@@ -153,7 +153,7 @@ every unit in exactly one location, army health totals matching the presets, ter
 
 ---
 
-## Phase 2 — Rolling
+## Phase 2 — Rolling  ✅ done
 
 **Deliverable.** `rollArmy(units, resultType, rng): RollResult`.
 
@@ -179,6 +179,30 @@ log needs to reconstruct the roll.
 contributes 0. Property test: for any army and result type, `0 ≤ total ≤ sum of max face counts`.
 Worked example — the Firewalker `Guardian` (`1 ID`, `1 MELEE`, `1 SAVE`, `1 MISSILE`, `2 MELEE`,
 `1 MANEUVER`) rolling melee yields exactly one of `{1, 1, 0, 0, 2, 0}`.
+
+**Outcome.** 93 tests green. `faceResults` is three lines, as predicted — no multiplier, no size
+lookup, no monster branch. A test asserts that across all 280 faces.
+
+- **SAIs throw rather than return 0 when `ruleSet.sai === 'full'`.** A half-enabled ruleset should
+  fail loudly, not quietly play a wrong game.
+- **The Phase 1 gap is closed.** `setupGame` now runs the Horde roll-off when `firstPlayer` is
+  omitted, threading one RNG stream in rules order (roll-off, then terrain faces). Ties reroll,
+  with a coin flip after 50 attempts so tiny armies cannot spin forever.
+- **Measured army output** (4000 rolls per army, starter presets):
+
+  | | melee | save | maneuver | magic |
+  |---|---|---|---|---|
+  | Treefolk home | 4.9 | 4.3 | 2.3 | 2.8 |
+  | Firewalkers home | 4.0 | 3.0 | 3.5 | 3.2 |
+
+  Treefolk are measurably tankier and Firewalkers more mobile, which is what the dice look like.
+  More importantly this is the first hard evidence on the magic house rule — see below.
+
+**Magic looks weak.** Army magic averages 1.6–3.2, so `floor(M / 2)` is typically **0–1 damage**,
+while a melee action averages ~4.5 against ~3 saves for ~1.5–2 damage plus a counter-attack. Magic
+is the low-output, low-risk option — defensible, but thin. Combined with Highland carrying three
+magic faces, Highland will play very slowly. Worth revisiting `floor` vs `ceil` (`RULES-V0.md`
+section 8) once Phase 5 makes it playable; these are dice averages, not playtest results.
 
 ---
 

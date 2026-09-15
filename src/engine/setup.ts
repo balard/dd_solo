@@ -1,16 +1,16 @@
 /**
- * Builds the opening position.
+ * Builds the opening position, following RULES-V0.md section 7.
  *
- * Follows RULES-V0.md section 7, with one deliberate gap: the Horde roll-off that
- * decides who goes first needs `rollArmy`, which arrives in Phase 2. Until then
- * `firstPlayer` is passed in. The preset forces both propose Highland as the
- * Frontier, so the *other* setup choice -- which proposed terrain is used --
- * resolves itself and never needs asking.
+ * The Horde roll-off for order of play is included now that `rollArmy` exists. The
+ * *other* setup choice -- which proposed terrain becomes the Frontier -- resolves
+ * itself, because both starter forces propose Highland; `setupGame` throws rather
+ * than guessing if a future pair of presets disagrees.
  */
 import { terrainDie } from '../data/load'
 import { preset, PRESET_ARMY_NAMES, type Preset, type PresetArmyName } from '../data/presets'
 
 import { nextInt, rngFrom, type RngState } from './rng'
+import { rollArmy } from './roll'
 import {
   V0_RULES,
   type GameState,
@@ -27,7 +27,11 @@ export interface SetupOptions {
   readonly seed: number
   /** Preset id for each player, e.g. `treefolk_starter`. */
   readonly forces: Readonly<Record<PlayerId, string>>
-  readonly firstPlayer: PlayerId
+  /**
+   * Who takes the first march. Omit to decide it by the Horde roll-off, which is
+   * what the rules actually call for.
+   */
+  readonly firstPlayer?: PlayerId
   readonly ruleSet?: RuleSet
 }
 
@@ -63,41 +67,84 @@ export function rollStartingFace(rng: RngState): readonly [TerrainFace, RngState
   }
 }
 
-function buildUnits(player: PlayerId, force: Preset): UnitInstance[] {
-  const units: UnitInstance[] = []
+type ArmyGroups = Readonly<Record<PresetArmyName, readonly UnitInstance[]>>
+
+function buildUnits(player: PlayerId, force: Preset): { all: UnitInstance[]; byArmy: ArmyGroups } {
+  const all: UnitInstance[] = []
+  const byArmy = {} as Record<PresetArmyName, UnitInstance[]>
   let ordinal = 0
 
   for (const armyName of PRESET_ARMY_NAMES) {
     const slot = startingSlot(armyName, player)
+    byArmy[armyName] = []
+
     for (const typeId of force.armies[armyName]) {
       const shortName = typeId.split('.')[1] ?? typeId
-      units.push({
+      const unit: UnitInstance = {
         id: `${player}:${shortName}#${ordinal}`,
         typeId,
         owner: player,
         location: { kind: 'terrain', slot },
-      })
+      }
+      all.push(unit)
+      byArmy[armyName].push(unit)
       ordinal += 1
     }
   }
 
-  return units
+  return { all, byArmy }
+}
+
+/** Ties are rerolled; after this many we stop and flip a coin rather than loop. */
+const MAX_TIE_REROLLS = 50
+
+/**
+ * RULES-V0.md section 7 step 4: both players roll their Horde Army for maneuver, and
+ * the winner chooses to go first or to pick the Frontier. With both starter forces
+ * proposing the same Frontier there is nothing to pick, so the winner simply marches
+ * first and no decision has to be asked.
+ *
+ * The rules do not say what happens on a tie. Rerolling is the natural reading.
+ */
+function rollForFirstPlayer(
+  hordes: Readonly<Record<PlayerId, readonly UnitInstance[]>>,
+  rng: RngState,
+  ruleSet: RuleSet,
+): readonly [PlayerId, { p1: number; p2: number }, RngState] {
+  let state = rng
+
+  for (let attempt = 0; attempt < MAX_TIE_REROLLS; attempt++) {
+    const [p1Roll, afterP1] = rollArmy(hordes.p1, 'maneuver', state, ruleSet)
+    const [p2Roll, afterP2] = rollArmy(hordes.p2, 'maneuver', afterP1, ruleSet)
+    state = afterP2
+
+    if (p1Roll.total !== p2Roll.total) {
+      const winner: PlayerId = p1Roll.total > p2Roll.total ? 'p1' : 'p2'
+      return [winner, { p1: p1Roll.total, p2: p2Roll.total }, state] as const
+    }
+  }
+
+  // Persistent ties mean very small armies; break it rather than spin forever.
+  const [coin, next] = nextInt(state, 2)
+  return [coin === 0 ? 'p1' : 'p2', { p1: 0, p2: 0 }, next] as const
 }
 
 export function setupGame(options: SetupOptions): GameState {
   const p1Force = preset(options.forces.p1)
   const p2Force = preset(options.forces.p2)
+  const ruleSet = options.ruleSet ?? V0_RULES
+
+  const p1Units = buildUnits('p1', p1Force)
+  const p2Units = buildUnits('p2', p2Force)
 
   const units: Record<string, UnitInstance> = {}
-  for (const unit of [...buildUnits('p1', p1Force), ...buildUnits('p2', p2Force)]) {
+  for (const unit of [...p1Units.all, ...p2Units.all]) {
     if (units[unit.id] !== undefined) {
       throw new Error(`duplicate unit id generated: ${unit.id}`)
     }
     units[unit.id] = unit
   }
 
-  // Both forces propose the same Frontier in the starter presets; assert it rather
-  // than silently preferring one, because a future preset could differ.
   if (p1Force.proposedFrontier !== p2Force.proposedFrontier) {
     throw new Error(
       `the two forces propose different Frontier terrains ` +
@@ -106,17 +153,32 @@ export function setupGame(options: SetupOptions): GameState {
     )
   }
 
+  const log: LogEntry[] = []
+  let rng = rngFrom(options.seed)
+
+  // Step 4: order of play, before the terrains are rolled.
+  let firstPlayer: PlayerId
+  if (options.firstPlayer === undefined) {
+    const [winner, rolls, next] = rollForFirstPlayer(
+      { p1: p1Units.byArmy.horde, p2: p2Units.byArmy.horde },
+      rng,
+      ruleSet,
+    )
+    firstPlayer = winner
+    rng = next
+    log.push({ kind: 'order_of_play', rolls, firstPlayer })
+  } else {
+    firstPlayer = options.firstPlayer
+  }
+
+  log.unshift({ kind: 'game_start', seed: options.seed, firstPlayer })
+
+  // Step 5: opening terrain faces.
   const dice: Readonly<Record<TerrainSlot, string>> = {
     p1_home: p1Force.homeTerrain,
     frontier: p1Force.proposedFrontier,
     p2_home: p2Force.homeTerrain,
   }
-
-  const log: LogEntry[] = [
-    { kind: 'game_start', seed: options.seed, firstPlayer: options.firstPlayer },
-  ]
-
-  let rng = rngFrom(options.seed)
   const terrains = {} as Record<TerrainSlot, TerrainInPlay>
 
   for (const slot of ['p1_home', 'frontier', 'p2_home'] as const) {
@@ -129,12 +191,12 @@ export function setupGame(options: SetupOptions): GameState {
   }
 
   return {
-    ruleSet: options.ruleSet ?? V0_RULES,
+    ruleSet,
     rng,
     units,
     terrains,
     turn: {
-      marching: options.firstPlayer,
+      marching: firstPlayer,
       phase: 'effects_expire',
       marchIndex: 0,
       marchStep: 'select_army',

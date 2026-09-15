@@ -3,10 +3,10 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: Phase 1 done.** Scaffold, typed data layer, engine types, seeded RNG, presets,
-> `setupGame` and `validateState` are in. The reducer is a skeleton: it guards actions against
-> `state.pending` but no phase is implemented, so nothing is ever pending yet.
-> `docs/PLAN-V0.md` Phase 2 (rolling) is next.
+> **Status: Phase 2 done.** Data layer, engine types, seeded RNG, presets, `setupGame`,
+> `validateState` and `rollArmy` are in. The reducer is still a skeleton: it guards actions
+> against `state.pending` but no phase is implemented, so nothing is ever pending yet.
+> `docs/PLAN-V0.md` Phase 3 (damage) is next.
 
 ## Read these first
 
@@ -126,8 +126,12 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **Armies are derived, not stored.** A unit has a `location`; `armyAt(state, player, slot)` is a
   query. Home/Campaign/Horde are setup vocabulary only. Never add a parallel army or DUA list —
   the absence of one is what makes desync impossible.
-- **`setupGame` takes `firstPlayer` as a parameter.** The Horde roll-off that should decide it
-  needs `rollArmy` (Phase 2). Revisit when rolling exists.
+- **`rollArmy` has no special case for ID icons or monsters, and must not grow one.** The count
+  printed on the face is already the answer. `faceResults` is three lines; keep it that way.
+- **`setupGame` runs the Horde roll-off** when `firstPlayer` is omitted, threading one RNG stream
+  in rules order: roll-off first, then terrain faces.
+- **Not yet in `rollArmy`: the eighth-face ID-doubling bonus.** Cut in v0; it belongs in that
+  function when `ruleSet.eighthFace` becomes `'full'`.
 - **Terrain `face === 8` and `capturedBy !== null` must always agree.** `validateState` enforces
   it; both the win check and the revert-to-7 rule depend on it.
 - **`advance` throws after 1000 steps** rather than hanging. If you hit that, a phase handler is

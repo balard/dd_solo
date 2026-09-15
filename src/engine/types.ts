@@ -132,6 +132,11 @@ export type GameAction =
 export type LogEntry =
   | { readonly kind: 'game_start'; readonly seed: number; readonly firstPlayer: PlayerId }
   | {
+      readonly kind: 'order_of_play'
+      readonly rolls: Readonly<Record<PlayerId, number>>
+      readonly firstPlayer: PlayerId
+    }
+  | {
       readonly kind: 'terrain_placed'
       readonly slot: TerrainSlot
       readonly dieId: string

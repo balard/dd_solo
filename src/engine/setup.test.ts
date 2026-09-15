@@ -172,6 +172,41 @@ describe('setupGame', () => {
   })
 })
 
+describe('order of play', () => {
+  const rolled = (seed: number) =>
+    setupGame({ seed, forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' } })
+
+  it('decides the first player by the Horde roll-off when none is given', () => {
+    const state = rolled(7)
+    const entry = state.log.find((e) => e.kind === 'order_of_play')
+    expect(entry).toBeDefined()
+    if (entry?.kind !== 'order_of_play') throw new Error('unreachable')
+    expect(entry.firstPlayer).toBe(state.turn.marching)
+    expect(entry.rolls.p1).not.toBe(entry.rolls.p2)
+    expect(entry.firstPlayer).toBe(entry.rolls.p1 > entry.rolls.p2 ? 'p1' : 'p2')
+  })
+
+  it('still produces a valid state', () => {
+    expect(validateState(rolled(7))).toEqual([])
+  })
+
+  it('lets either side win across seeds', () => {
+    const winners = new Set(
+      Array.from({ length: 40 }, (_, i) => rolled(i + 1).turn.marching),
+    )
+    expect(winners).toEqual(new Set(['p1', 'p2']))
+  })
+
+  it('skips the roll-off entirely when a first player is given', () => {
+    const state = setupGame(OPTIONS)
+    expect(state.log.some((e) => e.kind === 'order_of_play')).toBe(false)
+  })
+
+  it('stays reproducible with the roll-off in the stream', () => {
+    expect(rolled(21)).toEqual(rolled(21))
+  })
+})
+
 describe('validateState', () => {
   const state = setupGame(OPTIONS)
 
