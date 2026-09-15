@@ -14,6 +14,10 @@ npm run play          # play a game in the terminal
 npm test              # 187 tests, including 1000-game self-play
 ```
 
+On Windows PowerShell, `npm` may be blocked by the script execution policy
+(`npm.ps1 cannot be loaded because running scripts is disabled`). Use `.\play.cmd`, or
+`npm.cmd` instead of `npm` — the `.cmd` shim is not subject to that policy.
+
 ## Where things are
 
 - [`docs/PLAN-V0.md`](docs/PLAN-V0.md) — the nine phases to a playable alpha

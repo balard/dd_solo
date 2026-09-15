@@ -34,6 +34,10 @@ npm run data        # regenerate and validate data/starter/ from data/raw/
 npm run play        # play a game in the terminal (--seed N, --ai random)
 ```
 
+On Windows PowerShell these may fail with `npm.ps1 cannot be loaded because running scripts is
+disabled`. That is the shell's execution policy, not the project. Use `npm.cmd ...`, or `.\play.cmd`
+for the client — the `.cmd` shims bypass it without changing any machine setting.
+
 `tsconfig.json` is deliberately strict — `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
 and `verbatimModuleSyntax` are all on. Keep `vitest` and `vite` on compatible majors: a mismatch
 makes vitest install a nested copy of vite, and the two `Plugin` types then conflict under
