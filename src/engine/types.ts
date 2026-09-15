@@ -81,6 +81,24 @@ export type MarchStep =
   | 'contest_maneuver'
   | 'choose_direction'
   | 'action'
+  // Combat, once an action is chosen. The `resolve_*` steps take no decision --
+  // they roll and compute -- but are still explicit states so the advance loop has
+  // somewhere to stand, and so a v1 SAI with a delayed effect has a seam to occupy.
+  | 'choose_target'
+  | 'resolve_attack'
+  | 'assign_attack_damage'
+  | 'offer_counter'
+  | 'resolve_counter'
+  | 'assign_counter_damage'
+
+/** The exchange currently being resolved. */
+export interface CombatState {
+  readonly action: ActionKind
+  /** The terrain holding the army under attack. */
+  readonly targetSlot: TerrainSlot
+  /** Damage awaiting assignment by whoever is about to lose units. */
+  readonly damage: number
+}
 
 export interface TurnState {
   readonly marching: PlayerId
@@ -92,6 +110,8 @@ export interface TurnState {
   readonly marchingArmy: ArmyRef | null
   /** Armies already marched this turn; the second march must differ. */
   readonly armiesMarched: readonly ArmyRef[]
+  /** Non-null only while an action is being resolved. */
+  readonly combat: CombatState | null
 }
 
 export type Direction = 'up' | 'down'
@@ -195,6 +215,32 @@ export type LogEntry =
       readonly moves: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[]
     }
   | { readonly kind: 'retreated'; readonly player: PlayerId; readonly unitIds: readonly UnitId[] }
+  | {
+      readonly kind: 'action_chosen'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly action: ActionKind
+    }
+  | { readonly kind: 'action_skipped'; readonly player: PlayerId; readonly slot: TerrainSlot }
+  | {
+      readonly kind: 'combat_resolved'
+      readonly attacker: PlayerId
+      readonly defender: PlayerId
+      readonly slot: TerrainSlot
+      readonly action: ActionKind
+      readonly isCounter: boolean
+      readonly attackTotal: number
+      /** null when no save roll was made: magic allows none, a zero attack earns none. */
+      readonly saveTotal: number | null
+      readonly damage: number
+    }
+  | {
+      readonly kind: 'units_killed'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly unitIds: readonly UnitId[]
+    }
+  | { readonly kind: 'counter_declined'; readonly player: PlayerId }
   | { readonly kind: 'turn_end'; readonly player: PlayerId }
   | {
       readonly kind: 'victory'

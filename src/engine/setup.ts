@@ -202,6 +202,7 @@ export function setupGame(options: SetupOptions): GameState {
       marchStep: 'select_army',
       marchingArmy: null,
       armiesMarched: [],
+      combat: null,
     },
     // Phase 4 adds the advance loop that turns this into the first real decision.
     pending: null,

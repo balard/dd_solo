@@ -3,11 +3,10 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: Phase 4 done.** The game runs: turn sequence, marches, contested maneuvering,
-> capture, the Reserves Phase and both win conditions. A game of pure maneuvering can be played
-> to a capture win through `reduce`. Actions (melee/missile/magic) are not implemented — the
-> action step offers `legal: []` — so there is still no combat and no UI.
-> `docs/PLAN-V0.md` Phase 5 (actions) is next.
+> **Status: Phase 5 done.** The rules engine is complete for v0: turn sequence, marches,
+> contested maneuvering, melee with counter-attack, missile, simplified magic, damage, capture and
+> both win conditions. A full game is playable end to end through `reduce` — but only in code:
+> there is no AI and no UI yet. `docs/PLAN-V0.md` Phase 6 (AI and the headless harness) is next.
 
 ## Read these first
 
@@ -146,6 +145,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   `applyAction` and `advance` returns early, silently skipping the win check.
 - **Maneuvering is three steps** — declare, contest, direction — because the opponent must decide
   whether to contest without knowing the direction. Do not collapse them.
+- **A zero attack roll makes no save roll at all** (`saveTotal: null`), and consumes no
+  randomness. Magic never allows a save whatever it rolls.
+- **No `assign_damage` decision is raised when `maxAbsorbable` is 0** — damage too small to kill
+  anything is simply dropped.
 - **`advance` throws after 1000 steps** rather than hanging. If you hit that, a phase handler is
   failing to either reach a decision or change the state.
 

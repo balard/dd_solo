@@ -478,16 +478,3 @@ describe('reserves phase', () => {
     expect(() => reduce(state, { kind: 'retreat', unitIds: [enemy] })).toThrow(/not yours/)
   })
 })
-
-describe('actions are not implemented yet', () => {
-  it('offers no action and rejects taking one', () => {
-    const state = play(
-      begin(fresh()),
-      { kind: 'choose_march_army', army: 'frontier' },
-      { kind: 'choose_maneuver', maneuver: false },
-    )
-    expect(state.pending?.kind).toBe('choose_action')
-    expect((state.pending as { legal: readonly string[] }).legal).toEqual([])
-    expect(() => reduce(state, { kind: 'choose_action', action: 'melee' })).toThrow(/Phase 5/)
-  })
-})

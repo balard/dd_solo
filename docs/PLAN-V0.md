@@ -298,7 +298,7 @@ walk across the terrain faces. Phase 6 formalises this as `RandomAI`.
 
 ---
 
-## Phase 5 — Actions
+## Phase 5 — Actions  ✅ done
 
 **Deliverable.** Melee, missile and magic, gated by the terrain's current face.
 
@@ -319,6 +319,34 @@ call site, and the `floor` vs `ceil` question in `RULES-V0.md` §8 should be a o
 **Tests.** `7 melee − 3 saves = 4 damage`. Zero attack results → no save roll raised at all.
 Counter-attack damages the marcher. Missile raises no counter. Magic of 7 → 3 damage, no save
 decision raised for the defender. A magic action is illegal from reserves.
+
+**Outcome.** 176 tests green. A random-play fuzz over 300 complete games with combat live produced
+zero `validateState` violations; 205 reached a result (185 by elimination, 20 by capture) and 95
+hit the decision cap.
+
+- **`legalActions` returns `[]` when there is nothing to hit,** not just when the face forbids the
+  action. Melee and magic need an opposing army at the same terrain; missile needs a reachable
+  target. The empty list is how the engine says "you may only pass".
+- **A zero attack makes no save roll at all,** rather than a save roll against 0. `saveTotal` is
+  `null` in that case and no randomness is consumed — which also keeps replays stable.
+- **Damage that cannot kill anything is dropped rather than asked about.** If `maxAbsorbable` is
+  0, no `assign_damage` decision is raised at all, matching "if a die takes less damage than it
+  has health, the damage is ignored".
+
+**Magic is less weak than Phase 2's arithmetic suggested.** At full strength melee averages 3.48
+results → 1.45 damage after saves, while magic averages 2.22 → 0.96 damage with no save allowed.
+So magic delivers about two thirds of melee's damage *and* takes no counter-attack in return —
+a defensible trade rather than the near-uselessness predicted from dice averages alone. The
+Phase 2 note overstated it, because it compared magic's raw total against melee's raw total
+without accounting for saves eating most of melee's advantage.
+
+**Game length is the real open question.** Random play averages 314 turns, which is wildly longer
+than a real game. Treat that as an upper bound rather than a prediction: a random agent maneuvers
+aimlessly, splits its force, and attacks with whatever happens to be adjacent, while a human
+concentrates force and picks favourable fights. The 185:20 split of elimination over capture wins
+has the same cause — random play almost never maneuvers a terrain the same way often enough to
+take it. Worth re-measuring in Phase 6 against `GreedyAI`, and only then deciding whether anything
+needs tuning.
 
 ---
 

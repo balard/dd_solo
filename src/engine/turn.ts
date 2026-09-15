@@ -13,9 +13,8 @@
  * action, which is what guarantees the victory check runs after every state change
  * rather than only at end of turn.
  */
-import { terrainFaceAction } from '../data/load'
-import type { TerrainFaceNumber } from '../data/types'
-
+import { legalActions, missileTargets, resolveAttack, terrainAction } from './combat'
+import { applyDamage, damageAssignmentProblem, damageOptions } from './damage'
 import { rollArmy } from './roll'
 import {
   IllegalActionError,
@@ -69,13 +68,6 @@ export function marchableArmies(state: GameState, player: PlayerId): readonly Ar
   )
 }
 
-/** Which actions the terrain's current face permits. Empty in v0 -- Phase 5. */
-function legalActions(state: GameState, slot: TerrainSlot): readonly ActionKind[] {
-  void state
-  void slot
-  return []
-}
-
 export function legalDirections(face: TerrainFace): readonly Direction[] {
   const options: Direction[] = []
   if (face < 8) options.push('up')
@@ -127,7 +119,7 @@ function syncCaptures(state: GameState): GameState {
 
 /** Ends the current march, moving to the second march or on to the Reserves Phase. */
 function endMarch(state: GameState): GameState {
-  const base = withTurn(state, { marchingArmy: null, marchStep: 'select_army' })
+  const base = withTurn(state, { marchingArmy: null, marchStep: 'select_army', combat: null })
   return state.turn.marchIndex === 0
     ? withTurn(base, { marchIndex: 1 })
     : withTurn(base, { phase: 'reserves_reinforce' })
@@ -143,6 +135,7 @@ function endTurn(state: GameState): GameState {
       marchStep: 'select_army',
       marchingArmy: null,
       armiesMarched: [],
+      combat: null,
     }),
     { kind: 'turn_end', player: state.turn.marching },
   )
@@ -194,11 +187,115 @@ function stepMarch(state: GameState): GameState {
 
     case 'action': {
       const slot = marchingSlot(state)
-      const legal = legalActions(state, slot)
-      // Phase 5 fills this in. Until then the only honest offer is "no action".
+      const legal = legalActions(state, player, slot)
       return { ...state, pending: { kind: 'choose_action', player, slot, legal } }
     }
+
+    case 'choose_target': {
+      const slot = marchingSlot(state)
+      return {
+        ...state,
+        pending: {
+          kind: 'choose_missile_target',
+          player,
+          options: missileTargets(state, player, slot),
+        },
+      }
+    }
+
+    // Auto steps: they roll and compute rather than asking anything, but are real
+    // states so the advance loop has somewhere to stand between the dice landing
+    // and the damage being assigned.
+    case 'resolve_attack':
+      return resolveExchange(state, false)
+    case 'resolve_counter':
+      return resolveExchange(state, true)
+
+    case 'assign_attack_damage':
+    case 'assign_counter_damage': {
+      const combat = requireCombat(state)
+      const victim =
+        state.turn.marchStep === 'assign_attack_damage' ? opponentOf(player) : player
+      const slot =
+        state.turn.marchStep === 'assign_attack_damage' ? combat.targetSlot : marchingSlot(state)
+      return {
+        ...state,
+        pending: { kind: 'assign_damage', player: victim, slot, damage: combat.damage },
+      }
+    }
+
+    case 'offer_counter': {
+      const combat = requireCombat(state)
+      const defender = opponentOf(player)
+      // "A defending army reduced to zero units does not counter-attack."
+      if (armyAt(state, defender, combat.targetSlot).length === 0) return endMarch(state)
+      return {
+        ...state,
+        pending: { kind: 'choose_counter_attack', player: defender, slot: combat.targetSlot },
+      }
+    }
   }
+}
+
+function requireCombat(state: GameState) {
+  const combat = state.turn.combat
+  if (combat === null) throw new Error('no combat is being resolved')
+  return combat
+}
+
+/**
+ * Rolls one exchange and routes to damage assignment, the counter-attack, or the
+ * end of the march.
+ *
+ * Only melee offers a counter-attack, and only on the first exchange -- "Surprise
+ * has no effect during a counter-attack" is the rulebook's way of saying counters
+ * do not themselves get countered.
+ */
+function resolveExchange(state: GameState, isCounter: boolean): GameState {
+  const combat = requireCombat(state)
+  const marcher = state.turn.marching
+  const enemy = opponentOf(marcher)
+  const marchSlot = marchingSlot(state)
+
+  const attacker = isCounter ? enemy : marcher
+  const defender = isCounter ? marcher : enemy
+  const attackerSlot = isCounter ? combat.targetSlot : marchSlot
+  const defenderSlot = isCounter ? marchSlot : combat.targetSlot
+
+  const outcome = resolveAttack(state, {
+    action: combat.action,
+    attacker,
+    attackerSlot,
+    defender,
+    defenderSlot,
+  })
+
+  const logged = withLog({ ...state, rng: outcome.rng }, {
+    kind: 'combat_resolved',
+    attacker,
+    defender,
+    slot: defenderSlot,
+    action: combat.action,
+    isCounter,
+    attackTotal: outcome.attackTotal,
+    saveTotal: outcome.saveTotal,
+    damage: outcome.damage,
+  })
+
+  // Damage that cannot kill anything is dropped rather than asked about: a die that
+  // takes less damage than its health simply ignores it (RULES-V0.md section 6).
+  const required = damageOptions(armyAt(state, defender, defenderSlot), outcome.damage).required
+  const withCombat = withTurn(logged, { combat: { ...combat, damage: outcome.damage } })
+
+  if (required > 0) {
+    return withTurn(withCombat, {
+      marchStep: isCounter ? 'assign_counter_damage' : 'assign_attack_damage',
+    })
+  }
+  if (isCounter) return endMarch(withCombat)
+  return combat.action === 'melee'
+    ? withTurn(withCombat, { marchStep: 'offer_counter' })
+    : endMarch(withCombat)
 }
 
 /**
@@ -362,13 +459,85 @@ function applyDirection(state: GameState, direction: Direction): GameState {
   return withTurn(moveTerrain(state, slot, direction), { marchStep: 'action' })
 }
 
-function applyAction_(state: GameState, action: ActionKind | null): GameState {
-  if (action !== null) {
+function applyChooseAction(state: GameState, action: ActionKind | null): GameState {
+  const player = state.turn.marching
+  const slot = marchingSlot(state)
+
+  if (action === null) {
+    return endMarch(withLog(state, { kind: 'action_skipped', player, slot }))
+  }
+
+  const legal = legalActions(state, player, slot)
+  if (!legal.includes(action)) {
+    const permitted = terrainAction(state, slot)
     throw new IllegalActionError(
-      `actions are not implemented yet (PLAN-V0.md Phase 5); only "no action" is legal`,
+      permitted === null || permitted === action
+        ? `no ${action} action is available at ${slot} -- there is nothing to attack`
+        : `${slot} is on a ${permitted} face, so ${action} is not available`,
     )
   }
-  return endMarch(state)
+
+  const logged = withLog(state, { kind: 'action_chosen', player, slot, action })
+
+  // Missile is the only action that picks its target; melee and magic hit the
+  // opposing army at the marching army's own terrain.
+  if (action === 'missile') {
+    return withTurn(logged, {
+      marchStep: 'choose_target',
+      combat: { action, targetSlot: slot, damage: 0 },
+    })
+  }
+  return withTurn(logged, {
+    marchStep: 'resolve_attack',
+    combat: { action, targetSlot: slot, damage: 0 },
+  })
+}
+
+function applyMissileTarget(state: GameState, slot: TerrainSlot): GameState {
+  const player = state.turn.marching
+  const options = missileTargets(state, player, marchingSlot(state))
+  if (!options.includes(slot)) {
+    throw new IllegalActionError(
+      `${slot} is not a legal missile target -- available: ${options.join(', ') || 'none'}`,
+    )
+  }
+  const combat = requireCombat(state)
+  return withTurn(state, {
+    marchStep: 'resolve_attack',
+    combat: { ...combat, targetSlot: slot },
+  })
+}
+
+function applyCounterAttack(state: GameState, counter: boolean): GameState {
+  const defender = opponentOf(state.turn.marching)
+  if (!counter) {
+    return endMarch(withLog(state, { kind: 'counter_declined', player: defender }))
+  }
+  return withTurn(state, { marchStep: 'resolve_counter' })
+}
+
+function applyAssignDamage(state: GameState, unitIds: readonly UnitId[]): GameState {
+  const combat = requireCombat(state)
+  const isCounterDamage = state.turn.marchStep === 'assign_counter_damage'
+  const marcher = state.turn.marching
+  const victim = isCounterDamage ? marcher : opponentOf(marcher)
+  const slot = isCounterDamage ? marchingSlot(state) : combat.targetSlot
+
+  const army = armyAt(state, victim, slot)
+  const problem = damageAssignmentProblem(army, combat.damage, unitIds)
+  if (problem !== null) throw new IllegalActionError(problem)
+
+  const killed = withLog(applyDamage(state, unitIds), {
+    kind: 'units_killed',
+    player: victim,
+    slot,
+    unitIds,
+  })
+
+  if (isCounterDamage) return endMarch(killed)
+  return combat.action === 'melee'
+    ? withTurn(killed, { marchStep: 'offer_counter' })
+    : endMarch(killed)
 }
 
 function applyReinforce(
@@ -433,24 +602,16 @@ export function applyAction(state: GameState, action: GameAction): GameState {
     case 'choose_direction':
       return applyDirection(cleared, action.direction)
     case 'choose_action':
-      return applyAction_(cleared, action.action)
+      return applyChooseAction(cleared, action.action)
+    case 'choose_missile_target':
+      return applyMissileTarget(cleared, action.slot)
+    case 'choose_counter_attack':
+      return applyCounterAttack(cleared, action.counter)
+    case 'assign_damage':
+      return applyAssignDamage(cleared, action.unitIds)
     case 'reinforce':
       return applyReinforce(cleared, action.moves)
     case 'retreat':
       return applyRetreat(cleared, action.unitIds)
-
-    // Phase 5.
-    case 'choose_missile_target':
-    case 'choose_counter_attack':
-    case 'assign_damage':
-      throw new IllegalActionError(`${action.kind} is not implemented yet (PLAN-V0.md Phase 5)`)
   }
-}
-
-/** Unused for now, but keeps `terrainFaceAction` honest as Phase 5's entry point. */
-export function terrainAction(state: GameState, slot: TerrainSlot): ActionKind | null {
-  const terrain = state.terrains[slot]
-  if (terrain.face === 8) return null
-  const icon = terrainFaceAction(terrain.dieId, terrain.face as TerrainFaceNumber)
-  return icon.toLowerCase() as ActionKind
 }
