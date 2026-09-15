@@ -3,9 +3,9 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: Phase 6 done.** The game is playable — `npm run play` runs a full game in the
-> terminal against `PassiveAI`. Engine, both AIs, replay and the self-play harness are in.
-> `docs/PLAN-V0.md` Phase 7 (the React UI) is next, and is the only thing left before an alpha.
+> **Status: Phase 7 done.** The game is playable in the browser (`npm run dev`) and in the
+> terminal (`npm run play`). Engine, both AIs, replay, harness and UI are in.
+> `docs/PLAN-V0.md` Phase 8 (PWA, persistence, polish) is the last one.
 
 ## Read these first
 
@@ -168,6 +168,20 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   moves without ending, and is always a bug.
 - **A game record is `{ setup, actions }` and nothing else.** Replaying it reproduces the game die
   for die. `replayTo(record, n)` is undo.
+
+## UI
+
+- **Every screen renders from `state.pending`.** `promptFor(pending, human)` turns it into a
+  sentence and the legal buttons; no component decides what is legal or tracks where it is in a
+  multi-step move.
+- **The dice grid is also the selection surface** for damage, retreat and reinforce. One gesture,
+  no modals.
+- **Logic lives in pure functions in `prompts.ts`, not in components.** `damageSelection` is the
+  example: the confirm-button rule is testable without a DOM. Keep it that way rather than
+  reaching for jsdom.
+- **A selection is a draft answer to one question** — `App` clears it whenever `pending` changes.
+- **Glyphs are ours** (`Glyph.tsx`), stroked in `currentColor` on a 24x24 grid, so colour and dark
+  mode come from CSS and no glyph needs a second variant.
 
 ## Conventions
 

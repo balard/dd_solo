@@ -1,128 +1,156 @@
 /**
- * Phase 0 exit criterion: every die in the starter set, read from the real data
- * files through the real loader.
+ * The game.
  *
- * This is a data-pipeline smoke test wearing a UI costume. It is deliberately not
- * the game, and it gets replaced wholesale in Phase 7.
+ * Layout is phone-first: a compact always-visible board strip, one focused terrain
+ * where the playing happens, the running log, and a sticky action bar driven
+ * entirely by `state.pending`. Wider screens just get more room.
  */
-import { SPECIES, TERRAIN_DICE, TERRAIN_TYPES, unitsOfSpecies } from '../data/load'
-import type { Face, TerrainFaceNumber, UnitType } from '../data/types'
+import { useEffect, useMemo, useState } from 'react'
 
-import { Opening } from './Opening'
+import { unitType } from '../data/load'
+import {
+  armyAt,
+  livingUnits,
+  type PlayerId,
+  type TerrainSlot,
+  type UnitId,
+} from '../engine/types'
 
-const FACE_NUMBERS: readonly TerrainFaceNumber[] = [1, 2, 3, 4, 5, 6, 7]
-
-function faceLabel(face: Face): string {
-  return face.icon === 'SAI' ? face.sai : face.icon.toLowerCase()
-}
-
-function FaceChip({ face }: { face: Face }) {
-  return (
-    <span className={`face i-${face.icon}`}>
-      <b>{face.count}</b>
-      <span>{faceLabel(face)}</span>
-    </span>
-  )
-}
-
-function UnitRow({ unit }: { unit: UnitType }) {
-  return (
-    <tr>
-      <td className="name">{unit.name}</td>
-      <td className="meta">
-        {unit.health}h · {unit.dieType}
-      </td>
-      <td className="meta">{unit.unitClass.replace('_', ' ')}</td>
-      <td>
-        <div className="faces">
-          {unit.faces.map((face, i) => (
-            <FaceChip key={i} face={face} />
-          ))}
-        </div>
-      </td>
-    </tr>
-  )
-}
+import { ActionBar } from './game/ActionBar'
+import { BoardStrip } from './game/BoardStrip'
+import { DiceGrid } from './game/DiceGrid'
+import { LogPanel } from './game/LogPanel'
+import { focusedSlot, slotLabel } from './game/prompts'
+import { useGame } from './game/useGame'
 
 export function App() {
-  const unitCount = SPECIES.reduce((n, s) => n + unitsOfSpecies(s.id).length, 0)
-  const faceCount = SPECIES.reduce(
-    (n, s) => n + unitsOfSpecies(s.id).reduce((m, u) => m + u.faces.length, 0),
-    0,
-  )
+  const game = useGame()
+  const { state, human, seed, dispatch, newGame, opponentThinking } = game
+  const enemy: PlayerId = human === 'p1' ? 'p2' : 'p1'
+  const pending = state.pending
+
+  const [manualFocus, setManualFocus] = useState<TerrainSlot | null>(null)
+  const [selection, setSelection] = useState<ReadonlySet<UnitId>>(new Set())
+
+  // A selection is a draft answer to one question. When the question changes, the
+  // draft is meaningless, so it goes.
+  const pendingKey = pending === null ? 'none' : `${pending.kind}:${pending.player}`
+  useEffect(() => {
+    setSelection(new Set())
+  }, [pendingKey])
+
+  // Follow the game unless the player has deliberately looked elsewhere; a new
+  // decision about a different terrain takes the focus back.
+  const engineFocus = focusedSlot(state)
+  useEffect(() => {
+    setManualFocus(null)
+  }, [engineFocus])
+  const focused = manualFocus ?? engineFocus
+
+  const toggle = (id: UnitId) =>
+    setSelection((current) => {
+      if (id === '') return current
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const mine = armyAt(state, human, focused)
+  const theirs = armyAt(state, enemy, focused)
+
+  // Which grid is selectable depends on what is being asked.
+  const selectMode = useMemo(() => {
+    if (pending === null || pending.player !== human) return null
+    if (pending.kind === 'assign_damage') return { side: 'mine' as const, slot: pending.slot }
+    if (pending.kind === 'retreat') return { side: 'mine' as const, slot: null }
+    if (pending.kind === 'reinforce') return { side: 'reserve' as const, slot: null }
+    return null
+  }, [pending, human])
+
+  const reserve = livingUnits(state, human).filter((u) => u.location.kind === 'reserve')
+  const health = (units: readonly { typeId: string }[]) =>
+    units.reduce((n, u) => n + unitType(u.typeId).health, 0)
+
+  const turn = state.log.filter((e) => e.kind === 'turn_end').length + 1
 
   return (
-    <div className="wrap">
-      <h1>dd_solo — die data</h1>
-      <p className="sub">
-        {unitCount} unit dice ({faceCount} faces) and {TERRAIN_DICE.length} terrain dice, loaded and
-        validated from <code>data/starter/</code>.
-      </p>
-
-      <Opening />
-
-      {SPECIES.map((species) => (
-        <section key={species.id}>
-          <h2>
-            {species.name} <span className="sub">— {species.elements.join(' + ')}</span>
-          </h2>
-          <div className="scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Unit</th>
-                  <th>Size</th>
-                  <th>Class</th>
-                  <th>Faces</th>
-                </tr>
-              </thead>
-              <tbody>
-                {unitsOfSpecies(species.id).map((unit) => (
-                  <UnitRow key={unit.id} unit={unit} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ))}
-
-      <section>
-        <h2>Terrains</h2>
-        <div className="scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Elements</th>
-                {FACE_NUMBERS.map((n) => (
-                  <th key={n}>{n}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {TERRAIN_TYPES.map((type) => (
-                <tr key={type.id}>
-                  <td className="name">{type.name}</td>
-                  <td className="meta">{type.elements.join(' + ')}</td>
-                  {FACE_NUMBERS.map((n) => (
-                    <td key={n} className={`meta i-${type.faces[n]}`}>
-                      {type.faces[n].toLowerCase()}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="app">
+      <header className="app-head">
+        <div>
+          <h1>dd_solo</h1>
+          <p className="sub">
+            Turn {turn} ·{' '}
+            {state.winner !== null
+              ? 'game over'
+              : state.turn.marching === human
+                ? 'your march'
+                : 'enemy march'}{' '}
+            · seed {seed}
+          </p>
         </div>
-        <p className="note">
-          Face 8 is the eighth face. Each type exists in four variants —{' '}
-          {TERRAIN_DICE.filter((d) => d.type === TERRAIN_TYPES[0]?.id)
-            .map((d) => d.eighthFace.replace('_', ' '))
-            .join(', ')}{' '}
-          — identical on faces 1–7. The split points differ per type, and that difference is most of
-          what distinguishes these dice.
-        </p>
-      </section>
+        <button type="button" className="choice secondary" onClick={() => newGame()}>
+          New game
+        </button>
+      </header>
+
+      <BoardStrip state={state} human={human} focused={focused} onFocus={setManualFocus} />
+
+      <main className="focus">
+        <h2 className="focus-head">
+          {slotLabel(focused, human)}
+          <span className="muted">
+            {state.terrains[focused].face === 8
+              ? ' · captured'
+              : ` · face ${state.terrains[focused].face}`}
+          </span>
+        </h2>
+
+        <section className="army">
+          <h3>
+            Enemy <span className="muted">{theirs.length}d / {health(theirs)}h</span>
+          </h3>
+          <DiceGrid units={theirs} />
+        </section>
+
+        <section className="army">
+          <h3>
+            Your army <span className="muted">{mine.length}d / {health(mine)}h</span>
+          </h3>
+          <DiceGrid
+            units={mine}
+            selectable={selectMode?.side === 'mine'}
+            selected={selection}
+            onToggle={toggle}
+          />
+        </section>
+
+        {(reserve.length > 0 || selectMode?.side === 'reserve') && (
+          <section className="army">
+            <h3>
+              Your reserve <span className="muted">{reserve.length}d / {health(reserve)}h</span>
+            </h3>
+            <DiceGrid
+              units={reserve}
+              selectable={selectMode?.side === 'reserve'}
+              selected={selection}
+              onToggle={toggle}
+            />
+          </section>
+        )}
+
+        <LogPanel state={state} human={human} />
+      </main>
+
+      <ActionBar
+        state={state}
+        human={human}
+        pending={pending}
+        opponentThinking={opponentThinking}
+        selection={selection}
+        onClearSelection={() => setSelection(new Set())}
+        dispatch={dispatch}
+      />
     </div>
   )
 }

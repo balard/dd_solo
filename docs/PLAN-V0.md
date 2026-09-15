@@ -379,7 +379,7 @@ house rule — while the UI is still weeks away. Recommended, but skippable.
 
 ---
 
-## Phase 7 — UI
+## Phase 7 — UI  ✅ done
 
 **Deliverable.** The screens from `OVERVIEW.md` §6. Engine-driven throughout: the UI renders
 `state.pending` and dispatches actions. **No component holds wizard state.**
@@ -404,6 +404,25 @@ the rulebook to understand what the app is asking for.
 
 **Tests.** Component tests for the damage sheet's maximal-selection gating. The engine is already
 covered; do not re-test rules through the DOM.
+
+**Outcome.** 203 tests green. A full game plays in the browser at 375px with no horizontal
+overflow and no console errors.
+
+- **The dice grid *is* the selection surface.** Assigning damage, retreating and reinforcing all
+  reuse the same tappable grid rather than each getting a modal — selecting units to lose is the
+  same gesture as looking at them.
+- **The gating became a pure function instead of a component test.** `damageSelection(state,
+  pending, selection)` returns `{ absorbed, required, ready, suggestion }`, so the rule the confirm
+  button exists to enforce is tested without adding jsdom and testing-library, and the component
+  renders it while deciding nothing. This is a deliberate deviation from the plan's "component
+  tests", and a better shape: logic that matters should not need a DOM to verify.
+- **The combat log now carries the dice, not just the totals.** `combat_resolved` gained
+  `attackDice` / `saveDice` so the UI shows what landed before the arithmetic. It costs nothing on
+  disk, because a saved game is `{ setup, actions }` and the log is derived.
+- **The selection is cleared whenever the pending decision changes.** A half-made selection is a
+  draft answer to one question; it is meaningless against the next one.
+- **The focused terrain follows the game** unless the player deliberately taps another, and a new
+  decision about a different terrain takes the focus back.
 
 ---
 

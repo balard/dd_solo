@@ -280,6 +280,8 @@ function resolveExchange(state: GameState, isCounter: boolean): GameState {
     attackTotal: outcome.attackTotal,
     saveTotal: outcome.saveTotal,
     damage: outcome.damage,
+    attackDice: outcome.attackRoll.dice,
+    saveDice: outcome.saveRoll?.dice ?? null,
   })
 
   // Damage that cannot kill anything is dropped rather than asked about: a die that

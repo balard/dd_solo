@@ -4,6 +4,7 @@
  * Nothing here knows about React, the DOM, or which player is human. The engine is
  * a pure reducer over these values; see `docs/OVERVIEW.md` section 2.
  */
+import type { DieRoll } from './roll'
 import type { RngState } from './rng'
 
 export type PlayerId = 'p1' | 'p2'
@@ -233,6 +234,10 @@ export type LogEntry =
       /** null when no save roll was made: magic allows none, a zero attack earns none. */
       readonly saveTotal: number | null
       readonly damage: number
+      /** The dice themselves, so the UI can show what landed rather than only the sum.
+       *  Log-only: a saved game is `{ setup, actions }`, so this costs nothing on disk. */
+      readonly attackDice: readonly DieRoll[]
+      readonly saveDice: readonly DieRoll[] | null
     }
   | {
       readonly kind: 'units_killed'

@@ -7,7 +7,7 @@
 import { terrainFaceAction } from '../data/load'
 import type { TerrainFaceNumber } from '../data/types'
 
-import { rollArmy } from './roll'
+import { rollArmy, type RollResult } from './roll'
 import type { RngState } from './rng'
 import {
   TERRAIN_SLOTS,
@@ -95,6 +95,9 @@ export interface AttackOutcome {
   /** null when no save roll was made -- magic allows none, and a zero attack earns none. */
   readonly saveTotal: number | null
   readonly damage: number
+  /** The dice themselves, so the UI can show what landed rather than only the sum. */
+  readonly attackRoll: RollResult
+  readonly saveRoll: RollResult | null
   readonly rng: RngState
 }
 
@@ -129,12 +132,14 @@ export function resolveAttack(state: GameState, spec: AttackSpec): AttackOutcome
       attackTotal: attackRoll.total,
       saveTotal: null,
       damage: magicDamage(attackRoll.total, state.ruleSet),
+      attackRoll,
+      saveRoll: null,
       rng: afterAttack,
     }
   }
 
   if (attackRoll.total === 0) {
-    return { attackTotal: 0, saveTotal: null, damage: 0, rng: afterAttack }
+    return { attackTotal: 0, saveTotal: null, damage: 0, attackRoll, saveRoll: null, rng: afterAttack }
   }
 
   const [saveRoll, afterSave] = rollArmy(defenders, 'save', afterAttack, state.ruleSet)
@@ -142,6 +147,8 @@ export function resolveAttack(state: GameState, spec: AttackSpec): AttackOutcome
     attackTotal: attackRoll.total,
     saveTotal: saveRoll.total,
     damage: Math.max(0, attackRoll.total - saveRoll.total),
+    attackRoll,
+    saveRoll,
     rng: afterSave,
   }
 }

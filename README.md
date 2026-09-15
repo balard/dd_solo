@@ -5,13 +5,14 @@ the opponent.
 
 Unofficial fan project for personal use. Dragon Dice is a registered trademark of SFR, Inc.
 
-**Status:** playable in the terminal. The v0 rules engine is complete; the React UI is the last
-piece before an alpha.
+**Status:** playable. The v0 rules engine and UI are complete; PWA packaging and persistence are
+the last step.
 
 ```bash
 npm install
-npm run play          # play a game in the terminal
-npm test              # 187 tests, including 1000-game self-play
+npm run dev           # play in the browser
+npm run play          # or in the terminal
+npm test              # 203 tests, including 1000-game self-play
 ```
 
 On Windows PowerShell, `npm` may be blocked by the script execution policy
