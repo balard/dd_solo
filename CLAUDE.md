@@ -3,10 +3,9 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: Phase 5 done.** The rules engine is complete for v0: turn sequence, marches,
-> contested maneuvering, melee with counter-attack, missile, simplified magic, damage, capture and
-> both win conditions. A full game is playable end to end through `reduce` — but only in code:
-> there is no AI and no UI yet. `docs/PLAN-V0.md` Phase 6 (AI and the headless harness) is next.
+> **Status: Phase 6 done.** The game is playable — `npm run play` runs a full game in the
+> terminal against `PassiveAI`. Engine, both AIs, replay and the self-play harness are in.
+> `docs/PLAN-V0.md` Phase 7 (the React UI) is next, and is the only thing left before an alpha.
 
 ## Read these first
 
@@ -32,6 +31,7 @@ npm test            # vitest run
 npm run typecheck   # tsc --noEmit
 npm run build       # typecheck + production build
 npm run data        # regenerate and validate data/starter/ from data/raw/
+npm run play        # play a game in the terminal (--seed N, --ai random)
 ```
 
 `tsconfig.json` is deliberately strict — `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
@@ -151,6 +151,19 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   anything is simply dropped.
 - **`advance` throws after 1000 steps** rather than hanging. If you hit that, a phase handler is
   failing to either reach a decision or change the state.
+
+## AI and replay
+
+- **`AiPlayer` is `decide(state, pending, rng) => [action, rng]`.** Randomness is threaded, never
+  ambient, so a run is reproducible from `{ seed, aiSeed }` alone.
+- **`PassiveAI` starts nothing but is not inert** — it answers every forced decision and *does*
+  counter-attack. Do not "simplify" it into a no-op: that would leave the save/damage/counter path
+  untested.
+- **`RandomAI` is a test tool, not an opponent.** `runGame` + 1000 seeded self-play games is the
+  cheapest bug detector here; a `stoppedBecause === 'stuck'` result means the machine ran out of
+  moves without ending, and is always a bug.
+- **A game record is `{ setup, actions }` and nothing else.** Replaying it reproduces the game die
+  for die. `replayTo(record, n)` is undo.
 
 ## Conventions
 

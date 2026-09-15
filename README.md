@@ -5,8 +5,14 @@ the opponent.
 
 Unofficial fan project for personal use. Dragon Dice is a registered trademark of SFR, Inc.
 
-**Status:** pre-code. Design docs, a phased implementation plan, and the complete starter-set die
-data (40 unit dice, 12 terrain dice).
+**Status:** playable in the terminal. The v0 rules engine is complete; the React UI is the last
+piece before an alpha.
+
+```bash
+npm install
+npm run play          # play a game in the terminal
+npm test              # 187 tests, including 1000-game self-play
+```
 
 ## Where things are
 

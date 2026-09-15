@@ -350,7 +350,7 @@ needs tuning.
 
 ---
 
-## Phase 6 — AI and the headless harness
+## Phase 6 — AI and the headless harness  ✅ done
 
 **Deliverable.** Two AIs, for two different jobs.
 
