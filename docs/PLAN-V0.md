@@ -206,7 +206,7 @@ section 8) once Phase 5 makes it playable; these are dice averages, not playtest
 
 ---
 
-## Phase 3 — Damage
+## Phase 3 — Damage  ✅ done
 
 **Deliverable.** The rule most likely to be built wrong. Write the tests first.
 
@@ -235,6 +235,20 @@ that is not maximal.
 | 2 | 3 | max 0; nothing dies, damage ignored |
 | 10 | 3, 2 | max 5; army wiped |
 | 0 | anything | no `assign_damage` decision raised at all |
+
+**Outcome.** 121 tests green.
+
+- **Greedy is wrong, and it was worth proving.** Largest-first *looks* correct and passes most
+  cases, but 4 damage against 3, 2, 2 makes it take the 3, strand a point, and stop at 3 — while
+  `{2, 2}` absorbs the full 4. Hence the DP with reconstruction, plus a test named after exactly
+  this trap and an exhaustive brute-force cross-check over all 2⁷ subsets for damage 0–18.
+- **Which maximal set to kill is strategy, not rules.** The surviving *health* is identical across
+  every maximal set (it is always `total − maxAbsorbable`), but the surviving *number of dice* is
+  not — and more dice generally means more results. `chooseMaximalSubset` returns a deterministic
+  legal answer for the AI and an auto button; the real choice belongs to the player. A preference
+  heuristic is a Phase 6 concern.
+- **`applyDamage` deliberately does not check for victory.** The win check runs after every state
+  change, not only after damage, so it belongs to the caller in Phase 4.
 
 ---
 

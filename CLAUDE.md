@@ -3,10 +3,11 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: Phase 2 done.** Data layer, engine types, seeded RNG, presets, `setupGame`,
-> `validateState` and `rollArmy` are in. The reducer is still a skeleton: it guards actions
-> against `state.pending` but no phase is implemented, so nothing is ever pending yet.
-> `docs/PLAN-V0.md` Phase 3 (damage) is next.
+> **Status: Phase 3 done.** Data layer, engine types, seeded RNG, presets, `setupGame`,
+> `validateState`, `rollArmy` and damage resolution are in. The reducer is still a skeleton: it
+> guards actions against `state.pending` but no phase is implemented, so nothing is ever pending
+> and **nothing is playable yet**. `docs/PLAN-V0.md` Phase 4 (turn structure and maneuver) is
+> next, and is where the game starts to run.
 
 ## Read these first
 
@@ -134,6 +135,11 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   function when `ruleSet.eighthFace` becomes `'full'`.
 - **Terrain `face === 8` and `capturedBy !== null` must always agree.** `validateState` enforces
   it; both the win check and the revert-to-7 rule depend on it.
+- **Damage assignment must be maximal, and greedy does not find it.** 4 damage against units of
+  3, 2, 2 must kill `{2,2}`, not the 3. Use `maxAbsorbable` / `chooseMaximalSubset` in
+  `damage.ts`; never hand-roll a largest-first loop.
+- **`applyDamage` does not check for victory.** The caller does, because the win check runs after
+  every state change.
 - **`advance` throws after 1000 steps** rather than hanging. If you hit that, a phase handler is
   failing to either reach a decision or change the state.
 
