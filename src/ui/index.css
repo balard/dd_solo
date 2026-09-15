@@ -17,6 +17,14 @@
   --id: #46423c;
   --sai: #a03c72;
 
+  /* Elements. Carried in the data since transcription, used on screen at last. */
+  --el-air: #5b8dd6;
+  --el-water: #2f9c77;
+  --el-earth: #c9a227;
+  --el-fire: #d1552f;
+  --el-death: #5a5560;
+  --el-ivory: #cfc8b8;
+
   color-scheme: light dark;
 }
 
@@ -38,6 +46,13 @@
     --maneuver: #d9b955;
     --id: #b8b2a8;
     --sai: #ef92c4;
+
+    --el-air: #7fb0f0;
+    --el-water: #54c69c;
+    --el-earth: #e0c04c;
+    --el-fire: #f0805a;
+    --el-death: #8b8496;
+    --el-ivory: #e6e0d2;
   }
 }
 
@@ -354,3 +369,78 @@ body {
   padding: 8px;
   resize: vertical;
 }
+
+/* --- elements -------------------------------------------------------------- */
+
+.elements { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
+.el {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgb(0 0 0 / 12%);
+}
+.el-air { background: var(--el-air); }
+.el-water { background: var(--el-water); }
+.el-earth { background: var(--el-earth); }
+.el-fire { background: var(--el-fire); }
+.el-death { background: var(--el-death); }
+.el-ivory { background: var(--el-ivory); }
+
+/* --- inspecting a die ------------------------------------------------------ */
+
+.die-wrap { display: contents; }
+.die-wrap.is-open { display: block; flex-basis: 100%; }
+
+.die { cursor: pointer; }
+.die-monster .die-size { color: var(--sai); }
+.die-open {
+  border-color: var(--accent);
+  background: var(--sunk);
+}
+
+.die-detail {
+  margin-top: 5px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 7px;
+  background: var(--sunk);
+}
+.detail-head {
+  margin: 0 0 8px;
+  font-size: .82rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.face-sheet { display: flex; flex-wrap: wrap; gap: 5px; }
+.sheet-face {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+/* --- fallen ---------------------------------------------------------------- */
+
+.fallen-toggle {
+  font: inherit;
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.fallen-toggle:hover { color: var(--fg); }
+.fallen-side { font-size: .72rem; margin: 6px 0 4px; }
+.fallen .die { opacity: .62; }

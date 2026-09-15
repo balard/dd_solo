@@ -183,6 +183,12 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **A selection is a draft answer to one question** — `App` clears it whenever `pending` changes.
 - **Glyphs are ours** (`Glyph.tsx`), stroked in `currentColor` on a 24x24 grid, so colour and dark
   mode come from CSS and no glyph needs a second variant.
+- **A unit tile does two jobs.** When a decision needs units chosen it selects; otherwise tapping
+  *inspects*, opening the die to show every face it has. Without that the app showed outcomes but
+  never capabilities — you could watch a die roll but not find out what it could roll.
+- **Elements are shown, not just stored.** `ElementDots` renders the species and terrain elements
+  that have been in the data since transcription. They do nothing in v0 (no spells) but they are
+  what makes the board legible at a glance.
 
 ## Saving
 

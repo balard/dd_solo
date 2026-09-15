@@ -1,20 +1,48 @@
 /**
  * An army as a grid of tappable dice.
  *
- * ~44px targets, because that is the smallest comfortable tap on a phone, and the
- * same grid doubles as the damage-assignment surface -- selecting units to lose is
- * the same gesture as looking at them.
+ * ~44px targets, because that is the smallest comfortable tap on a phone.
+ *
+ * A tile does two jobs depending on what the game is asking. When a decision needs
+ * units chosen -- damage, retreat, reinforce -- tapping selects. Otherwise tapping
+ * *inspects*: the tile opens to show every face the die has. That matters because
+ * until now the app only ever showed outcomes. You could watch an Oak Lord roll,
+ * but never find out what it was capable of rolling, which is exactly what you need
+ * to decide whether to attack with it.
  */
 import { unitType } from '../../data/load'
+import type { Face } from '../../data/types'
 import type { UnitId, UnitInstance } from '../../engine/types'
 
-import { Glyph } from './Glyph'
+import { ElementDots, speciesInfo } from './Elements'
+import { FaceGlyph, Glyph, faceLabel } from './Glyph'
 
 const SIZE_LABEL: Record<string, string> = {
   small: 'S',
   medium: 'M',
   large: 'L',
-  monster: '★',
+  monster: 'M+',
+}
+
+const CLASS_LABEL: Record<string, string> = {
+  heavy_melee: 'heavy melee',
+  light_melee: 'light melee',
+  cavalry: 'cavalry',
+  missile: 'missile',
+  magic: 'magic',
+}
+
+/** Every face of a die, so a player can see what it is able to do. */
+function FaceSheet({ faces }: { faces: readonly Face[] }) {
+  return (
+    <div className="face-sheet">
+      {faces.map((face, i) => (
+        <span key={i} className={`sheet-face i-${face.icon}`} title={faceLabel(face)}>
+          <FaceGlyph face={face} size={17} />
+        </span>
+      ))}
+    </div>
+  )
 }
 
 export function DiceGrid({
@@ -22,11 +50,15 @@ export function DiceGrid({
   selectable = false,
   selected,
   onToggle,
+  inspecting,
+  onInspect,
 }: {
   units: readonly UnitInstance[]
   selectable?: boolean
   selected?: ReadonlySet<UnitId>
   onToggle?: (id: UnitId) => void
+  inspecting?: UnitId | null
+  onInspect?: (id: UnitId | null) => void
 }) {
   if (units.length === 0) return <p className="empty">no units here</p>
 
@@ -35,18 +67,47 @@ export function DiceGrid({
       {units.map((unit) => {
         const type = unitType(unit.typeId)
         const isSelected = selected?.has(unit.id) ?? false
-        const Tag = selectable ? 'button' : 'div'
+        const isOpen = !selectable && inspecting === unit.id
+        const species = speciesInfo(type.species)
+
         return (
-          <Tag
-            key={unit.id}
-            className={`die ${isSelected ? 'die-selected' : ''} ${selectable ? 'die-selectable' : ''}`}
-            {...(selectable ? { onClick: () => onToggle?.(unit.id), type: 'button' as const } : {})}
-            title={`${type.name} — ${type.health} health, ${type.dieType}`}
-          >
-            <span className="die-size">{SIZE_LABEL[type.size] ?? '?'}</span>
-            <span className="die-name">{type.name}</span>
-            <span className="die-health">{type.health}</span>
-          </Tag>
+          <div key={unit.id} className={`die-wrap ${isOpen ? 'is-open' : ''}`}>
+            <button
+              type="button"
+              className={
+                'die' +
+                (isSelected ? ' die-selected' : '') +
+                (selectable ? ' die-selectable' : '') +
+                (isOpen ? ' die-open' : '') +
+                (type.size === 'monster' ? ' die-monster' : '')
+              }
+              onClick={() =>
+                selectable ? onToggle?.(unit.id) : onInspect?.(isOpen ? null : unit.id)
+              }
+              title={
+                selectable
+                  ? `${type.name} — ${type.health} health`
+                  : `${type.name} — tap to see its faces`
+              }
+            >
+              <span className="die-size">{SIZE_LABEL[type.size] ?? '?'}</span>
+              <span className="die-name">{type.name}</span>
+              <span className="die-health">{type.health}</span>
+            </button>
+
+            {isOpen && (
+              <div className="die-detail">
+                <p className="detail-head">
+                  <b>{type.name}</b>
+                  <span className="muted">
+                    {type.health} health · {type.dieType} · {CLASS_LABEL[type.unitClass]}
+                  </span>
+                  {species && <ElementDots elements={species.elements} />}
+                </p>
+                <FaceSheet faces={type.faces} />
+              </div>
+            )}
+          </div>
         )
       })}
     </div>
@@ -57,7 +118,12 @@ export function DiceGrid({
 export function RollStrip({
   dice,
 }: {
-  dice: readonly { unitId: string; typeId: string; face: import('../../data/types').Face; results: number }[]
+  dice: readonly {
+    unitId: string
+    typeId: string
+    face: Face
+    results: number
+  }[]
 }) {
   return (
     <div className="roll-strip">
@@ -65,9 +131,7 @@ export function RollStrip({
         <span
           key={`${die.unitId}-${i}`}
           className={`rolled i-${die.face.icon} ${die.results === 0 ? 'rolled-blank' : ''}`}
-          title={`${unitType(die.typeId).name}: ${die.face.count} ${
-            die.face.icon === 'SAI' ? die.face.sai : die.face.icon.toLowerCase()
-          }`}
+          title={`${unitType(die.typeId).name}: ${faceLabel(die.face)}`}
         >
           <Glyph name={die.face.icon} size={16} />
           {die.results > 0 && <b>{die.results}</b>}

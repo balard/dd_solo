@@ -8,8 +8,10 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { unitType } from '../data/load'
+import { preset } from '../data/presets'
 import {
   armyAt,
+  deadUnits,
   livingUnits,
   type PlayerId,
   type TerrainSlot,
@@ -19,6 +21,7 @@ import {
 import { ActionBar } from './game/ActionBar'
 import { BoardStrip } from './game/BoardStrip'
 import { DiceGrid } from './game/DiceGrid'
+import { ElementDots, speciesInfo } from './game/Elements'
 import { LogPanel } from './game/LogPanel'
 import { focusedSlot, slotLabel } from './game/prompts'
 import { useGame } from './game/useGame'
@@ -31,12 +34,15 @@ export function App() {
 
   const [manualFocus, setManualFocus] = useState<TerrainSlot | null>(null)
   const [selection, setSelection] = useState<ReadonlySet<UnitId>>(new Set())
+  const [inspecting, setInspecting] = useState<UnitId | null>(null)
+  const [showFallen, setShowFallen] = useState(false)
 
   // A selection is a draft answer to one question. When the question changes, the
   // draft is meaningless, so it goes.
   const pendingKey = pending === null ? 'none' : `${pending.kind}:${pending.player}`
   useEffect(() => {
     setSelection(new Set())
+    setInspecting(null)
   }, [pendingKey])
 
   // Follow the game unless the player has deliberately looked elsewhere; a new
@@ -68,7 +74,16 @@ export function App() {
     return null
   }, [pending, human])
 
+  const speciesName = (player: PlayerId) => {
+    const forceId = game.record.setup.forces[player]
+    return speciesInfo(preset(forceId).species)
+  }
+  const mySpecies = speciesName(human)
+  const theirSpecies = speciesName(enemy)
+
   const reserve = livingUnits(state, human).filter((u) => u.location.kind === 'reserve')
+  const myFallen = deadUnits(state, human)
+  const theirFallen = deadUnits(state, enemy)
   const health = (units: readonly { typeId: string }[]) =>
     units.reduce((n, u) => n + unitType(u.typeId).health, 0)
 
@@ -136,23 +151,45 @@ export function App() {
 
         <div className="armies">
           <section className="army">
-          <h3>
-            Enemy <span className="muted">{theirs.length}d / {health(theirs)}h</span>
-          </h3>
-          <DiceGrid units={theirs} />
-        </section>
+            <h3>
+              Enemy
+              {theirSpecies && (
+                <>
+                  {' '}
+                  <span className="muted">{theirSpecies.name}</span>
+                  <ElementDots elements={theirSpecies.elements} />
+                </>
+              )}{' '}
+              <span className="muted">
+                {theirs.length}d / {health(theirs)}h
+              </span>
+            </h3>
+            <DiceGrid units={theirs} inspecting={inspecting} onInspect={setInspecting} />
+          </section>
 
-        <section className="army">
-          <h3>
-            Your army <span className="muted">{mine.length}d / {health(mine)}h</span>
-          </h3>
-          <DiceGrid
-            units={mine}
-            selectable={selectMode?.side === 'mine'}
-            selected={selection}
-            onToggle={toggle}
-          />
-        </section>
+          <section className="army">
+            <h3>
+              Your army
+              {mySpecies && (
+                <>
+                  {' '}
+                  <span className="muted">{mySpecies.name}</span>
+                  <ElementDots elements={mySpecies.elements} />
+                </>
+              )}{' '}
+              <span className="muted">
+                {mine.length}d / {health(mine)}h
+              </span>
+            </h3>
+            <DiceGrid
+              units={mine}
+              selectable={selectMode?.side === 'mine'}
+              selected={selection}
+              onToggle={toggle}
+              inspecting={inspecting}
+              onInspect={setInspecting}
+            />
+          </section>
 
           {(reserve.length > 0 || selectMode?.side === 'reserve') && (
           <section className="army">
@@ -164,8 +201,35 @@ export function App() {
               selectable={selectMode?.side === 'reserve'}
               selected={selection}
               onToggle={toggle}
+              inspecting={inspecting}
+              onInspect={setInspecting}
             />
           </section>
+          )}
+
+          {(myFallen.length > 0 || theirFallen.length > 0) && (
+            <section className="army">
+              <h3>
+                <button
+                  type="button"
+                  className="fallen-toggle"
+                  onClick={() => setShowFallen((v) => !v)}
+                >
+                  {showFallen ? '▾' : '▸'} Fallen
+                  <span className="muted">
+                    {' '}you {myFallen.length} · enemy {theirFallen.length}
+                  </span>
+                </button>
+              </h3>
+              {showFallen && (
+                <div className="fallen">
+                  <p className="fallen-side muted">Yours</p>
+                  <DiceGrid units={myFallen} inspecting={inspecting} onInspect={setInspecting} />
+                  <p className="fallen-side muted">Enemy</p>
+                  <DiceGrid units={theirFallen} inspecting={inspecting} onInspect={setInspecting} />
+                </div>
+              )}
+            </section>
           )}
         </div>
 

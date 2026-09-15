@@ -5,7 +5,7 @@
  * what you need at a glance -- where each terrain stands and who is strong there --
  * and the actual playing happens in the focused terrain below.
  */
-import { terrainDie, terrainFaceAction, unitType } from '../../data/load'
+import { terrainDie, terrainFaceAction, terrainType, unitType } from '../../data/load'
 import type { TerrainFaceNumber } from '../../data/types'
 import {
   TERRAIN_SLOTS,
@@ -15,6 +15,7 @@ import {
   type TerrainSlot,
 } from '../../engine/types'
 
+import { ElementDots } from './Elements'
 import { Glyph, type GlyphName } from './Glyph'
 import { slotLabel } from './prompts'
 
@@ -59,7 +60,15 @@ export function BoardStrip({
             onClick={() => onFocus(slot)}
           >
             <span className="chip-head">
-              <span className="chip-name">{slotLabel(slot, human)}</span>
+              <span className="chip-name">
+                {slotLabel(slot, human)}
+                <ElementDots
+                  elements={terrainType(terrainDie(terrain.dieId).type).elements}
+                  title={`${terrainType(terrainDie(terrain.dieId).type).name} — ${terrainType(
+                    terrainDie(terrain.dieId).type,
+                  ).elements.join(' + ')}`}
+                />
+              </span>
               <span className="chip-face">
                 {captured ? (
                   <span className="chip-eighth">
