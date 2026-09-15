@@ -42,6 +42,7 @@ npm run build       # typecheck + production build
 npm run data        # regenerate and validate data/starter/ from data/raw/
 npm run art         # optional: mirror real face art into public/faces/ (gitignored)
 npm run play        # play a game in the terminal (--seed N, --ai random)
+npm run goldens     # re-record the golden corpus -- see below before you do
 ```
 
 **`npm test` is slow on purpose** — around 30-50s, most of it the 1000-game fuzz and the replay
@@ -208,6 +209,12 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   moves without ending, and is always a bug.
 - **A game record is `{ setup, actions }` and nothing else.** Replaying it reproduces the game die
   for die. `replayTo(record, n)` is undo.
+- **The golden corpus is the guard on "this changed no outcome".** `src/engine/__golden__/` holds
+  25 recorded games plus a `digestState` of what each replayed to, and `golden.test.ts` replays
+  them. A refactor that claims to be behaviour-preserving is only as good as this file staying
+  untouched. **Regenerating it with `npm run goldens` is the one move that can hide a bug**, so a
+  commit that does it says why in the message — it is not a snapshot to refresh when it goes red.
+  The digest keeps per-die results, because a roll can change without changing who dies.
 
 ## UI
 

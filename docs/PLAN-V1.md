@@ -116,19 +116,34 @@ homes.
 **Deliverable.** 25 recorded v0 games, committed *before* a line of Phase 0 is written, and a test
 that replays them.
 
-`src/engine/__golden__/v0-games.json` holds `runGame` records — `RandomAI` on both sides, seeds
-1–25, named forces — each beside a **digest** of its final state: every unit id to its location,
-the three terrains, `rng.counter`, `winner`, and the log rendered to lines. A digest rather than a
-hash, because a hash mismatch tells you only that something moved, and the whole point of the file
-is to say *what*.
+`src/engine/__golden__/v0-games.json` holds `runGame` records — `RandomAI` on both sides, named
+forces — each beside a **digest** of its final state: every unit to its location, the three
+terrains, the turn state, `rng.counter`, the pending decision, `winner`, and the whole log as
+key-sorted JSON lines. A digest rather than a hash, because a hash mismatch tells you only that
+something moved, and the whole point of the file is to say *what*.
 
 Cut them now and they measure both Phase 0 halves: 0b must reproduce them exactly, and 0a must
 reproduce them through its overrides. Cut them after 0b and they only ever confirm what they were
 generated from.
 
-`tools/record_goldens.ts`, behind `npm run goldens`, regenerates the file. **Regenerating it is the
-one move that can hide a bug**, so a commit that does it says why in its message. Replay is cheap —
-it calls no AI — so 25 games cost the suite very little.
+**The log is not redundant with the outcome fields, which is the thing to know before trimming
+this file.** Tripling the eighth-face ID bonus as a test changed no unit's fate in the first golden
+game — the attack was already lethal — and the only evidence of it was the per-die results in the
+log. A roll that changes without changing an outcome is exactly what a refactor claims not to do,
+so the dice stay. They are stored as `unitId@faceIndex=results`, which loses nothing (the face
+follows from the unit and the index) and is five times smaller than the `DieRoll` it replaces.
+
+**The 25 games are selected, not the first 25 seeds.** Random self-play mostly does not finish:
+two thirds of seeds are still going at 800 decisions and the median winner takes 1100, so seeds
+1–25 gave a corpus that was three fifths unfinished games and 6 MB. The recorder scans upward and
+keeps the first 25 seeds that reach an ending inside 800 decisions (seeds 1–190, as it turns out),
+which buys the two things that were missing: every game exercises capture, the win check and
+`game_over`, and the file is 2.4 MB — 136 KB packed — instead. Breadth is not this file's job; the
+1000-game fuzz does that, unselected, every run.
+
+`src/cli/goldens.ts`, behind `npm run goldens`, regenerates the file. **Regenerating it is the one
+move that can hide a bug**, so a commit that does it says why in its message. Replay is cheap — it
+calls no AI — so the whole corpus checks in about 2.5 seconds.
 
 ---
 
