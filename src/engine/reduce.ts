@@ -4,14 +4,9 @@
  * `reduce(state, action) => state`. Pure: no side effects, no clocks, no ambient
  * randomness. Randomness comes from `state.rng`, so replaying an action log
  * reproduces a game die for die.
- *
- * Phase 1 supplies the skeleton: the action/pending guard, and the auto-advance
- * loop. The phase handlers themselves land in Phases 4 and 5 -- until then
- * `advance` has nothing to do and every action is rejected, because no decision is
- * ever pending.
  */
-import type { GameAction, GameState } from './types'
-import { IllegalActionError } from './types'
+import { applyAction, stepGame } from './turn'
+import { IllegalActionError, type GameAction, type GameState } from './types'
 
 /**
  * How many advance steps before we assume the state machine is looping.
@@ -39,7 +34,7 @@ export function advance(state: GameState): GameState {
       return current
     }
 
-    const next = step_(current)
+    const next = stepGame(current)
     if (next === current) {
       return current // nothing left to do without a decision
     }
@@ -50,16 +45,6 @@ export function advance(state: GameState): GameState {
     `advance did not settle after ${MAX_ADVANCE_STEPS} steps ` +
       `(phase ${current.turn.phase}, march ${current.turn.marchIndex}/${current.turn.marchStep})`,
   )
-}
-
-/**
- * One step of the phase machine. Returns the same object when there is nothing to
- * do, which is how `advance` knows to stop.
- *
- * Phase 4 fills this in.
- */
-function step_(state: GameState): GameState {
-  return state
 }
 
 export function reduce(state: GameState, action: GameAction): GameState {
@@ -80,7 +65,16 @@ export function reduce(state: GameState, action: GameAction): GameState {
     )
   }
 
-  // Phase 4-5 apply the action here. Until then the guard above is the whole
-  // reducer, which is exactly what the phase can honestly claim to provide.
+  // `applyAction` clears `pending` and never sets one, so `advance` always runs at
+  // least one `stepGame` -- which is what makes the victory check run after every
+  // state change rather than only at end of turn.
+  return advance(applyAction(state, action))
+}
+
+/**
+ * Starts a freshly set-up game running: advances from the opening position to the
+ * first real decision.
+ */
+export function begin(state: GameState): GameState {
   return advance(state)
 }

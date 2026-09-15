@@ -63,10 +63,24 @@ export type Phase =
   | 'eighth_face'
   | 'dragon_attack'
   | 'march'
-  | 'reserves'
+  | 'reserves_reinforce'
+  | 'reserves_retreat'
   | 'game_over'
 
-export type MarchStep = 'select_army' | 'maneuver' | 'action'
+/**
+ * Steps within a march.
+ *
+ * Maneuvering is three separate steps because the rules make it three separate
+ * decisions, in this order: the marcher declares intent *without* saying which way,
+ * the opponent decides whether to contest, and only then is the direction chosen.
+ * Collapsing them would leak the direction to the contesting player.
+ */
+export type MarchStep =
+  | 'select_army'
+  | 'declare_maneuver'
+  | 'contest_maneuver'
+  | 'choose_direction'
+  | 'action'
 
 export interface TurnState {
   readonly marching: PlayerId
@@ -79,6 +93,8 @@ export interface TurnState {
   /** Armies already marched this turn; the second march must differ. */
   readonly armiesMarched: readonly ArmyRef[]
 }
+
+export type Direction = 'up' | 'down'
 
 export type ActionKind = 'melee' | 'missile' | 'magic'
 
@@ -94,7 +110,13 @@ export type Pending =
   | { readonly kind: 'choose_march_army'; readonly player: PlayerId; readonly options: readonly ArmyRef[] }
   | { readonly kind: 'choose_maneuver'; readonly player: PlayerId; readonly slot: TerrainSlot }
   | { readonly kind: 'contest_maneuver'; readonly player: PlayerId; readonly slot: TerrainSlot }
-  | { readonly kind: 'choose_direction'; readonly player: PlayerId; readonly slot: TerrainSlot }
+  | {
+      readonly kind: 'choose_direction'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      /** Face 1 cannot go down and face 8 cannot go up, so this is not always both. */
+      readonly options: readonly Direction[]
+    }
   | {
       readonly kind: 'choose_action'
       readonly player: PlayerId
@@ -121,7 +143,7 @@ export type GameAction =
   | { readonly kind: 'choose_march_army'; readonly army: ArmyRef | null }
   | { readonly kind: 'choose_maneuver'; readonly maneuver: boolean }
   | { readonly kind: 'contest_maneuver'; readonly contest: boolean }
-  | { readonly kind: 'choose_direction'; readonly direction: 'up' | 'down' }
+  | { readonly kind: 'choose_direction'; readonly direction: Direction }
   | { readonly kind: 'choose_action'; readonly action: ActionKind | null }
   | { readonly kind: 'choose_missile_target'; readonly slot: TerrainSlot }
   | { readonly kind: 'choose_counter_attack'; readonly counter: boolean }
@@ -142,7 +164,43 @@ export type LogEntry =
       readonly dieId: string
       readonly face: TerrainFace
     }
-  | { readonly kind: 'phase'; readonly phase: Phase; readonly player: PlayerId }
+  | { readonly kind: 'march_begin'; readonly player: PlayerId; readonly army: ArmyRef; readonly index: 0 | 1 }
+  | { readonly kind: 'march_skipped'; readonly player: PlayerId; readonly index: 0 | 1 }
+  | { readonly kind: 'maneuver_declared'; readonly player: PlayerId; readonly slot: TerrainSlot }
+  | { readonly kind: 'maneuver_allowed'; readonly slot: TerrainSlot }
+  | {
+      readonly kind: 'maneuver_contested'
+      readonly slot: TerrainSlot
+      readonly marcher: number
+      readonly defender: number
+      readonly marcherWins: boolean
+    }
+  | {
+      readonly kind: 'terrain_moved'
+      readonly slot: TerrainSlot
+      readonly from: TerrainFace
+      readonly to: TerrainFace
+      readonly by: PlayerId
+    }
+  | { readonly kind: 'terrain_captured'; readonly slot: TerrainSlot; readonly by: PlayerId }
+  | {
+      readonly kind: 'terrain_lost'
+      readonly slot: TerrainSlot
+      readonly from: PlayerId
+      readonly reason: 'maneuvered' | 'abandoned'
+    }
+  | {
+      readonly kind: 'reinforced'
+      readonly player: PlayerId
+      readonly moves: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[]
+    }
+  | { readonly kind: 'retreated'; readonly player: PlayerId; readonly unitIds: readonly UnitId[] }
+  | { readonly kind: 'turn_end'; readonly player: PlayerId }
+  | {
+      readonly kind: 'victory'
+      readonly player: PlayerId
+      readonly reason: 'captures' | 'elimination'
+    }
 
 /**
  * Which slice of the full game is switched on.

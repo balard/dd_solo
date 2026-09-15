@@ -3,11 +3,11 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: Phase 3 done.** Data layer, engine types, seeded RNG, presets, `setupGame`,
-> `validateState`, `rollArmy` and damage resolution are in. The reducer is still a skeleton: it
-> guards actions against `state.pending` but no phase is implemented, so nothing is ever pending
-> and **nothing is playable yet**. `docs/PLAN-V0.md` Phase 4 (turn structure and maneuver) is
-> next, and is where the game starts to run.
+> **Status: Phase 4 done.** The game runs: turn sequence, marches, contested maneuvering,
+> capture, the Reserves Phase and both win conditions. A game of pure maneuvering can be played
+> to a capture win through `reduce`. Actions (melee/missile/magic) are not implemented — the
+> action step offers `legal: []` — so there is still no combat and no UI.
+> `docs/PLAN-V0.md` Phase 5 (actions) is next.
 
 ## Read these first
 
@@ -140,6 +140,12 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   `damage.ts`; never hand-roll a largest-first loop.
 - **`applyDamage` does not check for victory.** The caller does, because the win check runs after
   every state change.
+- **`applyAction` clears `pending` and must never set one; `stepGame` is the only thing that sets
+  it.** This is why the victory check runs after every state change: an action leaves `pending`
+  null, so `advance` always runs `stepGame` at least once afterwards. Set `pending` inside
+  `applyAction` and `advance` returns early, silently skipping the win check.
+- **Maneuvering is three steps** — declare, contest, direction — because the opponent must decide
+  whether to contest without knowing the direction. Do not collapse them.
 - **`advance` throws after 1000 steps** rather than hanging. If you hit that, a phase handler is
   failing to either reach a decision or change the state.
 

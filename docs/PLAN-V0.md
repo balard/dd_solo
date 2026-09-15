@@ -252,7 +252,7 @@ that is not maximal.
 
 ---
 
-## Phase 4 — Turn structure and maneuver
+## Phase 4 — Turn structure and maneuver  ✅ done
 
 **Deliverable.** A turn you can play end to end with no attacks.
 
@@ -272,6 +272,29 @@ that is not maximal.
 **Tests.** Terrain at 7, uncontested maneuver up → captured. Contested, marcher ties → marcher
 wins. Captured terrain, opponent out-maneuvers → back to 7, capture lost. Second capture → `winner`
 set immediately, not at end of turn. Marching the same army twice is rejected.
+
+**Outcome.** 152 tests green, and a throwaway random-play fuzz over 120 games (~134k decisions)
+produced zero `validateState` violations and zero crashes. 18 of those games reached a capture win
+by maneuvering alone, so the win path holds under random play and not just under a script. The
+other 102 hit the step cap, which is expected: with no combat, random maneuvering is a drunkard's
+walk across the terrain faces. Phase 6 formalises this as `RandomAI`.
+
+- **The load-bearing split:** `applyAction` folds in a decision and *always clears* `pending`,
+  never setting one; `stepGame` is the only thing that sets `pending`. Because an action leaves
+  `pending` null, the advance loop always runs `stepGame` at least once afterwards — which is
+  precisely what makes the victory check run after every state change instead of at end of turn.
+  Getting this backwards would have made `advance` return early and skip the check.
+- **Maneuvering is three steps, not one.** Declare → contest → direction, because the rules make
+  the opponent decide whether to contest *without* knowing which way the terrain is going.
+  Collapsing them would leak the direction. There is a test asserting the pending decision
+  contains no direction while the contest is open.
+- **`Phase` gained `reserves_reinforce` / `reserves_retreat`** instead of one `reserves` phase, so
+  the sub-step needs no extra field on `TurnState`.
+- **`choose_direction` carries its legal options,** since face 1 cannot go down and face 8 cannot
+  go up.
+- **Phase 5's `choose_action` is offered with `legal: []`** and rejects any non-null action. An
+  empty list is an honest contract; offering `['melee']` and then throwing would be a lie that the
+  Phase 6 fuzzer would trip over immediately.
 
 ---
 
