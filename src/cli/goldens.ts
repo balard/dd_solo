@@ -25,7 +25,7 @@ import { randomAi } from '../ai/random'
 import { runGame } from '../ai/run'
 import { digestState, type StateDigest } from '../engine/digest'
 import type { GameRecord } from '../engine/replay'
-import type { SetupOptions } from '../engine/setup'
+import { STARTER_FORCES, type SetupOptions } from '../engine/setup'
 
 const GAMES = 25
 const MAX_DECISIONS = 800
@@ -46,7 +46,7 @@ export interface GoldenGame {
 function play(seed: number): GoldenGame {
   const setup: SetupOptions = {
     seed,
-    forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' },
+    forces: STARTER_FORCES,
   }
   const aiSeed = seed * 7
   const result = runGame({

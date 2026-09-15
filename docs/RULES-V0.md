@@ -180,7 +180,7 @@ without raising a decision `PassiveAI` cannot hold an opinion about. The real st
 with `GreedyAI` (`PLAN-V1.md` Phase 9).
 
 For the alpha, ship **two fixed preset 30-health army lists** (one per species) so a game can be
-started in one tap. v1 Phase 0a replaces them with forces rolled from the seed — random race,
+started in one tap. **v1 Phase 0a replaced them** with forces rolled from the seed — random race,
 24 or 36 health, random units, random split — keeping named forces as the option tests and the
 regression baseline use. A hand-driven army builder is still a later feature.
 

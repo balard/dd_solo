@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { replay, replayTo } from '../engine/replay'
-import { setupGame, type SetupOptions } from '../engine/setup'
+import { setupGame, STARTER_FORCES, type SetupOptions } from '../engine/setup'
 import { livingUnits, type PlayerId } from '../engine/types'
 import { validateState } from '../engine/validate'
 
@@ -11,7 +11,7 @@ import { runGame } from './run'
 
 const setup = (seed: number, firstPlayer?: PlayerId): SetupOptions => ({
   seed,
-  forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' },
+  forces: STARTER_FORCES,
   ...(firstPlayer ? { firstPlayer } : {}),
 })
 
@@ -154,6 +154,13 @@ describe('self-play fuzz', () => {
   /**
    * The phase's headline exit criterion. Every intermediate state is checked, so a
    * failure names the seed pair and the decision that broke it.
+   *
+   * **Rolled forces, not the starter lists.** The two hand-authored forces field one
+   * monster each and always the same dice, so a thousand games of them exercised the
+   * same 28 dice a thousand times. A rolled force draws from all 20 types of its
+   * species and comes in two sizes, which is what makes this worth running again
+   * once SAIs are live -- and the seed still reproduces the whole game, setup
+   * included, so a failure is still two integers.
    */
   it('survives 1000 random self-play games', { timeout: 180_000 }, () => {
     let decided = 0
@@ -163,7 +170,7 @@ describe('self-play fuzz', () => {
 
     for (let i = 0; i < 1000; i++) {
       const result = runGame({
-        setup: setup(i + 1),
+        setup: { seed: i + 1, forces: { kind: 'random' } },
         players: { p1: randomAi, p2: randomAi },
         aiSeed: 500_000 + i,
         maxDecisions: 1200,

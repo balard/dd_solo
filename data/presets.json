@@ -1,26 +1,66 @@
 {
-  "_comment": "Hand-authored starting forces. NOT generated -- the importers never touch this file. Each force is 30 health in three armies of at most 15 (RULES-V0.md section 7). The two lists are deliberately parallel in size and role so early playtesting isolates species differences rather than list-building differences. Eighth-face variants are cosmetic in v0, so every terrain uses the tower die.",
+  "_comment": "Hand-authored setup content. NOT generated -- the importers never touch this file. Two separate things live here. `species` is a per-species profile: the Home Terrain a species brings and the second terrain it proposes as the Frontier, which the loser of the Horde roll-off places (PLAN-V1.md Phase 0a). With only three terrain types in the box and element-matching leaving each species just two legal ones, both of which it would otherwise spend on its home, the second is a second die of its own type -- Tower at home, City at the Frontier, so the two dice differ. Phase 5 adds three more types and makes that a real choice. `presets` are named 30-health forces, kept because a test that wants a particular die on the board has to be able to say so, and because the golden corpus needs forces that never change. An ordinary game rolls its forces from the seed instead.",
+  "species": {
+    "treefolk": {
+      "homeTerrain": "swampland_tower",
+      "secondTerrain": "swampland_city"
+    },
+    "firewalkers": {
+      "homeTerrain": "wasteland_tower",
+      "secondTerrain": "wasteland_city"
+    }
+  },
   "presets": {
     "treefolk_starter": {
       "name": "Treefolk starter force",
       "species": "treefolk",
-      "homeTerrain": "swampland_tower",
-      "proposedFrontier": "highland_tower",
       "armies": {
-        "home": ["treefolk.oak_lord", "treefolk.oak", "treefolk.oakling", "treefolk.pine", "treefolk.dryad"],
-        "campaign": ["treefolk.darktree", "treefolk.noble_willow", "treefolk.naiad", "treefolk.willow"],
-        "horde": ["treefolk.pine_prince", "treefolk.lady_nereid", "treefolk.hamadryad", "treefolk.nymph", "treefolk.pineling"]
+        "home": [
+          "treefolk.oak_lord",
+          "treefolk.oak",
+          "treefolk.oakling",
+          "treefolk.pine",
+          "treefolk.dryad"
+        ],
+        "campaign": [
+          "treefolk.darktree",
+          "treefolk.noble_willow",
+          "treefolk.naiad",
+          "treefolk.willow"
+        ],
+        "horde": [
+          "treefolk.pine_prince",
+          "treefolk.lady_nereid",
+          "treefolk.hamadryad",
+          "treefolk.nymph",
+          "treefolk.pineling"
+        ]
       }
     },
     "firewalkers_starter": {
       "name": "Firewalkers starter force",
       "species": "firewalkers",
-      "homeTerrain": "wasteland_tower",
-      "proposedFrontier": "highland_tower",
       "armies": {
-        "home": ["firewalkers.sentinel", "firewalkers.watcher", "firewalkers.guardian", "firewalkers.firemaster", "firewalkers.sunflare"],
-        "campaign": ["firewalkers.fireshadow", "firewalkers.expeditioner", "firewalkers.nightsbane", "firewalkers.adventurer"],
-        "horde": ["firewalkers.firestormer", "firewalkers.daybringer", "firewalkers.sunburst", "firewalkers.shadowchaser", "firewalkers.firestarter"]
+        "home": [
+          "firewalkers.sentinel",
+          "firewalkers.watcher",
+          "firewalkers.guardian",
+          "firewalkers.firemaster",
+          "firewalkers.sunflare"
+        ],
+        "campaign": [
+          "firewalkers.fireshadow",
+          "firewalkers.expeditioner",
+          "firewalkers.nightsbane",
+          "firewalkers.adventurer"
+        ],
+        "horde": [
+          "firewalkers.firestormer",
+          "firewalkers.daybringer",
+          "firewalkers.sunburst",
+          "firewalkers.shadowchaser",
+          "firewalkers.firestarter"
+        ]
       }
     }
   }

@@ -20,8 +20,6 @@ import { clearSave, readSave, writeSave } from './storage'
 /** How long to let the player read the opponent's move before the next one. */
 const AI_THINKING_MS = 650
 
-const FORCES = { p1: 'treefolk_starter', p2: 'firewalkers_starter' } as const
-
 /** How the current game came to be, so the UI can say something honest about it. */
 export type GameOrigin =
   | { readonly kind: 'new' }
@@ -51,7 +49,7 @@ interface Session {
 }
 
 function fresh(seed: number, origin: GameOrigin = { kind: 'new' }): Session {
-  const setup: SetupOptions = { seed, forces: FORCES }
+  const setup: SetupOptions = { seed, forces: { kind: 'random' } }
   return { state: begin(setupGame(setup)), setup, actions: [], origin }
 }
 

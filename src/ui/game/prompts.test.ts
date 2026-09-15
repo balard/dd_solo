@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { unitType } from '../../data/load'
 import { begin } from '../../engine/reduce'
-import { setupGame } from '../../engine/setup'
+import { setupGame, STARTER_FORCES } from '../../engine/setup'
 import {
   TERRAIN_SLOTS,
   armyAt,
@@ -25,7 +25,7 @@ const fresh = () =>
   begin(
     setupGame({
       seed: 1234,
-      forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' },
+      forces: STARTER_FORCES,
       firstPlayer: 'p1',
     }),
   )

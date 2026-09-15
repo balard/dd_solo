@@ -8,10 +8,10 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { unitType } from '../data/load'
-import { preset } from '../data/presets'
 import {
   deadUnits,
   livingUnits,
+  speciesOf,
   type PlayerId,
   type TerrainSlot,
   type UnitId,
@@ -61,10 +61,9 @@ export function App() {
   // in prompts.ts, where it is testable without a DOM.
   const selectMode = useMemo(() => selectModeFor(pending, human), [pending, human])
 
-  const speciesName = (player: PlayerId) => {
-    const forceId = game.record.setup.forces[player]
-    return speciesInfo(preset(forceId).species)
-  }
+  // Read off the dice rather than the setup: a force may have been rolled, in which
+  // case there is no preset id to look up, and the units know anyway.
+  const speciesName = (player: PlayerId) => speciesInfo(speciesOf(state, player))
   const mySpecies = speciesName(human)
   const theirSpecies = speciesName(enemy)
 

@@ -4,6 +4,8 @@
  * Nothing here knows about React, the DOM, or which player is human. The engine is
  * a pure reducer over these values; see `docs/OVERVIEW.md` section 2.
  */
+import { unitType } from '../data/load'
+
 import type { DieRoll } from './roll'
 import type { RngState } from './rng'
 
@@ -175,6 +177,14 @@ export type GameAction =
 export type LogEntry =
   | { readonly kind: 'game_start'; readonly seed: number; readonly firstPlayer: PlayerId }
   | {
+      /** Only when the forces were rolled: a named force is a choice, not a draw. */
+      readonly kind: 'forces_drawn'
+      /** Health per side. Both sides always bring the same. */
+      readonly health: number
+      readonly species: Readonly<Record<PlayerId, string>>
+      readonly dice: Readonly<Record<PlayerId, number>>
+    }
+  | {
       readonly kind: 'order_of_play'
       readonly rolls: Readonly<Record<PlayerId, number>>
       readonly firstPlayer: PlayerId
@@ -329,6 +339,19 @@ export class IllegalActionError extends Error {
 // --- selectors ---------------------------------------------------------------
 // Armies are queries, not stored entities. Everything that needs "the army at X"
 // goes through these.
+
+/**
+ * Which species a player is fielding, read off their dice.
+ *
+ * Derived rather than stored, for the same reason armies are: a force is one
+ * species, every unit says which, and a second copy of that fact could drift. Dead
+ * units count -- they stay in `state.units` -- so this survives a rout.
+ */
+export function speciesOf(state: GameState, player: PlayerId): string {
+  const unit = Object.values(state.units).find((u) => u.owner === player)
+  if (unit === undefined) throw new Error(`${player} has no units at all, not even dead ones`)
+  return unitType(unit.typeId).species
+}
 
 export function unitsOf(state: GameState, player: PlayerId): readonly UnitInstance[] {
   return Object.values(state.units).filter((u) => u.owner === player)

@@ -3,7 +3,7 @@ import { doublesIds, legalActions, magicDamage, missileTargets, terrainAction } 
 import { damageOptions } from './damage'
 import { begin, reduce } from './reduce'
 import { rollArmy } from './roll'
-import { setupGame } from './setup'
+import { setupGame, STARTER_FORCES } from './setup'
 import {
   IllegalActionError,
   armyAt,
@@ -17,8 +17,19 @@ import {
   V0_RULES,
 } from './types'
 import { validateState } from './validate'
+/**
+ * Every test below reads an action off a terrain face, so which terrain sits at the
+ * Frontier decides what they mean: Highland runs magic on faces 1-3 and melee on
+ * 6-7, Wasteland magic on 1 alone. Phase 0a made the Frontier depend on who lost
+ * the roll-off, so it is pinned here rather than left to the setup.
+ */
 const fresh = (seed = 1234, firstPlayer: PlayerId = 'p1') =>
-  setupGame({ seed, forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' }, firstPlayer })
+  setupGame({
+    seed,
+    forces: STARTER_FORCES,
+    firstPlayer,
+    terrains: { frontier: 'highland_tower' },
+  })
 function play(state: GameState, ...actions: GameAction[]): GameState {
   return actions.reduce((current, action) => {
     const next = reduce(current, action)

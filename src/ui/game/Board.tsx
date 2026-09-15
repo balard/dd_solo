@@ -260,7 +260,19 @@ export function Board({
               <span className="chip-head">
                 <span className="chip-name">
                   {slotLabel(slot, human)}
-                  <span className="chip-terrain">{type.name}</span>
+                  {/*
+                   * The eighth-face icon, not just the type. Since Phase 0a the
+                   * Frontier is a second die of one species' own type, so a board
+                   * can hold two Wastelands -- identical here unless the thing that
+                   * differs is on screen. It is also what face 8 will do from
+                   * Phase 5, which is worth reading before you turn a terrain up.
+                   */}
+                  <span className="chip-terrain">
+                    {type.name}
+                    <span className="chip-eighth">
+                      {terrainDie(terrain.dieId).eighthFace.replace(/_/g, ' ')}
+                    </span>
+                  </span>
                   <ElementDots
                     elements={type.elements}
                     title={`${type.name} — ${type.elements.join(' + ')}`}

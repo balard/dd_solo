@@ -1,18 +1,32 @@
 /**
  * Builds the opening position, following RULES-V0.md section 7.
  *
- * The Horde roll-off for order of play is included now that `rollArmy` exists. The
- * *other* setup choice -- which proposed terrain becomes the Frontier -- resolves
- * itself, because both starter forces propose Highland; `setupGame` throws rather
- * than guessing if a future pair of presets disagrees.
+ * Both setup choices are made here now. Order of play comes from the Horde roll-off,
+ * and the *Frontier* comes from the loser of that roll-off, who places the second
+ * terrain their species brings. The rules give the winner the choice of one prize or
+ * the other; splitting them one each costs nothing while the opponent is `PassiveAI`,
+ * which could hold no opinion about which terrain it would rather fight on, and it
+ * means no decision has to be raised. `GreedyAI` (Phase 9) gets the real rule.
+ *
+ * A force is either named -- a preset, for tests and the golden corpus -- or rolled
+ * from the seed. **The named path must consume no generation draws at all**, or a
+ * named game lands on a different board than v0 gave it and every golden quietly
+ * changes meaning.
  */
-import { terrainDie } from '../data/load'
-import { preset, PRESET_ARMY_NAMES, type Preset, type PresetArmyName } from '../data/presets'
+import { terrainDie, unitType } from '../data/load'
+import {
+  preset,
+  speciesProfile,
+  PRESET_ARMY_NAMES,
+  type PresetArmyName,
+} from '../data/presets'
 
+import { generateForces, type GeneratedForce } from './force'
 import { nextInt, rngFrom, type RngState } from './rng'
 import { rollArmy, type DieRoll } from './roll'
 import {
   V0_RULES,
+  opponentOf,
   type GameState,
   type LogEntry,
   type PlayerId,
@@ -23,16 +37,46 @@ import {
   type UnitInstance,
 } from './types'
 
+/**
+ * Where the two forces come from.
+ *
+ * Randomisation is how a game is set up; naming forces is how the engine is tested.
+ * A test that wants a Gorgon on the board has to be able to say so, the golden
+ * corpus needs forces that never change, and `V0_RULES` needs a fixed configuration
+ * to stay a regression baseline.
+ */
+export type ForceSpec =
+  | { readonly kind: 'named'; readonly forces: Readonly<Record<PlayerId, string>> }
+  | { readonly kind: 'random' }
+
+/** The two hand-authored 30-health forces. Most tests want exactly this. */
+export const STARTER_FORCES: ForceSpec = {
+  kind: 'named',
+  forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' },
+}
+
 export interface SetupOptions {
   readonly seed: number
-  /** Preset id for each player, e.g. `treefolk_starter`. */
-  readonly forces: Readonly<Record<PlayerId, string>>
+  readonly forces: ForceSpec
   /**
    * Who takes the first march. Omit to decide it by the Horde roll-off, which is
-   * what the rules actually call for.
+   * what the rules actually call for. Naming one skips the roll-off, and the other
+   * player is then the loser who sets the Frontier.
    */
   readonly firstPlayer?: PlayerId
+  /**
+   * Pins a terrain die to a slot, overriding what the species would bring. Setup
+   * needs no such thing; tests do -- this is how a test says "a Tower, here" -- and
+   * it is what lets the golden corpus keep replaying the board it was recorded on.
+   */
+  readonly terrains?: Readonly<Partial<Record<TerrainSlot, string>>>
   readonly ruleSet?: RuleSet
+}
+
+/** A force once it is resolved, whichever way it was obtained. */
+interface ResolvedForce {
+  readonly species: string
+  readonly armies: Readonly<Record<PresetArmyName, readonly string[]>>
 }
 
 /**
@@ -69,7 +113,10 @@ export function rollStartingFace(rng: RngState): readonly [TerrainFace, RngState
 
 type ArmyGroups = Readonly<Record<PresetArmyName, readonly UnitInstance[]>>
 
-function buildUnits(player: PlayerId, force: Preset): { all: UnitInstance[]; byArmy: ArmyGroups } {
+function buildUnits(
+  player: PlayerId,
+  force: ResolvedForce,
+): { all: UnitInstance[]; byArmy: ArmyGroups } {
   const all: UnitInstance[] = []
   const byArmy = {} as Record<PresetArmyName, UnitInstance[]>
   let ordinal = 0
@@ -142,13 +189,46 @@ function rollForFirstPlayer(
   return [coin === 0 ? 'p1' : 'p2', { p1: 0, p2: 0 }, { p1: [], p2: [] }, next] as const
 }
 
-export function setupGame(options: SetupOptions): GameState {
-  const p1Force = preset(options.forces.p1)
-  const p2Force = preset(options.forces.p2)
-  const ruleSet = options.ruleSet ?? V0_RULES
+const countDice = (force: GeneratedForce): number =>
+  PRESET_ARMY_NAMES.reduce((sum, name) => sum + force.armies[name].length, 0)
 
-  const p1Units = buildUnits('p1', p1Force)
-  const p2Units = buildUnits('p2', p2Force)
+const forceHealth = (force: ResolvedForce): number =>
+  PRESET_ARMY_NAMES.reduce(
+    (sum, name) => sum + force.armies[name].reduce((n, id) => n + unitType(id).health, 0),
+    0,
+  )
+
+export function setupGame(options: SetupOptions): GameState {
+  const ruleSet = options.ruleSet ?? V0_RULES
+  const log: LogEntry[] = []
+  let rng = rngFrom(options.seed)
+
+  // Steps 1 to 3: the forces. Named forces take no draws, so a named game opens on
+  // the board it always opened on.
+  let forces: Readonly<Record<PlayerId, ResolvedForce>>
+  if (options.forces.kind === 'named') {
+    forces = { p1: preset(options.forces.forces.p1), p2: preset(options.forces.forces.p2) }
+  } else {
+    const [rolled, next] = generateForces(rng)
+    rng = next
+    forces = rolled
+    log.push({
+      kind: 'forces_drawn',
+      health: forceHealth(rolled.p1),
+      species: { p1: rolled.p1.species, p2: rolled.p2.species },
+      dice: { p1: countDice(rolled.p1), p2: countDice(rolled.p2) },
+    })
+  }
+
+  if (forceHealth(forces.p1) !== forceHealth(forces.p2)) {
+    throw new Error(
+      `the two forces are ${forceHealth(forces.p1)} and ${forceHealth(forces.p2)} health; ` +
+        `both sides bring the same, or the game is unfair before it starts`,
+    )
+  }
+
+  const p1Units = buildUnits('p1', forces.p1)
+  const p2Units = buildUnits('p2', forces.p2)
 
   const units: Record<string, UnitInstance> = {}
   for (const unit of [...p1Units.all, ...p2Units.all]) {
@@ -157,17 +237,6 @@ export function setupGame(options: SetupOptions): GameState {
     }
     units[unit.id] = unit
   }
-
-  if (p1Force.proposedFrontier !== p2Force.proposedFrontier) {
-    throw new Error(
-      `the two forces propose different Frontier terrains ` +
-        `(${p1Force.proposedFrontier} vs ${p2Force.proposedFrontier}); ` +
-        `choosing between them is a setup decision that does not exist yet`,
-    )
-  }
-
-  const log: LogEntry[] = []
-  let rng = rngFrom(options.seed)
 
   // Step 4: order of play, before the terrains are rolled.
   let firstPlayer: PlayerId
@@ -186,11 +255,17 @@ export function setupGame(options: SetupOptions): GameState {
 
   log.unshift({ kind: 'game_start', seed: options.seed, firstPlayer })
 
+  // The roll-off's other prize: the loser places the Frontier, from the second
+  // terrain their species brings. It reads the result rather than rolling, so it
+  // consumes nothing and cannot disturb the stream below.
+  const frontierSetter = opponentOf(firstPlayer)
+
   // Step 5: opening terrain faces.
   const dice: Readonly<Record<TerrainSlot, string>> = {
-    p1_home: p1Force.homeTerrain,
-    frontier: p1Force.proposedFrontier,
-    p2_home: p2Force.homeTerrain,
+    p1_home: options.terrains?.p1_home ?? speciesProfile(forces.p1.species).homeTerrain,
+    frontier:
+      options.terrains?.frontier ?? speciesProfile(forces[frontierSetter].species).secondTerrain,
+    p2_home: options.terrains?.p2_home ?? speciesProfile(forces.p2.species).homeTerrain,
   }
   const terrains = {} as Record<TerrainSlot, TerrainInPlay>
 

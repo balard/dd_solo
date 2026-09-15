@@ -25,8 +25,12 @@ const KEY = 'dd_solo.save'
  *    is rolled that was not rolled before, but the totals differ and actions that
  *    were illegal at a captured terrain are now legal -- so an old log replays into
  *    a different game rather than a wrong one, which is exactly what this guards.
+ *
+ * 3: forces are rolled from the seed, and the Frontier die is the roll-off loser's
+ *    second terrain rather than a fixed Highland. An old log replays onto a board
+ *    with different armies on different terrains -- a different game entirely.
  */
-export const SAVE_VERSION = 2
+export const SAVE_VERSION = 3
 
 export interface SavedGame {
   readonly version: number

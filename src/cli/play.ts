@@ -8,6 +8,7 @@
  *   npm run play               -- you are p1, PassiveAI is p2
  *   npm run play -- --seed 42  -- a specific game
  *   npm run play -- --ai random
+ *   npm run play -- --forces starter   -- the two hand-authored 30-health lists
  */
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
@@ -15,17 +16,18 @@ import { stdin, stdout } from 'node:process'
 import { passiveAi } from '../ai/passive'
 import { randomAi } from '../ai/random'
 import type { AiPlayer } from '../ai/types'
-import { terrainDie, terrainFaceAction, unitType } from '../data/load'
+import { SPECIES, terrainDie, terrainFaceAction, unitType } from '../data/load'
 import type { TerrainFaceNumber } from '../data/types'
 import { damageOptions } from '../engine/damage'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
-import { setupGame } from '../engine/setup'
+import { setupGame, STARTER_FORCES, type ForceSpec } from '../engine/setup'
 import {
   TERRAIN_SLOTS,
   armyAt,
   deadUnits,
   livingUnits,
+  speciesOf,
   type GameAction,
   type GameState,
   type LogEntry,
@@ -56,6 +58,8 @@ const SLOT_LABEL: Record<TerrainSlot, string> = {
 const actionName = (action: string) => action.charAt(0).toUpperCase() + action.slice(1)
 
 const name = (unit: UnitInstance) => unitType(unit.typeId).name
+/** "treefolk" -> "Treefolk": ids are the engine's vocabulary, not the player's. */
+const speciesName = (id: string) => SPECIES.find((s) => s.id === id)?.name ?? id
 const health = (units: readonly UnitInstance[]) =>
   units.reduce((sum, u) => sum + unitType(u.typeId).health, 0)
 
@@ -98,6 +102,12 @@ function board(state: GameState, human: PlayerId): string {
 
 function describe(entry: LogEntry, state: GameState): string | null {
   switch (entry.kind) {
+    case 'forces_drawn':
+      return dim(
+        `forces rolled: ${entry.health} health a side — ` +
+          `p1 ${speciesName(entry.species.p1)} (${entry.dice.p1} dice), ` +
+          `p2 ${speciesName(entry.species.p2)} (${entry.dice.p2} dice)`,
+      )
     case 'order_of_play':
       return dim(`Horde roll-off ${entry.rolls.p1}–${entry.rolls.p2}: ${entry.firstPlayer} marches first`)
     case 'march_begin':
@@ -373,20 +383,29 @@ function parseArgs() {
   return {
     seed: seedArg === undefined ? Math.floor(Math.random() * 100_000) : Number(seedArg),
     ai: get('--ai') === 'random' ? randomAi : passiveAi,
+    // The seed decides the forces now. `--forces starter` brings back the two
+    // hand-authored 30-health lists, which is what the tests still play.
+    forces: get('--forces') === 'starter' ? STARTER_FORCES : ({ kind: 'random' } as ForceSpec),
   }
 }
 
 async function main() {
-  const { seed, ai }: { seed: number; ai: AiPlayer } = parseArgs()
+  const { seed, ai, forces }: { seed: number; ai: AiPlayer; forces: ForceSpec } = parseArgs()
   const human: PlayerId = 'p1'
 
-  console.log(bold('\ndd_solo — Dragon Dice, v0 alpha'))
-  console.log(dim(`seed ${seed} · you are p1 (Treefolk) · opponent is ${ai.name} (Firewalkers)`))
-  console.log(dim('q quits at any prompt. Nothing is saved.\n'))
+  let state = begin(setupGame({ seed, forces }))
 
-  let state = begin(
-    setupGame({ seed, forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' } }),
+  // Which species you are is a roll now, so the banner reads it off the board
+  // rather than stating it.
+  const fielding = (player: PlayerId) => speciesName(speciesOf(state, player))
+  console.log(bold('\ndd_solo — Dragon Dice'))
+  console.log(
+    dim(
+      `seed ${seed} · you are p1 (${fielding('p1')}) · ` +
+        `opponent is ${ai.name} (${fielding('p2')})`,
+    ),
   )
+  console.log(dim('q quits at any prompt. Nothing is saved.\n'))
   let aiRng: RngState = rngFrom(seed ^ 0x5eed)
   let shown = 0
   // Redraw the board when the situation changes, not before every prompt --

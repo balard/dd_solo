@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { unitType } from '../data/load'
-import { PRESETS, preset } from '../data/presets'
+import { PRESETS, preset, speciesProfile } from '../data/presets'
 
 import { reduce } from './reduce'
 import { rngFrom } from './rng'
-import { rollStartingFace, setupGame, type SetupOptions } from './setup'
+import { rollStartingFace, setupGame, STARTER_FORCES, type SetupOptions } from './setup'
 import {
   IllegalActionError,
   TERRAIN_SLOTS,
@@ -22,7 +22,7 @@ import { validateState } from './validate'
 
 const OPTIONS: SetupOptions = {
   seed: 1234,
-  forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' },
+  forces: STARTER_FORCES,
   firstPlayer: 'p1',
 }
 
@@ -125,10 +125,28 @@ describe('setupGame', () => {
     }
   })
 
-  it('uses each home terrain from its own preset, plus the agreed Frontier', () => {
-    expect(state.terrains.p1_home.dieId).toBe('swampland_tower')
-    expect(state.terrains.p2_home.dieId).toBe('wasteland_tower')
-    expect(state.terrains.frontier.dieId).toBe('highland_tower')
+  it('takes each home terrain from that species profile', () => {
+    expect(state.terrains.p1_home.dieId).toBe(speciesProfile('treefolk').homeTerrain)
+    expect(state.terrains.p2_home.dieId).toBe(speciesProfile('firewalkers').homeTerrain)
+  })
+
+  /**
+   * `OPTIONS` names p1 as the first player, so there is no roll-off and p2 is the
+   * loser who sets the Frontier.
+   */
+  it('takes the Frontier from the second terrain of whoever marches second', () => {
+    expect(state.terrains.frontier.dieId).toBe(speciesProfile('firewalkers').secondTerrain)
+    expect(setupGame({ ...OPTIONS, firstPlayer: 'p2' }).terrains.frontier.dieId).toBe(
+      speciesProfile('treefolk').secondTerrain,
+    )
+  })
+
+  it('lets a caller pin a terrain die, which is how the goldens keep their board', () => {
+    const pinned = setupGame({ ...OPTIONS, terrains: { frontier: 'highland_tower' } })
+    expect(pinned.terrains.frontier.dieId).toBe('highland_tower')
+    // And nothing else moves: the same seed still rolls the same faces.
+    expect(pinned.terrains.p1_home).toEqual(state.terrains.p1_home)
+    expect(pinned.rng).toEqual(state.rng)
   })
 
   it('starts every terrain on a face between 1 and 6, uncaptured', () => {
@@ -168,13 +186,15 @@ describe('setupGame', () => {
   })
 
   it('rejects an unknown preset', () => {
-    expect(() => setupGame({ ...OPTIONS, forces: { p1: 'nope', p2: 'nope' } })).toThrow()
+    expect(() =>
+      setupGame({ ...OPTIONS, forces: { kind: 'named', forces: { p1: 'nope', p2: 'nope' } } }),
+    ).toThrow()
   })
 })
 
 describe('order of play', () => {
   const rolled = (seed: number) =>
-    setupGame({ seed, forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' } })
+    setupGame({ seed, forces: STARTER_FORCES })
 
   it('decides the first player by the Horde roll-off when none is given', () => {
     const state = rolled(7)

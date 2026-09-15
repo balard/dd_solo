@@ -503,6 +503,18 @@ body {
 }
 
 /*
+ * The eighth-face icon, beside the terrain type. Quieter than the type because it
+ * is the second thing you read -- but it has to be there at all, since two dice of
+ * the same type differ only by this, and the Frontier is one of them.
+ */
+.chip-eighth {
+  font-size: .68rem;
+  opacity: .72;
+  margin-left: 4px;
+}
+.chip-eighth::before { content: '·'; margin-right: 4px; }
+
+/*
  * SFR's art is dark line work drawn for white dice. On a dark theme it would
  * vanish, so it is inverted there rather than given a light plate -- the plate
  * would look like a sticker on the board.

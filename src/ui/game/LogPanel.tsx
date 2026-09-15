@@ -6,10 +6,13 @@
  * also how the rules get learned.
  */
 
+import type { ReactElement } from 'react'
+
 import { unitType } from '../../data/load'
 import type { GameState, LogEntry, PlayerId, TerrainSlot } from '../../engine/types'
 
 import { RollStrip } from './DiceGrid'
+import { speciesInfo } from './Elements'
 import { slotLabel } from './prompts'
 
 /** "melee" -> "Melee". The action reads as a name in a sentence, not a keyword. */
@@ -17,7 +20,20 @@ function actionName(action: string): string {
   return action.charAt(0).toUpperCase() + action.slice(1)
 }
 
-function Line({ entry, state, human }: { entry: LogEntry; state: GameState; human: PlayerId }) {
+/**
+ * The return type is written out rather than inferred so that a new `LogEntry` kind
+ * is a compile error here. Without it the switch just falls off the end and returns
+ * `undefined`, which React renders as a crash rather than as nothing.
+ */
+function Line({
+  entry,
+  state,
+  human,
+}: {
+  entry: LogEntry
+  state: GameState
+  human: PlayerId
+}): ReactElement | null {
   const who = (player: PlayerId) => (player === human ? 'You' : 'The enemy')
   const whoLower = (player: PlayerId) => (player === human ? 'you' : 'the enemy')
   const where = (slot: TerrainSlot) => slotLabel(slot, human)
@@ -198,6 +214,16 @@ function Line({ entry, state, human }: { entry: LogEntry; state: GameState; huma
           {entry.player === human ? 'You win' : 'You lose'} &mdash; by {entry.reason}
         </p>
       )
+    case 'forces_drawn': {
+      const named = (player: PlayerId) =>
+        speciesInfo(entry.species[player])?.name ?? entry.species[player]
+      return (
+        <p className="log-line muted">
+          Forces rolled &mdash; {entry.health} health a side. You are{' '}
+          <b>{named(human)}</b>, the enemy is <b>{named(human === 'p1' ? 'p2' : 'p1')}</b>.
+        </p>
+      )
+    }
     case 'game_start':
     case 'terrain_placed':
       return null

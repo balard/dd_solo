@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { randomAi } from '../../ai/random'
 import { runGame } from '../../ai/run'
 import { replay } from '../../engine/replay'
+import { STARTER_FORCES } from '../../engine/setup'
 
 import { SAVE_VERSION, clearSave, readSave, writeSave } from './storage'
 
@@ -26,7 +27,7 @@ function installStorage(impl?: Partial<Storage>): Map<string, string> {
 
 const played = () =>
   runGame({
-    setup: { seed: 7, forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' } },
+    setup: { seed: 7, forces: STARTER_FORCES },
     players: { p1: randomAi, p2: randomAi },
     aiSeed: 7,
     maxDecisions: 120,

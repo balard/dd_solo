@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { begin, reduce } from './reduce'
-import { setupGame } from './setup'
+import { setupGame, STARTER_FORCES } from './setup'
 import { findVictory, legalDirections, marchableArmies } from './turn'
 import {
   IllegalActionError,
@@ -18,7 +18,7 @@ import {
 import { validateState } from './validate'
 
 const fresh = (seed = 1234, firstPlayer: PlayerId = 'p1') =>
-  setupGame({ seed, forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' }, firstPlayer })
+  setupGame({ seed, forces: STARTER_FORCES, firstPlayer })
 
 /** Drives a script of decisions, checking the state stays valid throughout. */
 function play(state: GameState, ...actions: GameAction[]): GameState {

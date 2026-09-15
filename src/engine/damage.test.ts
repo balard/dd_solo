@@ -11,7 +11,7 @@ import {
   isMaximalSubset,
   maxAbsorbable,
 } from './damage'
-import { setupGame } from './setup'
+import { setupGame, STARTER_FORCES } from './setup'
 import { armyAt, deadUnits, livingUnits } from './types'
 import { validateState } from './validate'
 
@@ -145,7 +145,7 @@ describe('assignmentProblem', () => {
 describe('unit-level damage', () => {
   const state = setupGame({
     seed: 1234,
-    forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' },
+    forces: STARTER_FORCES,
     firstPlayer: 'p1',
   })
 

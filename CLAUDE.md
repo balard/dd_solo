@@ -41,7 +41,7 @@ npm run typecheck   # tsc --noEmit
 npm run build       # typecheck + production build
 npm run data        # regenerate and validate data/starter/ from data/raw/
 npm run art         # optional: mirror real face art into public/faces/ (gitignored)
-npm run play        # play a game in the terminal (--seed N, --ai random)
+npm run play        # play a game in the terminal (--seed N, --ai random, --forces starter)
 npm run goldens     # re-record the golden corpus -- see below before you do
 ```
 
@@ -154,8 +154,27 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   the absence of one is what makes desync impossible.
 - **`rollArmy` has no special case for ID icons or monsters, and must not grow one.** The count
   printed on the face is already the answer. `faceResults` is three lines; keep it that way.
-- **`setupGame` runs the Horde roll-off** when `firstPlayer` is omitted, threading one RNG stream
-  in rules order: roll-off first, then terrain faces.
+- **`setupGame` rolls the whole opening from the seed.** One RNG stream, in this order, and the
+  order is load-bearing:
+
+  ```
+  race -> size -> p1 units -> p1 split -> p2 units -> p2 split   (random forces only)
+       -> Horde roll-off -> Frontier set by the loser (no draw) -> terrain faces
+  ```
+
+  **A named force must consume no generation draws at all** -- not "the same draws", none -- or a
+  named game lands on a different board than v0 gave it and the golden corpus quietly changes
+  meaning. The generation steps live inside the random branch, not before it.
+- **The roll-off's two prizes are split one each**: the winner marches first, the loser places the
+  Frontier from the second terrain their species brings. The rules give the winner the choice of
+  one *or* the other; that is a real decision and `PassiveAI` could hold no opinion about it, so
+  `GreedyAI` gets the real rule in Phase 9. A house rule, recorded in `RULES-V0.md` section 7.
+- **`SetupOptions.terrains` pins a die to a slot.** That is how a test says "a Tower, here", and it
+  is what lets the golden corpus keep replaying the board it was recorded on now that the Frontier
+  moves. Applied last, over whatever the species would have brought.
+- **Species is derived, like armies are.** `speciesOf(state, player)` reads it off any of that
+  player's dice, dead ones included; a rolled force has no preset id to look up, and a second copy
+  of the fact could drift.
 - **A roll is a ten-step pipeline, not a sum** (`pipeline.ts`, full rules p. 27). `resolveRoll`
   rolls the dice and runs steps 5–10; `rollArmy` is the one-type, one-number door onto it that the
   rest of the engine uses. **The running value is a triple per result type — `{ id, normal, sai }`
