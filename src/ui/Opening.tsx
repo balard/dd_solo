@@ -1,24 +1,25 @@
 /**
- * Phase 1 made visible: the opening position from `setupGame`.
+ * Phases 1-2 made visible: set a seed, see the opening position it produces and
+ * what the armies roll.
  *
  * Throwaway, like the rest of the Phase 0 smoke page -- Phase 7 replaces all of it.
- * It exists so the setup can be eyeballed rather than only asserted.
+ * There is no gameplay here and cannot be until Phases 4-5: the reducer has no
+ * phases implemented, so nothing is ever pending and no action is ever legal.
  */
+import { useState } from 'react'
+
 import { terrainDie, terrainFaceAction, unitType } from '../data/load'
-import type { TerrainFaceNumber } from '../data/types'
+import type { ResultType, TerrainFaceNumber } from '../data/types'
+import { rollArmy } from '../engine/roll'
 import { setupGame } from '../engine/setup'
-import { TERRAIN_SLOTS, armyAt, type GameState, type PlayerId, type TerrainSlot } from '../engine/types'
+import {
+  TERRAIN_SLOTS,
+  armyAt,
+  type GameState,
+  type PlayerId,
+  type TerrainSlot,
+} from '../engine/types'
 import { validateState } from '../engine/validate'
-
-const SEED = 1234
-
-const state: GameState = setupGame({
-  seed: SEED,
-  forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' },
-  firstPlayer: 'p1',
-})
-
-const problems = validateState(state)
 
 const SLOT_LABEL: Record<TerrainSlot, string> = {
   p1_home: 'P1 home',
@@ -26,13 +27,59 @@ const SLOT_LABEL: Record<TerrainSlot, string> = {
   p2_home: 'P2 home',
 }
 
-function ArmyCell({ player, slot }: { player: PlayerId; slot: TerrainSlot }) {
+const ACTION_RESULT: Record<string, ResultType> = {
+  MELEE: 'melee',
+  MISSILE: 'missile',
+  MAGIC: 'magic',
+}
+
+function health(state: GameState, player: PlayerId, slot: TerrainSlot): number {
+  return armyAt(state, player, slot).reduce((sum, u) => sum + unitType(u.typeId).health, 0)
+}
+
+/**
+ * What this army would roll for the terrain's current action, and for saves.
+ *
+ * Derived from the game's own RNG so it is stable across re-renders rather than
+ * flickering on every paint -- the same seed always shows the same sample.
+ */
+function sampleRolls(state: GameState, player: PlayerId, slot: TerrainSlot, action: ResultType) {
   const units = armyAt(state, player, slot)
-  const health = units.reduce((sum, u) => sum + unitType(u.typeId).health, 0)
+  const offset = slot.length + (player === 'p1' ? 0 : 97)
+  const rng = { seed: state.rng.seed, counter: state.rng.counter + offset }
+  const [attack] = rollArmy(units, action, rng, state.ruleSet)
+  const [save] = rollArmy(units, 'save', { ...rng, counter: rng.counter + 40 }, state.ruleSet)
+  return { attack: attack.total, save: save.total }
+}
+
+function ArmyCell({
+  state,
+  player,
+  slot,
+  action,
+}: {
+  state: GameState
+  player: PlayerId
+  slot: TerrainSlot
+  action: ResultType | null
+}) {
+  const units = armyAt(state, player, slot)
+  const sample = action === null ? null : sampleRolls(state, player, slot, action)
+
   return (
     <td>
       <div className="meta">
-        {units.length} dice · {health} health
+        {units.length} dice · {health(state, player, slot)} health
+        {sample && (
+          <>
+            {' · '}
+            <span className={`i-${action?.toUpperCase() ?? ''}`}>
+              rolls {sample.attack} {action}
+            </span>
+            {', '}
+            <span className="i-SAVE">{sample.save} save</span>
+          </>
+        )}
       </div>
       <div className="faces">
         {units.map((u) => (
@@ -47,51 +94,108 @@ function ArmyCell({ player, slot }: { player: PlayerId; slot: TerrainSlot }) {
 }
 
 export function Opening() {
+  const [seedText, setSeedText] = useState('1234')
+  const seed = Number.parseInt(seedText, 10)
+  const validSeed = Number.isFinite(seed)
+
+  const state = validSeed
+    ? setupGame({ seed, forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' } })
+    : null
+
+  const problems = state ? validateState(state) : []
+  const orderEntry = state?.log.find((e) => e.kind === 'order_of_play')
+
   return (
     <section>
       <h2>Opening position</h2>
-      <p className="sub">
-        Seed {SEED} · P1 Treefolk vs P2 Firewalkers · {state.turn.marching} marches first ·{' '}
-        {problems.length === 0 ? 'state valid' : `${problems.length} INVARIANT VIOLATIONS`}
-      </p>
-      <div className="scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Terrain</th>
-              <th>Die</th>
-              <th>Face</th>
-              <th>P1 — Treefolk</th>
-              <th>P2 — Firewalkers</th>
-            </tr>
-          </thead>
-          <tbody>
-            {TERRAIN_SLOTS.map((slot) => {
-              const terrain = state.terrains[slot]
-              const action =
-                terrain.face === 8
-                  ? terrainDie(terrain.dieId).eighthFace.replace('_', ' ')
-                  : terrainFaceAction(terrain.dieId, terrain.face as TerrainFaceNumber).toLowerCase()
-              return (
-                <tr key={slot}>
-                  <td className="name">{SLOT_LABEL[slot]}</td>
-                  <td className="meta">{terrain.dieId.replace('_', ' ')}</td>
-                  <td className="meta">
-                    {terrain.face} — {action}
-                  </td>
-                  <ArmyCell player="p1" slot={slot} />
-                  <ArmyCell player="p2" slot={slot} />
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+
+      <div className="controls">
+        <label>
+          Seed{' '}
+          <input
+            value={seedText}
+            onChange={(e) => setSeedText(e.target.value)}
+            inputMode="numeric"
+            size={8}
+          />
+        </label>
+        <button onClick={() => setSeedText(String(Math.trunc(Date.now() % 100000)))}>
+          Random seed
+        </button>
+        {[1, 2, 3, 7, 21].map((s) => (
+          <button key={s} onClick={() => setSeedText(String(s))}>
+            {s}
+          </button>
+        ))}
       </div>
-      <p className="note">
-        Every terrain is contested at setup, because each side&rsquo;s Horde Army deploys to the
-        opponent&rsquo;s Home Terrain. Re-seeding changes only the opening faces — deployment is
-        fixed by the presets.
-      </p>
+
+      {!state && <p className="note">Enter a whole number for the seed.</p>}
+
+      {state && (
+        <>
+          <p className="sub">
+            P1 Treefolk vs P2 Firewalkers ·{' '}
+            {orderEntry?.kind === 'order_of_play' ? (
+              <>
+                Horde roll-off {orderEntry.rolls.p1}–{orderEntry.rolls.p2}, so{' '}
+                <b>{orderEntry.firstPlayer}</b> marches first
+              </>
+            ) : (
+              <>{state.turn.marching} marches first</>
+            )}{' '}
+            · {problems.length === 0 ? 'state valid' : `${problems.length} INVARIANT VIOLATIONS`}
+          </p>
+
+          <div className="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Terrain</th>
+                  <th>Die</th>
+                  <th>Face</th>
+                  <th>P1 — Treefolk</th>
+                  <th>P2 — Firewalkers</th>
+                </tr>
+              </thead>
+              <tbody>
+                {TERRAIN_SLOTS.map((slot) => {
+                  const terrain = state.terrains[slot]
+                  const icon =
+                    terrain.face === 8
+                      ? null
+                      : terrainFaceAction(terrain.dieId, terrain.face as TerrainFaceNumber)
+                  const action = icon === null ? null : (ACTION_RESULT[icon] as ResultType)
+                  return (
+                    <tr key={slot}>
+                      <td className="name">{SLOT_LABEL[slot]}</td>
+                      <td className="meta">{terrain.dieId.replace('_', ' ')}</td>
+                      <td className="meta">
+                        {terrain.face} —{' '}
+                        <span className={`i-${icon ?? ''}`}>
+                          {icon?.toLowerCase() ?? terrainDie(terrain.dieId).eighthFace}
+                        </span>
+                      </td>
+                      <ArmyCell state={state} player="p1" slot={slot} action={action} />
+                      <ArmyCell state={state} player="p2" slot={slot} action={action} />
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="note">
+            <b>Nothing here is playable yet.</b> This is the position <code>setupGame</code>{' '}
+            produces, plus one sample roll per army for whatever action its terrain currently
+            allows. Turn structure and maneuvering arrive in Phase 4, combat in Phase 5.
+            <br />
+            <br />
+            Every terrain is contested at setup, because each side&rsquo;s Horde Army deploys onto
+            the opponent&rsquo;s Home Terrain. Changing the seed re-rolls the order of play and the
+            opening faces; deployment is fixed by the presets.
+          </p>
+        </>
+      )}
     </section>
   )
 }
