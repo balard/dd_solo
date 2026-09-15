@@ -165,7 +165,9 @@ rulebooks would have produced it.
 ### Reference art
 
 `tools/fetch_faces.py` mirrors the real SVGs for every face our data references into
-`assets/faces/` (gitignored). The remote asset set is **sparse, per-species, and not derivable from (icon, count)**. It mirrors
+`public/faces/` (gitignored) — that is the only directory Vite serves, so art anywhere else is
+invisible to the browser. `--offline` re-mirrors from a local copy (`assets/faces/` by default,
+or `--source=DIR`) instead of the network. The remote asset set is **sparse, per-species, and not derivable from (icon, count)**. It mirrors
 exactly the faces that species actually has: `treefolk/save-4.svg` and `treefolk/magic-4.svg` exist
 because Treefolk dice carry those faces, while the same paths under `firewalkers/` are 404 because
 no Firewalker die does. Some icons also carry a variant index (`maneuver-1-4`, `cantrip-1-3`,
@@ -180,10 +182,12 @@ in that species — not which die carries them, but enough to catch an invented 
 
 A ladder, because the interesting version needs the boring version's interface first:
 
-- **v0 — `PassiveAI`.** Never takes a march, never maneuvers, never attacks. But it is *not* a
-  no-op: it must still answer every mandatory pending decision — save rolls, damage assignment
-  (maximally, per the rules), counter-attacks. This is exactly enough to test the whole loop, and
-  it proves the `Pending` abstraction works before any strategy exists.
+- **v0 — `PassiveAI`.** Never takes a march, never declares a maneuver, never attacks. But it is
+  *not* a no-op: it must still answer every mandatory pending decision — save rolls, damage
+  assignment (maximally, per the rules), counter-attacks, and contesting a maneuver declared
+  against it. This is exactly enough to test the whole loop, and it proves the `Pending`
+  abstraction works before any strategy exists. Contesting and countering are both free, so
+  declining them would cost it the terrain track for nothing and leave those paths untested.
 - **v1 — `GreedyAI`.** Heuristic scoring over enumerated legal actions: expected damage, terrain
   progress, army health preserved.
 - **v2 — search.** Genuinely tractable here, unlike most games: every die's face distribution is
@@ -250,7 +254,7 @@ Expanded into phases with exit criteria and tests in [`PLAN-V0.md`](PLAN-V0.md).
 2. **Engine core** — state types, `Pending`, seeded RNG, setup, turn sequence, maneuver.
 3. **Combat** — melee/missile/magic resolution and damage assignment, with tests first.
 4. **PassiveAI** — enough to play a full game against.
-5. **UI** — board strip, terrain focus, dice grid, damage sheet, roll results.
+5. **UI** — board of terrain cards, dice grid, damage sheet, roll results.
 6. **Playable alpha** — PWA, persistence, a game start-to-finish.
 
 Then the ruleset flags come off one at a time: SAIs → eighth-face powers → spells → dragons.

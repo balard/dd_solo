@@ -33,7 +33,7 @@ as the fallback for anything the starter book leaves vague.
 | **Dragons, Summoning Pool, Dragon Attack phase** | Needs the spell system (Summon Dragon) to even enter play. | v2 |
 | **SAIs** | ~30 distinct icons, many with delayed effects and targeting. Faces are *recorded* in the data as `<count> SAI:<Name>` but produce **zero results**. The starter set uses 12: Smite, Counter, Bullseye, Fly, Cantrip, Create Fireminions, Galeforce, Firecloud, Firewalking, Flame, Rise from the Ashes, Seize. | v1 |
 | **Eighth-face icon powers** (City, Temple, Standing Stones, Tower) | Each is a separate subsystem. Which icon a die carries **is** recorded in the data; in v0 all four behave identically, so the choice is cosmetic. | v1 |
-| **Eighth-face combat bonuses** (ID doubling; opponents restricted to melee) | Capture still wins the game, so the terrain race is intact without them. | v1 |
+| ~~Eighth-face combat bonuses~~ | **Now in.** ID doubling and the melee-only restriction are implemented; see §5. | — |
 | **Buried Unit Area (BUA)** | Only reachable via SAIs, spells and Temple. Nothing can bury in v0. | v1 |
 | **Promotion / recruitment** | Only reachable via dragon-slaying, Wild Growth and the City. | v1 |
 | **Species abilities** | Starter rules grant Treefolk/Firewalkers none. Nothing to implement. | — |
@@ -45,7 +45,7 @@ as the fallback for anything the starter book leaves vague.
 Per turn, for the **marching player**:
 
 1. **Effects Expire** — no-op in v0. Present as a phase so nothing has to be inserted later.
-2. **Eighth Face** — no-op in v0 (no icon powers).
+2. **Eighth Face** — still a no-op *phase*: the holder's advantages are passive (§5), and the icon powers that would trigger here are cut.
 3. **Dragon Attack** — no-op in v0 (no dragons).
 4. **First March** — pick one army, then: Maneuver step (optional) → Action step (optional).
 5. **Second March** — pick a *different* army, same two steps.
@@ -81,8 +81,22 @@ change, not a rewrite.
 
 ## 5. Actions in full
 
-The terrain's current face dictates which action is available. Faces run magic → missile → melee
-as the number rises, but the split points differ sharply by terrain type:
+The terrain's current face dictates which action is available — **unless the terrain is captured**,
+in which case the eighth face overrides it entirely:
+
+- The holding army **doubles all ID results** whenever it rolls at that terrain. This is every
+  roll, not only attacks: saves and contested maneuvers double too.
+- The holding army may take **melee, missile or magic**; any opposing army at that terrain is
+  **restricted to melee**.
+
+An action still needs something to hit, so a holder with no enemy present at the terrain is
+offered only missile, and only if it can reach an army elsewhere.
+
+Still cut: the Eighth Face Icon powers (City, Standing Stones, Temple, Tower) — `RuleSet.eighthFace`
+runs `captureOnly` → `standard` (where v0 now sits) → `full`.
+
+For an uncaptured terrain, faces run magic → missile → melee as the number rises, but the split
+points differ sharply by terrain type:
 
 | Type | Melee faces | Missile faces | Magic faces |
 |---|---|---|---|
@@ -177,4 +191,4 @@ Resolved so far:
 - **All die data is transcribed** — 40 unit dice and 12 terrain dice, passing validation.
 - Magic targets **same terrain only** — it is a melee variant in v0 (§4).
 - A Reserve Army may **not** take a magic action, and so cannot march in v0 (§3, §4).
-- Capturing the eighth face still wins; no icon powers and no ID doubling (§2).
+- Capturing the eighth face wins and grants both standard advantages; no icon powers (§2, §5).

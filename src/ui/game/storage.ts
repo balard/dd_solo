@@ -19,8 +19,14 @@ const KEY = 'dd_solo.save'
  * Bump when a change would make old action logs replay differently -- new phases,
  * changed decision order, altered dice consumption. A mismatch is discarded with a
  * message rather than replayed into a wrong game.
+ *
+ * 2: the eighth face started granting its two standard advantages (ID results
+ *    doubled, and the melee-only restriction on armies facing the holder). No die
+ *    is rolled that was not rolled before, but the totals differ and actions that
+ *    were illegal at a captured terrain are now legal -- so an old log replays into
+ *    a different game rather than a wrong one, which is exactly what this guards.
  */
-export const SAVE_VERSION = 1
+export const SAVE_VERSION = 2
 
 export interface SavedGame {
   readonly version: number

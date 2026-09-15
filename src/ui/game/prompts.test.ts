@@ -3,9 +3,23 @@ import { describe, expect, it } from 'vitest'
 import { unitType } from '../../data/load'
 import { begin } from '../../engine/reduce'
 import { setupGame } from '../../engine/setup'
-import { armyAt, type GameState, type Pending, type UnitId } from '../../engine/types'
+import {
+  TERRAIN_SLOTS,
+  armyAt,
+  type GameState,
+  type Pending,
+  type UnitId,
+} from '../../engine/types'
 
-import { damageSelection, focusedSlot, promptFor, slotLabel } from './prompts'
+import {
+  damageSelection,
+  focusedSlot,
+  orderedForDisplay,
+  promptFor,
+  selectModeFor,
+  selectableAt,
+  slotLabel,
+} from './prompts'
 
 const fresh = () =>
   begin(
@@ -166,5 +180,78 @@ describe('focusedSlot', () => {
         turn: { ...state.turn, marchingArmy: 'p1_home' },
       }),
     ).toBe('p1_home')
+  })
+})
+
+describe('selection targeting', () => {
+  const mine = (slot: 'p1_home' | 'frontier' | 'p2_home' | null) =>
+    ({ side: 'mine', slot }) as const
+
+  it('confines damage assignment to the terrain that was hit', () => {
+    // `damagePending` puts the hit at p1_home.
+    const mode = selectModeFor(damagePending(3), 'p1')
+    expect(mode).toEqual(mine('p1_home'))
+    expect(selectableAt(mode, 'p1_home')).toBe(true)
+    expect(selectableAt(mode, 'frontier')).toBe(false)
+    expect(selectableAt(mode, 'p2_home')).toBe(false)
+  })
+
+  it('lets a retreat pull from every terrain at once', () => {
+    const mode = selectModeFor({ kind: 'retreat', player: 'p1' }, 'p1')
+    expect(mode).toEqual(mine(null))
+    for (const slot of TERRAIN_SLOTS) expect(selectableAt(mode, slot)).toBe(true)
+  })
+
+  it('selects nothing on the board while reinforcing from reserve', () => {
+    const mode = selectModeFor({ kind: 'reinforce', player: 'p1' }, 'p1')
+    expect(mode?.side).toBe('reserve')
+    for (const slot of TERRAIN_SLOTS) expect(selectableAt(mode, slot)).toBe(false)
+  })
+
+  it('never offers the opponent’s decision to the human', () => {
+    expect(selectModeFor(damagePending(3), 'p2')).toBeNull()
+  })
+
+  it('selects nothing when no decision is pending', () => {
+    expect(selectModeFor(null, 'p1')).toBeNull()
+    expect(selectableAt(null, 'frontier')).toBe(false)
+  })
+})
+
+describe('display order', () => {
+  const at = (state: GameState, slot: 'p1_home' | 'frontier' | 'p2_home') =>
+    orderedForDisplay(armyAt(state, 'p1', slot)).map((u) => unitType(u.typeId))
+
+  it('groups by class in HM, LM, MI, CA, MA order', () => {
+    const order = ['heavy_melee', 'light_melee', 'missile', 'cavalry', 'magic']
+    for (const slot of TERRAIN_SLOTS) {
+      const seen = at(fresh(), slot).map((t) => order.indexOf(t.unitClass))
+      expect(seen).toEqual([...seen].sort((a, b) => a - b))
+    }
+  })
+
+  it('puts the biggest die first inside each class', () => {
+    for (const slot of TERRAIN_SLOTS) {
+      const types = at(fresh(), slot)
+      for (let i = 1; i < types.length; i++) {
+        const prev = types[i - 1]!
+        const here = types[i]!
+        if (prev.unitClass === here.unitClass) expect(prev.health).toBeGreaterThanOrEqual(here.health)
+      }
+    }
+  })
+
+  it('does not add, drop or duplicate units', () => {
+    const units = armyAt(fresh(), 'p1', 'frontier')
+    const ordered = orderedForDisplay(units)
+    expect(ordered).toHaveLength(units.length)
+    expect(new Set(ordered.map((u) => u.id))).toEqual(new Set(units.map((u) => u.id)))
+  })
+
+  it('leaves the caller’s array alone', () => {
+    const units = armyAt(fresh(), 'p1', 'frontier')
+    const before = units.map((u) => u.id)
+    orderedForDisplay(units)
+    expect(units.map((u) => u.id)).toEqual(before)
   })
 })

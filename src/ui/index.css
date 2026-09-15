@@ -88,7 +88,6 @@ body {
 }
 
 .app-head,
-.board-strip,
 .banner {
   flex: none;
 }
@@ -103,25 +102,36 @@ body {
 .app-head h1 { font-size: 1.05rem; margin: 0; letter-spacing: .01em; }
 .app-head .sub { margin: 0; color: var(--muted); font-size: .78rem; }
 
-/* --- board strip ---------------------------------------------------------- */
+/* --- the board ------------------------------------------------------------ */
 
-.board-strip { display: grid; gap: 6px; }
+.board { display: grid; gap: 10px; }
 
-.terrain-chip {
+.terrain-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 10px 9px;
+}
+.terrain-card.is-focused { border-left-color: var(--accent); background: var(--sunk); }
+.terrain-card.is-captured { border-left-color: var(--magic); }
+
+/* The header is the inspect affordance, the same gesture a unit tile uses. */
+.card-head-btn {
   display: block;
   width: 100%;
   text-align: left;
   font: inherit;
   color: inherit;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line);
-  border-radius: 7px;
-  padding: 7px 10px;
+  background: none;
+  border: none;
+  padding: 0;
   cursor: pointer;
 }
-.terrain-chip.is-focused { border-left-color: var(--accent); background: var(--sunk); }
-.terrain-chip.is-captured { border-left-color: var(--magic); }
+.card-head-btn:hover .chip-terrain { color: var(--fg); }
+
+.card-army { margin-top: 8px; margin-bottom: 0; }
+.off-board { margin-top: 12px; }
 
 .chip-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .chip-name { font-weight: 600; font-size: .88rem; }
@@ -129,24 +139,16 @@ body {
 .chip-number { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--fg); }
 .chip-eighth { font-size: .78rem; color: var(--magic); text-transform: capitalize; }
 
-.chip-armies {
-  display: flex;
-  gap: 12px;
-  font-size: .76rem;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
 .chip-held { display: block; font-size: .72rem; color: var(--magic); margin-top: 2px; }
 
 /* --- focused terrain ------------------------------------------------------ */
 
-.focus {
+.page {
   flex: 1;
   min-height: 0; /* lets the flex child actually shrink and scroll */
   overflow-y: auto;
   margin-top: 14px;
 }
-.focus-head { font-size: .95rem; margin: 0 0 10px; }
 
 .army { margin-bottom: 12px; }
 .army h3 {
@@ -158,7 +160,9 @@ body {
   font-weight: 600;
 }
 
-.dice-grid { display: flex; flex-wrap: wrap; gap: 5px; }
+/* flex-end so dice of different sizes sit on a common line, like on a table --
+   the default stretch would equalise their heights and erase the difference. */
+.dice-grid { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 5px; }
 
 .die {
   display: flex;
@@ -181,13 +185,47 @@ body {
   background: color-mix(in srgb, var(--melee) 14%, var(--panel));
   text-decoration: line-through;
 }
-.die-size {
+/* Plain text: colour on the dice is being saved for the species elements. */
+.die-kind {
   font-size: .68rem;
   font-weight: 700;
-  color: var(--muted);
+  color: inherit;
   min-width: 12px;
+  letter-spacing: .02em;
 }
 .die-name { white-space: nowrap; }
+
+/* --- a tile that is the die ------------------------------------------------
+   When the ID face stands in for the name the tile goes square and its side is
+   set per die size (DiceGrid TILE_SIZE), so the whole button grows with the die
+   rather than just the art inside it. Badge and health move to the corners so
+   neither can stretch the width and flatten the size difference. */
+.die-squared {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 0;
+  padding: 3px;
+}
+.die-squared .die-kind {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  min-width: 0;
+  font-size: .6rem;
+  line-height: 1;
+}
+.die-squared .die-health {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  border-left: 0;
+  padding-left: 0;
+  font-size: .66rem;
+  line-height: 1;
+}
+.die-portrait { display: block; }
+.die-portrait-slot { display: block; }
 .die-health {
   font-variant-numeric: tabular-nums;
   font-size: .72rem;
@@ -302,32 +340,26 @@ body {
 }
 .choice.secondary:hover { border-color: var(--muted); }
 
-@media (min-width: 560px) {
-  .board-strip { grid-template-columns: repeat(3, 1fr); }
-}
+
 
 /*
  * Wide screens: put the log beside the armies rather than below them. Stretching
  * a phone layout across a desktop is what made this look unfinished.
  */
+/*
+ * Wide screens: the three terrains side by side. Below 900px they stack, because
+ * three columns of dice at phone width is four columns of nothing.
+ *
+ * `align-items: start` so a card with more dice does not stretch the other two;
+ * they are independent boards, not a table with rows.
+ */
 @media (min-width: 900px) {
-  .focus {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 24px;
-    align-content: start;
-  }
-  .focus-head { grid-column: 1 / -1; }
-  .armies { grid-column: 1; }
-  .log {
-    grid-column: 2;
-    margin-top: 0;
-    padding-top: 0;
-    padding-left: 20px;
-    border-top: none;
-    border-left: 1px solid var(--line);
+  .board {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
   }
   .choices { max-width: 640px; }
+}
 }
 
 /* --- banners and recovery -------------------------------------------------- */
@@ -393,7 +425,6 @@ body {
 .die-wrap.is-open { display: block; flex-basis: 100%; }
 
 .die { cursor: pointer; }
-.die-monster .die-size { color: var(--sai); }
 .die-open {
   border-color: var(--accent);
   background: var(--sunk);
@@ -429,16 +460,82 @@ body {
   background: var(--panel);
 }
 
+/* --- inspecting a terrain -------------------------------------------------- */
+
+
+.terrain-detail {
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 7px;
+  background: var(--sunk);
+}
+
+/* A terrain face carries its number, so the sheet stacks digit over art rather
+   than sitting them side by side as a unit face does. */
+.terrain-sheet-face {
+  flex-direction: column;
+  gap: 1px;
+  min-width: 56px;
+}
+.sheet-number {
+  font-size: .64rem;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+/* Where the die actually stands right now. */
+.terrain-sheet-face.is-current {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+.terrain-sheet-face.is-current .sheet-number { color: var(--fg); }
+/* Face 8 comes from the eighth-face icon, not the terrain type. */
+.terrain-sheet-face.is-eighth { border-style: dashed; }
+
+.chip-terrain {
+  font-weight: 400;
+  font-size: .76rem;
+  color: var(--muted);
+  margin-left: 5px;
+}
+
 /*
  * SFR's art is dark line work drawn for white dice. On a dark theme it would
  * vanish, so it is inverted there rather than given a light plate -- the plate
  * would look like a sticker on the board.
  */
+/* `.die-portrait` is unit art too -- it is drawn as a plain <img> rather than through
+   `FaceArt`, so it has to be named here or the tile portraits go dark on dark. */
 .face-art { display: block; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .face-art,
-  :root:not([data-theme='light']) .chip-art {
+  :root:not([data-theme='light']) .die-portrait {
     filter: invert(1) hue-rotate(180deg) brightness(1.08);
+  }
+}
+
+/*
+ * Terrain art is flattened to one ink colour.
+ *
+ * SFR draws the three terrain magic faces in deep pink (#FF1493) while every other
+ * terrain face -- melee, missile, all four eighth faces -- is pure black. On our
+ * board that pink reads as a highlight the rules do not intend: a magic face is not
+ * more important than a melee one. `brightness(0)` collapses any hue to black, so it
+ * needs no per-file targeting and survives re-running `npm run art`; dark mode then
+ * inverts that to white, the same move the unit art makes.
+ */
+.chip-art,
+.terrain-face-art {
+  display: block;
+  filter: brightness(0);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .chip-art,
+  :root:not([data-theme='light']) .terrain-face-art {
+    filter: brightness(0) invert(1);
   }
 }
 

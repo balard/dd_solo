@@ -10,7 +10,7 @@ import { terrainDie } from '../data/load'
 import { preset, PRESET_ARMY_NAMES, type Preset, type PresetArmyName } from '../data/presets'
 
 import { nextInt, rngFrom, type RngState } from './rng'
-import { rollArmy } from './roll'
+import { rollArmy, type DieRoll } from './roll'
 import {
   V0_RULES,
   type GameState,
@@ -110,7 +110,12 @@ function rollForFirstPlayer(
   hordes: Readonly<Record<PlayerId, readonly UnitInstance[]>>,
   rng: RngState,
   ruleSet: RuleSet,
-): readonly [PlayerId, { p1: number; p2: number }, RngState] {
+): readonly [
+  PlayerId,
+  { p1: number; p2: number },
+  Record<PlayerId, readonly DieRoll[]>,
+  RngState,
+] {
   let state = rng
 
   for (let attempt = 0; attempt < MAX_TIE_REROLLS; attempt++) {
@@ -120,13 +125,21 @@ function rollForFirstPlayer(
 
     if (p1Roll.total !== p2Roll.total) {
       const winner: PlayerId = p1Roll.total > p2Roll.total ? 'p1' : 'p2'
-      return [winner, { p1: p1Roll.total, p2: p2Roll.total }, state] as const
+      // The deciding attempt's dice, not every tied one: the log shows the roll that
+      // settled it, the same way a combat shows the exchange that landed.
+      return [
+        winner,
+        { p1: p1Roll.total, p2: p2Roll.total },
+        { p1: p1Roll.dice, p2: p2Roll.dice },
+        state,
+      ] as const
     }
   }
 
-  // Persistent ties mean very small armies; break it rather than spin forever.
+  // Persistent ties mean very small armies; break it rather than spin forever. No
+  // dice to show for a coin flip, so the log falls back to its one-line form.
   const [coin, next] = nextInt(state, 2)
-  return [coin === 0 ? 'p1' : 'p2', { p1: 0, p2: 0 }, next] as const
+  return [coin === 0 ? 'p1' : 'p2', { p1: 0, p2: 0 }, { p1: [], p2: [] }, next] as const
 }
 
 export function setupGame(options: SetupOptions): GameState {
@@ -159,14 +172,14 @@ export function setupGame(options: SetupOptions): GameState {
   // Step 4: order of play, before the terrains are rolled.
   let firstPlayer: PlayerId
   if (options.firstPlayer === undefined) {
-    const [winner, rolls, next] = rollForFirstPlayer(
+    const [winner, rolls, rollOffDice, next] = rollForFirstPlayer(
       { p1: p1Units.byArmy.horde, p2: p2Units.byArmy.horde },
       rng,
       ruleSet,
     )
     firstPlayer = winner
     rng = next
-    log.push({ kind: 'order_of_play', rolls, firstPlayer })
+    log.push({ kind: 'order_of_play', rolls, firstPlayer, dice: rollOffDice })
   } else {
     firstPlayer = options.firstPlayer
   }

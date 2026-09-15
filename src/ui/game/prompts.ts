@@ -6,6 +6,7 @@
  * state or decides what is legal -- the engine already did both.
  */
 import { unitType } from '../../data/load'
+import type { UnitClass } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
 import {
   armyAt,
@@ -14,6 +15,7 @@ import {
   type Pending,
   type TerrainSlot,
   type UnitId,
+  type UnitInstance,
 } from '../../engine/types'
 
 export const SLOT_LABEL: Record<TerrainSlot, string> = {
@@ -179,4 +181,71 @@ export function focusedSlot(state: GameState): TerrainSlot {
   const army = state.turn.marchingArmy
   if (army !== null && army !== 'reserve') return army
   return 'frontier'
+}
+
+/**
+ * What the current decision lets the player pick, and where.
+ *
+ * `slot: null` means "my units, wherever they stand" — a retreat draws from every
+ * terrain at once. A damage assignment names one terrain and must leave the other
+ * two alone, which only started to matter once every army was on screen together:
+ * while just one terrain was visible, "selectable" and "selectable *here*" were the
+ * same question.
+ */
+export interface SelectMode {
+  readonly side: 'mine' | 'reserve'
+  readonly slot: TerrainSlot | null
+}
+
+export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): SelectMode | null {
+  if (pending === null || pending.player !== human) return null
+  switch (pending.kind) {
+    case 'assign_damage':
+      return { side: 'mine', slot: pending.slot }
+    case 'retreat':
+      return { side: 'mine', slot: null }
+    case 'reinforce':
+      return { side: 'reserve', slot: null }
+    default:
+      return null
+  }
+}
+
+/** Whether my army at `slot` is selectable under the current decision. */
+export function selectableAt(mode: SelectMode | null, slot: TerrainSlot): boolean {
+  return mode?.side === 'mine' && (mode.slot === null || mode.slot === slot)
+}
+
+
+/**
+ * Display order for an army: grouped by class, biggest first inside each group.
+ *
+ * The class order is the one a player thinks in -- heavy melee, light melee,
+ * missile, cavalry, magic -- not alphabetical. Within a class the heaviest die
+ * leads, so the units that decide a damage assignment are where the eye lands
+ * first, and identical dice end up side by side instead of scattered by whatever
+ * order the preset happened to list them in.
+ *
+ * Presentation only. Selection is by unit id and damage suggestions come from the
+ * engine, so nothing downstream depends on this order.
+ */
+const CLASS_ORDER: readonly UnitClass[] = [
+  'heavy_melee',
+  'light_melee',
+  'missile',
+  'cavalry',
+  'magic',
+]
+
+export function orderedForDisplay(units: readonly UnitInstance[]): readonly UnitInstance[] {
+  return [...units].sort((a, b) => {
+    const left = unitType(a.typeId)
+    const right = unitType(b.typeId)
+    const byClass = CLASS_ORDER.indexOf(left.unitClass) - CLASS_ORDER.indexOf(right.unitClass)
+    if (byClass !== 0) return byClass
+    if (left.health !== right.health) return right.health - left.health
+    // A stable, readable tiebreak, so two dice of the same class and size always
+    // appear in the same order rather than shuffling between renders.
+    return left.name.localeCompare(right.name)
+  })
 }

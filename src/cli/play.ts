@@ -52,6 +52,9 @@ const SLOT_LABEL: Record<TerrainSlot, string> = {
   p2_home: 'P2 home',
 }
 
+/** "melee" -> "Melee": the action reads as a name in a sentence, not a keyword. */
+const actionName = (action: string) => action.charAt(0).toUpperCase() + action.slice(1)
+
 const name = (unit: UnitInstance) => unitType(unit.typeId).name
 const health = (units: readonly UnitInstance[]) =>
   units.reduce((sum, u) => sum + unitType(u.typeId).health, 0)
@@ -116,11 +119,20 @@ function describe(entry: LogEntry, state: GameState): string | null {
     case 'terrain_lost':
       return yellow(`${entry.from} loses ${SLOT_LABEL[entry.slot]} (${entry.reason})`)
     case 'action_chosen':
-      return `${entry.player} attacks with ${bold(entry.action)} at ${SLOT_LABEL[entry.slot]}`
+      return `${entry.player} does a ${bold(actionName(entry.action))} attack ${
+        entry.fromSlot === entry.toSlot
+          ? `at ${SLOT_LABEL[entry.fromSlot]}`
+          : `from ${SLOT_LABEL[entry.fromSlot]} to ${SLOT_LABEL[entry.toSlot]}`
+      }`
     case 'action_skipped':
       return dim(`${entry.player} takes no action`)
     case 'combat_resolved': {
-      const arrow = entry.isCounter ? 'counter-attack' : entry.action
+      const kind = entry.isCounter ? 'counter-attack' : entry.action
+      // Both ends when they differ -- a missile shot, or a counter coming back.
+      const arrow =
+        entry.attackerSlot === entry.defenderSlot
+          ? `${kind} at ${SLOT_LABEL[entry.defenderSlot]}`
+          : `${kind} ${SLOT_LABEL[entry.attackerSlot]} -> ${SLOT_LABEL[entry.defenderSlot]}`
       const sum =
         entry.saveTotal === null
           ? `${entry.attackTotal} ${entry.action}${entry.action === 'magic' ? ' ÷ 2' : ''}`

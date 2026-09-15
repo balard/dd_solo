@@ -76,15 +76,25 @@ export interface RollResult {
 /**
  * Rolls every die in an army for one result type.
  *
- * Note what is *not* here: the eighth-face ID-doubling bonus. It is cut in v0
- * (`ruleSet.eighthFace === 'captureOnly'`) and belongs in this function when it
- * returns.
+ * The eighth-face ID-doubling bonus is the one modifier it applies, via `doubleIds`.
+ * Everything else about a face is already in the data.
  */
 export function rollArmy(
   units: readonly UnitInstance[],
   resultType: ResultType,
   rng: RngState,
   ruleSet: RuleSet,
+  /**
+   * The eighth-face bonus: "When rolling the army, all ID results are doubled"
+   * (starter rules, Terrain - Eighth Face). True when this army holds the terrain
+   * it is rolling at. It applies to *every* roll that army makes there -- attacks,
+   * saves and maneuvers alike -- not just attacks.
+   *
+   * It lives here rather than in `faceResults` because it is a fact about the
+   * board, not about the face: the same die doubles or not depending on where it
+   * is standing. `faceResults` stays a pure face-to-results function.
+   */
+  doubleIds = false,
 ): readonly [RollResult, RngState] {
   const dice: DieRoll[] = []
   let state = rng
@@ -100,7 +110,8 @@ export function rollArmy(
       throw new Error(`${unit.typeId}: rolled face ${faceIndex} but the die has ${type.faces.length}`)
     }
 
-    const results = faceResults(face, resultType, ruleSet)
+    const rolled = faceResults(face, resultType, ruleSet)
+    const results = doubleIds && face.icon === 'ID' ? rolled * 2 : rolled
     total += results
     dice.push({ unitId: unit.id, typeId: unit.typeId, faceIndex, face, results })
   }

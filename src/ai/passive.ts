@@ -1,12 +1,18 @@
 /**
  * The alpha opponent: takes no initiative.
  *
- * Skips every march, never contests a maneuver, never reinforces or retreats. But
- * it is **not inert** -- it answers every decision forced on it, and it *does*
- * counter-attack, which costs it nothing and exercises a path a truly do-nothing
- * opponent would leave entirely untested.
+ * Skips every march, never reinforces or retreats. But it is **not inert** -- it
+ * answers every decision forced on it, and it *does* contest maneuvers and
+ * counter-attack.
  *
- * "Passive" here means "starts nothing", not "never acts".
+ * Both of those are free. Contesting costs nothing but a roll it was never going to
+ * use elsewhere, and declining would hand the marcher every terrain turn unopposed,
+ * which is not passivity so much as surrender. They also keep the contest and
+ * counter-attack paths under test, which a truly do-nothing opponent would leave
+ * entirely unexercised.
+ *
+ * "Passive" here means "starts nothing", not "never acts". The engine only asks at
+ * all when this player actually has an army at the contested terrain.
  */
 import { damageOptions } from '../engine/damage'
 import type { RngState } from '../engine/rng'
@@ -31,8 +37,9 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     case 'choose_maneuver':
       return { kind: 'choose_maneuver', maneuver: false }
 
+    // It contests: free, and letting every maneuver through unopposed is surrender.
     case 'contest_maneuver':
-      return { kind: 'contest_maneuver', contest: false }
+      return { kind: 'contest_maneuver', contest: true }
 
     case 'choose_action':
       return { kind: 'choose_action', action: null }

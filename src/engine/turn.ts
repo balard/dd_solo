@@ -13,7 +13,7 @@
  * action, which is what guarantees the victory check runs after every state change
  * rather than only at end of turn.
  */
-import { legalActions, missileTargets, resolveAttack, terrainAction } from './combat'
+import { doublesIds, legalActions, missileTargets, resolveAttack, terrainAction } from './combat'
 import { applyDamage, damageAssignmentProblem, damageOptions } from './damage'
 import { rollArmy } from './roll'
 import {
@@ -274,7 +274,8 @@ function resolveExchange(state: GameState, isCounter: boolean): GameState {
     kind: 'combat_resolved',
     attacker,
     defender,
-    slot: defenderSlot,
+    attackerSlot,
+    defenderSlot,
     action: combat.action,
     isCounter,
     attackTotal: outcome.attackTotal,
@@ -428,12 +429,14 @@ function applyContest(state: GameState, contest: boolean): GameState {
     'maneuver',
     state.rng,
     state.ruleSet,
+    doublesIds(state, player, slot),
   )
   const [defenderRoll, afterDefender] = rollArmy(
     armyAt(state, opponentOf(player), slot),
     'maneuver',
     afterMarcher,
     state.ruleSet,
+    doublesIds(state, opponentOf(player), slot),
   )
 
   // "The highest total wins (the marching army wins a tie)."
@@ -445,6 +448,8 @@ function applyContest(state: GameState, contest: boolean): GameState {
     marcher: marcherRoll.total,
     defender: defenderRoll.total,
     marcherWins,
+    marcherDice: marcherRoll.dice,
+    defenderDice: defenderRoll.dice,
   })
 
   return withTurn(rolled, { marchStep: marcherWins ? 'choose_direction' : 'action' })
@@ -471,6 +476,14 @@ function applyChooseAction(state: GameState, action: ActionKind | null): GameSta
 
   const legal = legalActions(state, player, slot)
   if (!legal.includes(action)) {
+    const terrain = state.terrains[slot]
+    if (terrain.face === 8 && state.ruleSet.eighthFace !== 'captureOnly') {
+      throw new IllegalActionError(
+        terrain.capturedBy === player
+          ? `no ${action} action is available at ${slot} -- there is nothing to attack`
+          : `${slot} is held by the opponent, so only a melee action is available`,
+      )
+    }
     const permitted = terrainAction(state, slot)
     throw new IllegalActionError(
       permitted === null || permitted === action
@@ -479,16 +492,23 @@ function applyChooseAction(state: GameState, action: ActionKind | null): GameSta
     )
   }
 
-  const logged = withLog(state, { kind: 'action_chosen', player, slot, action })
-
   // Missile is the only action that picks its target; melee and magic hit the
-  // opposing army at the marching army's own terrain.
+  // opposing army at the marching army's own terrain. So missile's log entry waits
+  // for `applyMissileTarget`, where both ends are finally known.
   if (action === 'missile') {
-    return withTurn(logged, {
+    return withTurn(state, {
       marchStep: 'choose_target',
       combat: { action, targetSlot: slot, damage: 0 },
     })
   }
+
+  const logged = withLog(state, {
+    kind: 'action_chosen',
+    player,
+    fromSlot: slot,
+    toSlot: slot,
+    action,
+  })
   return withTurn(logged, {
     marchStep: 'resolve_attack',
     combat: { action, targetSlot: slot, damage: 0 },
@@ -504,7 +524,14 @@ function applyMissileTarget(state: GameState, slot: TerrainSlot): GameState {
     )
   }
   const combat = requireCombat(state)
-  return withTurn(state, {
+  const logged = withLog(state, {
+    kind: 'action_chosen',
+    player,
+    fromSlot: marchingSlot(state),
+    toSlot: slot,
+    action: combat.action,
+  })
+  return withTurn(logged, {
     marchStep: 'resolve_attack',
     combat: { ...combat, targetSlot: slot },
   })

@@ -10,7 +10,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { unitType } from '../data/load'
 import { preset } from '../data/presets'
 import {
-  armyAt,
   deadUnits,
   livingUnits,
   type PlayerId,
@@ -19,11 +18,11 @@ import {
 } from '../engine/types'
 
 import { ActionBar } from './game/ActionBar'
-import { BoardStrip } from './game/BoardStrip'
+import { Board } from './game/Board'
 import { DiceGrid } from './game/DiceGrid'
-import { ElementDots, speciesInfo } from './game/Elements'
+import { speciesInfo } from './game/Elements'
 import { LogPanel } from './game/LogPanel'
-import { focusedSlot, slotLabel } from './game/prompts'
+import { focusedSlot, selectModeFor } from './game/prompts'
 import { useGame } from './game/useGame'
 
 export function App() {
@@ -32,10 +31,10 @@ export function App() {
   const enemy: PlayerId = human === 'p1' ? 'p2' : 'p1'
   const pending = state.pending
 
-  const [manualFocus, setManualFocus] = useState<TerrainSlot | null>(null)
   const [selection, setSelection] = useState<ReadonlySet<UnitId>>(new Set())
   const [inspecting, setInspecting] = useState<UnitId | null>(null)
   const [showFallen, setShowFallen] = useState(false)
+  const [openTerrain, setOpenTerrain] = useState<TerrainSlot | null>(null)
 
   // A selection is a draft answer to one question. When the question changes, the
   // draft is meaningless, so it goes.
@@ -45,13 +44,9 @@ export function App() {
     setInspecting(null)
   }, [pendingKey])
 
-  // Follow the game unless the player has deliberately looked elsewhere; a new
-  // decision about a different terrain takes the focus back.
-  const engineFocus = focusedSlot(state)
-  useEffect(() => {
-    setManualFocus(null)
-  }, [engineFocus])
-  const focused = manualFocus ?? engineFocus
+  // Every army is on screen now, so there is nothing to look away *to*: this only
+  // marks which terrain the current decision is about.
+  const focused = focusedSlot(state)
 
   const toggle = (id: UnitId) =>
     setSelection((current) => {
@@ -62,17 +57,9 @@ export function App() {
       return next
     })
 
-  const mine = armyAt(state, human, focused)
-  const theirs = armyAt(state, enemy, focused)
-
-  // Which grid is selectable depends on what is being asked.
-  const selectMode = useMemo(() => {
-    if (pending === null || pending.player !== human) return null
-    if (pending.kind === 'assign_damage') return { side: 'mine' as const, slot: pending.slot }
-    if (pending.kind === 'retreat') return { side: 'mine' as const, slot: null }
-    if (pending.kind === 'reinforce') return { side: 'reserve' as const, slot: null }
-    return null
-  }, [pending, human])
+  // Which grid is selectable depends on what is being asked. The rule itself lives
+  // in prompts.ts, where it is testable without a DOM.
+  const selectMode = useMemo(() => selectModeFor(pending, human), [pending, human])
 
   const speciesName = (player: PlayerId) => {
     const forceId = game.record.setup.forces[player]
@@ -137,64 +124,32 @@ export function App() {
         </p>
       )}
 
-      <BoardStrip state={state} human={human} focused={focused} onFocus={setManualFocus} />
+      {/* One scrolling page: board, then what is off the board, then the log.
+          The log used to sit in its own column beside the board, which does not
+          survive giving every terrain its dice -- there is no width left for it. */}
+      <main className="page">
+        <Board
+          state={state}
+          human={human}
+          focused={focused}
+          openTerrain={openTerrain}
+          onToggleFaces={(slot) => setOpenTerrain((open) => (open === slot ? null : slot))}
+          selectMode={selectMode}
+          selected={selection}
+          onToggle={toggle}
+          inspecting={inspecting}
+          onInspect={setInspecting}
+          mySpecies={mySpecies}
+          theirSpecies={theirSpecies}
+        />
 
-      <main className="focus">
-        <h2 className="focus-head">
-          {slotLabel(focused, human)}
-          <span className="muted">
-            {state.terrains[focused].face === 8
-              ? ' · captured'
-              : ` · face ${state.terrains[focused].face}`}
-          </span>
-        </h2>
-
-        <div className="armies">
-          <section className="army">
+        {(reserve.length > 0 || selectMode?.side === 'reserve') && (
+          <section className="army off-board">
             <h3>
-              Enemy
-              {theirSpecies && (
-                <>
-                  {' '}
-                  <span className="muted">{theirSpecies.name}</span>
-                  <ElementDots elements={theirSpecies.elements} />
-                </>
-              )}{' '}
+              Your reserve{' '}
               <span className="muted">
-                {theirs.length}d / {health(theirs)}h
+                {reserve.length}d / {health(reserve)}h
               </span>
-            </h3>
-            <DiceGrid units={theirs} inspecting={inspecting} onInspect={setInspecting} />
-          </section>
-
-          <section className="army">
-            <h3>
-              Your army
-              {mySpecies && (
-                <>
-                  {' '}
-                  <span className="muted">{mySpecies.name}</span>
-                  <ElementDots elements={mySpecies.elements} />
-                </>
-              )}{' '}
-              <span className="muted">
-                {mine.length}d / {health(mine)}h
-              </span>
-            </h3>
-            <DiceGrid
-              units={mine}
-              selectable={selectMode?.side === 'mine'}
-              selected={selection}
-              onToggle={toggle}
-              inspecting={inspecting}
-              onInspect={setInspecting}
-            />
-          </section>
-
-          {(reserve.length > 0 || selectMode?.side === 'reserve') && (
-          <section className="army">
-            <h3>
-              Your reserve <span className="muted">{reserve.length}d / {health(reserve)}h</span>
             </h3>
             <DiceGrid
               units={reserve}
@@ -205,33 +160,33 @@ export function App() {
               onInspect={setInspecting}
             />
           </section>
-          )}
+        )}
 
-          {(myFallen.length > 0 || theirFallen.length > 0) && (
-            <section className="army">
-              <h3>
-                <button
-                  type="button"
-                  className="fallen-toggle"
-                  onClick={() => setShowFallen((v) => !v)}
-                >
-                  {showFallen ? '▾' : '▸'} Fallen
-                  <span className="muted">
-                    {' '}you {myFallen.length} · enemy {theirFallen.length}
-                  </span>
-                </button>
-              </h3>
-              {showFallen && (
-                <div className="fallen">
-                  <p className="fallen-side muted">Yours</p>
-                  <DiceGrid units={myFallen} inspecting={inspecting} onInspect={setInspecting} />
-                  <p className="fallen-side muted">Enemy</p>
-                  <DiceGrid units={theirFallen} inspecting={inspecting} onInspect={setInspecting} />
-                </div>
-              )}
-            </section>
-          )}
-        </div>
+        {(myFallen.length > 0 || theirFallen.length > 0) && (
+          <section className="army off-board">
+            <h3>
+              <button
+                type="button"
+                className="fallen-toggle"
+                onClick={() => setShowFallen((v) => !v)}
+              >
+                {showFallen ? '▾' : '▸'} Fallen
+                <span className="muted">
+                  {' '}
+                  you {myFallen.length} · enemy {theirFallen.length}
+                </span>
+              </button>
+            </h3>
+            {showFallen && (
+              <div className="fallen">
+                <p className="fallen-side muted">Yours</p>
+                <DiceGrid units={myFallen} inspecting={inspecting} onInspect={setInspecting} />
+                <p className="fallen-side muted">Enemy</p>
+                <DiceGrid units={theirFallen} inspecting={inspecting} onInspect={setInspecting} />
+              </div>
+            )}
+          </section>
+        )}
 
         <LogPanel state={state} human={human} />
       </main>

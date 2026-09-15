@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { legalActions, magicDamage, missileTargets, terrainAction } from './combat'
+import { doublesIds, legalActions, magicDamage, missileTargets, terrainAction } from './combat'
 import { damageOptions } from './damage'
 import { begin, reduce } from './reduce'
+import { rollArmy } from './roll'
 import { setupGame } from './setup'
 import {
   IllegalActionError,
@@ -311,7 +312,10 @@ describe('choosing an action', () => {
     expect(state.turn.marchIndex).toBe(1)
     expect(state.log.some((e) => e.kind === 'action_skipped')).toBe(true)
   })
-  it('offers nothing on a captured terrain, since the eighth face has no action', () => {
+  it('offers the holder only the actions that have something to hit', () => {
+    // p1 maneuvers an undefended Frontier to 8 and captures it. The eighth face
+    // grants melee, missile and magic -- but p2 has no army there to melee or
+    // magic, so only missile, which reaches their other terrains, survives.
     const state = play(
       begin(emptyArmy(setFace(fresh(), 'frontier', 7), 'p2', 'frontier')),
       { kind: 'choose_march_army', army: 'frontier' },
@@ -319,8 +323,9 @@ describe('choosing an action', () => {
       { kind: 'choose_direction', direction: 'up' },
     )
     expect(state.terrains.frontier.face).toBe(8)
+    expect(state.terrains.frontier.capturedBy).toBe('p1')
     expect(state.pending?.kind).toBe('choose_action')
-    expect((state.pending as { legal: readonly string[] }).legal).toEqual([])
+    expect((state.pending as { legal: readonly string[] }).legal).toEqual(['missile'])
     expect(() => reduce(state, { kind: 'choose_action', action: 'melee' })).toThrow(
       IllegalActionError,
     )
@@ -368,5 +373,94 @@ describe('elimination through combat', () => {
       return
     }
     throw new Error('no seed in the sweep killed the last defender')
+  })
+})
+
+/** Face 8 held by `holder` — `setFace` deliberately clears `capturedBy`, and the
+ *  two must always agree (validateState enforces it). */
+function captured(state: GameState, slot: TerrainSlot, holder: PlayerId): GameState {
+  return {
+    ...state,
+    terrains: { ...state.terrains, [slot]: { ...state.terrains[slot], face: 8, capturedBy: holder } },
+  }
+}
+
+describe('the eighth face', () => {
+  describe('action restriction', () => {
+    it('lets the holder choose melee, missile or magic', () => {
+      const state = captured(begin(fresh()), 'frontier', 'p1')
+      expect([...legalActions(state, 'p1', 'frontier')].sort()).toEqual([
+        'magic',
+        'melee',
+        'missile',
+      ])
+    })
+
+    it('restricts the army facing the holder to melee', () => {
+      const state = captured(begin(fresh()), 'frontier', 'p1')
+      expect(legalActions(state, 'p2', 'frontier')).toEqual(['melee'])
+    })
+
+    it('overrides whatever the numbered face would have allowed', () => {
+      // terrainAction reports nothing at face 8; the eighth face supplies its own.
+      const state = captured(begin(fresh()), 'frontier', 'p1')
+      expect(terrainAction(state, 'frontier')).toBeNull()
+      expect(legalActions(state, 'p1', 'frontier').length).toBeGreaterThan(0)
+    })
+
+    it('still offers nothing when there is nothing to attack', () => {
+      const state = emptyArmy(captured(begin(fresh()), 'frontier', 'p1'), 'p2', 'frontier')
+      // p2 is gone, so melee and magic have no target; missile can still reach elsewhere.
+      expect(legalActions(state, 'p1', 'frontier')).not.toContain('melee')
+      expect(legalActions(state, 'p1', 'frontier')).not.toContain('magic')
+    })
+
+    it('grants none of it under the captureOnly ruleset', () => {
+      const base = captured(begin(fresh()), 'frontier', 'p1')
+      const old = { ...base, ruleSet: { ...V0_RULES, eighthFace: 'captureOnly' as const } }
+      expect(legalActions(old, 'p1', 'frontier')).toEqual([])
+      expect(legalActions(old, 'p2', 'frontier')).toEqual([])
+    })
+  })
+
+  describe('ID doubling', () => {
+    const idFaces = (dice: readonly { face: { icon: string }; results: number }[]) =>
+      dice.filter((d) => d.face.icon === 'ID')
+
+    it('doubles ID results and leaves every other face alone', () => {
+      const state = begin(fresh())
+      const army = armyAt(state, 'p1', 'frontier')
+      const [plain] = rollArmy(army, 'melee', state.rng, V0_RULES, false)
+      const [bonus] = rollArmy(army, 'melee', state.rng, V0_RULES, true)
+
+      // Same rng in, same faces out -- only the ID results differ.
+      expect(bonus.dice.map((d) => d.faceIndex)).toEqual(plain.dice.map((d) => d.faceIndex))
+      for (let i = 0; i < plain.dice.length; i++) {
+        const before = plain.dice[i]!
+        const after = bonus.dice[i]!
+        expect(after.results).toBe(before.face.icon === 'ID' ? before.results * 2 : before.results)
+      }
+      const ids = idFaces(plain.dice)
+      const idTotal = ids.reduce((n, d) => n + d.results, 0)
+      expect(bonus.total).toBe(plain.total + idTotal)
+    })
+
+    it('consumes exactly the same randomness either way', () => {
+      const state = begin(fresh())
+      const army = armyAt(state, 'p1', 'frontier')
+      const [, plainRng] = rollArmy(army, 'melee', state.rng, V0_RULES, false)
+      const [, bonusRng] = rollArmy(army, 'melee', state.rng, V0_RULES, true)
+      expect(bonusRng).toEqual(plainRng)
+    })
+
+    it('applies only to the holder, and only under a ruleset that grants it', () => {
+      const held = captured(begin(fresh()), 'frontier', 'p1')
+      expect(doublesIds(held, 'p1', 'frontier')).toBe(true)
+      expect(doublesIds(held, 'p2', 'frontier')).toBe(false)
+      expect(doublesIds(held, 'p1', 'p1_home')).toBe(false)
+
+      const old = { ...held, ruleSet: { ...V0_RULES, eighthFace: 'captureOnly' as const } }
+      expect(doublesIds(old, 'p1', 'frontier')).toBe(false)
+    })
   })
 })

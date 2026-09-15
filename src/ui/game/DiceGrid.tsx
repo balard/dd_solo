@@ -11,18 +11,69 @@
  * to decide whether to attack with it.
  */
 import { unitType } from '../../data/load'
-import type { Face } from '../../data/types'
+import type { Face, UnitType } from '../../data/types'
 import type { UnitId, UnitInstance } from '../../engine/types'
 
 import { ElementDots, speciesInfo } from './Elements'
 import { FaceArt } from './FaceArt'
 import { faceLabel } from './Glyph'
+import { orderedForDisplay } from './prompts'
+import { useFaceArt } from './useFaceArt'
 
-const SIZE_LABEL: Record<string, string> = {
-  small: 'S',
-  medium: 'M',
-  large: 'L',
-  monster: 'M+',
+/**
+ * The corner badge says what the die *does*, not how big it is.
+ *
+ * It used to read S/M/L/M+, which the health digit in the other corner already says
+ * exactly (size determines health: 1/2/3/4) and the tile's own size says a third
+ * time. Class is the one thing about a die that nothing else on the tile shows.
+ */
+const CLASS_BADGE: Record<string, string> = {
+  heavy_melee: 'HM',
+  light_melee: 'LM',
+  cavalry: 'CA',
+  missile: 'MI',
+  magic: 'MA',
+}
+
+/**
+ * Tile and portrait size per die size, so a tile reads at a glance the way the
+ * physical dice do -- a monster die really is the big one in the hand.
+ *
+ * The *whole tile* is square and scales, not just the art inside it; a big portrait
+ * in a name-shaped box does not read as a bigger die. Size badge and health become
+ * corner annotations so neither one drives the width.
+ *
+ * Two floors constrain this. The portrait floor is 30px: below roughly that, face
+ * art is less legible than our own glyph (measured, see OVERVIEW section 5), so
+ * `small` sits *at* the floor and the spread comes from raising the larger sizes.
+ * The tile floor is 44px, the smallest comfortable tap on a phone.
+ */
+const TILE_SIZE: Record<string, number> = {
+  small: 48,
+  medium: 54,
+  large: 60,
+  monster: 70,
+}
+
+const PORTRAIT_SIZE: Record<string, number> = {
+  small: 30,
+  medium: 34,
+  large: 38,
+  monster: 46,
+}
+
+/**
+ * What a die is, in one line: "Darktree — monster heavy melee".
+ *
+ * No health: size *is* health in this data (small 1, medium 2, large 3, monster 4,
+ * checked across all 40), so printing both says the same thing twice. The tile still
+ * shows the number, where it earns its place doing arithmetic during damage.
+ *
+ * `size` doubles as the word for it, and `monster` is the interesting one -- it is a
+ * size in the data but reads as a kind of die at the table.
+ */
+function describe(type: UnitType): string {
+  return `${type.name} — ${type.size} ${CLASS_LABEL[type.unitClass] ?? type.unitClass}`
 }
 
 const CLASS_LABEL: Record<string, string> = {
@@ -67,15 +118,28 @@ export function DiceGrid({
   inspecting?: UnitId | null
   onInspect?: (id: UnitId | null) => void
 }) {
+  const art = useFaceArt()
+
   if (units.length === 0) return <p className="empty">no units here</p>
 
   return (
     <div className="dice-grid">
-      {units.map((unit) => {
+      {orderedForDisplay(units).map((unit) => {
         const type = unitType(unit.typeId)
         const isSelected = selected?.has(unit.id) ?? false
         const isOpen = !selectable && inspecting === unit.id
         const species = speciesInfo(type.species)
+
+        // The ID face is the die's portrait -- it is the one face that is a picture
+        // of the unit rather than of an action. It sits at index 0 on all 40 dice,
+        // but ask the data rather than trusting that.
+        const idIndex = type.faces.findIndex((face) => face.icon === 'ID')
+        const portrait = idIndex < 0 ? null : art.unitFace(unit.typeId, idIndex)
+        const portraitSize = PORTRAIT_SIZE[type.size] ?? 30
+        // Square only while a portrait is (or may still be) what we draw. The
+        // name fallback is wide text and keeps the original row-shaped tile.
+        const squared = !art.ready || portrait !== null
+        const tileSize = TILE_SIZE[type.size] ?? 48
 
         return (
           <div key={unit.id} className={`die-wrap ${isOpen ? 'is-open' : ''}`}>
@@ -86,19 +150,43 @@ export function DiceGrid({
                 (isSelected ? ' die-selected' : '') +
                 (selectable ? ' die-selectable' : '') +
                 (isOpen ? ' die-open' : '') +
-                (type.size === 'monster' ? ' die-monster' : '')
+                (squared ? ' die-squared' : '')
               }
+              style={squared ? { width: tileSize, height: tileSize } : undefined}
               onClick={() =>
                 selectable ? onToggle?.(unit.id) : onInspect?.(isOpen ? null : unit.id)
               }
-              title={
-                selectable
-                  ? `${type.name} — ${type.health} health`
-                  : `${type.name} — tap to see its faces`
-              }
+              // The portrait carries no name, so the tooltip and the accessible name
+              // both have to. What a die *is* -- monster heavy melee, medium magic --
+              // is what you want when weighing an attack, and it is the one thing the
+              // tile cannot show; the tap affordance is guessable, so it gives way.
+              title={describe(type)}
+              aria-label={describe(type)}
             >
-              <span className="die-size">{SIZE_LABEL[type.size] ?? '?'}</span>
-              <span className="die-name">{type.name}</span>
+              <span className="die-kind">{CLASS_BADGE[type.unitClass] ?? '??'}</span>
+              {/*
+               * The portrait replaces the name only when we actually have the art.
+               * Without it every ID face would draw the same generic glyph and the
+               * tiles would become indistinguishable, so a clone that never ran
+               * `npm run art` keeps the names it has always had.
+               */}
+              {!art.ready ? (
+                <span
+                  className="die-portrait-slot"
+                  style={{ width: portraitSize, height: portraitSize }}
+                />
+              ) : portrait !== null ? (
+                <img
+                  className="die-portrait"
+                  src={portrait}
+                  width={portraitSize}
+                  height={portraitSize}
+                  alt={type.name}
+                  draggable={false}
+                />
+              ) : (
+                <span className="die-name">{type.name}</span>
+              )}
               <span className="die-health">{type.health}</span>
             </button>
 

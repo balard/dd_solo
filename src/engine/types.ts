@@ -178,6 +178,9 @@ export type LogEntry =
       readonly kind: 'order_of_play'
       readonly rolls: Readonly<Record<PlayerId, number>>
       readonly firstPlayer: PlayerId
+      /** The deciding roll's dice -- empty only when repeated ties forced a coin flip.
+       *  Log-only, like `combat_resolved`: a save is `{ setup, actions }`. */
+      readonly dice: Readonly<Record<PlayerId, readonly DieRoll[]>>
     }
   | {
       readonly kind: 'terrain_placed'
@@ -195,6 +198,10 @@ export type LogEntry =
       readonly marcher: number
       readonly defender: number
       readonly marcherWins: boolean
+      /** Both sides' dice, so a contest reads like an attack rather than two bare
+       *  numbers. Log-only, like `combat_resolved`. */
+      readonly marcherDice: readonly DieRoll[]
+      readonly defenderDice: readonly DieRoll[]
     }
   | {
       readonly kind: 'terrain_moved'
@@ -219,7 +226,19 @@ export type LogEntry =
   | {
       readonly kind: 'action_chosen'
       readonly player: PlayerId
-      readonly slot: TerrainSlot
+      /**
+       * Where the attack is made *from* — the marching army's own terrain, not the
+       * target. Named `fromSlot` rather than `slot` because "at <slot>" read as the
+       * target while meaning the origin.
+       */
+      readonly fromSlot: TerrainSlot
+      /**
+       * What it is aimed at: the same terrain for melee and magic, which hit the army
+       * facing them. Missile chooses, so **this entry is written when the target is
+       * picked, not when the action is declared** — otherwise the one action that can
+       * name a second terrain would be the one unable to.
+       */
+      readonly toSlot: TerrainSlot
       readonly action: ActionKind
     }
   | { readonly kind: 'action_skipped'; readonly player: PlayerId; readonly slot: TerrainSlot }
@@ -227,7 +246,13 @@ export type LogEntry =
       readonly kind: 'combat_resolved'
       readonly attacker: PlayerId
       readonly defender: PlayerId
-      readonly slot: TerrainSlot
+      /**
+       * Both ends of the exchange. They are the same terrain for melee and magic,
+       * which only ever hit the army facing them; they differ for missile, which
+       * shoots at another terrain, and a counter-attack swaps them.
+       */
+      readonly attackerSlot: TerrainSlot
+      readonly defenderSlot: TerrainSlot
       readonly action: ActionKind
       readonly isCounter: boolean
       readonly attackTotal: number
@@ -263,14 +288,22 @@ export type LogEntry =
 export interface RuleSet {
   readonly magic: 'simplified' | 'spells'
   readonly sai: 'inert' | 'full'
-  readonly eighthFace: 'captureOnly' | 'full'
+  /**
+   * `captureOnly` — a captured terrain wins the game and does nothing else.
+   * `standard`    — plus the two advantages the rules grant any holder: ID results
+   *                 doubled when rolling that army, and the action restriction
+   *                 (holder may melee/missile/magic, everyone else melee only).
+   * `full`        — plus the Eighth Face Icon powers (City, Standing Stones,
+   *                 Temple, Tower), which are still cut.
+   */
+  readonly eighthFace: 'captureOnly' | 'standard' | 'full'
   readonly dragons: boolean
 }
 
 export const V0_RULES: RuleSet = {
   magic: 'simplified',
   sai: 'inert',
-  eighthFace: 'captureOnly',
+  eighthFace: 'standard',
   dragons: false,
 }
 

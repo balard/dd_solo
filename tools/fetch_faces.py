@@ -18,6 +18,13 @@ answers -- fine here, impossible synchronously in a browser. So this script reco
 what it found, keyed by exactly what the UI knows: a unit type id and a face index.
 
 Usage:  python tools/fetch_faces.py [--dry-run]
+        python tools/fetch_faces.py --offline [--source=DIR]
+
+`--offline` mirrors from a local directory (default `assets/faces/`) instead of the
+network, for when the art has already been fetched once. The files still land in
+`public/faces/`, because that is the only directory Vite serves -- art sitting in
+`assets/faces/` is invisible to the browser, and art without a manifest draws
+nothing at all.
 """
 import json
 import pathlib
@@ -31,6 +38,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 UNITS = ROOT / "data" / "starter" / "units.json"
 TERRAINS = ROOT / "data" / "starter" / "terrains.json"
 OUT = ROOT / "public" / "faces"
+LOCAL = ROOT / "assets" / "faces"
 BASE = "https://commander.dragondice.com/images/faces"
 
 CLASS_SHORT = {
@@ -70,9 +78,20 @@ def unit_candidates(unit, face):
     ]
 
 
-def fetch(path, dry_run):
+def fetch(path, dry_run, source=None):
+    """Put one file in OUT, from `source` if given else the network. True if present."""
     dest = OUT / path
     if dest.exists():
+        return True
+    if source is not None:
+        # A local mirror can be probed for free, so --dry-run stays honest here.
+        src = source / path
+        if not src.exists():
+            return False
+        if dry_run:
+            return True
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(src.read_bytes())
         return True
     if dry_run:
         return True
@@ -91,14 +110,14 @@ def fetch(path, dry_run):
     return True
 
 
-def resolve(candidates, dry_run, cache):
+def resolve(candidates, dry_run, cache, source=None):
     """First candidate that actually exists, or None."""
     for path in candidates:
         if path in cache:
             if cache[path]:
                 return path
             continue
-        ok = fetch(path, dry_run)
+        ok = fetch(path, dry_run, source)
         cache[path] = ok
         if ok:
             return path
@@ -107,6 +126,17 @@ def resolve(candidates, dry_run, cache):
 
 def main() -> int:
     dry_run = "--dry-run" in sys.argv
+
+    source = None
+    for arg in sys.argv[1:]:
+        if arg.startswith("--source="):
+            source = pathlib.Path(arg.split("=", 1)[1])
+    if source is None and "--offline" in sys.argv:
+        source = LOCAL
+    if source is not None and not source.is_dir():
+        print(f"no such directory: {source}", file=sys.stderr)
+        return 1
+
     units_doc = json.loads(UNITS.read_text(encoding="utf-8"))
 
     cache: dict[str, bool] = {}
@@ -117,7 +147,7 @@ def main() -> int:
         for index, face in enumerate(unit["faces"]):
             if face == "TODO":
                 continue
-            found = resolve(unit_candidates(unit, face), dry_run, cache)
+            found = resolve(unit_candidates(unit, face), dry_run, cache, source)
             key = f"{unit['id']}#{index}"
             if found:
                 manifest_units[key] = found
@@ -130,14 +160,14 @@ def main() -> int:
         for type_id, terrain in terrains_doc["terrainTypes"].items():
             for number, icon in terrain["faces"].items():
                 path = f"terrain/sais/{icon.lower()}-{number}.svg"
-                if resolve([path], dry_run, cache):
+                if resolve([path], dry_run, cache, source):
                     manifest_terrains[f"{type_id}#{number}"] = path
                 else:
                     missing.append(f"terrain {type_id}#{number}")
         for die in terrains_doc["terrains"]:
             eighth = die["eighthFace"].replace("_", "-")
             path = f"terrain/sais/{eighth}-8.svg"
-            if resolve([path], dry_run, cache):
+            if resolve([path], dry_run, cache, source):
                 manifest_terrains[f"eighth#{die['eighthFace']}"] = path
 
     if not dry_run:
