@@ -184,20 +184,24 @@ started in one tap. v1 Phase 0a replaces them with forces rolled from the seed �
 24 or 36 health, random units, random split — keeping named forces as the option tests and the
 regression baseline use. A hand-driven army builder is still a later feature.
 
-Suggested preset terrains, matching each species to its own elements: Treefolk bring **Swampland**
-as their Home Terrain, Firewalkers bring **Wasteland**, and **Highland** — the only type sharing an
-element with both — is each side's proposed Frontier Terrain. The eighth-face variant is cosmetic
-in v0; pick any.
+Preset terrains, matching each species to its own elements: Treefolk bring **Swampland** as their
+Home Terrain and Firewalkers **Wasteland**. For the alpha both propose **Highland** — the only type
+sharing an element with both — as their Frontier, which is what lets v0 sidestep step 4.
+
+v1 Phase 0a needs the two proposals to differ, and with three types in the box element-matching
+leaves no third option for either species, so each proposes **a second die of its own type**:
+Swampland for Treefolk, Wasteland for Firewalkers, with the eighth-face icon (Tower at home, City
+at the Frontier) separating the dice. Cosmetic until Phase 5 implements the icons.
 
 ## 8. Open questions
 
 - **Army builder** in the alpha, or only the two 30-health presets? (Currently: presets only.)
   Still open, and deliberately outside `PLAN-V1.md` — an army builder is what makes *more species*
   worth having, so it belongs with them rather than with the rules.
-- **Which terrain dice each species brings** — the suggestion in §7 is a guess at what plays well,
-  not a rule. Phase 0a makes the second terrain matter (the roll-off loser puts theirs at the
-  Frontier) and Phase 5 makes the eighth-face variant matter and adds three more types, so what is
-  currently a free choice becomes two real ones.
+- **Which terrain dice each species brings** — the choice in §7 is a guess at what plays well, not
+  a rule, and Phase 0a's second-die-of-your-own-type is forced by there being only three types
+  rather than chosen. Phase 5 adds three more and makes the eighth-face icon matter, at which point
+  both halves become real decisions — including whether the Frontier should go on being a City.
 - **Undo.** Architecturally free, but it lets you re-roll bad dice. Misclick-rewind only, or not
   at all in the alpha?
 - **How the random force distribution should be shaped.** Phase 0a draws units uniformly over a

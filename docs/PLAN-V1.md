@@ -50,8 +50,11 @@ for it again.
 **Dependencies:**
 
 ```
-0a Setup: random forces + second terrain      (independent of 0b; either order)
-0b Roll pipeline
+G  Golden files: 25 recorded v0 games          cut before anything moves
+|
+0b Roll pipeline                               proven by G
+|
+0a Setup: random forces + second terrain       re-proves G through its overrides
 |
 +--> 1 SAIs A: result generators
 |
@@ -72,10 +75,16 @@ for it again.
                         9 UI and AI for v1
 ```
 
-Phases 0a and 0b touch different files (`setup.ts` and `roll.ts`) and neither needs the other.
-Phases 1, 2 and 3 are likewise independent of each other and can be done in any order. **Tower
-(Phase 5a) can be pulled forward to immediately after Phase 0b** — it is one condition in
-`missileTargets`, and every terrain in play is a Tower until Phase 5 says otherwise.
+Phases 0a and 0b touch different files (`setup.ts` and `roll.ts`) and neither needs the other, so
+either order compiles. **Do 0b first anyway.** Its whole value is a golden file proving it changed
+no outcome, and that proof is strongest against a world where nothing else is moving; 0a changes
+outcomes by construction. So: cut the goldens, land the refactor under them, then land setup and
+watch the same goldens stay green through their terrain overrides (§0a, *Keeping the goldens*).
+
+Phases 1, 2 and 3 are independent of each other and can be done in any order. **Tower (Phase 5a)
+can be pulled forward to immediately after Phase 0b** — it is one condition in `missileTargets`,
+and every terrain in play is a Tower until 0a puts a City at the Frontier, after which it is both
+homes.
 
 **Two rules hold for every phase:**
 
@@ -99,6 +108,27 @@ Phases 1, 2 and 3 are likewise independent of each other and can be done in any 
   bugs and is a real argument for doing 0a early. It does not remove the obligation: a *unit* test
   still has to name the dice it is exercising, because a random force proves nothing about a
   specific SAI on a specific turn.
+
+---
+
+## Phase G — The golden files
+
+**Deliverable.** 25 recorded v0 games, committed *before* a line of Phase 0 is written, and a test
+that replays them.
+
+`src/engine/__golden__/v0-games.json` holds `runGame` records — `RandomAI` on both sides, seeds
+1–25, named forces — each beside a **digest** of its final state: every unit id to its location,
+the three terrains, `rng.counter`, `winner`, and the log rendered to lines. A digest rather than a
+hash, because a hash mismatch tells you only that something moved, and the whole point of the file
+is to say *what*.
+
+Cut them now and they measure both Phase 0 halves: 0b must reproduce them exactly, and 0a must
+reproduce them through its overrides. Cut them after 0b and they only ever confirm what they were
+generated from.
+
+`tools/record_goldens.ts`, behind `npm run goldens`, regenerates the file. **Regenerating it is the
+one move that can hide a bug**, so a commit that does it says why in its message. Replay is cheap —
+it calls no AI — so 25 games cost the suite very little.
 
 ---
 
@@ -191,7 +221,7 @@ take the first turn, *or* pick which proposed Frontier is used, in which case th
 is a genuine strategic decision, and handing it to `PassiveAI` would mean an opponent that either
 always picks the same way or picks at random; neither is a game. So v1 splits the two prizes one
 each instead: **the winner takes the first march, the loser sets the Frontier.** No decision is
-raised, nothing needs an opinion, and the Frontier stops being a constant.
+raised and nothing needs an opinion.
 
 The real rule arrives with `GreedyAI` (Phase 9), which is the first thing in the project able to
 hold an opinion about which terrain it wants to fight on. Until then this house rule sits in
@@ -202,10 +232,45 @@ terrain, second terrain) and a force (the unit list). Randomisation takes the fo
 remains is a per-species profile. Splitting the type now is cheaper than splitting it in Phase 5,
 when six terrain types make the second-terrain choice actually interesting.
 
+**What the two species actually propose.** The mechanism above moves nothing on its own: with three
+terrain types in the box, both species already propose Highland. Element-matching leaves Treefolk
+(water, earth) only Swampland and Highland and Firewalkers (air, fire) only Wasteland and Highland,
+and each already spends one on its Home Terrain — so "the loser sets the Frontier" would set it to
+Highland Tower every game, exactly as v0 does.
+
+So each species' second terrain becomes **a second die of its own type**: Treefolk propose
+Swampland, Firewalkers propose Wasteland. The roll-off loser fights on their own element, which is
+a real consolation for marching second, and the Frontier finally varies by seed. The two dice must
+differ from the home dice — the same die cannot stand in two slots — so the eighth-face icon is
+what separates them: homes stay Tower, and both second terrains are **City**.
+
+Two consequences, neither a problem here and both worth writing down before Phase 5 meets them:
+
+- **Tower is still the icon to pull forward** (Phase 5a), but it now covers the two homes rather
+  than the whole board.
+- **The Frontier is always a City**, so from Phase 5 the most contested terrain grants its holder a
+  promotion or a recruit every turn. That is a balance question for the phase that implements City,
+  not for this one. The icon is one string in `data/presets.json`.
+
+### Keeping the goldens
+
+Changing what the Frontier die is means **named forces no longer reproduce the v0 board**, which is
+what Phase G's records were recorded on. The fix is an escape hatch that setup wants for its own
+sake:
+
+```ts
+readonly terrains?: Partial<Record<TerrainSlot, string>>   // explicit die per slot, applied last
+```
+
+The 25 stored setups gain `terrains: { frontier: 'highland_tower' }` and their digests must come
+back **byte-identical**. That is a stronger check than the original wording: it proves 0a changed
+the board and nothing else. Phase 5 needs the same hatch anyway — a test for Tower has to be able
+to say "Tower, here" rather than hope the presets still agree.
+
 **Exit criterion.** A seed alone produces a complete, legal setup: both races assigned, both forces
 at the same legal total, all three armies non-empty and within the half-health cap, and a Frontier
 die belonging to the roll-off loser. `validateState` accepts every one of 1000 seeded setups, and
-explicit named forces still produce exactly the v0 board.
+the Phase G goldens replay unchanged through their terrain override.
 
 **Tests.**
 
@@ -216,8 +281,9 @@ explicit named forces still produce exactly the v0 board.
 | Army split | no empty army, and no army over `floor(total / 2)` health across all 1000 |
 | Unit draw | total health lands exactly on the budget, never over, never short |
 | Roll-off | the Frontier die is the *loser's* second terrain, and the winner marches first |
+| An explicit `firstPlayer` | no roll-off happens, so the *other* player is the loser and sets the Frontier |
 | Persistent ties | the existing coin-flip fallback still resolves, and still sets a Frontier |
-| `kind: 'named'` | reproduces the v0 board exactly, so the goldens keep their meaning |
+| `kind: 'named'` | consumes no generation draws; with a `terrains` override it is the v0 board |
 
 **Bump `SAVE_VERSION`.** The Frontier die now depends on the roll-off, so an old log replays onto a
 different board.
@@ -247,7 +313,7 @@ interface RollOutcome {
 }
 ```
 
-Three changes hide inside this:
+Five changes hide inside this:
 
 - **`totals` is a map, not a number.** A dragon attack is a *combination roll* — one roll counted
   for melee, missile and save at once, with the owner choosing what each ID becomes. v0's
@@ -256,20 +322,37 @@ Three changes hide inside this:
 - **`faceResults` keeps its signature and stays three lines.** The context goes to a new
   `saiEffects(face, context)`; the normal-icon path is untouched. Invariant 7 is not weakened —
   the count on the face is still the final answer.
-- **`Modifier` enters `GameState` as an empty list.** Nothing produces one until Phase 3, but steps
-  6, 7, 9 and 10 exist and are exercised by tests from day one.
+- **`rollArmy` keeps its signature too, and becomes a wrapper.** `roll.test.ts` and
+  `combat.test.ts` call it directly, `doubleIds` flag and all, and this phase's exit criterion is
+  that every v0 test passes *unmodified*. So `resolveRoll` goes underneath it, not in front of it.
+- **The working value is a triple per result type — `{ id, normal, sai }` — not a number.** This is
+  what the pipeline's ordering actually requires and it is easy to miss: step 6 removes ID results
+  **last**, and step 8 adds SAI results **after** the divide at step 7. Neither can be expressed
+  against a single running subtotal, so the subtotal splits three ways and only collapses at
+  step 10. Eighth-face ID doubling then stops being a per-die branch and becomes a step-9
+  `Modifier` over the `id` share — same numbers out, one fewer special case in `rollArmy`.
+- **`Modifier` reaches the pipeline through `modifiersFor(state, context)`, which returns `[]`.**
+  The plan used to put an empty list in `GameState`; a field nothing ever writes is dead weight,
+  and Phase 3 replaces it with `state.effects` regardless. A function is the same seam with nothing
+  to delete later, and it keeps `resolveRoll` free of `GameState` — it takes units, a context,
+  modifiers and an RNG, and stays as pure as `faceResults`.
+
+Two divides, or two multiplies, on one result type is a **thrown error**, not a rejected action:
+step 7 and step 9 each allow at most one, so a second one means the engine built an illegal
+modifier list, which is a bug and not a move.
 
 **Exit criterion.** Every v0 test passes unmodified. Stash the new tests and the suite is identical.
 No `SAVE_VERSION` bump — dice consumption has not changed.
 
 **Tests.**
 
-- A golden-file test: 25 recorded v0 games replay to byte-identical final states.
+- The Phase G goldens: 25 recorded v0 games replay to byte-identical digests.
 - Pipeline ordering, with hand-built modifier lists: subtract-then-divide differs from
   divide-then-subtract; a subtraction removes ID results last; two dividers on one result type is
   rejected.
 - A combination roll counting melee+missile+save lets one ID split across types and never
-  double-counts it.
+  double-counts it. Per-die ID provenance is kept in the outcome and a `splitIds` allocator spends
+  it, so the test is real rather than a promise Phase 6 has to keep.
 
 ---
 
@@ -521,7 +604,10 @@ terrains and out of scope.
 > `data/raw/terrains.faces.txt` when transcribed, re-run `python tools/import_terrains.py`.
 
 Also in this phase: home terrain follows from species elements (Treefolk → Swampland, Firewalkers →
-Wasteland), and the frontier becomes a choice among proposed terrains rather than a fixed Highland.
+Wasteland), and the second terrain each species proposes becomes a real choice rather than the
+second die of its own type that Phase 0a settled for. Three new types mean Treefolk can propose
+Coastland or Feyland and Firewalkers Flatland or Feyland, which is the first point at which the
+proposal is worth thinking about — and the point at which the Frontier stops always being a City.
 
 **Exit criterion.** All four icons resolve. A captured terrain reverting to face 7 removes the
 icon's effect in the same step. `validateState` still enforces `face === 8 ⟺ capturedBy !== null`.
