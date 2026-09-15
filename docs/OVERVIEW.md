@@ -86,25 +86,38 @@ This is the single most load-bearing type in the project. It gives us:
 ### Damage assignment is a real algorithm
 
 See `RULES-V0.md` §6. Damage does not reduce hit points — it kills a maximal-sum subset of units,
-and the *defender* chooses which. `legalDamageAssignments(army, damage)` enumerates the maximal
-subsets; the reducer rejects anything else. Brute force over ≤ 12 dice is entirely fine.
+and the *defender* chooses which. **Do not enumerate the maximal subsets**: there can be
+exponentially many and the list is not something a UI can render. `maxAbsorbable` is a subset-sum
+DP over achievable totals ≤ damage, O(n · damage); the damage sheet lets the player toggle units
+against `absorbed N / must reach M`, and the reducer rejects anything `isMaximalSubset` refuses.
+Better interface and the cheaper algorithm, which is not the usual trade.
 
-This is the rule most likely to be implemented wrong by reflex, so it gets tests first.
+This is the rule most likely to be implemented wrong by reflex, so it gets tests first. Greedy is
+the specific reflex: largest-first passes most cases but takes the 3 against 4 damage and units of
+3, 2, 2, stranding a point where `{2,2}` absorbs all four.
 
 ### Scope lives in a ruleset config, not in `if` statements
 
 ```ts
 interface RuleSet {
-  magic: 'simplified' | 'spells'       // v0: 'simplified' — RULES-V0.md §4
-  sai: 'inert' | 'full'                // v0: 'inert' — SAI faces roll as zero results
-  eighthFace: 'captureOnly' | 'full'   // v0: 'captureOnly' — capture wins, no icon powers
-  dragons: boolean                     // v0: false
+  magic: 'simplified' | 'spells'                  // now 'simplified' — RULES-V0.md §4
+  sai: 'inert' | 'full'                           // now 'inert' — SAI faces roll as zero results
+  eighthFace: 'captureOnly' | 'standard' | 'full' // now 'standard' — the two advantages, no icons
+  dragons: boolean                                // now false
 }
 ```
 
-The v0 → v1 ladder then has a concrete shape: each flag flipped is a milestone, and the cut
-features have a named home before anyone writes them. It also keeps the alpha's house rules
-from being quietly welded into the engine.
+v1 adds a `'results'` tier to `sai` (Phase 1) and a `speciesAbilities` flag (Phase 8); see
+`PLAN-V1.md` §10 for the target values.
+
+The v0 → v1 ladder then has a concrete shape: each flag advanced is a milestone, and the cut
+features have a named home before anyone writes them. It also keeps the alpha's house rules from
+being quietly welded into the engine.
+
+**A flag gains a tier; it never loses a branch.** `eighthFace` went `'captureOnly' → 'standard'`
+by adding a rung rather than deleting a condition, and `sai` gains `'results'` the same way in v1
+Phase 1. `V0_RULES` therefore stays playable for the life of the project, which is what makes it
+usable as the regression baseline for every v1 phase.
 
 ## 3. Data
 
@@ -148,7 +161,9 @@ a die header, then one `<count> <Icon>` line per face.
 |---|---|
 | Firewalkers | **complete** — 20/20 dice, 140 faces |
 | Treefolk | **complete** — 20/20 dice, 140 faces |
-| Terrains | **complete** — 3 types × 4 eighth-face variants = 12 dice |
+| Terrains (v0) | **complete** — 3 types × 4 eighth-face variants = 12 dice |
+| Terrains (v1) | **missing** — Coastland, Flatland, Feyland: 3 types × 4 variants = 12 dice |
+| Dragons (v1) | **missing** — 5 elements × 2 forms (drake/wyrm) = 10 dice, 12 faces each |
 
 Both species pass validation. A useful independent check fell out of having both: the data uses
 exactly 25 distinct SAIs, and the starter rulebook documents exactly those 25 — no unknown names,
@@ -161,6 +176,16 @@ product of two axes, not a flat list. And while every type runs magic → missil
 number rises, **the split points differ per type**: Wasteland has one magic face, Highland has
 three. That difference is most of what distinguishes the dice, and no amount of reasoning from the
 rulebooks would have produced it.
+
+**The two v1 gaps are the same lesson, not yet learned twice.** Nothing about the three known
+terrain types predicts where Coastland's magic/missile split falls, so the three new types must be
+transcribed like the first three. Dragons are worse: the rulebook documents what each icon *does*
+(Jaws 12 damage, Claws 6, Wing 5 and fly home, Tail 3 and roll again, Breath, Treasure, Belly) but
+never how many of each appear on the twelve faces. The one structural hint is that dragons "come in
+two forms: drakes, which have wings, and wyrms, which have a treasure chest" — which looks like the
+same base-plus-variant shape as a terrain die, and which is therefore exactly the kind of plausible
+inference that the terrain split points already proved unsafe. Treat it as a hypothesis to check
+against real dice. These block v1 Phases 5 and 6 and are the long pole in that plan.
 
 ### Reference art
 
@@ -250,22 +275,51 @@ The working plan:
 
 Expanded into phases with exit criteria and tests in [`PLAN-V0.md`](PLAN-V0.md). Summary:
 
-1. **Data** — ~~schema, importers, validator, all 40 unit dice and 12 terrain dice~~ **done.**
-2. **Engine core** — state types, `Pending`, seeded RNG, setup, turn sequence, maneuver.
-3. **Combat** — melee/missile/magic resolution and damage assignment, with tests first.
-4. **PassiveAI** — enough to play a full game against.
-5. **UI** — board of terrain cards, dice grid, damage sheet, roll results.
-6. **Playable alpha** — PWA, persistence, a game start-to-finish.
+1. ~~**Data** — schema, importers, validator, all 40 unit dice and 12 terrain dice~~ **done.**
+2. ~~**Engine core** — state types, `Pending`, seeded RNG, setup, turn sequence, maneuver~~ **done.**
+3. ~~**Combat** — melee/missile/magic resolution and damage assignment, with tests first~~ **done.**
+4. ~~**PassiveAI** — enough to play a full game against~~ **done.**
+5. ~~**UI** — board of terrain cards, dice grid, damage sheet, roll results~~ **done.**
+6. ~~**Playable alpha** — PWA, persistence, a game start-to-finish~~ **done.**
 
-Then the ruleset flags come off one at a time: SAIs → eighth-face powers → spells → dragons.
+### v1 — the complete basic game for these two species
+
+Ten phases in [`PLAN-V1.md`](PLAN-V1.md): every SAI, all six basic terrain types and all four
+eighth-face icons, promotion and resurrection, the five elemental dragons, and all 18 spells
+Treefolk and Firewalkers can cast.
+
+The order is **not** the order the features were cut in, which is the one thing worth carrying
+across from that document. v0 computes a roll as a sum; the rulebook computes it as a ten-step
+pipeline (*Die Roll Resolution*, full rules p. 27), and every v1 feature attaches to a numbered step
+of it. So v1 opens with one behaviour-preserving refactor and then fills in a structure that already
+exists:
+
+```
+0 roll pipeline -> 1 SAIs (results) -> 2 DUA/BUA/promotion -> 3 effects & durations
+  -> 4 SAIs (targeting) -> 5 terrains & eighth faces -> 6 dragons -> 7 spells
+  -> 8 species abilities -> 9 UI & AI
+```
+
+Phases 1–3 are independent of each other. Tower can be pulled forward to sit right after Phase 0.
+Two phases are blocked on die data that is in neither rulebook — see §3, *Where the data comes
+from*.
 
 ## 8. Open questions
 
 Rules-level open questions are in `RULES-V0.md` §8. Project-level:
 
-- Should the alpha ship an **army builder**, or only the two presets? (Currently: presets only.)
-- **Magic rounding** — `floor(M / 2)`; `ceil` would make magic notably stronger.
+- Should we ship an **army builder**, or only the two presets? (Currently: presets only.) Held back
+  from `PLAN-V1.md` on purpose: a builder is what makes *more species* worth having, so it belongs
+  with them rather than with the rules. That makes it the obvious first move once v1 lands.
 - **Undo**: free to implement given the architecture, but it lets you re-roll bad dice. Offer it
-  only as an explicit "rewind" for misclicks, or not at all in the alpha?
+  only as an explicit "rewind" for misclicks, or not at all?
+- **Where the UI investment goes.** v1 is a rules ladder and buys almost no visual change — the
+  board, the dice and the log look the same with dragons on them. Rolling animation, colour and
+  motion are a separate track that can be taken in slices at any point, and are worth most right
+  after Phase 1, when a fifth of the faces stop being blanks.
+- **`PassiveAI` has an expiry date.** It is an honest opponent in v0 because it has nothing to
+  decline but attacks. Once it is declining 18 spells and every SAI target, "passive" quietly
+  becomes "handicapped" and solo play stops testing the rules. `PLAN-V1.md` Phase 9 is where
+  `GreedyAI` (§4) lands; the open question is whether the end of the ladder is early enough.
 - The rulebook PDFs are ~21 MB committed to git. Fine for a personal repo; worth moving to a
   release asset or Git LFS if this ever goes public.

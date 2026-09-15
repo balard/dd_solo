@@ -8,6 +8,10 @@ Source of truth for everything else: `docs/rules/starter-treefolk-vs-firewalkers
 (the Kickstarter starter rules, our release target) with `docs/rules/dragon-dice-v4.01-full-rules.pdf`
 as the fallback for anything the starter book leaves vague.
 
+[`PLAN-V1.md`](PLAN-V1.md) is the ladder out of this subset, and its §10 lists every house rule
+below together with the phase that retires it. **This document stays normative regardless**:
+`V0_RULES` remains a playable configuration and is the regression baseline for every v1 phase.
+
 ---
 
 ## 1. What's in
@@ -30,13 +34,13 @@ as the fallback for anything the starter book leaves vague.
 | Cut | Rationale | Comes back in |
 |---|---|---|
 | **Spells / elements** | The entire spell list is the single biggest chunk of rules. Replaced by §4. | v1 |
-| **Dragons, Summoning Pool, Dragon Attack phase** | Needs the spell system (Summon Dragon) to even enter play. | v2 |
-| **SAIs** | ~30 distinct icons, many with delayed effects and targeting. Faces are *recorded* in the data as `<count> SAI:<Name>` but produce **zero results**. The starter set uses 12: Smite, Counter, Bullseye, Fly, Cantrip, Create Fireminions, Galeforce, Firecloud, Firewalking, Flame, Rise from the Ashes, Seize. | v1 |
+| **Dragons, Summoning Pool, Dragon Attack phase** | Needs the spell system (Summon Dragon) to even enter play. Phase 6 builds the dragon machinery and Phase 7 supplies the only way to summon one, so dragons are not actually reachable in a game until spells land. | v1 |
+| **SAIs** | **25** distinct icons, many with delayed effects and targeting. Faces are *recorded* in the data as `<count> SAI:<Name>` but produce **zero results** — that is 58 of the 280 faces, so roughly one die in five rolls a blank. The two presets between them reach 10 of the 25: Bullseye, Cantrip, Counter, Create Fireminions, Fly, Smite, Smother, Surprise, Volley, Wild Growth. | v1 |
 | **Eighth-face icon powers** (City, Temple, Standing Stones, Tower) | Each is a separate subsystem. Which icon a die carries **is** recorded in the data; in v0 all four behave identically, so the choice is cosmetic. | v1 |
 | ~~Eighth-face combat bonuses~~ | **Now in.** ID doubling and the melee-only restriction are implemented; see §5. | — |
 | **Buried Unit Area (BUA)** | Only reachable via SAIs, spells and Temple. Nothing can bury in v0. | v1 |
 | **Promotion / recruitment** | Only reachable via dragon-slaying, Wild Growth and the City. | v1 |
-| **Species abilities** | Starter rules grant Treefolk/Firewalkers none. Nothing to implement. | — |
+| **Species abilities** | The *starter* book grants Treefolk/Firewalkers none, so against our release target there is nothing to implement. The full rules give each species two, plus a turn phase of their own that `Phase` does not model. | v1 |
 | **Items, minor terrains, Dragonkin, Eldarim, multiplayer** | Advanced rules, far out of scope. | later |
 | **Effects Expire phase** | Nothing in v0 creates a lasting effect. Kept as a no-op phase so the turn structure is already correct. | v1 |
 
@@ -178,17 +182,31 @@ in v0; pick any.
 
 ## 8. Open questions
 
-- **Magic rounding.** `floor(M / 2)` is specified. `ceil` would make magic notably stronger;
-  worth revisiting once the feel is testable.
 - **Army builder** in the alpha, or only the two 30-health presets? (Currently: presets only.)
+  Still open, and deliberately outside `PLAN-V1.md` — an army builder is what makes *more species*
+  worth having, so it belongs with them rather than with the rules.
 - **Which terrain dice the presets use** — the suggestion in §7 is a guess at what plays well, not
-  a rule. Easy to change once there is something to play.
+  a rule. The stakes change in v1 Phase 5: the eighth-face variant stops being cosmetic and three
+  more terrain types arrive, so this becomes a real decision rather than a free one.
 - **Undo.** Architecturally free, but it lets you re-roll bad dice. Misclick-rewind only, or not
   at all in the alpha?
+- **Death dragons are unsummonable in this matchup**, and it is not clear that is a *problem*.
+  `Summon Dragon` needs magic of the dragon's own element, and neither species casts death magic,
+  so a Death dragon brought to the game sits in the Summoning Pool forever. Ship it as the real
+  rule, or restrict preset dragon picks to the four live elements? See `PLAN-V1.md` Phase 6.
 
 Resolved so far:
 
-- **All die data is transcribed** — 40 unit dice and 12 terrain dice, passing validation.
+- **All unit and terrain die data is transcribed** — 40 unit dice and 12 terrain dice, passing
+  validation. **Two data gaps are now known and named**: terrain faces 1–7 for Coastland, Flatland
+  and Feyland, and the dragon die face layouts. Neither is in either rulebook; both block v1 phases
+  and neither may be inferred (`PLAN-V1.md` §5c, §6).
 - Magic targets **same terrain only** — it is a melee variant in v0 (§4).
 - A Reserve Army may **not** take a magic action, and so cannot march in v0 (§3, §4).
 - Capturing the eighth face wins and grants both standard advantages; no icon powers (§2, §5).
+- **Magic rounding** — `floor(M / 2)` stands for `V0_RULES` and will not be revisited. The question
+  expires rather than gets answered: v1 Phase 7 replaces the house rule with the real spell system,
+  so there is no rounding left to tune. Tune it only if the alpha config is still being played.
+- **The scope of "all the SAIs" and "all the spells"** is now exact, not approximate: 25 SAIs
+  across 58 faces, and 18 spells castable by these two species. Both are enumerated in
+  `PLAN-V1.md`.

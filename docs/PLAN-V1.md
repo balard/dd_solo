@@ -573,8 +573,9 @@ by its own phase; this is for the things a player needs to **see**.
   should show the subtotal, each modifier, and the final — the pipeline's ten steps are the
   explanation, so expose them.
 - **The AI needs a real opinion.** `PassiveAI` answering "cast nothing, target nothing" for 18
-  spells and 10 SAIs is not passive any more, it is broken. Expect a new `BasicAI` with simple
-  heuristics: cast the cheapest useful spell, target the most health you can kill.
+  spells and 10 SAIs is not passive any more, it is broken. This is where `GreedyAI` — the next
+  rung of the ladder in `OVERVIEW.md` §4 — stops being optional: heuristic scoring over enumerated
+  legal actions, extended to cast the cheapest useful spell and target the most health it can kill.
 
 **Exit criterion.** A full Treefolk vs Firewalkers game is playable end to end with every rule on,
 on a phone, and the log explains every number in it.
@@ -639,7 +640,7 @@ completely different, and do not treat that as a regression.
 
 **`PassiveAI` will quietly stop being a fair opponent.** It is honest in v0 because it has nothing
 to decline except attacks. Once it is declining 18 spells and every SAI target, "passive" becomes
-"handicapped", and solo play stops being a test of the rules. Phase 9's `BasicAI` is not optional
+"handicapped", and solo play stops being a test of the rules. Phase 9's `GreedyAI` is not optional
 polish.
 
 ## Not in this plan
