@@ -3,16 +3,17 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: pre-code, data complete.** The repo holds documentation, the full starter-set die
-> data, and the rulebooks. No app scaffold yet — that is the next session's job. Do not assume
-> any of the paths under `src/` exist.
+> **Status: pre-code, data complete, plan written.** The repo holds documentation, the full
+> starter-set die data, and the rulebooks. No app scaffold yet — `docs/PLAN-V0.md` Phase 0 is the
+> next job. Do not assume any of the paths under `src/` exist.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking, milestones. |
+| `docs/PLAN-V0.md` | **The order of work.** Nine phases to a playable alpha, each with an exit criterion and its tests. Start here when writing code. |
+| `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
 | `data/ICONS.md` | The die-face vocabulary. Required before touching `data/`. |
 | `docs/rules/starter-treefolk-vs-firewalkers.pdf` | The Kickstarter starter rules — the v1.0 release target. |
 | `docs/rules/dragon-dice-v4.01-full-rules.pdf` | Full v4.01 rules. Fallback for anything the starter book leaves vague. |
@@ -55,10 +56,13 @@ These are the things that break the project if violated:
    Adding a cut feature means implementing behind its flag, not deleting a condition.
 6. **Die faces are data, in `data/`, validated against the schemas.** Never hard-code a die's
    faces in TypeScript.
-7. **A face carries a count of icons, not one icon.** `2 MELEE` on a 1-health unit generates two
-   melee results. Counts broadly scale with size but follow no reliable formula — the 2-health
-   Treefolk `Oak` has a `4 SAVE` face. Treating a face as a single result makes every damage
-   number in the game wrong.
+7. **A face carries a count of icons, not one icon.** The count is already the final answer:
+   every ID face's count equals its unit's health and every normal monster face's count is 4
+   (verified across all 280). So `rollArmy` never special-cases ID or monsters — if you are
+   writing `if (size === 'monster')` in the roller, the data is already doing it for you. `2 MELEE` on a 1-health unit generates two
+   `2 MELEE` on a 1-health unit generates two melee results. Counts follow no reliable formula —
+   the 2-health Treefolk `Oak` has a `4 SAVE` face. Treating a face as a single result makes every
+   damage number in the game wrong.
 8. **Never ship SFR's icon or dice art.** Use our own SVG glyphs. See `OVERVIEW.md` §5.
 
 ## Alpha house rules (easy to forget)

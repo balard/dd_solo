@@ -235,6 +235,8 @@ The working plan:
 
 ## 7. Milestones
 
+Expanded into phases with exit criteria and tests in [`PLAN-V0.md`](PLAN-V0.md). Summary:
+
 1. **Data** — ~~schema, importers, validator, all 40 unit dice and 12 terrain dice~~ **done.**
 2. **Engine core** — state types, `Pending`, seeded RNG, setup, turn sequence, maneuver.
 3. **Combat** — melee/missile/magic resolution and damage assignment, with tests first.
