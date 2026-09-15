@@ -24,5 +24,8 @@ Thumbs.db
 __pycache__/
 *.pyc
 
-# mirrored reference art (tools/fetch_faces.py) - not redistributed
+# Mirrored SFR face art (tools/fetch_faces.py). Served locally by Vite so a local
+# build shows the real dice, but never committed -- the repo stays free of their
+# artwork, and the app falls back to our own glyphs when this is absent.
+public/faces/
 assets/faces/

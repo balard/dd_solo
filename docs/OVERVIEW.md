@@ -196,13 +196,22 @@ Keep `AiPlayer` as an interface from day one so all three are drop-in.
 
 This is a fan-made solo aid for a game we own. Worth being deliberate about:
 
-- **Do not ship SFR's icon art, unit art, or dice imagery.** Draw our own simple SVG glyphs for
-  the six result types. They need to be legible at 24px anyway, which the real art is not.
-- The real SVGs are publicly served and can be mirrored locally as **development reference**
-  (`tools/fetch_faces.py`, gitignored). Using them in a personal build is your call; bundling them
-  in anything distributed is not. Keep them behind a glyph-lookup indirection so swapping art is a
-  config change. Do not hotlink them at runtime — it breaks offline use and depends on paths they
-  are free to change.
+- **The repository contains no SFR artwork**, and must not. `tools/fetch_faces.py` (`npm run art`)
+  mirrors it into `public/faces/`, which is gitignored.
+- **The app must be complete without it.** Every face falls back to our own glyphs when the
+  manifest is absent, so a fresh clone that never runs the fetcher is a whole game rather than a
+  broken one. That is not a nicety: it is what keeps the project distributable.
+- **A local build does show the real dice**, because Vite serves `public/`. That is a personal-use
+  decision. **Consequence worth stating plainly: `npm run build` copies `public/faces/` into
+  `dist/`, so publishing that `dist/` would be redistributing SFR's art.** Delete `public/faces/`
+  before building anything you intend to share.
+- **Size decides which art is right, not quality.** Measured: at 16–17px the real faces fail — a
+  multi-icon face packs its copies into ~7px each and an ID portrait becomes a smudge. At 30px and
+  above they are clearly better than our glyphs, and they draw their own count, so they need no
+  badge. Hence art in the die inspector (44px), the roll strip (30px) and terrain chips (28px);
+  glyphs everywhere smaller and as the universal fallback.
+- Do not hotlink the art at runtime — it breaks offline use and depends on paths they are free to
+  change.
 - Die face *data* is factual game information, but unit and species names are SFR trademarks.
   Fine for personal use; it matters if this is ever distributed publicly.
 - The rulebooks in `docs/rules/` are SFR's, redistributed under their personal-use grant. They are

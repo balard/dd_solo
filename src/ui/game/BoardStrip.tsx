@@ -18,6 +18,48 @@ import {
 import { ElementDots } from './Elements'
 import { Glyph, type GlyphName } from './Glyph'
 import { slotLabel } from './prompts'
+import { useFaceArt } from './useFaceArt'
+
+/**
+ * The terrain die face.
+ *
+ * The real art has the number drawn into it, so when it is available it replaces
+ * both the number and the glyph -- it *is* the die face. Without it, the number
+ * plus our glyph says the same thing.
+ */
+function renderFace(
+  art: ReturnType<typeof useFaceArt>,
+  terrain: GameState['terrains'][TerrainSlot],
+  icon: GlyphName | null,
+) {
+  const die = terrainDie(terrain.dieId)
+
+  if (terrain.face === 8) {
+    const url = art.eighthFace(die.eighthFace)
+    const label = die.eighthFace.replace('_', ' ')
+    return url !== null ? (
+      <img className="chip-art" src={url} width={30} height={30} alt={label} title={label} />
+    ) : (
+      <span className="chip-eighth">{label}</span>
+    )
+  }
+
+  const url = art.terrainFace(die.type, terrain.face)
+  const label = `face ${terrain.face} — ${icon?.toLowerCase() ?? ''}`
+  return (
+    <>
+      {/* The number stays outside the art. It is the most important thing on the
+          chip -- how close this terrain is to being captured -- and the digit drawn
+          into the die is far too small to read at a glance. */}
+      <span className="chip-number">{terrain.face}</span>
+      {url !== null ? (
+        <img className="chip-art" src={url} width={28} height={28} alt={label} title={label} />
+      ) : (
+        icon && <Glyph name={icon} size={15} />
+      )}
+    </>
+  )
+}
 
 function strength(state: GameState, player: PlayerId, slot: TerrainSlot) {
   const units = armyAt(state, player, slot)
@@ -36,6 +78,7 @@ export function BoardStrip({
   onFocus: (slot: TerrainSlot) => void
 }) {
   const enemy: PlayerId = human === 'p1' ? 'p2' : 'p1'
+  const art = useFaceArt()
 
   return (
     <div className="board-strip">
@@ -69,18 +112,7 @@ export function BoardStrip({
                   ).elements.join(' + ')}`}
                 />
               </span>
-              <span className="chip-face">
-                {captured ? (
-                  <span className="chip-eighth">
-                    {terrainDie(terrain.dieId).eighthFace.replace('_', ' ')}
-                  </span>
-                ) : (
-                  <>
-                    <span className="chip-number">{terrain.face}</span>
-                    {icon && <Glyph name={icon} size={15} />}
-                  </>
-                )}
-              </span>
+              <span className="chip-face">{renderFace(art, terrain, icon)}</span>
             </span>
             <span className="chip-armies">
               <span className="you">

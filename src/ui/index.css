@@ -245,9 +245,9 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 2px 5px;
+  padding: 2px 4px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 6px;
   background: var(--panel);
   font-size: .7rem;
 }
@@ -420,11 +420,26 @@ body {
 .sheet-face {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 3px 7px;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 52px;
+  padding: 3px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--panel);
+}
+
+/*
+ * SFR's art is dark line work drawn for white dice. On a dark theme it would
+ * vanish, so it is inverted there rather than given a light plate -- the plate
+ * would look like a sticker on the board.
+ */
+.face-art { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .face-art,
+  :root:not([data-theme='light']) .chip-art {
+    filter: invert(1) hue-rotate(180deg) brightness(1.08);
+  }
 }
 
 /* --- fallen ---------------------------------------------------------------- */
@@ -444,3 +459,5 @@ body {
 .fallen-toggle:hover { color: var(--fg); }
 .fallen-side { font-size: .72rem; margin: 6px 0 4px; }
 .fallen .die { opacity: .62; }
+
+.chip-art { display: block; flex: none; }

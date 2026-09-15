@@ -32,6 +32,7 @@ npm test            # vitest run
 npm run typecheck   # tsc --noEmit
 npm run build       # typecheck + production build
 npm run data        # regenerate and validate data/starter/ from data/raw/
+npm run art         # optional: mirror real face art into public/faces/ (gitignored)
 npm run play        # play a game in the terminal (--seed N, --ai random)
 ```
 
@@ -82,7 +83,10 @@ These are the things that break the project if violated:
    `2 MELEE` on a 1-health unit generates two melee results. Counts follow no reliable formula —
    the 2-health Treefolk `Oak` has a `4 SAVE` face. Treating a face as a single result makes every
    damage number in the game wrong.
-8. **Never ship SFR's icon or dice art.** Use our own SVG glyphs. See `OVERVIEW.md` §5.
+8. **Never commit SFR's icon or dice art, and never let the app depend on it.** `npm run art`
+   mirrors it into the gitignored `public/faces/`; every face falls back to our own glyphs when
+   that is missing, so a fresh clone is a complete game. Note that `npm run build` copies
+   `public/faces/` into `dist/` — delete it before publishing a build. See `OVERVIEW.md` §5.
 
 ## Alpha house rules (easy to forget)
 
@@ -183,6 +187,12 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **A selection is a draft answer to one question** — `App` clears it whenever `pending` changes.
 - **Glyphs are ours** (`Glyph.tsx`), stroked in `currentColor` on a 24x24 grid, so colour and dark
   mode come from CSS and no glyph needs a second variant.
+- **Real face art is used where it is big enough to read**, via `FaceArt` / `useFaceArt`: the die
+  inspector at 44px, the roll strip at 30px, terrain chips at 28px. Below about 30px it is worse
+  than a glyph — measured, not assumed — so small sizes stay glyphs.
+- **The UI never computes an art filename.** The remote set is sparse and not derivable from
+  (icon, count), so `tools/fetch_faces.py` resolves it and writes a manifest keyed by
+  `<unitTypeId>#<faceIndex>`. Add a face, re-run `npm run art`.
 - **A unit tile does two jobs.** When a decision needs units chosen it selects; otherwise tapping
   *inspects*, opening the die to show every face it has. Without that the app showed outcomes but
   never capabilities — you could watch a die roll but not find out what it could roll.

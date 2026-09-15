@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-"""Mirror the Dice Commander face art for every face our data actually uses.
+"""Mirror the Dice Commander face art and write a manifest the UI can look up.
 
-Reference art only -- see docs/OVERVIEW.md section 5 on the asset position. The app
-ships our own glyphs; this exists so we can *look* at the real icons while building,
-and so a future build can optionally use them for personal use.
+Output goes to `public/faces/`, which Vite serves in dev and copies into `dist/`
+on build -- so a local build shows the real dice. The directory is gitignored, so
+the repository itself never contains SFR's artwork. See docs/OVERVIEW.md section 5.
 
-The asset set is sparse and not derivable from (icon, count): only combinations
-actually printed on some die exist, some icons carry a variant index
-(maneuver-1-4, cantrip-1-3), and monster faces use a '-m' suffix. So we try a
-fallback chain per face and report what could not be resolved.
+**The app must work without any of this.** If the manifest is missing, every face
+falls back to our own glyphs. Running this is optional, and a fresh clone that
+never runs it is still a complete, playable game.
 
-Output: assets/faces/<species>/... mirroring the remote layout. Gitignored.
+Why a manifest rather than computing filenames in the UI: the remote asset set is
+sparse, per-species, and not derivable from (icon, count). Only combinations
+actually printed on some die of that species exist, some icons carry a variant
+index (maneuver-1-4, cantrip-1-3, trample-1-m vs trample-2-m), and monster faces
+use a '-m' suffix. Resolving that needs to try several candidates and see which
+answers -- fine here, impossible synchronously in a browser. So this script records
+what it found, keyed by exactly what the UI knows: a unit type id and a face index.
 
 Usage:  python tools/fetch_faces.py [--dry-run]
 """
@@ -25,36 +30,42 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 UNITS = ROOT / "data" / "starter" / "units.json"
 TERRAINS = ROOT / "data" / "starter" / "terrains.json"
-OUT = ROOT / "assets" / "faces"
+OUT = ROOT / "public" / "faces"
 BASE = "https://commander.dragondice.com/images/faces"
 
-CLASS_SHORT = {"heavy_melee": "heavy", "light_melee": "light",
-               "cavalry": "cavalry", "missile": "missile", "magic": "magic"}
+CLASS_SHORT = {
+    "heavy_melee": "heavy",
+    "light_melee": "light",
+    "cavalry": "cavalry",
+    "missile": "missile",
+    "magic": "magic",
+}
 FACE_RE = re.compile(r"^(\d+) (.+)$")
 
 
-def candidates(unit, face):
-    """Remote paths to try for one face, best guess first."""
-    sp = unit["species"]
-    m = FACE_RE.match(face)
-    if not m:
+def unit_candidates(unit, face):
+    """Remote paths to try for one unit face, best guess first."""
+    species = unit["species"]
+    match = FACE_RE.match(face)
+    if not match:
         return []
-    count, icon = int(m.group(1)), m.group(2)
+    count, icon = int(match.group(1)), match.group(2)
 
     if icon == "ID":
         if unit["size"] == "monster":
-            return [f"{sp}/ids/monster-{unit['id'].split('.', 1)[1].replace('_', '-')}.svg"]
-        return [f"{sp}/ids/{CLASS_SHORT[unit['class']]}-{unit['size']}.svg"]
+            name = unit["id"].split(".", 1)[1].replace("_", "-")
+            return [f"{species}/ids/monster-{name}.svg"]
+        return [f"{species}/ids/{CLASS_SHORT[unit['class']]}-{unit['size']}.svg"]
 
     if icon.startswith("SAI:"):
-        stem, folder = icon[4:].lower().replace(" ", "-"), f"{sp}/sais"
+        stem, folder = icon[4:].lower().replace(" ", "-"), f"{species}/sais"
     else:
-        stem, folder = icon.lower(), sp
+        stem, folder = icon.lower(), species
 
     suffix = "m" if unit["size"] == "monster" else str(count)
     return [
-        f"{folder}/{stem}-{suffix}.svg",     # save-3, smite-4, melee-m
-        f"{folder}/{stem}-1-{suffix}.svg",   # maneuver-1-4, cantrip-1-3
+        f"{folder}/{stem}-{suffix}.svg",
+        f"{folder}/{stem}-1-{suffix}.svg",
         f"{folder}/{stem}-2-{suffix}.svg",
     ]
 
@@ -62,71 +73,93 @@ def candidates(unit, face):
 def fetch(path, dry_run):
     dest = OUT / path
     if dest.exists():
-        return "cached"
-    url = f"{BASE}/{path}"
+        return True
     if dry_run:
-        return "would-fetch"
+        return True
     try:
-        with urllib.request.urlopen(url, timeout=20) as r:
-            body = r.read()
-    except urllib.error.HTTPError as e:
-        return f"http-{e.code}"
-    except Exception as e:                                  # noqa: BLE001
-        return f"error-{type(e).__name__}"
+        with urllib.request.urlopen(f"{BASE}/{path}", timeout=20) as response:
+            body = response.read()
+    except urllib.error.HTTPError:
+        return False
+    except Exception as error:  # noqa: BLE001
+        print(f"  {path}: {type(error).__name__}")
+        return False
+
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(body)
-    time.sleep(0.15)                                        # be polite to their server
-    return "fetched"
+    time.sleep(0.12)  # be polite to their server
+    return True
 
 
-def main():
+def resolve(candidates, dry_run, cache):
+    """First candidate that actually exists, or None."""
+    for path in candidates:
+        if path in cache:
+            if cache[path]:
+                return path
+            continue
+        ok = fetch(path, dry_run)
+        cache[path] = ok
+        if ok:
+            return path
+    return None
+
+
+def main() -> int:
     dry_run = "--dry-run" in sys.argv
-    doc = json.loads(UNITS.read_text(encoding="utf-8"))
+    units_doc = json.loads(UNITS.read_text(encoding="utf-8"))
 
-    wanted, unresolved = {}, []
+    cache: dict[str, bool] = {}
+    manifest_units: dict[str, str] = {}
+    missing: list[str] = []
 
-    # Terrain faces: art is shared across terrain types and named by the number
-    # printed on the face -- terrain/sais/melee-7.svg, terrain/sais/city-8.svg.
-    if TERRAINS.exists():
-        tdoc = json.loads(TERRAINS.read_text(encoding="utf-8"))
-        for t in tdoc["terrainTypes"].values():
-            for number, icon in t["faces"].items():
-                path = f"terrain/sais/{icon.lower()}-{number}.svg"
-                wanted.setdefault(path, [path])
-        for d in tdoc["terrains"]:
-            path = f"terrain/sais/{d['eighthFace'].replace('_', '-')}-8.svg"
-            wanted.setdefault(path, [path])
-
-    for unit in doc["units"]:
-        for face in unit["faces"]:
+    for unit in units_doc["units"]:
+        for index, face in enumerate(unit["faces"]):
             if face == "TODO":
                 continue
-            paths = candidates(unit, face)
-            if not paths:
-                unresolved.append((unit["id"], face, "unparseable"))
-                continue
-            wanted.setdefault(paths[0], paths)
+            found = resolve(unit_candidates(unit, face), dry_run, cache)
+            key = f"{unit['id']}#{index}"
+            if found:
+                manifest_units[key] = found
+            else:
+                missing.append(f"{key} ({face})")
 
-    counts = {}
-    for _, paths in sorted(wanted.items()):
-        for path in paths:
-            result = fetch(path, dry_run)
-            counts[result] = counts.get(result, 0) + 1
-            if result in ("fetched", "cached", "would-fetch"):
-                break
-        else:
-            unresolved.append((path, "", "no candidate resolved"))
+    manifest_terrains: dict[str, str] = {}
+    if TERRAINS.exists():
+        terrains_doc = json.loads(TERRAINS.read_text(encoding="utf-8"))
+        for type_id, terrain in terrains_doc["terrainTypes"].items():
+            for number, icon in terrain["faces"].items():
+                path = f"terrain/sais/{icon.lower()}-{number}.svg"
+                if resolve([path], dry_run, cache):
+                    manifest_terrains[f"{type_id}#{number}"] = path
+                else:
+                    missing.append(f"terrain {type_id}#{number}")
+        for die in terrains_doc["terrains"]:
+            eighth = die["eighthFace"].replace("_", "-")
+            path = f"terrain/sais/{eighth}-8.svg"
+            if resolve([path], dry_run, cache):
+                manifest_terrains[f"eighth#{die['eighthFace']}"] = path
 
-    print(f"{len(wanted)} distinct faces referenced by data/starter/units.json")
-    for k, v in sorted(counts.items()):
-        print(f"  {k}: {v}")
-    if unresolved:
-        print(f"\n{len(unresolved)} unresolved:")
-        for a, b, why in unresolved:
-            print(f"  {a} {b} -- {why}")
     if not dry_run:
-        print(f"\nmirrored into {OUT.relative_to(ROOT)}/ (gitignored)")
+        OUT.mkdir(parents=True, exist_ok=True)
+        (OUT / "manifest.json").write_text(
+            json.dumps(
+                {"version": 1, "units": manifest_units, "terrains": manifest_terrains},
+                indent=1,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    fetched = sum(1 for ok in cache.values() if ok)
+    print(f"{len(manifest_units)} unit faces and {len(manifest_terrains)} terrain faces mapped")
+    print(f"{fetched} distinct files in {OUT.relative_to(ROOT)}/ (gitignored)")
+    if missing:
+        print(f"\n{len(missing)} could not be resolved (they fall back to our glyphs):")
+        for item in missing[:20]:
+            print(f"  {item}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

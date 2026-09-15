@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "data": "python tools/import_faces.py && python tools/import_terrains.py && python tools/validate_data.py",
-    "play": "vite-node src/cli/play.ts"
+    "play": "vite-node src/cli/play.ts",
+    "art": "python tools/fetch_faces.py"
   },
   "dependencies": {
     "react": "^18.3.1",

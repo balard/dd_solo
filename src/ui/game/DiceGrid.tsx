@@ -15,7 +15,8 @@ import type { Face } from '../../data/types'
 import type { UnitId, UnitInstance } from '../../engine/types'
 
 import { ElementDots, speciesInfo } from './Elements'
-import { FaceGlyph, Glyph, faceLabel } from './Glyph'
+import { FaceArt } from './FaceArt'
+import { faceLabel } from './Glyph'
 
 const SIZE_LABEL: Record<string, string> = {
   small: 'S',
@@ -32,13 +33,19 @@ const CLASS_LABEL: Record<string, string> = {
   magic: 'magic',
 }
 
-/** Every face of a die, so a player can see what it is able to do. */
-function FaceSheet({ faces }: { faces: readonly Face[] }) {
+/**
+ * Every face of a die, so a player can see what it is able to do.
+ *
+ * Drawn large enough for the real art to actually read. At the 16-17px the roll
+ * strip used to use, a multi-icon face packs its copies into ~7px each and an ID
+ * portrait becomes a smudge; at 44px both are clear.
+ */
+function FaceSheet({ typeId, faces }: { typeId: string; faces: readonly Face[] }) {
   return (
     <div className="face-sheet">
       {faces.map((face, i) => (
         <span key={i} className={`sheet-face i-${face.icon}`} title={faceLabel(face)}>
-          <FaceGlyph face={face} size={17} />
+          <FaceArt typeId={typeId} faceIndex={i} face={face} size={44} />
         </span>
       ))}
     </div>
@@ -104,7 +111,7 @@ export function DiceGrid({
                   </span>
                   {species && <ElementDots elements={species.elements} />}
                 </p>
-                <FaceSheet faces={type.faces} />
+                <FaceSheet typeId={unit.typeId} faces={type.faces} />
               </div>
             )}
           </div>
@@ -121,6 +128,7 @@ export function RollStrip({
   dice: readonly {
     unitId: string
     typeId: string
+    faceIndex: number
     face: Face
     results: number
   }[]
@@ -133,7 +141,7 @@ export function RollStrip({
           className={`rolled i-${die.face.icon} ${die.results === 0 ? 'rolled-blank' : ''}`}
           title={`${unitType(die.typeId).name}: ${faceLabel(die.face)}`}
         >
-          <Glyph name={die.face.icon} size={16} />
+          <FaceArt typeId={die.typeId} faceIndex={die.faceIndex} face={die.face} size={30} />
           {die.results > 0 && <b>{die.results}</b>}
         </span>
       ))}
