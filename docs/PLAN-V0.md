@@ -29,7 +29,7 @@ Phases 2 and 3 can be done in either order. Everything else needs what precedes 
 
 ---
 
-## Phase 0 — Scaffold
+## Phase 0 — Scaffold  ✅ done
 
 **Deliverable.** Vite + TypeScript + React project, Vitest wired, strict compiler settings, the
 directory split from `OVERVIEW.md` §1, and the data loading path proven end to end.
@@ -49,6 +49,16 @@ build-config problems before any logic depends on them.
 
 **Tests.** `load.ts` parses every face in both files without throwing; face counts per die match
 `dieType`; the engine-purity lint rule fails when deliberately violated.
+
+**Outcome.** 28 tests green, typecheck clean, page renders all 52 dice with no console errors and
+no horizontal overflow at 375px. Two things learned:
+
+- The purity check is a *tested pure function* (`findViolations`) applied to the real tree, not an
+  ESLint rule — no plugin dependency, and it is verified against deliberate violations. It must
+  skip `*.test.ts`, since test fixtures legitimately contain the very strings it forbids.
+- `Face` is a discriminated union rather than an optional `sai?: string`, which
+  `exactOptionalPropertyTypes` makes awkward to construct and which would let callers read `.sai`
+  without narrowing.
 
 ---
 

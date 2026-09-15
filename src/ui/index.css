@@ -1,0 +1,88 @@
+:root {
+  --bg: #fbfaf8;
+  --fg: #1d1c1a;
+  --muted: #6b6762;
+  --line: #e2ded8;
+  --card: #ffffff;
+  --melee: #b4401f;
+  --missile: #1f6f4a;
+  --magic: #5b3fa8;
+  --save: #2a5c8f;
+  --maneuver: #8a6a15;
+  --id: #46423c;
+  --sai: #a03c72;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #17161a;
+    --fg: #ece9e4;
+    --muted: #9b958c;
+    --line: #322f36;
+    --card: #201e24;
+    --melee: #f08a6a;
+    --missile: #6fc99a;
+    --magic: #b39ef0;
+    --save: #7bb3e8;
+    --maneuver: #d9b955;
+    --id: #b8b2a8;
+    --sai: #ef92c4;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 24px; padding-inline: 16px; }
+
+h1 { font-size: 1.35rem; margin: 0 0 4px; }
+h2 { font-size: 1.05rem; margin: 28px 0 10px; }
+.sub { color: var(--muted); margin: 0 0 8px; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+td.name { font-weight: 600; white-space: nowrap; }
+td.meta { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.scroll { overflow-x: auto; }
+
+.faces { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.face {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: .78rem;
+  white-space: nowrap;
+}
+.face b { font-variant-numeric: tabular-nums; }
+
+.i-ID { color: var(--id); }
+.i-MELEE { color: var(--melee); }
+.i-MISSILE { color: var(--missile); }
+.i-MAGIC { color: var(--magic); }
+.i-SAVE { color: var(--save); }
+.i-MANEUVER { color: var(--maneuver); }
+.i-SAI { color: var(--sai); font-style: italic; }
+
+.note {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--muted);
+  background: var(--card);
+  padding: 10px 12px;
+  border-radius: 4px;
+  color: var(--muted);
+  margin: 16px 0 0;
+}

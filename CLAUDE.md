@@ -3,9 +3,9 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: pre-code, data complete, plan written.** The repo holds documentation, the full
-> starter-set die data, and the rulebooks. No app scaffold yet — `docs/PLAN-V0.md` Phase 0 is the
-> next job. Do not assume any of the paths under `src/` exist.
+> **Status: Phase 0 done.** Scaffold, typed data layer and tests are in. `src/engine/` and
+> `src/ai/` exist but are empty apart from the purity guard — `docs/PLAN-V0.md` Phase 1
+> (engine foundations) is next.
 
 ## Read these first
 
@@ -24,6 +24,19 @@ Both PDFs are text-extractable: `pdftotext -layout <file> -` (available in the G
 
 TypeScript + Vite + React, shipped as a PWA; Capacitor wraps the same build into an APK later.
 Vitest for tests.
+
+```bash
+npm run dev         # dev server on :5173
+npm test            # vitest run
+npm run typecheck   # tsc --noEmit
+npm run build       # typecheck + production build
+npm run data        # regenerate and validate data/starter/ from data/raw/
+```
+
+`tsconfig.json` is deliberately strict — `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
+and `verbatimModuleSyntax` are all on. Keep `vitest` and `vite` on compatible majors: a mismatch
+makes vitest install a nested copy of vite, and the two `Plugin` types then conflict under
+`exactOptionalPropertyTypes`.
 
 ## Layout
 
