@@ -172,8 +172,17 @@ Both are legal and the defender picks. Killing only the 3 is **illegal**.
    The unused proposed terrain leaves the game.
 5. Roll each terrain in play: **re-roll 8s, turn 7s down to 6**. Terrains start on 1–6.
 
+**v0 sidesteps step 4's choice entirely** by requiring both forces to propose the same Frontier
+die — `setupGame` throws otherwise, saying in as many words that choosing between them is a setup
+decision that does not exist yet. v1 Phase 0a makes it: the roll-off **winner marches first and the
+loser sets the Frontier** from their own second terrain, which splits step 4's two prizes one each
+without raising a decision `PassiveAI` cannot hold an opinion about. The real step 4 comes back
+with `GreedyAI` (`PLAN-V1.md` Phase 9).
+
 For the alpha, ship **two fixed preset 30-health army lists** (one per species) so a game can be
-started in one tap. The army builder is a v1 feature.
+started in one tap. v1 Phase 0a replaces them with forces rolled from the seed — random race,
+24 or 36 health, random units, random split — keeping named forces as the option tests and the
+regression baseline use. A hand-driven army builder is still a later feature.
 
 Suggested preset terrains, matching each species to its own elements: Treefolk bring **Swampland**
 as their Home Terrain, Firewalkers bring **Wasteland**, and **Highland** — the only type sharing an
@@ -185,15 +194,23 @@ in v0; pick any.
 - **Army builder** in the alpha, or only the two 30-health presets? (Currently: presets only.)
   Still open, and deliberately outside `PLAN-V1.md` — an army builder is what makes *more species*
   worth having, so it belongs with them rather than with the rules.
-- **Which terrain dice the presets use** — the suggestion in §7 is a guess at what plays well, not
-  a rule. The stakes change in v1 Phase 5: the eighth-face variant stops being cosmetic and three
-  more terrain types arrive, so this becomes a real decision rather than a free one.
+- **Which terrain dice each species brings** — the suggestion in §7 is a guess at what plays well,
+  not a rule. Phase 0a makes the second terrain matter (the roll-off loser puts theirs at the
+  Frontier) and Phase 5 makes the eighth-face variant matter and adds three more types, so what is
+  currently a free choice becomes two real ones.
 - **Undo.** Architecturally free, but it lets you re-roll bad dice. Misclick-rewind only, or not
   at all in the alpha?
-- **How much of the die data a preset should reach.** The two forces field one monster each, which
-  is what caps a preset game at 10 of the 25 SAIs (`PLAN-V1.md`, standing rules). Widening the
-  presets, adding a second pair, or leaving it to an army builder are all defensible; leaving it
-  unexamined is how v1 ends up with 15 SAIs that no game ever rolls.
+- **How the random force distribution should be shaped.** Phase 0a draws units uniformly over a
+  species' 20 types, which is *not* uniform over health — each species has five dice at each of
+  health 1–4, so a draw averages 2.5 and a force is ~10 dice at 24 health, ~14 at 36. Weighting
+  small gives more, weaker dice and longer games; weighting large gives swingier ones. Untested
+  either way until there is something to play.
+
+Answered by `PLAN-V1.md` rather than here:
+
+- **How much of the die data a game reaches.** The two fixed forces field one monster each, capping
+  a game at 10 of the 25 SAIs. Phase 0a's random forces draw from all 20 dice of a species, so the
+  monsters — and the other 15 SAIs — turn up on their own.
 
 Resolved so far:
 

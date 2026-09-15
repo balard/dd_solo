@@ -1,8 +1,9 @@
 # Implementation plan — v1
 
-Ten phases from the playable alpha to the **complete basic game for Treefolk vs Firewalkers**:
+Eleven phases from the playable alpha to the **complete basic game for Treefolk vs Firewalkers**:
 every SAI, every basic terrain and all four eighth-face icons, promotion and resurrection, the
-five elemental dragons, every spell those two species can cast, and their species abilities.
+five elemental dragons, every spell those two species can cast, and their species abilities. It
+opens by replacing the two hand-authored forces with forces rolled from the seed.
 
 Read `PLAN-V0.md` for how the alpha got here and `RULES-V0.md` for the subset it implements. This
 document is the *order of work*. Where it and `RULES-V0.md` disagree, that is because v1 removes a
@@ -49,7 +50,8 @@ for it again.
 **Dependencies:**
 
 ```
-0 Roll pipeline
+0a Setup: random forces + second terrain      (independent of 0b; either order)
+0b Roll pipeline
 |
 +--> 1 SAIs A: result generators
 |
@@ -70,9 +72,10 @@ for it again.
                         9 UI and AI for v1
 ```
 
-Phases 1, 2 and 3 are independent of each other and can be done in any order. **Tower (Phase 5a)
-can be pulled forward to immediately after Phase 0** — it is one condition in `missileTargets` and
-it is the only eighth-face icon reachable in the current presets.
+Phases 0a and 0b touch different files (`setup.ts` and `roll.ts`) and neither needs the other.
+Phases 1, 2 and 3 are likewise independent of each other and can be done in any order. **Tower
+(Phase 5a) can be pulled forward to immediately after Phase 0b** — it is one condition in
+`missileTargets`, and every terrain in play is a Tower until Phase 5 says otherwise.
 
 **Two rules hold for every phase:**
 
@@ -84,21 +87,144 @@ it is the only eighth-face icon reachable in the current presets.
 - **The 1000-game fuzz stays green.** `runGame` over 1000 seeds with `RandomAI`, no result with
   `stoppedBecause === 'stuck'`. It is the cheapest bug detector in the project and it gets more
   valuable, not less, as the rules grow.
-- **The presets do not exercise most of what this plan builds.** The two 30-health forces reach
-  only **10 of the 25 SAIs**. The other 15 live almost entirely on the eight monster dice neither
-  preset takes — Genie, Gorgon, Phoenix, Salamander, Redwood, Satyr, Strangle Vine, Unicorn — plus
-  the two h3 magic dice. Each preset fields exactly one monster (Darktree, Fireshadow), and that
-  one choice is what caps the coverage.
+- **Test against dice that have the rule you are building.** The two hand-authored 30-health
+  forces reach only **10 of the 25 SAIs**. The other 15 live almost entirely on the eight monster
+  dice neither force takes — Genie, Gorgon, Phoenix, Salamander, Redwood, Satyr, Strangle Vine,
+  Unicorn — plus the two h3 magic dice. Each force fields exactly one monster (Darktree,
+  Fireshadow), and that single pick is what caps the coverage. The fuzz could run a thousand games
+  under those forces and never once execute Firecloud, Flame or Seize.
 
-  So the fuzz can be green for a thousand games and still have never executed Firecloud, Flame or
-  Seize. **Every phase below needs test forces that field the dice it is implementing**, and the
-  fuzz needs at least one preset pair that does too, or coverage silently stays at 10 while the
-  test count goes up. This is the single easiest way for this plan to produce rules that are
-  written, tested against nothing, and wrong.
+  **Phase 0a fixes this as a side effect** — a random force draws from all 20 dice of its species,
+  so monsters and their SAIs turn up constantly. That makes the fuzz meaningfully better at finding
+  bugs and is a real argument for doing 0a early. It does not remove the obligation: a *unit* test
+  still has to name the dice it is exercising, because a random force proves nothing about a
+  specific SAI on a specific turn.
 
 ---
 
-## Phase 0 — The roll pipeline
+## Phase 0a — Setup: random forces and the second terrain
+
+**Deliverable.** Two changes to `setupGame`, each removing a choice the alpha made for you once and
+then never again.
+
+### Random forces
+
+The two hand-authored 30-health presets are replaced by a force rolled from the seed. In order,
+because the order *is* the RNG stream:
+
+1. **Race.** One draw gives one player Treefolk and the other Firewalkers.
+2. **Size.** One draw picks **24 or 36 health, shared by both players.** Rolling a size per player
+   would make force size an asymmetry rather than a variety knob, which is a balance decision
+   dressed up as a dice roll.
+3. **Units.** Draw a unit type of that species at random, add it if its health fits the remaining
+   budget, repeat until the budget is exactly zero. Duplicates are allowed — the real game lets you
+   field several copies of a die. This always terminates on an exact total because every species
+   has 1-health dice, so no backtracking is needed.
+4. **Split.** Deal the units randomly into Home, Campaign and Horde under the two constraints
+   `presets.ts` already validates: **every army holds at least one unit**, and **no army holds more
+   than half the total health rounded down** (12 at 24, 18 at 36). A random deal violates these
+   often enough that the repair path is the real work — make it a bounded retry, not a `while` loop
+   that can spin.
+
+The data makes step 3 well behaved. Each species has exactly 20 dice — **five at each health from 1
+to 4, and four in each of the five classes** — so a uniform draw over types averages 2.5 health,
+giving roughly 10 dice at 24 health and 14 at 36, about a quarter of them monsters.
+
+**Uniform over types is not uniform over health**, and that is the knob to turn if forces come out
+feeling wrong. Weighting toward the small end yields more, weaker dice and longer games; toward the
+large end, a handful of monsters and swingy ones. Choose the distribution deliberately instead of
+inheriting whichever one got written first, and keep it in one named function so it can be changed
+without touching setup.
+
+**Keep explicit forces as an option.** `SetupOptions.forces` should stay, with randomisation as a
+second variant:
+
+```ts
+type ForceSpec =
+  | { readonly kind: 'named'; readonly forces: Readonly<Record<PlayerId, string>> }
+  | { readonly kind: 'random' }
+```
+
+This matters more than it looks. A test that wants Gorgon on the board must be able to *say so*,
+the golden-file replays in Phase 0b need forces that never change, and `V0_RULES` needs a fixed
+configuration to stay a regression baseline. Randomisation is how a game is set up, not how the
+engine is tested.
+
+Replay is unaffected either way: `GameRecord` is `{ setup, actions }`, `setup` carries the seed, and
+force generation is a pure function of it. A record still reproduces the game die for die — it now
+reproduces which race you were given too.
+
+**`kind: 'named'` must consume no generation draws at all.** Not "the same draws", none: if setup
+advances the RNG counter before the roll-off, a named force lands on a different board than it did
+in v0 and every golden file quietly changes meaning. The generation steps belong inside the random
+branch, not before the branch.
+
+### The RNG stream
+
+`CLAUDE.md` records the current order as "roll-off first, then terrain faces". This extends that
+rather than reordering it, because the roll-off rolls the **Horde** army and the split is what
+decides which dice are in it:
+
+```
+race -> size -> p1 units -> p1 split -> p2 units -> p2 split   (random forces only)
+     -> Horde roll-off -> Frontier chosen by the loser (no draw) -> terrain faces
+```
+
+Choosing the Frontier consumes nothing — it reads the roll-off result — so it can sit between the
+two without disturbing anything downstream. Write the order down in `setup.ts` next to the stream,
+the way the existing comment does; it is the single easiest thing here to change by accident.
+
+### The second terrain die
+
+Each **species** gets a defined second terrain die, and the **loser of the Horde roll-off puts
+theirs at the Frontier**.
+
+`setup.ts` already throws on exactly this situation:
+
+> `the two forces propose different Frontier terrains (...); choosing between them is a setup
+> decision that does not exist yet`
+
+This phase is that decision, and the throw goes away.
+
+**This is deliberately not the written rule.** The full rules give the roll-off winner a choice —
+take the first turn, *or* pick which proposed Frontier is used, in which case they go second. That
+is a genuine strategic decision, and handing it to `PassiveAI` would mean an opponent that either
+always picks the same way or picks at random; neither is a game. So v1 splits the two prizes one
+each instead: **the winner takes the first march, the loser sets the Frontier.** No decision is
+raised, nothing needs an opinion, and the Frontier stops being a constant.
+
+The real rule arrives with `GreedyAI` (Phase 9), which is the first thing in the project able to
+hold an opinion about which terrain it wants to fight on. Until then this house rule sits in
+`RULES-V0.md` §7 alongside the others.
+
+A consequence worth planning for: `Preset` currently mixes two things — a species profile (home
+terrain, second terrain) and a force (the unit list). Randomisation takes the force away, so what
+remains is a per-species profile. Splitting the type now is cheaper than splitting it in Phase 5,
+when six terrain types make the second-terrain choice actually interesting.
+
+**Exit criterion.** A seed alone produces a complete, legal setup: both races assigned, both forces
+at the same legal total, all three armies non-empty and within the half-health cap, and a Frontier
+die belonging to the roll-off loser. `validateState` accepts every one of 1000 seeded setups, and
+explicit named forces still produce exactly the v0 board.
+
+**Tests.**
+
+| Case | Expected |
+|---|---|
+| The same seed, twice | identical races, sizes, units, split and Frontier |
+| 1000 seeded setups | every one passes `validateState`; totals are only ever 24 or 36 |
+| Army split | no empty army, and no army over `floor(total / 2)` health across all 1000 |
+| Unit draw | total health lands exactly on the budget, never over, never short |
+| Roll-off | the Frontier die is the *loser's* second terrain, and the winner marches first |
+| Persistent ties | the existing coin-flip fallback still resolves, and still sets a Frontier |
+| `kind: 'named'` | reproduces the v0 board exactly, so the goldens keep their meaning |
+
+**Bump `SAVE_VERSION`.** The Frontier die now depends on the roll-off, so an old log replays onto a
+different board.
+
+---
+
+## Phase 0b — The roll pipeline
 
 **Deliverable.** `resolveRoll` replaces the sum inside `rollArmy`, with **no change to any game
 outcome**. This is a refactor phase and it must land as one.
@@ -279,7 +405,7 @@ Two new mechanisms:
 - **A sub-roll.** Smother and Firecloud make their targets take a *maneuver* roll; Bullseye and
   Double Strike a *save* roll; Seize an *ID* roll. These are rolls of a chosen subset of units,
   outside the normal attack/save exchange. `rollUnits(state, unitIds, context)` — the pipeline from
-  Phase 0 already accepts an arbitrary die set.
+  Phase 0b already accepts an arbitrary die set.
 - **A delayed effect.** Choke and Confuse are explicitly "delayed until after the target army rolls
   for saves" (pipeline step 2). `CombatState` grows a `delayed: readonly DelayedEffect[]` queue
   drained at that step. The `resolve_*` march steps were left in `MarchStep` for exactly this —
@@ -418,9 +544,10 @@ The shape, from pp. 16–20:
 
 - A dragon has **5 health and 5 automatic saves**, so 10 melee *or* 10 missile kills it. The two may
   not be combined against one dragon, though they may be split across different dragons.
-- Each player brings **two dragons** (one per 24 points of a 30-point force, rounded up — the
-  starter book and the full rules agree here) into their Summoning Pool. The pool is not part of
-  force size and is separate from the DUA and BUA.
+- Each player brings **one dragon per 24 points of force, rounded up**, into their Summoning Pool
+  — so **one at 24 health and two at 36**, the sizes Phase 0a rolls. (The starter book's "two
+  dragons" for a 30-health force is the same rule, which is a useful check on both readings.) The
+  pool is not part of force size and is separate from the DUA and BUA.
 - The Dragon Attack Phase fires at every terrain where the **marching** player has an army. Dragons
   attack regardless of who summoned them — including their summoner.
 - The army answers with a **combination roll** counting melee, missile and save at once, with each
@@ -436,7 +563,7 @@ dragon's automatic saves for that attack.
 Breath effects need Phase 3, because every one of them is a duration modifier: Air halves melee,
 Earth halves maneuver, Water halves missile, Death makes the army ignore its IDs, Fire buries the
 units it killed unless they save. "Halving modifiers are not cumulative" is pipeline step 7's
-one-divider-per-result-type rule, already built in Phase 0.
+one-divider-per-result-type rule, already built in Phase 0b.
 
 > **⚠ Blocking data question.** The **dragon die face layout is in neither rulebook.** The icon
 > *effects* are documented; how many of each appear on the twelve faces is not. The rules do say
@@ -624,6 +751,15 @@ on a phone, and the log explains every number in it.
 | No promotion | Phase 2 |
 | No burying | Phase 2 |
 | Three fixed terrains, all Towers | Phase 5 |
+| Two hand-authored 30-health forces, fixed race per player | Phase 0a |
+| The Frontier is a constant, and both forces must propose the same die | Phase 0a |
+
+**One of these is replaced by another house rule, not by the real rule.** The Frontier stops being
+a constant in Phase 0a, but the rulebook's actual step 4 — the roll-off winner choosing between the
+first turn and the Frontier — needs an opponent capable of wanting a particular terrain. Until
+`GreedyAI` exists in Phase 9, v1 splits the two prizes one each: winner marches first, loser sets
+the Frontier. So §7 of `RULES-V0.md` gains a house rule in v1 and loses it again in Phase 9, which
+is the only entry in this table that moves twice.
 
 **Do not delete `RULES-V0.md`, and do not delete the flags.** `V0_RULES` stays a valid, playable
 configuration — it is the regression baseline for every phase above, and the reason each of these is
@@ -645,7 +781,7 @@ export const V1_RULES: RuleSet = {
 
 ## Risks
 
-**Phase 0 is the phase people skip.** It delivers nothing a player can see and every later phase is
+**Phase 0b is the phase people skip.** It delivers nothing a player can see and every later phase is
 cheaper for it. If it gets cut short, the symptom is Phase 6 discovering that combination rolls need
 `rollArmy` rewritten anyway — with SAIs and spells already built on top of the old shape.
 
