@@ -3,18 +3,23 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: v0 alpha complete.** All nine phases of `docs/PLAN-V0.md` are done. The game is
-> playable in the browser (`npm run dev`), in the terminal (`npm run play`), installable as a PWA,
-> and resumes where you left off. Since the alpha landed, the board grew to show every army at
-> once and the eighth face started granting its two standard advantages (`eighthFace: 'standard'`).
+> **Status: v0 alpha complete; v1 Phase 0 landed.** All nine phases of `docs/PLAN-V0.md` are done.
+> The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
+> installable as a PWA, and resumes where you left off. Since the alpha landed, the board grew to
+> show every army at once and the eighth face started granting its two standard advantages
+> (`eighthFace: 'standard'`).
 >
-> Next is the v1 ladder — SAIs, then the eighth-face **icon** powers, then spells, then dragons —
-> each a `RuleSet` flag with a home already prepared. Worth knowing before picking one up: **every
-> terrain in both starter presets is a Tower** (`swampland_tower`, `highland_tower`,
-> `wasteland_tower`), so Tower's "may attack any terrain in play during a missile action" is the
-> *only* icon power reachable in this matchup. It is also the smallest of the four — one condition
-> inside `missileTargets` — which makes it a cheap way to finish the eighth face for the starter
-> set long before City, Temple and Standing Stones become reachable.
+> **Phase 0 of `docs/PLAN-V1.md` is done**, in three commits: a golden corpus of 25 recorded games
+> (Phase G), the rulebook's ten-step roll pipeline replacing the sum inside `rollArmy` (0b), and
+> forces rolled from the seed with the Frontier placed by the roll-off loser (0a). Phase 1 — SAIs
+> that generate results — is next, and the ladder after it is eighth-face **icon** powers, spells,
+> then dragons, each a `RuleSet` flag with a home already prepared.
+>
+> Worth knowing before picking one up: **both home terrains are Towers and the Frontier is a City**
+> (Phase 0a gave each species a second die of its own type). So Tower's "may attack any terrain in
+> play during a missile action" is the icon power that covers two of the three terrains here, and
+> it is the smallest of the four — one condition inside `missileTargets` — which makes it a cheap
+> way to start the eighth face long before Temple and Standing Stones become reachable.
 
 ## Read these first
 
