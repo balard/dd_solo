@@ -156,12 +156,18 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   printed on the face is already the answer. `faceResults` is three lines; keep it that way.
 - **`setupGame` runs the Horde roll-off** when `firstPlayer` is omitted, threading one RNG stream
   in rules order: roll-off first, then terrain faces.
-- **ID doubling lives in `rollArmy`, not `faceResults`.** It is a fact about the board, not the
-  face: the same die doubles or not depending on where it stands, so `faceResults` stays a pure
-  face-to-results function and the bonus rides in on `rollArmy`'s `doubleIds` flag. Every call site
-  that rolls *at a terrain* must pass `doublesIds(state, player, slot)` — attacks, saves and
-  contested maneuvers all count as "rolling the army". It consumes no extra randomness, so a game
-  replays die for die either way; only the totals change.
+- **A roll is a ten-step pipeline, not a sum** (`pipeline.ts`, full rules p. 27). `resolveRoll`
+  rolls the dice and runs steps 5–10; `rollArmy` is the one-type, one-number door onto it that the
+  rest of the engine uses. **The running value is a triple per result type — `{ id, normal, sai }`
+  — and that is forced, not stylistic**: step 6 removes ID results *last* and step 8 adds SAI
+  results *after* step 7's divide, and neither survives a single subtotal.
+- **ID doubling is a step-9 modifier, and lives in neither `faceResults` nor the roller.** It is a
+  fact about the board, not the face: the same die doubles or not depending on where it stands, so
+  `faceResults` stays a pure face-to-results function and the bonus rides in on `rollArmy`'s
+  `doubleIds` flag as a `Modifier`. Every call site that rolls *at a terrain* must pass
+  `doublesIds(state, player, slot)` — attacks, saves and contested maneuvers all count as "rolling
+  the army". It consumes no extra randomness, so a game replays die for die either way; only the
+  totals change.
 - **Terrain `face === 8` and `capturedBy !== null` must always agree.** `validateState` enforces
   it; both the win check and the revert-to-7 rule depend on it.
 - **Damage assignment must be maximal, and greedy does not find it.** 4 damage against units of

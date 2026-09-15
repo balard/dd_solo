@@ -311,13 +311,12 @@ different board.
 outcome**. This is a refactor phase and it must land as one.
 
 ```ts
-interface RollContext {
-  readonly kind: 'melee' | 'missile' | 'magic' | 'maneuver' | 'save' | 'dragon'
-  /** What a save roll is saving against; null otherwise. Counter and Volley need this. */
-  readonly against: ActionKind | null
-  readonly player: PlayerId
-  readonly army: ArmyRef
-  readonly isCounter: boolean
+interface RollSpec {
+  /** One type for an ordinary roll; melee, missile and save for a dragon (Phase 6). */
+  readonly kinds: readonly ResultType[]
+  readonly modifiers: readonly Modifier[]
+  /** Which type each ID counts as. Required, and spent exactly, for a combination roll. */
+  readonly idAllocation?: IdAllocation
 }
 
 interface RollOutcome {
@@ -327,6 +326,13 @@ interface RollOutcome {
   readonly effects: readonly RollEffect[]
 }
 ```
+
+**`RollContext` — who is rolling, what the save is against, whether it is a counter — is Phase 1's,
+not this phase's.** Nothing in 0b reads a field of it: `faceResults` does not take one and
+`saiEffects` does not exist yet. Phase 1 has to revisit each call site anyway, because each one
+supplies a different context, so declaring it here would buy nothing and fill it with placeholders.
+What does have to land now is the *return* shape, which every call site destructures — that is the
+argument for `totals` and `effects`, and it does not extend to the argument bundle.
 
 Five changes hide inside this:
 
@@ -346,15 +352,29 @@ Five changes hide inside this:
   against a single running subtotal, so the subtotal splits three ways and only collapses at
   step 10. Eighth-face ID doubling then stops being a per-die branch and becomes a step-9
   `Modifier` over the `id` share — same numbers out, one fewer special case in `rollArmy`.
-- **`Modifier` reaches the pipeline through `modifiersFor(state, context)`, which returns `[]`.**
-  The plan used to put an empty list in `GameState`; a field nothing ever writes is dead weight,
-  and Phase 3 replaces it with `state.effects` regardless. A function is the same seam with nothing
-  to delete later, and it keeps `resolveRoll` free of `GameState` — it takes units, a context,
-  modifiers and an RNG, and stays as pure as `faceResults`.
+- **No modifier reaches the pipeline from `GameState` at all.** The plan used to put an empty
+  `Modifier[]` there; a field nothing writes is dead weight, and Phase 3 replaces it with
+  `state.effects` regardless. The eighth face builds its own modifier at `rollArmy`'s door, so
+  `resolveRoll` stays as free of `GameState` as `faceResults` is, and Phase 3 adds the seam when
+  there is something to read through it.
 
 Two divides, or two multiplies, on one result type is a **thrown error**, not a rejected action:
 step 7 and step 9 each allow at most one, so a second one means the engine built an illegal
-modifier list, which is a bug and not a move.
+modifier list, which is a bug and not a move. `applyModifiers` takes the result type it is working
+on and picks its own modifiers out of the list, rather than trusting the caller to have filtered —
+those two rules are only meaningful if one function decides what "per type" means.
+
+**The eighth face counts as its type's one multiplier**, rather than being exempt as an
+ID-only one. The rulebook restricts "more than one modifier that multiplies applied to each type of
+result" without saying which part of a roll each multiplies, so what a doubling *plus* a spell's
+multiplier computes is unanswerable — and unreachable until Phase 7 produces the second. Phase 7
+settles it; until then the pipeline refuses rather than inventing arithmetic.
+
+**Per-die `results` keeps the doubling.** `DieRoll.results` is what the log and the roll strip
+show, and the goldens record it, so it stays what it was in v0: the die's step-5 contribution with
+the eighth-face doubling applied. The aggregate in `totals` is authoritative; this is the same
+arithmetic on one die, and five dice that do not add up to the total on screen would be worse than
+no dice at all.
 
 **Exit criterion.** Every v0 test passes unmodified. Stash the new tests and the suite is identical.
 No `SAVE_VERSION` bump — dice consumption has not changed.
