@@ -1,0 +1,187 @@
+# Treefolk unit die faces.
+# Source: commander.dragondice.com face-art paths + Dice Commander die info, transcribed 2026-09-14.
+# Format: a die header line (URL or "<class>-<size>"), then one "<count> <Icon>" line per face.
+# d6 units have 6 faces, monsters (d10) have 10. See data/ICONS.md.
+
+https://commander.dragondice.com/images/faces/treefolk/ids/heavy-small.svg
+1 ID
+1 Melee
+1 Melee
+1 Melee
+1 Melee
+2 Save
+
+# The '4 SAVE' below is health+2 -- the only such face in all 280, so the validator
+# warns on it. Verified correct: the Treefolk heavy line buys saves at 2x health, and
+# Oakling (1 health, '2 SAVE') has the identical layout exactly halved. Leave as is.
+https://commander.dragondice.com/images/faces/treefolk/ids/heavy-medium.svg
+2 ID
+2 Melee
+2 Melee
+2 Melee
+2 Melee
+4 Save
+
+https://commander.dragondice.com/images/faces/treefolk/ids/heavy-large.svg
+3 ID
+3 Melee
+3 Smite
+3 Smite
+3 Melee
+4 Save
+
+https://commander.dragondice.com/images/faces/treefolk/ids/light-small.svg
+1 ID
+1 Maneuver
+1 Save
+1 Save
+1 Maneuver
+2 Melee
+
+https://commander.dragondice.com/images/faces/treefolk/ids/light-medium.svg
+2 ID
+3 Save
+2 Maneuver
+2 Maneuver
+2 Save
+3 Melee
+
+https://commander.dragondice.com/images/faces/treefolk/ids/light-large.svg
+3 ID
+4 Melee
+4 Wild Growth
+2 Maneuver
+2 Melee
+4 Save
+
+https://commander.dragondice.com/images/faces/treefolk/ids/missile-small.svg
+1 ID
+1 Save
+1 Missile
+1 Missile
+1 Maneuver
+2 Missile
+
+https://commander.dragondice.com/images/faces/treefolk/ids/missile-medium.svg
+2 ID
+2 Maneuver
+3 Missile
+2 Missile
+2 Maneuver
+3 Save
+
+https://commander.dragondice.com/images/faces/treefolk/ids/missile-large.svg
+3 ID
+2 Missile
+4 Volley
+4 Missile
+2 Missile
+4 Save
+
+https://commander.dragondice.com/images/faces/treefolk/ids/cavalry-small.svg
+1 ID
+1 Save
+1 Melee
+1 Melee
+1 Maneuver
+2 Maneuver
+
+https://commander.dragondice.com/images/faces/treefolk/ids/cavalry-medium.svg
+2 ID
+2 Melee
+3 Maneuver
+2 Maneuver
+2 Melee
+3 Save
+
+https://commander.dragondice.com/images/faces/treefolk/ids/cavalry-large.svg
+3 ID
+4 Maneuver
+4 Counter
+2 Melee
+2 Maneuver
+4 Save
+
+https://commander.dragondice.com/images/faces/treefolk/ids/magic-small.svg
+1 ID
+1 Save
+1 Magic
+1 Magic
+1 Melee
+2 Magic
+
+https://commander.dragondice.com/images/faces/treefolk/ids/magic-medium.svg
+2 ID
+2 Magic
+2 Melee
+3 Magic
+2 Magic
+3 Save
+
+https://commander.dragondice.com/images/faces/treefolk/ids/magic-large.svg
+3 ID
+2 Magic
+4 Cantrip
+3 Magic
+4 Magic
+3 Save
+
+https://commander.dragondice.com/images/faces/treefolk/ids/monster-darktree.svg
+4 ID
+4 Save
+4 Surprise
+4 Melee
+4 Smother
+4 Melee
+4 Save
+4 Surprise
+4 Save
+4 Smother
+
+https://commander.dragondice.com/images/faces/treefolk/ids/monster-redwood.svg
+4 ID
+4 Save
+4 Maneuver
+4 Melee
+4 Trample
+4 Melee
+4 Save
+4 Melee
+4 Save
+4 Trample
+
+https://commander.dragondice.com/images/faces/treefolk/ids/monster-satyr.svg
+4 ID
+4 Sleep
+4 Volley
+4 Hoof
+4 Magic
+4 Volley
+4 Confuse
+4 Missile
+4 Sleep
+4 Magic
+
+https://commander.dragondice.com/images/faces/treefolk/ids/monster-strangle-vine.svg
+4 ID
+4 Melee
+4 Double Strike
+4 Maneuver
+4 Choke
+4 Choke
+4 Smother
+4 Wild Growth
+4 Rend
+4 Maneuver
+
+https://commander.dragondice.com/images/faces/treefolk/ids/monster-unicorn.svg
+4 ID
+4 Trample
+4 Save
+4 Teleport
+4 Dispel Magic
+4 Dispel Magic
+4 Counter
+4 Trample
+4 Teleport
+4 Save

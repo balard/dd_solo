@@ -1,0 +1,28 @@
+node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
+coverage/
+*.local
+.env
+.env.*
+!.env.example
+
+# Capacitor native projects (generated)
+android/
+ios/
+
+# editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# python scratch
+__pycache__/
+*.pyc
+
+# mirrored reference art (tools/fetch_faces.py) - not redistributed
+assets/faces/

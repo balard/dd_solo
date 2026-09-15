@@ -1,0 +1,133 @@
+# Terrain die faces. Transcribed 2026-09-14.
+#
+# NOTE: the numbers here are FACE NUMBERS (1-8), not icon counts. This is the
+# opposite of the unit files, where "2 Melee" means two melee icons on one face.
+# On a terrain die "7 Melee" means face 7 shows melee.
+#
+# A terrain die is a terrain TYPE (which fixes faces 1-7) plus an EIGHTH-FACE icon.
+# Faces 1-7 are identical across the four eighth-face variants of a type.
+#
+# Header format: "<Type> <Eighth Face>".
+
+Swampland Tower
+8 Tower
+7 Melee
+6 Melee
+5 Melee
+4 Missile
+3 Missile
+2 Magic
+1 Magic
+
+Swampland City
+8 City
+7 Melee
+6 Melee
+5 Melee
+4 Missile
+3 Missile
+2 Magic
+1 Magic
+
+Swampland Standing Stones
+8 Standing Stones
+7 Melee
+6 Melee
+5 Melee
+4 Missile
+3 Missile
+2 Magic
+1 Magic
+
+Swampland Temple
+8 Temple
+7 Melee
+6 Melee
+5 Melee
+4 Missile
+3 Missile
+2 Magic
+1 Magic
+
+# Source paste labelled this block "Swampland Tower", but its faces are the
+# Highland layout, it sits in the Highland group, and Swampland Tower is already
+# recorded above with different faces. Recorded as Highland Tower.
+Highland Tower
+8 Tower
+7 Melee
+6 Melee
+5 Missile
+4 Missile
+3 Magic
+2 Magic
+1 Magic
+
+Highland City
+8 City
+7 Melee
+6 Melee
+5 Missile
+4 Missile
+3 Magic
+2 Magic
+1 Magic
+
+Highland Standing Stones
+8 Standing Stones
+7 Melee
+6 Melee
+5 Missile
+4 Missile
+3 Magic
+2 Magic
+1 Magic
+
+Highland Temple
+8 Temple
+7 Melee
+6 Melee
+5 Missile
+4 Missile
+3 Magic
+2 Magic
+1 Magic
+
+Wasteland Tower
+8 Tower
+7 Melee
+6 Melee
+5 Melee
+4 Melee
+3 Missile
+2 Missile
+1 Magic
+
+Wasteland City
+8 City
+7 Melee
+6 Melee
+5 Melee
+4 Melee
+3 Missile
+2 Missile
+1 Magic
+
+Wasteland Standing Stones
+8 Standing Stones
+7 Melee
+6 Melee
+5 Melee
+4 Melee
+3 Missile
+2 Missile
+1 Magic
+
+Wasteland Temple
+8 Temple
+7 Melee
+6 Melee
+5 Melee
+4 Melee
+3 Missile
+2 Missile
+1 Magic

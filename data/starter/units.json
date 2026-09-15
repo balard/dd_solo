@@ -1,0 +1,742 @@
+{
+  "$schema": "../schema/dice.schema.json",
+  "_generated": "by tools/import_faces.py from data/raw/*.faces.txt -- DO NOT EDIT BY HAND",
+  "species": {
+    "treefolk": {
+      "name": "Treefolk",
+      "elements": [
+        "water",
+        "earth"
+      ]
+    },
+    "firewalkers": {
+      "name": "Firewalkers",
+      "elements": [
+        "air",
+        "fire"
+      ]
+    }
+  },
+  "units": [
+    {
+      "id": "treefolk.oakling",
+      "name": "Oakling",
+      "species": "treefolk",
+      "class": "heavy_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "1 MELEE",
+        "1 MELEE",
+        "1 MELEE",
+        "2 SAVE"
+      ]
+    },
+    {
+      "id": "treefolk.oak",
+      "name": "Oak",
+      "species": "treefolk",
+      "class": "heavy_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MELEE",
+        "2 MELEE",
+        "2 MELEE",
+        "2 MELEE",
+        "4 SAVE"
+      ]
+    },
+    {
+      "id": "treefolk.oak_lord",
+      "name": "Oak Lord",
+      "species": "treefolk",
+      "class": "heavy_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 MELEE",
+        "3 SAI:Smite",
+        "3 SAI:Smite",
+        "3 MELEE",
+        "4 SAVE"
+      ]
+    },
+    {
+      "id": "treefolk.darktree",
+      "name": "Darktree",
+      "species": "treefolk",
+      "class": "heavy_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAVE",
+        "4 SAI:Surprise",
+        "4 MELEE",
+        "4 SAI:Smother",
+        "4 MELEE",
+        "4 SAVE",
+        "4 SAI:Surprise",
+        "4 SAVE",
+        "4 SAI:Smother"
+      ]
+    },
+    {
+      "id": "treefolk.willowling",
+      "name": "Willowling",
+      "species": "treefolk",
+      "class": "light_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MANEUVER",
+        "1 SAVE",
+        "1 SAVE",
+        "1 MANEUVER",
+        "2 MELEE"
+      ]
+    },
+    {
+      "id": "treefolk.willow",
+      "name": "Willow",
+      "species": "treefolk",
+      "class": "light_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "3 SAVE",
+        "2 MANEUVER",
+        "2 MANEUVER",
+        "2 SAVE",
+        "3 MELEE"
+      ]
+    },
+    {
+      "id": "treefolk.noble_willow",
+      "name": "Noble Willow",
+      "species": "treefolk",
+      "class": "light_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "4 MELEE",
+        "4 SAI:Wild Growth",
+        "2 MANEUVER",
+        "2 MELEE",
+        "4 SAVE"
+      ]
+    },
+    {
+      "id": "treefolk.redwood",
+      "name": "Redwood",
+      "species": "treefolk",
+      "class": "light_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAVE",
+        "4 MANEUVER",
+        "4 MELEE",
+        "4 SAI:Trample",
+        "4 MELEE",
+        "4 SAVE",
+        "4 MELEE",
+        "4 SAVE",
+        "4 SAI:Trample"
+      ]
+    },
+    {
+      "id": "treefolk.nymph",
+      "name": "Nymph",
+      "species": "treefolk",
+      "class": "cavalry",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 SAVE",
+        "1 MELEE",
+        "1 MELEE",
+        "1 MANEUVER",
+        "2 MANEUVER"
+      ]
+    },
+    {
+      "id": "treefolk.naiad",
+      "name": "Naiad",
+      "species": "treefolk",
+      "class": "cavalry",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MELEE",
+        "3 MANEUVER",
+        "2 MANEUVER",
+        "2 MELEE",
+        "3 SAVE"
+      ]
+    },
+    {
+      "id": "treefolk.lady_nereid",
+      "name": "Lady Nereid",
+      "species": "treefolk",
+      "class": "cavalry",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "4 MANEUVER",
+        "4 SAI:Counter",
+        "2 MELEE",
+        "2 MANEUVER",
+        "4 SAVE"
+      ]
+    },
+    {
+      "id": "treefolk.satyr",
+      "name": "Satyr",
+      "species": "treefolk",
+      "class": "cavalry",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Sleep",
+        "4 SAI:Volley",
+        "4 SAI:Hoof",
+        "4 MAGIC",
+        "4 SAI:Volley",
+        "4 SAI:Confuse",
+        "4 MISSILE",
+        "4 SAI:Sleep",
+        "4 MAGIC"
+      ]
+    },
+    {
+      "id": "treefolk.pineling",
+      "name": "Pineling",
+      "species": "treefolk",
+      "class": "missile",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 SAVE",
+        "1 MISSILE",
+        "1 MISSILE",
+        "1 MANEUVER",
+        "2 MISSILE"
+      ]
+    },
+    {
+      "id": "treefolk.pine",
+      "name": "Pine",
+      "species": "treefolk",
+      "class": "missile",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MANEUVER",
+        "3 MISSILE",
+        "2 MISSILE",
+        "2 MANEUVER",
+        "3 SAVE"
+      ]
+    },
+    {
+      "id": "treefolk.pine_prince",
+      "name": "Pine Prince",
+      "species": "treefolk",
+      "class": "missile",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "2 MISSILE",
+        "4 SAI:Volley",
+        "4 MISSILE",
+        "2 MISSILE",
+        "4 SAVE"
+      ]
+    },
+    {
+      "id": "treefolk.strangle_vine",
+      "name": "Strangle Vine",
+      "species": "treefolk",
+      "class": "missile",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 MELEE",
+        "4 SAI:Double Strike",
+        "4 MANEUVER",
+        "4 SAI:Choke",
+        "4 SAI:Choke",
+        "4 SAI:Smother",
+        "4 SAI:Wild Growth",
+        "4 SAI:Rend",
+        "4 MANEUVER"
+      ]
+    },
+    {
+      "id": "treefolk.hamadryad",
+      "name": "Hamadryad",
+      "species": "treefolk",
+      "class": "magic",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 SAVE",
+        "1 MAGIC",
+        "1 MAGIC",
+        "1 MELEE",
+        "2 MAGIC"
+      ]
+    },
+    {
+      "id": "treefolk.dryad",
+      "name": "Dryad",
+      "species": "treefolk",
+      "class": "magic",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MAGIC",
+        "2 MELEE",
+        "3 MAGIC",
+        "2 MAGIC",
+        "3 SAVE"
+      ]
+    },
+    {
+      "id": "treefolk.eldar_dryad",
+      "name": "Eldar Dryad",
+      "species": "treefolk",
+      "class": "magic",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "2 MAGIC",
+        "4 SAI:Cantrip",
+        "3 MAGIC",
+        "4 MAGIC",
+        "3 SAVE"
+      ]
+    },
+    {
+      "id": "treefolk.unicorn",
+      "name": "Unicorn",
+      "species": "treefolk",
+      "class": "magic",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Trample",
+        "4 SAVE",
+        "4 SAI:Teleport",
+        "4 SAI:Dispel Magic",
+        "4 SAI:Dispel Magic",
+        "4 SAI:Counter",
+        "4 SAI:Trample",
+        "4 SAI:Teleport",
+        "4 SAVE"
+      ]
+    },
+    {
+      "id": "firewalkers.guardian",
+      "name": "Guardian",
+      "species": "firewalkers",
+      "class": "heavy_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "1 SAVE",
+        "1 MISSILE",
+        "2 MELEE",
+        "1 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.watcher",
+      "name": "Watcher",
+      "species": "firewalkers",
+      "class": "heavy_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "3 MELEE",
+        "2 SAVE",
+        "2 MISSILE",
+        "3 MELEE",
+        "2 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.sentinel",
+      "name": "Sentinel",
+      "species": "firewalkers",
+      "class": "heavy_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 MELEE",
+        "3 MANEUVER",
+        "3 SAVE",
+        "4 SAI:Smite",
+        "3 MISSILE"
+      ]
+    },
+    {
+      "id": "firewalkers.fireshadow",
+      "name": "Fireshadow",
+      "species": "firewalkers",
+      "class": "heavy_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Fly",
+        "4 SAI:Create Fireminions",
+        "4 SAI:Smite",
+        "4 MELEE",
+        "4 MELEE",
+        "4 SAI:Cantrip",
+        "4 SAI:Create Fireminions",
+        "4 SAI:Counter",
+        "4 SAI:Fly"
+      ]
+    },
+    {
+      "id": "firewalkers.explorer",
+      "name": "Explorer",
+      "species": "firewalkers",
+      "class": "light_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "1 SAVE",
+        "1 MISSILE",
+        "1 MELEE",
+        "2 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.adventurer",
+      "name": "Adventurer",
+      "species": "firewalkers",
+      "class": "light_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "1 SAVE",
+        "2 MELEE",
+        "3 MELEE",
+        "3 MISSILE",
+        "3 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.expeditioner",
+      "name": "Expeditioner",
+      "species": "firewalkers",
+      "class": "light_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 MISSILE",
+        "3 MELEE",
+        "3 MELEE",
+        "4 SAI:Counter",
+        "3 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.genie",
+      "name": "Genie",
+      "species": "firewalkers",
+      "class": "light_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Galeforce",
+        "4 SAVE",
+        "4 SAI:Cantrip",
+        "4 SAI:Firecloud",
+        "4 SAVE",
+        "4 MELEE",
+        "4 SAI:Firewalking",
+        "4 MELEE",
+        "4 MAGIC"
+      ]
+    },
+    {
+      "id": "firewalkers.shadowchaser",
+      "name": "Shadowchaser",
+      "species": "firewalkers",
+      "class": "cavalry",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MANEUVER",
+        "2 MELEE",
+        "1 MISSILE",
+        "1 MANEUVER",
+        "1 SAVE"
+      ]
+    },
+    {
+      "id": "firewalkers.nightsbane",
+      "name": "Nightsbane",
+      "species": "firewalkers",
+      "class": "cavalry",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "3 MISSILE",
+        "2 MANEUVER",
+        "2 MANEUVER",
+        "3 MELEE",
+        "2 SAVE"
+      ]
+    },
+    {
+      "id": "firewalkers.daybringer",
+      "name": "Daybringer",
+      "species": "firewalkers",
+      "class": "cavalry",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "2 SAVE",
+        "4 MISSILE",
+        "4 MELEE",
+        "4 SAI:Fly",
+        "2 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.gorgon",
+      "name": "Gorgon",
+      "species": "firewalkers",
+      "class": "cavalry",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "2 SAI:Flame",
+        "4 MANEUVER",
+        "4 SAVE",
+        "4 MANEUVER",
+        "4 SAVE",
+        "4 MANEUVER",
+        "2 SAI:Flame",
+        "4 MANEUVER",
+        "4 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.firestarter",
+      "name": "Firestarter",
+      "species": "firewalkers",
+      "class": "missile",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MISSILE",
+        "1 SAVE",
+        "1 MELEE",
+        "2 MISSILE",
+        "1 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.firemaster",
+      "name": "Firemaster",
+      "species": "firewalkers",
+      "class": "missile",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "3 MISSILE",
+        "2 SAVE",
+        "2 MELEE",
+        "3 MISSILE",
+        "2 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.firestormer",
+      "name": "Firestormer",
+      "species": "firewalkers",
+      "class": "missile",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "4 MISSILE",
+        "2 SAVE",
+        "3 MELEE",
+        "4 SAI:Bullseye",
+        "3 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.phoenix",
+      "name": "Phoenix",
+      "species": "firewalkers",
+      "class": "missile",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Fly",
+        "4 SAI:Rise from the Ashes",
+        "4 SAI:Smite",
+        "4 SAI:Seize",
+        "4 SAVE",
+        "4 SAI:Fly",
+        "4 SAVE",
+        "4 SAI:Rise from the Ashes",
+        "4 SAI:Seize"
+      ]
+    },
+    {
+      "id": "firewalkers.sunburst",
+      "name": "Sunburst",
+      "species": "firewalkers",
+      "class": "magic",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MAGIC",
+        "1 MAGIC",
+        "1 MAGIC",
+        "1 MAGIC",
+        "2 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.sunflare",
+      "name": "Sunflare",
+      "species": "firewalkers",
+      "class": "magic",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MAGIC",
+        "2 MAGIC",
+        "3 MAGIC",
+        "2 MAGIC",
+        "3 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.ashbringer",
+      "name": "Ashbringer",
+      "species": "firewalkers",
+      "class": "magic",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 MAGIC",
+        "3 MAGIC",
+        "3 MAGIC",
+        "3 SAI:Cantrip",
+        "4 MANEUVER"
+      ]
+    },
+    {
+      "id": "firewalkers.salamander",
+      "name": "Salamander",
+      "species": "firewalkers",
+      "class": "magic",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 MELEE",
+        "4 MAGIC",
+        "4 SAVE",
+        "4 MELEE",
+        "4 MISSILE",
+        "4 SAI:Smite",
+        "4 SAVE",
+        "4 MELEE",
+        "4 SAI:Cantrip"
+      ]
+    }
+  ]
+}

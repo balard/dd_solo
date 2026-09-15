@@ -1,0 +1,117 @@
+{
+  "$schema": "../schema/terrain.schema.json",
+  "_generated": "by tools/import_terrains.py from data/raw/terrains.faces.txt -- DO NOT EDIT BY HAND",
+  "_comment": "Faces 1-7 live on the terrain type; a die is a type plus an eighth-face icon. The eighth-face icons are recorded but inert in v0 (see docs/RULES-V0.md).",
+  "terrainTypes": {
+    "swampland": {
+      "name": "Swampland",
+      "elements": [
+        "water",
+        "earth"
+      ],
+      "faces": {
+        "1": "MAGIC",
+        "2": "MAGIC",
+        "3": "MISSILE",
+        "4": "MISSILE",
+        "5": "MELEE",
+        "6": "MELEE",
+        "7": "MELEE"
+      }
+    },
+    "highland": {
+      "name": "Highland",
+      "elements": [
+        "fire",
+        "earth"
+      ],
+      "faces": {
+        "1": "MAGIC",
+        "2": "MAGIC",
+        "3": "MAGIC",
+        "4": "MISSILE",
+        "5": "MISSILE",
+        "6": "MELEE",
+        "7": "MELEE"
+      }
+    },
+    "wasteland": {
+      "name": "Wasteland",
+      "elements": [
+        "air",
+        "fire"
+      ],
+      "faces": {
+        "1": "MAGIC",
+        "2": "MISSILE",
+        "3": "MISSILE",
+        "4": "MELEE",
+        "5": "MELEE",
+        "6": "MELEE",
+        "7": "MELEE"
+      }
+    }
+  },
+  "terrains": [
+    {
+      "id": "swampland_tower",
+      "type": "swampland",
+      "eighthFace": "tower"
+    },
+    {
+      "id": "swampland_city",
+      "type": "swampland",
+      "eighthFace": "city"
+    },
+    {
+      "id": "swampland_standing_stones",
+      "type": "swampland",
+      "eighthFace": "standing_stones"
+    },
+    {
+      "id": "swampland_temple",
+      "type": "swampland",
+      "eighthFace": "temple"
+    },
+    {
+      "id": "highland_tower",
+      "type": "highland",
+      "eighthFace": "tower"
+    },
+    {
+      "id": "highland_city",
+      "type": "highland",
+      "eighthFace": "city"
+    },
+    {
+      "id": "highland_standing_stones",
+      "type": "highland",
+      "eighthFace": "standing_stones"
+    },
+    {
+      "id": "highland_temple",
+      "type": "highland",
+      "eighthFace": "temple"
+    },
+    {
+      "id": "wasteland_tower",
+      "type": "wasteland",
+      "eighthFace": "tower"
+    },
+    {
+      "id": "wasteland_city",
+      "type": "wasteland",
+      "eighthFace": "city"
+    },
+    {
+      "id": "wasteland_standing_stones",
+      "type": "wasteland",
+      "eighthFace": "standing_stones"
+    },
+    {
+      "id": "wasteland_temple",
+      "type": "wasteland",
+      "eighthFace": "temple"
+    }
+  ]
+}

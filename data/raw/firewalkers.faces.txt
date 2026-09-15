@@ -1,0 +1,184 @@
+# Firewalkers unit die faces.
+# Source: commander.dragondice.com face-art paths + Dice Commander die info, transcribed 2026-09-14.
+# Format: a die header line (URL or "<class>-<size>"), then one "<count> <Icon>" line per face.
+# d6 units have 6 faces, monsters (d10) have 10. See data/ICONS.md.
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/heavy-small.svg
+1 ID
+1 Melee
+1 Save
+1 Missile
+2 Melee
+1 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/heavy-medium.svg
+2 ID
+3 Melee
+2 Save
+2 Missile
+3 Melee
+2 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/heavy-large.svg
+3 ID
+3 Melee
+3 Maneuver
+3 Save
+4 Smite
+3 Missile
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/light-small.svg
+1 ID
+1 Melee
+1 Save
+1 Missile
+1 Melee
+2 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/light-medium.svg
+2 ID
+1 Save
+2 Melee
+3 Melee
+3 Missile
+3 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/light-large.svg
+3 ID
+3 Missile
+3 Melee
+3 Melee
+4 Counter
+3 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/missile-small.svg
+1 ID
+1 Missile
+1 Save
+1 Melee
+2 Missile
+1 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/missile-medium.svg
+2 ID
+3 Missile
+2 Save
+2 Melee
+3 Missile
+2 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/missile-large.svg
+3 ID
+4 Missile
+2 Save
+3 Melee
+4 Bullseye
+3 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/cavalry-small.svg
+1 ID
+1 Maneuver
+2 Melee
+1 Missile
+1 Maneuver
+1 Save
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/cavalry-medium.svg
+2 ID
+3 Missile
+2 Maneuver
+2 Maneuver
+3 Melee
+2 Save
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/cavalry-large.svg
+3 ID
+2 Save
+4 Missile
+4 Melee
+4 Fly
+2 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/magic-small.svg
+1 ID
+1 Magic
+1 Magic
+1 Magic
+1 Magic
+2 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/magic-medium.svg
+2 ID
+2 Magic
+2 Magic
+3 Magic
+2 Magic
+3 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/magic-large.svg
+3 ID
+3 Magic
+3 Magic
+3 Magic
+3 Cantrip
+4 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/monster-fireshadow.svg
+4 ID
+4 Fly
+4 Create Fireminions
+4 Smite
+4 Melee
+4 Melee
+4 Cantrip
+4 Create Fireminions
+4 Counter
+4 Fly
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/monster-genie.svg
+4 ID
+4 Galeforce
+4 Save
+4 Cantrip
+4 Firecloud
+4 Save
+4 Melee
+4 Firewalking
+4 Melee
+4 Magic
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/monster-gorgon.svg
+4 ID
+2 Flame
+4 Maneuver
+4 Save
+4 Maneuver
+4 Save
+4 Maneuver
+2 Flame
+4 Maneuver
+4 Maneuver
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/monster-phoenix.svg
+4 ID
+4 Fly
+4 Rise from the Ashes
+4 Smite
+4 Seize
+4 Save
+4 Fly
+4 Save
+4 Rise from the Ashes
+4 Seize
+
+https://commander.dragondice.com/images/faces/firewalkers/ids/monster-salamander.svg
+4 ID
+4 Melee
+4 Magic
+4 Save
+4 Melee
+4 Missile
+4 Smite
+4 Save
+4 Melee
+4 Cantrip
