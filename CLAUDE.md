@@ -44,10 +44,10 @@ npm run art         # optional: mirror real face art into public/faces/ (gitigno
 npm run play        # play a game in the terminal (--seed N, --ai random)
 ```
 
-**`npm test` fails on a clean checkout, and it is not a broken test.** `src/ai/ai.test.ts`
-replays 25 seeded games and needs ~6.5s against vitest's 5s default `testTimeout`; the whole file
-takes ~80s on a mid-range machine. Run `npx vitest run --testTimeout=120000` instead, or add a
-`test: { testTimeout: 30000 }` block to `vite.config.ts`, which currently has none.
+**`npm test` is slow on purpose** — around 30-50s, most of it the 1000-game fuzz and the replay
+check that replays 25 full games. `vite.config.ts` sets `testTimeout: 30_000` because vitest's 5s
+default fails those outright; do not read a long run as a hang, and do not lower it back. A real
+hang still fails fast on its own, since `advance` throws after 1000 steps.
 
 On Windows PowerShell these may fail with `npm.ps1 cannot be loaded because running scripts is
 disabled`. That is the shell's execution policy, not the project. Use `npm.cmd ...`, or `.\play.cmd`

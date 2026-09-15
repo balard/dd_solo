@@ -39,5 +39,13 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    /*
+     * Vitest defaults to 5s, which the seeded self-play tests blow through: the
+     * replay check alone replays 25 full games (~6.5s here) and the 1000-game fuzz
+     * is heavier still. They are slow because they are thorough, not because
+     * anything is hanging -- `advance` throws after 1000 steps, so a real hang
+     * fails fast regardless of this number.
+     */
+    testTimeout: 30_000,
   },
 })
