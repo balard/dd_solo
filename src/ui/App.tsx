@@ -134,7 +134,8 @@ export function App() {
           </span>
         </h2>
 
-        <section className="army">
+        <div className="armies">
+          <section className="army">
           <h3>
             Enemy <span className="muted">{theirs.length}d / {health(theirs)}h</span>
           </h3>
@@ -153,7 +154,7 @@ export function App() {
           />
         </section>
 
-        {(reserve.length > 0 || selectMode?.side === 'reserve') && (
+          {(reserve.length > 0 || selectMode?.side === 'reserve') && (
           <section className="army">
             <h3>
               Your reserve <span className="muted">{reserve.length}d / {health(reserve)}h</span>
@@ -165,7 +166,8 @@ export function App() {
               onToggle={toggle}
             />
           </section>
-        )}
+          )}
+        </div>
 
         <LogPanel state={state} human={human} />
       </main>

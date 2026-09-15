@@ -17,7 +17,6 @@
   --id: #46423c;
   --sai: #a03c72;
 
-  --bar-h: 132px;
   color-scheme: light dark;
 }
 
@@ -57,11 +56,26 @@ body {
 
 /* --- shell ---------------------------------------------------------------- */
 
+/*
+ * An app shell, not a document: header and board pinned at the top, a scrollable
+ * middle, and the action bar sitting directly under it. Built this way because a
+ * fixed bar over a short page leaves a large dead zone on anything taller than a
+ * phone -- which is exactly what it did before.
+ */
 .app {
-  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-width: 1080px;
   margin: 0 auto;
   padding-inline: 12px;
-  padding-block: 10px calc(var(--bar-h) + 16px);
+  padding-block: 10px 0;
+}
+
+.app-head,
+.board-strip,
+.banner {
+  flex: none;
 }
 
 .app-head {
@@ -111,7 +125,12 @@ body {
 
 /* --- focused terrain ------------------------------------------------------ */
 
-.focus { margin-top: 14px; }
+.focus {
+  flex: 1;
+  min-height: 0; /* lets the flex child actually shrink and scroll */
+  overflow-y: auto;
+  margin-top: 14px;
+}
 .focus-head { font-size: .95rem; margin: 0 0 10px; }
 
 .army { margin-bottom: 12px; }
@@ -182,8 +201,7 @@ body {
   margin-top: 16px;
   border-top: 1px solid var(--line);
   padding-top: 10px;
-  max-height: 46vh;
-  overflow-y: auto;
+  padding-bottom: 8px;
   font-size: .84rem;
 }
 .log-line { margin: 3px 0; }
@@ -225,15 +243,11 @@ body {
 /* --- action bar ----------------------------------------------------------- */
 
 .action-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  min-height: var(--bar-h);
+  flex: none;
+  margin-inline: -12px;
+  padding: 12px 12px max(12px, env(safe-area-inset-bottom));
   background: var(--panel);
   border-top: 1px solid var(--line);
-  padding: 12px max(12px, calc(50vw - 348px));
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
   box-shadow: 0 -6px 20px rgb(0 0 0 / 7%);
 }
 .question { margin: 0 0 9px; font-size: .92rem; }
@@ -275,6 +289,30 @@ body {
 
 @media (min-width: 560px) {
   .board-strip { grid-template-columns: repeat(3, 1fr); }
+}
+
+/*
+ * Wide screens: put the log beside the armies rather than below them. Stretching
+ * a phone layout across a desktop is what made this look unfinished.
+ */
+@media (min-width: 900px) {
+  .focus {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 24px;
+    align-content: start;
+  }
+  .focus-head { grid-column: 1 / -1; }
+  .armies { grid-column: 1; }
+  .log {
+    grid-column: 2;
+    margin-top: 0;
+    padding-top: 0;
+    padding-left: 20px;
+    border-top: none;
+    border-left: 1px solid var(--line);
+  }
+  .choices { max-width: 640px; }
 }
 
 /* --- banners and recovery -------------------------------------------------- */

@@ -402,6 +402,10 @@ Order, most load-bearing first:
 **Exit criterion.** A full game start to finish against `PassiveAI` at 375px wide, without reading
 the rulebook to understand what the app is asking for.
 
+**Verify at desktop width too.** Phone-first is the right constraint, but "verified at 375px" is
+not "verified". The first build shipped a fixed bottom bar over a short page, which on a desktop
+window left a large dead zone between the log and the bar, and made no use of the width at all.
+
 **Tests.** Component tests for the damage sheet's maximal-selection gating. The engine is already
 covered; do not re-test rules through the DOM.
 
@@ -423,6 +427,14 @@ overflow and no console errors.
   draft answer to one question; it is meaningless against the next one.
 - **The focused terrain follows the game** unless the player deliberately taps another, and a new
   decision about a different terrain takes the focus back.
+- **The layout is an app shell, not a document** — a full-height flex column with the header and
+  board pinned, a scrollable middle, and the action bar directly under it. The first attempt used
+  a fixed bar over a normally-flowing page, which is fine on a phone and obviously broken on a
+  desktop window. Above 900px the log moves beside the armies rather than stretching a phone
+  layout across the width.
+- **`grid-row: 2 / -1` is degenerate without explicit rows** — `-1` counts against the *explicit*
+  grid, so with only `grid-template-columns` declared it silently placed the log in row 1. Fixed
+  structurally by wrapping the army sections in `.armies`, which makes the grid plainly 2x2.
 
 ---
 
