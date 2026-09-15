@@ -25,7 +25,7 @@ import { useGame } from './game/useGame'
 
 export function App() {
   const game = useGame()
-  const { state, human, seed, dispatch, newGame, opponentThinking } = game
+  const { state, human, seed, origin, saving, dispatch, newGame, opponentThinking } = game
   const enemy: PlayerId = human === 'p1' ? 'p2' : 'p1'
   const pending = state.pending
 
@@ -89,10 +89,38 @@ export function App() {
             · seed {seed}
           </p>
         </div>
-        <button type="button" className="choice secondary" onClick={() => newGame()}>
+        <button
+          type="button"
+          className="choice secondary"
+          onClick={() => {
+            const started = state.log.some((e) => e.kind === 'march_begin')
+            if (
+              state.winner !== null ||
+              !started ||
+              window.confirm('Abandon this game and start a new one?')
+            ) {
+              newGame()
+            }
+          }}
+        >
           New game
         </button>
       </header>
+
+      {origin.kind === 'recovered' && (
+        <p className="banner warn">
+          Started a new game &mdash; {origin.reason}.
+        </p>
+      )}
+      {origin.kind === 'resumed' && state.winner === null && (
+        <p className="banner muted">Resumed your saved game.</p>
+      )}
+      {!saving && (
+        <p className="banner warn">
+          This game cannot be saved &mdash; the browser is refusing to store it. It will be lost
+          when you close the tab.
+        </p>
+      )}
 
       <BoardStrip state={state} human={human} focused={focused} onFocus={setManualFocus} />
 

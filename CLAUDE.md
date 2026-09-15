@@ -3,9 +3,10 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: Phase 7 done.** The game is playable in the browser (`npm run dev`) and in the
-> terminal (`npm run play`). Engine, both AIs, replay, harness and UI are in.
-> `docs/PLAN-V0.md` Phase 8 (PWA, persistence, polish) is the last one.
+> **Status: v0 alpha complete.** All eight phases of `docs/PLAN-V0.md` are done. The game is
+> playable in the browser (`npm run dev`), in the terminal (`npm run play`), installable as a PWA,
+> and resumes where you left off. Next work is the v1 ladder: SAIs, then eighth-face powers, then
+> spells, then dragons — each a `RuleSet` flag with a home already prepared.
 
 ## Read these first
 
@@ -182,6 +183,16 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **A selection is a draft answer to one question** — `App` clears it whenever `pending` changes.
 - **Glyphs are ours** (`Glyph.tsx`), stroked in `currentColor` on a 24x24 grid, so colour and dark
   mode come from CSS and no glyph needs a second variant.
+
+## Saving
+
+- **A save is `{ setup, actions }` replayed on load, never a serialised state.** A few KB however
+  long the game runs, and it doubles as a reproducible bug report.
+- **Bump `SAVE_VERSION` in `storage.ts` whenever a change would make old action logs replay
+  differently** — new phases, changed decision order, altered dice consumption. A mismatch is
+  discarded with a message rather than replayed into a wrong game.
+- **Wrap every `localStorage` access.** It throws in private windows, with site data blocked, and
+  on a full quota. A game that cannot be saved must still be playable.
 
 ## Conventions
 

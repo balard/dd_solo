@@ -276,3 +276,43 @@ body {
 @media (min-width: 560px) {
   .board-strip { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* --- banners and recovery -------------------------------------------------- */
+
+.banner {
+  margin: 0 0 10px;
+  padding: 8px 11px;
+  border-radius: 7px;
+  font-size: .82rem;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+}
+.banner.warn { border-left: 3px solid var(--maneuver); }
+.banner.muted { color: var(--muted); }
+
+.recovery { padding-block: 24px; }
+.recovery h1 { font-size: 1.15rem; margin: 0 0 8px; }
+.error-message {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .82rem;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--melee);
+  border-radius: 6px;
+  padding: 9px 11px;
+  overflow-x: auto;
+}
+.recovery details { margin: 12px 0; }
+.recovery summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+.recovery textarea {
+  width: 100%;
+  margin-top: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .72rem;
+  background: var(--sunk);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  resize: vertical;
+}

@@ -426,7 +426,7 @@ overflow and no console errors.
 
 ---
 
-## Phase 8 — Alpha polish
+## Phase 8 — Alpha polish  ✅ done
 
 **Deliverable.** Something you can install and come back to.
 
@@ -438,6 +438,30 @@ overflow and no console errors.
 - Loading and error states for a corrupt or outdated save
 
 **Exit criterion.** Install to a phone home screen, play, close, reopen, resume mid-turn.
+
+**Outcome.** 216 tests green. Verified in the built app: playing six moves, reloading, and coming
+back to the *same* pending decision with the same board and seed, announced by a "Resumed your
+saved game" banner. A six-move save is **406 bytes**.
+
+- **A save is the record, never a snapshot.** `{ setup, actions }` replayed on load. It stays a few
+  KB however long the game runs, it doubles as a bug report, and it cannot disagree with itself the
+  way a serialised state could.
+- **`SAVE_VERSION` guards against the rules moving underneath a save.** A version mismatch is
+  discarded with an explanation rather than replayed into a subtly wrong game. Bump it whenever a
+  change would make old action logs replay differently.
+- **Replay is wrapped in a try/catch anyway.** A well-formed save can still fail if a decision that
+  was legal last week no longer is; that is recoverable, not a crash. Corrupt, outdated and
+  unreplayable saves all land on "started a new game — *reason*", verified live.
+- **Every `localStorage` access is wrapped.** Private windows, blocked site data and full quotas
+  all throw. A game that cannot be saved still has to be playable, and the UI says so plainly.
+- **An error boundary shows the seed and move count** when something does crash, with the record
+  available to copy — because a game *is* its record, that is enough to reproduce any failure.
+
+**Not verified here: service-worker registration.** The embedded browser pane refuses to register
+one (`sw.js` serves correctly at 200 with the right content type; registration fails with "an
+unknown error occurred when fetching the script"). The manifest, icons, theme colour and the
+15-entry precache manifest are all generated and served correctly. Installing and offline use need
+checking in a real browser.
 
 ---
 
