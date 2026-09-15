@@ -8,6 +8,8 @@
 import { SPECIES, TERRAIN_DICE, TERRAIN_TYPES, unitsOfSpecies } from '../data/load'
 import type { Face, TerrainFaceNumber, UnitType } from '../data/types'
 
+import { Opening } from './Opening'
+
 const FACE_NUMBERS: readonly TerrainFaceNumber[] = [1, 2, 3, 4, 5, 6, 7]
 
 function faceLabel(face: Face): string {
@@ -56,6 +58,8 @@ export function App() {
         {unitCount} unit dice ({faceCount} faces) and {TERRAIN_DICE.length} terrain dice, loaded and
         validated from <code>data/starter/</code>.
       </p>
+
+      <Opening />
 
       {SPECIES.map((species) => (
         <section key={species.id}>

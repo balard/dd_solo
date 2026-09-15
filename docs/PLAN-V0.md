@@ -62,7 +62,7 @@ no horizontal overflow at 375px. Two things learned:
 
 ---
 
-## Phase 1 — Engine foundations
+## Phase 1 — Engine foundations  ✅ done
 
 **Deliverable.** The types, the RNG, the reducer skeleton, and a constructible initial state.
 
@@ -133,6 +133,23 @@ every unit in exactly one location, army health totals matching the presets, ter
 
 **Tests.** Same seed → identical state. Different seed → different terrain start faces.
 `validateState` rejects hand-corrupted states (unit in two places, terrain on face 7 at setup).
+
+**Outcome.** 65 tests green, typecheck clean. Notes for later phases:
+
+- **One deliberate gap.** The Horde roll-off that decides who goes first needs `rollArmy`, which
+  is Phase 2. Until then `setupGame` takes `firstPlayer` as a parameter. The *other* setup choice
+  — which proposed Frontier is used — resolves itself, because both preset forces propose
+  Highland; `setupGame` throws if a future pair of presets disagrees rather than silently picking.
+- **Location-as-single-source-of-truth paid off immediately.** "Every unit is in exactly one
+  place" is now structurally impossible to violate, so `validateState` does not check it. What it
+  checks instead is the pair that *can* drift: `face === 8` and `capturedBy !== null` must agree,
+  since letting them separate would silently break both the win check and the revert-to-7 rule.
+- **The RNG uses rejection sampling, not modulo.** A plain modulo skews toward low faces — the
+  kind of unfairness nobody notices and everybody eventually suspects. There is a chi-square
+  uniformity test over 60k rolls for both d6 and d10.
+- **`advance` has a step budget** (1000) that throws rather than hanging. A pure reducer that
+  fails to reach a decision would otherwise lock the UI with no diagnosis; the Phase 6 fuzzer
+  exists precisely to provoke this.
 
 ---
 

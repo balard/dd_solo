@@ -191,6 +191,7 @@ export const TERRAIN_DICE: readonly TerrainDie[] = loadedTerrains.dice
 
 const unitsById = new Map(UNIT_TYPES.map((u) => [u.id, u]))
 const terrainTypesById = new Map(TERRAIN_TYPES.map((t) => [t.id, t]))
+const terrainDiceById = new Map(TERRAIN_DICE.map((d) => [d.id, d]))
 
 export function unitType(id: string): UnitType {
   const found = unitsById.get(id)
@@ -202,6 +203,18 @@ export function terrainType(id: string): TerrainType {
   const found = terrainTypesById.get(id)
   if (!found) throw new DataError(`no such terrain type: ${id}`)
   return found
+}
+
+export function terrainDie(id: string): TerrainDie {
+  const found = terrainDiceById.get(id)
+  if (!found) throw new DataError(`no such terrain die: ${id}`)
+  return found
+}
+
+/** The action icon on a terrain die's numbered face. Face 8 is the eighth face and
+ *  carries no action, so it is not addressable here. */
+export function terrainFaceAction(dieId: string, face: TerrainFaceNumber): ActionIcon {
+  return terrainType(terrainDie(dieId).type).faces[face]
 }
 
 /** Units of one species, in the data's order (by class, then size). */

@@ -1,0 +1,27 @@
+{
+  "_comment": "Hand-authored starting forces. NOT generated -- the importers never touch this file. Each force is 30 health in three armies of at most 15 (RULES-V0.md section 7). The two lists are deliberately parallel in size and role so early playtesting isolates species differences rather than list-building differences. Eighth-face variants are cosmetic in v0, so every terrain uses the tower die.",
+  "presets": {
+    "treefolk_starter": {
+      "name": "Treefolk starter force",
+      "species": "treefolk",
+      "homeTerrain": "swampland_tower",
+      "proposedFrontier": "highland_tower",
+      "armies": {
+        "home": ["treefolk.oak_lord", "treefolk.oak", "treefolk.oakling", "treefolk.pine", "treefolk.dryad"],
+        "campaign": ["treefolk.darktree", "treefolk.noble_willow", "treefolk.naiad", "treefolk.willow"],
+        "horde": ["treefolk.pine_prince", "treefolk.lady_nereid", "treefolk.hamadryad", "treefolk.nymph", "treefolk.pineling"]
+      }
+    },
+    "firewalkers_starter": {
+      "name": "Firewalkers starter force",
+      "species": "firewalkers",
+      "homeTerrain": "wasteland_tower",
+      "proposedFrontier": "highland_tower",
+      "armies": {
+        "home": ["firewalkers.sentinel", "firewalkers.watcher", "firewalkers.guardian", "firewalkers.firemaster", "firewalkers.sunflare"],
+        "campaign": ["firewalkers.fireshadow", "firewalkers.expeditioner", "firewalkers.nightsbane", "firewalkers.adventurer"],
+        "horde": ["firewalkers.firestormer", "firewalkers.daybringer", "firewalkers.sunburst", "firewalkers.shadowchaser", "firewalkers.firestarter"]
+      }
+    }
+  }
+}

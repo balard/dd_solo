@@ -1,0 +1,222 @@
+/**
+ * Core engine types.
+ *
+ * Nothing here knows about React, the DOM, or which player is human. The engine is
+ * a pure reducer over these values; see `docs/OVERVIEW.md` section 2.
+ */
+import type { RngState } from './rng'
+
+export type PlayerId = 'p1' | 'p2'
+
+export function opponentOf(player: PlayerId): PlayerId {
+  return player === 'p1' ? 'p2' : 'p1'
+}
+
+/** The three terrains in play. */
+export type TerrainSlot = 'p1_home' | 'frontier' | 'p2_home'
+
+export const TERRAIN_SLOTS: readonly TerrainSlot[] = ['p1_home', 'frontier', 'p2_home']
+
+/**
+ * Where an army can be. An army is *derived* from this -- "player P's units at slot
+ * S" -- rather than tracked as an entity, which is why Home, Campaign and Horde are
+ * setup vocabulary only and cannot drift out of sync with unit positions.
+ */
+export type Location =
+  | { readonly kind: 'terrain'; readonly slot: TerrainSlot }
+  | { readonly kind: 'reserve' }
+  | { readonly kind: 'dua' }
+
+/** An army for the purpose of marching: a terrain, or the Reserve Area. */
+export type ArmyRef = TerrainSlot | 'reserve'
+
+export type UnitId = string
+
+export interface UnitInstance {
+  readonly id: UnitId
+  /** Key into the unit type data, e.g. `treefolk.oak_lord`. */
+  readonly typeId: string
+  readonly owner: PlayerId
+  readonly location: Location
+}
+
+export type TerrainFace = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+
+export interface TerrainInPlay {
+  readonly slot: TerrainSlot
+  /** Key into the terrain die data, e.g. `swampland_tower`. */
+  readonly dieId: string
+  readonly face: TerrainFace
+  /** Non-null exactly when `face === 8`. */
+  readonly capturedBy: PlayerId | null
+}
+
+/**
+ * Turn phases, including the three that do nothing in v0.
+ *
+ * The no-ops are real phases rather than omissions: they are where dragons, eighth-
+ * face powers and spell expiry land, and leaving holes now would mean restructuring
+ * the turn loop later.
+ */
+export type Phase =
+  | 'effects_expire'
+  | 'eighth_face'
+  | 'dragon_attack'
+  | 'march'
+  | 'reserves'
+  | 'game_over'
+
+export type MarchStep = 'select_army' | 'maneuver' | 'action'
+
+export interface TurnState {
+  readonly marching: PlayerId
+  readonly phase: Phase
+  /** 0 = First March, 1 = Second March. */
+  readonly marchIndex: 0 | 1
+  readonly marchStep: MarchStep
+  /** The army taking the current march, once chosen. */
+  readonly marchingArmy: ArmyRef | null
+  /** Armies already marched this turn; the second march must differ. */
+  readonly armiesMarched: readonly ArmyRef[]
+}
+
+export type ActionKind = 'melee' | 'missile' | 'magic'
+
+/**
+ * A point where the engine is blocked on a specific decision from a specific player.
+ *
+ * A discriminated union on purpose: the UI and every AI switch exhaustively on
+ * `kind`, so adding a decision later is a compile error everywhere that must handle
+ * it. Most of these are unreachable until Phase 4-5; they are declared now so the
+ * shape of the game is visible in one place.
+ */
+export type Pending =
+  | { readonly kind: 'choose_march_army'; readonly player: PlayerId; readonly options: readonly ArmyRef[] }
+  | { readonly kind: 'choose_maneuver'; readonly player: PlayerId; readonly slot: TerrainSlot }
+  | { readonly kind: 'contest_maneuver'; readonly player: PlayerId; readonly slot: TerrainSlot }
+  | { readonly kind: 'choose_direction'; readonly player: PlayerId; readonly slot: TerrainSlot }
+  | {
+      readonly kind: 'choose_action'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly legal: readonly ActionKind[]
+    }
+  | {
+      readonly kind: 'choose_missile_target'
+      readonly player: PlayerId
+      readonly options: readonly TerrainSlot[]
+    }
+  | { readonly kind: 'choose_counter_attack'; readonly player: PlayerId; readonly slot: TerrainSlot }
+  | {
+      readonly kind: 'assign_damage'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly damage: number
+    }
+  | { readonly kind: 'reinforce'; readonly player: PlayerId }
+  | { readonly kind: 'retreat'; readonly player: PlayerId }
+
+/** Actions answer the current `Pending`. Each `kind` matches a `Pending.kind`. */
+export type GameAction =
+  | { readonly kind: 'choose_march_army'; readonly army: ArmyRef | null }
+  | { readonly kind: 'choose_maneuver'; readonly maneuver: boolean }
+  | { readonly kind: 'contest_maneuver'; readonly contest: boolean }
+  | { readonly kind: 'choose_direction'; readonly direction: 'up' | 'down' }
+  | { readonly kind: 'choose_action'; readonly action: ActionKind | null }
+  | { readonly kind: 'choose_missile_target'; readonly slot: TerrainSlot }
+  | { readonly kind: 'choose_counter_attack'; readonly counter: boolean }
+  | { readonly kind: 'assign_damage'; readonly unitIds: readonly UnitId[] }
+  | { readonly kind: 'reinforce'; readonly moves: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[] }
+  | { readonly kind: 'retreat'; readonly unitIds: readonly UnitId[] }
+
+export type LogEntry =
+  | { readonly kind: 'game_start'; readonly seed: number; readonly firstPlayer: PlayerId }
+  | {
+      readonly kind: 'terrain_placed'
+      readonly slot: TerrainSlot
+      readonly dieId: string
+      readonly face: TerrainFace
+    }
+  | { readonly kind: 'phase'; readonly phase: Phase; readonly player: PlayerId }
+
+/**
+ * Which slice of the full game is switched on.
+ *
+ * Scope lives here rather than in scattered conditionals, so the v0 house rules
+ * cannot get quietly welded into the engine and each v1 feature has a named home
+ * before anyone writes it.
+ */
+export interface RuleSet {
+  readonly magic: 'simplified' | 'spells'
+  readonly sai: 'inert' | 'full'
+  readonly eighthFace: 'captureOnly' | 'full'
+  readonly dragons: boolean
+}
+
+export const V0_RULES: RuleSet = {
+  magic: 'simplified',
+  sai: 'inert',
+  eighthFace: 'captureOnly',
+  dragons: false,
+}
+
+export interface GameState {
+  readonly ruleSet: RuleSet
+  readonly rng: RngState
+  readonly units: Readonly<Record<UnitId, UnitInstance>>
+  readonly terrains: Readonly<Record<TerrainSlot, TerrainInPlay>>
+  readonly turn: TurnState
+  readonly pending: Pending | null
+  readonly log: readonly LogEntry[]
+  readonly winner: PlayerId | null
+}
+
+/** Thrown when an action does not answer the current pending decision. */
+export class IllegalActionError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'IllegalActionError'
+  }
+}
+
+// --- selectors ---------------------------------------------------------------
+// Armies are queries, not stored entities. Everything that needs "the army at X"
+// goes through these.
+
+export function unitsOf(state: GameState, player: PlayerId): readonly UnitInstance[] {
+  return Object.values(state.units).filter((u) => u.owner === player)
+}
+
+/** A player's units at a terrain slot. */
+export function armyAt(
+  state: GameState,
+  player: PlayerId,
+  slot: TerrainSlot,
+): readonly UnitInstance[] {
+  return Object.values(state.units).filter(
+    (u) => u.owner === player && u.location.kind === 'terrain' && u.location.slot === slot,
+  )
+}
+
+export function reserveArmy(state: GameState, player: PlayerId): readonly UnitInstance[] {
+  return Object.values(state.units).filter(
+    (u) => u.owner === player && u.location.kind === 'reserve',
+  )
+}
+
+export function deadUnits(state: GameState, player: PlayerId): readonly UnitInstance[] {
+  return Object.values(state.units).filter((u) => u.owner === player && u.location.kind === 'dua')
+}
+
+/** Units still in play -- not in the Dead Unit Area. A player with none has lost. */
+export function livingUnits(state: GameState, player: PlayerId): readonly UnitInstance[] {
+  return Object.values(state.units).filter((u) => u.owner === player && u.location.kind !== 'dua')
+}
+
+export function army(state: GameState, player: PlayerId, ref: ArmyRef): readonly UnitInstance[] {
+  return ref === 'reserve' ? reserveArmy(state, player) : armyAt(state, player, ref)
+}
+
+export function capturedCount(state: GameState, player: PlayerId): number {
+  return TERRAIN_SLOTS.filter((slot) => state.terrains[slot].capturedBy === player).length
+}
