@@ -190,10 +190,10 @@ in v0; pick any.
   more terrain types arrive, so this becomes a real decision rather than a free one.
 - **Undo.** Architecturally free, but it lets you re-roll bad dice. Misclick-rewind only, or not
   at all in the alpha?
-- **Death dragons are unsummonable in this matchup**, and it is not clear that is a *problem*.
-  `Summon Dragon` needs magic of the dragon's own element, and neither species casts death magic,
-  so a Death dragon brought to the game sits in the Summoning Pool forever. Ship it as the real
-  rule, or restrict preset dragon picks to the four live elements? See `PLAN-V1.md` Phase 6.
+- **How much of the die data a preset should reach.** The two forces field one monster each, which
+  is what caps a preset game at 10 of the 25 SAIs (`PLAN-V1.md`, standing rules). Widening the
+  presets, adding a second pair, or leaving it to an army builder are all defensible; leaving it
+  unexamined is how v1 ends up with 15 SAIs that no game ever rolls.
 
 Resolved so far:
 
@@ -210,3 +210,12 @@ Resolved so far:
 - **The scope of "all the SAIs" and "all the spells"** is now exact, not approximate: 25 SAIs
   across 58 faces, and 18 spells castable by these two species. Both are enumerated in
   `PLAN-V1.md`.
+- **Species abilities are in for v1.** Rapid Growth and Replanting for Treefolk, Air Flight and
+  Flaming Shields for Firewalkers, plus the Species Abilities Phase that `Phase` does not yet
+  model. The starter book grants none, so this is the one place v1 deliberately follows the full
+  rules over the release target (`PLAN-V1.md` Phase 8).
+- **The Death dragon ships and is unreachable, deliberately.** `Summon Dragon` needs magic of the
+  dragon's own element and neither species casts death magic, so it has no route onto the board in
+  this matchup. All five elements are transcribed anyway, for data completeness — it becomes
+  playable when a death-casting species arrives, and no house rule is added to reach it sooner
+  (`PLAN-V1.md` Phase 6).

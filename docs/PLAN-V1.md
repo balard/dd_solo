@@ -2,7 +2,7 @@
 
 Ten phases from the playable alpha to the **complete basic game for Treefolk vs Firewalkers**:
 every SAI, every basic terrain and all four eighth-face icons, promotion and resurrection, the
-five elemental dragons, and every spell those two species can cast.
+five elemental dragons, every spell those two species can cast, and their species abilities.
 
 Read `PLAN-V0.md` for how the alpha got here and `RULES-V0.md` for the subset it implements. This
 document is the *order of work*. Where it and `RULES-V0.md` disagree, that is because v1 removes a
@@ -84,6 +84,17 @@ it is the only eighth-face icon reachable in the current presets.
 - **The 1000-game fuzz stays green.** `runGame` over 1000 seeds with `RandomAI`, no result with
   `stoppedBecause === 'stuck'`. It is the cheapest bug detector in the project and it gets more
   valuable, not less, as the rules grow.
+- **The presets do not exercise most of what this plan builds.** The two 30-health forces reach
+  only **10 of the 25 SAIs**. The other 15 live almost entirely on the eight monster dice neither
+  preset takes — Genie, Gorgon, Phoenix, Salamander, Redwood, Satyr, Strangle Vine, Unicorn — plus
+  the two h3 magic dice. Each preset fields exactly one monster (Darktree, Fireshadow), and that
+  one choice is what caps the coverage.
+
+  So the fuzz can be green for a thousand games and still have never executed Firecloud, Flame or
+  Seize. **Every phase below needs test forces that field the dice it is implementing**, and the
+  fuzz needs at least one preset pair that does too, or coverage silently stays at 10 while the
+  test count goes up. This is the single easiest way for this plan to produce rules that are
+  written, tested against nothing, and wrong.
 
 ---
 
@@ -435,13 +446,22 @@ one-divider-per-result-type rule, already built in Phase 0.
 > dragon dice to transcribe into `data/raw/dragons.faces.txt`, with a `tools/import_dragons.py`
 > alongside the two existing importers. **Do not invent these faces.**
 
-> **⚠ Rules consequence worth deciding before you build.** A dragon leaves the Summoning Pool only
+> **Decided: the Death dragon ships, and is unreachable.** A dragon leaves the Summoning Pool only
 > via `Summon Dragon`, which requires magic **of that dragon's element**. Neither species can cast
-> death magic, so **a Death dragon brought by either player can never be summoned** in this matchup.
-> Four of the five elemental dragons are reachable; the fifth is a die that sits in the pool all
-> game. That is the rules working correctly, not a bug. Options: ship it as-is and let the player
-> discover that Death dragons are a bad pick, or restrict preset dragon choices to the four live
-> elements. Recommend the former — it is the real game — plus a line in the UI explaining it.
+> death magic, so **a Death dragon brought by either player can never be summoned** in this
+> matchup. Four of the five elemental dragons are reachable in play; the fifth is a die that would
+> sit in the pool all game.
+>
+> It goes in anyway, for completeness: all five elements are transcribed, validated and present in
+> `data/`, and the Death dragon simply has no route onto the board until a species that casts death
+> magic arrives. **This is data completeness, not a feature** — so it needs faces and a passing
+> validator, and nothing else. Do not build a house rule to make it summonable, and do not drop it
+> from the data on the grounds that nothing can reach it.
+>
+> One thing follows for the engine: it must not assume a die in the pool is reachable.
+> `validateState` has to be happy with a dragon that can never leave, and the Dragon Attack Phase
+> has to be happy with a pool that never empties. Whether a *preset* should pick Death — and how a
+> player is told why it will not appear — is a Phase 9 question, not a rules one.
 
 Ivory dragons (summonable by any single element) and White dragons (a 14-cost spell, 10 health,
 doubled damage) are **out of scope**: neither is one of the five base elements.
@@ -467,7 +487,13 @@ games clean with `dragons: true`.
 
 **Deliverable.** `magic: 'spells'`. The v0 magic house rule retires.
 
-This is the phase that changes the most existing behaviour, because **magic results gain an
+**The v0 magic house rule ends here.** `floor(M / 2)`, the same-terrain restriction, the absent
+save roll and the absent counter-attack are all replaced, and the rounding question that
+`RULES-V0.md` §8 carried since the alpha expires rather than gets answered — there is no rounding
+left to tune. `magic: 'simplified'` survives only as the `V0_RULES` regression baseline; it is not
+a configuration anyone plays or balances after this phase.
+
+This is also the phase that changes the most existing behaviour, because **magic results gain an
 element**. A magic result is elemental according to the species of the unit that rolled it —
 Treefolk generate Water and Earth magic, Firewalkers Air and Fire. A spell of a single element may
 only be cast with magic of that element; an Elemental spell with magic of any one element.
@@ -531,10 +557,10 @@ Three things close here:
 
 **Deliverable.** The missing seventh turn phase, and four abilities.
 
-> **This phase was not in your list.** It is here because the rules have a Species Abilities Phase
-> that `Phase` does not model at all, and because these four abilities are the most
-> Treefolk-and-Firewalker thing in the game — without them the two sides play almost identically.
-> Cut it if you disagree; nothing downstream depends on it.
+The starter book grants these two species no abilities, which is why `RULES-V0.md` §2 recorded
+"nothing to implement". The full rules give each of them two, and a turn phase to apply them in —
+and they are the most Treefolk-and-Firewalker thing in the game. Without them the two sides play
+almost identically, which is a poor result for a plan whose whole scope is these two species.
 
 | Species | Ability | Effect |
 |---|---|---|
