@@ -17,7 +17,6 @@ import type { Face, NormalIcon, ResultType, UnitType } from '../data/types'
 import {
   allocateIds,
   applyModifiers,
-  doubleIdsModifier,
   type IdAllocation,
   type Modifier,
   type RollEffect,
@@ -428,16 +427,19 @@ export function rollArmy(
   rng: RngState,
   ruleSet: RuleSet,
   /**
-   * The eighth-face bonus: "When rolling the army, all ID results are doubled"
-   * (starter rules, Terrain - Eighth Face). True when this army holds the terrain
-   * it is rolling at. It applies to *every* roll that army makes there -- attacks,
-   * saves and maneuvers alike -- not just attacks.
+   * Everything the board says about this roll: the eighth-face holder's doubled ID
+   * results, and every effect with a duration sitting on the army.
    *
-   * It is a fact about the board rather than about the face -- the same die doubles
-   * or not depending on where it is standing -- so `faceResults` stays a pure
-   * face-to-results function and this rides in as a step-9 modifier.
+   * All of it is a fact about the board rather than about any face -- the same die
+   * doubles or not depending on where it is standing -- so `faceResults` stays a pure
+   * face-to-results function and this rides in at steps 6 to 10. Gather it with
+   * `armyRoll` in `effects.ts`, which returns the modifiers and the rollable units
+   * together so that a call site cannot take one and forget the other.
+   *
+   * This was a `doubleIds: boolean` while the eighth face was the only thing in the
+   * game with an opinion about a roll.
    */
-  doubleIds = false,
+  modifiers: readonly Modifier[] = [],
   /** What the roll is for; see `defaultContextFor` for what leaving it out means. */
   context: RollContext = defaultContextFor(resultType),
 ): readonly [RollResult, RngState] {
@@ -445,7 +447,7 @@ export function rollArmy(
     units,
     {
       kinds: [resultType],
-      modifiers: doubleIds ? [doubleIdsModifier(resultType)] : [],
+      modifiers,
       context,
     },
     rng,

@@ -18,6 +18,7 @@
  */
 import { UNIT_TYPES, terrainDie, unitType } from '../data/load'
 
+import { pruneEffects } from './effects'
 import {
   TERRAIN_SLOTS,
   capturedCount,
@@ -112,6 +113,27 @@ export function validateState(state: GameState): string[] {
 
   if (state.rng.counter < 0 || !Number.isInteger(state.rng.counter)) {
     problems.push(`rng counter ${state.rng.counter} is not a non-negative integer`)
+  }
+
+  // An effect whose army has emptied or whose unit has left play should have been
+  // dropped at the end of the last action. Asking `pruneEffects` rather than repeating
+  // its conditions means the check cannot drift away from the rule it is checking.
+  if (pruneEffects(state) !== state) {
+    problems.push(
+      `effects: ${state.effects.length - pruneEffects(state).effects.length} outlived their ` +
+        `target and were not pruned`,
+    )
+  }
+  for (const effect of state.effects) {
+    if (effect.target.kind === 'unit' && state.units[effect.target.unitId] === undefined) {
+      problems.push(`effect ${effect.source}: names unit ${effect.target.unitId}, which does not exist`)
+    }
+    if (effect.expiresAtStartOfTurnOf !== 'p1' && effect.expiresAtStartOfTurnOf !== 'p2') {
+      problems.push(
+        `effect ${effect.source}: expires at the start of ` +
+          `${String(effect.expiresAtStartOfTurnOf)}'s turn, who is not a player`,
+      )
+    }
   }
 
   const marched = state.turn.armiesMarched

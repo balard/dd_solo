@@ -263,6 +263,13 @@ function Line({
 
         </p>
       )
+    case 'effects_expired':
+      return (
+        <p className="log-line muted">
+          {entry.sources.join(', ')} wears off at the start of{' '}
+          {entry.player === human ? 'your' : "the enemy's"} turn
+        </p>
+      )
     case 'counter_declined':
       return (
         <p className="log-line muted">

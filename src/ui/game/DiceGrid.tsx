@@ -110,6 +110,7 @@ function FaceSheet({ typeId, faces }: { typeId: string; faces: readonly Face[] }
 export function DiceGrid({
   units,
   selectable = false,
+  asleep,
   selected,
   onToggle,
   inspecting,
@@ -117,6 +118,9 @@ export function DiceGrid({
 }: {
   units: readonly UnitInstance[]
   selectable?: boolean
+  /** Dice that cannot be rolled or moved. They still show, still take damage and
+   *  still inspect -- they are simply not pickable, and say so. */
+  asleep?: ReadonlySet<UnitId>
   selected?: ReadonlySet<UnitId>
   onToggle?: (id: UnitId) => void
   inspecting?: UnitId | null
@@ -130,8 +134,12 @@ export function DiceGrid({
     <div className="dice-grid">
       {orderedForDisplay(units).map((unit) => {
         const type = unitType(unit.typeId)
+        const isAsleep = asleep?.has(unit.id) ?? false
+        const canSelect = selectable && !isAsleep
         const isSelected = selected?.has(unit.id) ?? false
-        const isOpen = !selectable && inspecting === unit.id
+        // A sleeping die is never pickable, so tapping it inspects even while the
+        // rest of the army is being selected from.
+        const isOpen = !canSelect && inspecting === unit.id
         const species = speciesInfo(type.species)
 
         // The ID face is the die's portrait -- it is the one face that is a picture
@@ -144,6 +152,7 @@ export function DiceGrid({
         // name fallback is wide text and keeps the original row-shaped tile.
         const squared = !art.ready || portrait !== null
         const tileSize = TILE_SIZE[type.size] ?? 48
+        const label = isAsleep ? `${describe(type)} — asleep` : describe(type)
 
         return (
           <div key={unit.id} className={`die-wrap ${isOpen ? 'is-open' : ''}`}>
@@ -152,20 +161,21 @@ export function DiceGrid({
               className={
                 'die' +
                 (isSelected ? ' die-selected' : '') +
-                (selectable ? ' die-selectable' : '') +
+                (canSelect ? ' die-selectable' : '') +
+                (isAsleep ? ' die-asleep' : '') +
                 (isOpen ? ' die-open' : '') +
                 (squared ? ' die-squared' : '')
               }
               style={squared ? { width: tileSize, height: tileSize } : undefined}
               onClick={() =>
-                selectable ? onToggle?.(unit.id) : onInspect?.(isOpen ? null : unit.id)
+                canSelect ? onToggle?.(unit.id) : onInspect?.(isOpen ? null : unit.id)
               }
               // The portrait carries no name, so the tooltip and the accessible name
               // both have to. What a die *is* -- monster heavy melee, medium magic --
               // is what you want when weighing an attack, and it is the one thing the
               // tile cannot show; the tap affordance is guessable, so it gives way.
-              title={describe(type)}
-              aria-label={describe(type)}
+              title={label}
+              aria-label={label}
             >
               <span className="die-kind">{CLASS_BADGE[type.unitClass] ?? '??'}</span>
               {/*

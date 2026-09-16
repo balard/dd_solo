@@ -27,6 +27,10 @@ export interface StateDigest {
   /** `<unit id> <type> <where>`, sorted by unit id. */
   readonly units: readonly string[]
   readonly terrains: readonly string[]
+  /** Effects with a duration, one stable-JSON line each. Empty in every recorded v0
+   *  game, which is why the corpus predates the field and `golden.test.ts` reads an
+   *  absent one as `[]` rather than the file being regenerated for it. */
+  readonly effects: readonly string[]
   readonly turn: string
   readonly pending: string
   readonly rngCounter: number
@@ -93,6 +97,7 @@ export function digestState(state: GameState): StateDigest {
       const terrain = state.terrains[slot]
       return `${slot} ${terrain.dieId} face ${terrain.face} held-by ${terrain.capturedBy ?? '-'}`
     }),
+    effects: state.effects.map((effect) => stableJson(effect)),
     turn: stableJson(state.turn),
     pending: state.pending === null ? 'none' : stableJson(state.pending),
     rngCounter: state.rng.counter,

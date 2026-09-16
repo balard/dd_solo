@@ -306,7 +306,7 @@ from*.
 
 ## 8. Open questions
 
-Rules-level open questions are in `RULES-V0.md` §10. Project-level:
+Rules-level open questions are in `RULES-V0.md` §11. Project-level:
 
 - Should we ship an **army builder**, or only the two presets? (Currently: presets only.) Held back
   from `PLAN-V1.md` on purpose: a builder is what makes *more species* worth having, so it belongs

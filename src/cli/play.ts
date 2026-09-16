@@ -191,6 +191,9 @@ function describe(entry: LogEntry, state: GameState): string | null {
           .map((id) => (state.units[id] ? name(state.units[id]!) : id))
           .join(', ')} rises from the ashes into ${entry.player}'s reserves`,
       )
+    case 'effects_expired':
+      return dim(`${entry.sources.join(', ')} wears off at the start of ${entry.player}'s turn`)
+
     case 'counter_declined':
       return dim(`${entry.player} declines to counter-attack`)
 

@@ -51,7 +51,7 @@ below together with the phase that retires it. **This document stays normative r
 
 Per turn, for the **marching player**:
 
-1. **Effects Expire** — no-op in v0. Present as a phase so nothing has to be inserted later.
+1. **Effects Expire** — no longer a no-op: effects with a duration end here, at the beginning of their caster's next turn (§10). Nothing produces one yet, so in practice it still does nothing.
 2. **Eighth Face** — still a no-op *phase*: the holder's advantages are passive (§5), and the icon powers that would trigger here are cut.
 3. **Dragon Attack** — no-op in v0 (no dragons).
 4. **First March** — pick one army, then: Maneuver step (optional) → Action step (optional).
@@ -277,7 +277,32 @@ player can actually see.
 roller split X between save results and promotions, which is a decision taken in the middle of a
 roll — the seam Phase 4 builds for Bullseye, Choke and Confuse. It stays inert until then.
 
-## 10. Open questions
+## 10. Effects with a duration (v1 Phase 3)
+
+No ruleset gates this one, because **nothing in a game produces an effect yet**. `state.effects` is
+empty in every game the project can play; what Phase 3 built is the machinery that receives them,
+and Phase 4's Sleep and Galeforce are the first two casters. Recorded here anyway, because the rules
+below are what every later duration — dragon breath, and all eighteen spells — will be read against.
+
+An effect targets **an army at a place** or **one unit**, carries roll modifiers and/or a status,
+and ends at the beginning of its caster's next turn.
+
+| | Rule |
+|---|---|
+| **Where an army effect lives** | At a location, not on the dice. March away and it does not follow you; arrive later and it applies to you anyway. |
+| **When an army effect ends** | At the beginning of its caster's next turn — so it is live for the whole of the opponent's turn in between — or as soon as the army has no units left, checked at the end of each action. |
+| **The exchange exception** | An army whose every unit is replaced in a single exchange is still present, so its effects survive. Nothing implements this: an exchange resolves in one pass, so no state with the army empty is ever observed. |
+| **Where a unit effect lives** | On the unit. It follows it into another army, and ends with the unit if it is killed. |
+| **Army modifiers and unit rolls** | "Modifiers that affect an army do not affect the roll of an individual unit from that army", and the reverse. The only unit rolls today are the death trigger's, which consults no modifiers at all; Phase 4's sub-rolls are the first that could get this wrong. |
+| **Stacking** | Two castings of a subtracting effect both apply. The only caps the rules state are **one divide and one multiply per result type**, which the pipeline already enforces — and the eighth face's ID doubling *is* that type's one multiplier. |
+
+**Sleep is a status, not arithmetic.** A sleeping unit cannot be rolled and cannot leave the terrain
+it stands on. It is otherwise entirely normal: still in its army, still counted for "the army is
+present" and for holding a captured terrain, still a legal target for damage, and still killed like
+anything else. Retreat is the only mover that has to refuse it — the Reinforce Step brings units
+*out* of Reserves, and a march turns the terrain die rather than moving anybody.
+
+## 11. Open questions
 
 
 - **Army builder** in the alpha, or only the two 30-health presets? (Currently: presets only.)

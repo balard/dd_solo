@@ -3,25 +3,29 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: v0 alpha complete; v1 Phases 0, 1 and 2 landed.** All nine phases of `docs/PLAN-V0.md` are done.
+> **Status: v0 alpha complete; v1 Phases 0, 1, 2 and 3 landed.** All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > installable as a PWA, and resumes where you left off. Since the alpha landed, the board grew to
 > show every army at once and the eighth face started granting its two standard advantages
 > (`eighthFace: 'standard'`).
 >
-> **Phases 0, 1 and 2 of `docs/PLAN-V1.md` are done.** Phase 0 landed in three commits: a golden
+> **Phases 0, 1, 2 and 3 of `docs/PLAN-V1.md` are done.** Phase 0 landed in three commits: a golden
 > corpus of 25 recorded games (Phase G), the rulebook's ten-step roll pipeline replacing the sum
 > inside `rollArmy` (0b), and forces rolled from the seed with the Frontier placed by the roll-off
 > loser (0a). **Phase 1 added `sai: 'results'`** — the twelve SAIs that only add results, plus
 > Rend's reroll. **Phase 2 added `dua: 'active'`** — the BUA, the promotion/recruitment/burial
 > machinery, and Rise from the Ashes' death trigger. The app and CLI play `DUA_RULES`, which is
-> both. The ladder after it is eighth-face **icon** powers, spells, then dragons, each a `RuleSet`
-> flag with a home already prepared.
+> both. **Phase 3 added `state.effects`** — effects with a duration, the Effects Expire Phase, and
+> `armyRoll` as the one door an army roll goes through; it is the first phase with **no `RuleSet`
+> flag**, because nothing produces an effect until Phase 4 and a flag would have gated nothing. The
+> ladder after it is targeting SAIs, eighth-face **icon** powers, spells, then dragons.
 >
 > **Each landed phase's findings are written up in `PLAN-V1.md` under its own heading** — what that
 > section got wrong before it was built, and what would have shipped green. Phase 1's list is the
 > one to read before starting Phase 4: three of its five bugs are the same shape, and Phase 4 meets
-> all three again. Phase 2's says why Wild Growth moved out of it and into Phase 4.
+> all three again. Phase 2's says why Wild Growth moved out of it and into Phase 4, and Phase 3's
+> says why Sleep and Galeforce followed — **Phase 4 now owns five SAIs that all need one pause or
+> another in the middle of a roll**, which makes that seam the whole of its first half.
 >
 > Worth knowing before picking one up: **both home terrains are Towers and the Frontier is a City**
 > (Phase 0a gave each species a second die of its own type). So Tower's "may attack any terrain in
@@ -137,6 +141,10 @@ These are the things that break the project if violated:
   recruitment, burial and Rise from the Ashes' death trigger. See `RULES-V0.md` §9. Still true of
   both rungs: **nothing in a game calls promotion or recruitment yet** (Phase 5's City is the first
   caller) and **nothing buries** (Phase 4's Flame).
+- **Nor does anything produce an effect with a duration yet**, though the machinery is there and
+  runs on every roll and every action -- `RULES-V0.md` §10. Phase 4's Sleep and Galeforce are the
+  first casters. Three phases have now shipped machinery ahead of its caller, deliberately; a
+  `state.effects` that is always empty is not a bug.
 
 - **Eighth face captures and wins** (two captures = victory) **and grants its two standard
   advantages**: the holder's army doubles all ID results when rolling *anything* there — attack,
@@ -271,11 +279,25 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   rather than `?: boolean` so the falsy-but-present value is a compile error.
 - **ID doubling is a step-9 modifier, and lives in neither `faceResults` nor the roller.** It is a
   fact about the board, not the face: the same die doubles or not depending on where it stands, so
-  `faceResults` stays a pure face-to-results function and the bonus rides in on `rollArmy`'s
-  `doubleIds` flag as a `Modifier`. Every call site that rolls *at a terrain* must pass
-  `doublesIds(state, player, slot)` — attacks, saves and contested maneuvers all count as "rolling
-  the army". It consumes no extra randomness, so a game replays die for die either way; only the
-  totals change.
+  `faceResults` stays a pure face-to-results function and the bonus rides in as a `Modifier`. It
+  consumes no extra randomness, so a game replays die for die either way; only the totals change.
+- **`armyRoll(state, player, ref, resultType)` is the one door an army roll goes through**
+  (`effects.ts`). It returns the dice that may be rolled *and* every modifier on them — the eighth
+  face's ID doubling and every effect with a duration — because the two are separate questions and
+  a site that answers one and forgets the other has no symptom: a sleeping die quietly rolling, or
+  a Galeforce quietly not applying. `rollArmy` takes the modifier list; it used to take a
+  `doubleIds: boolean`, which was enough while the eighth face was the only thing in the game with
+  an opinion about a roll. Attacks, saves and contested maneuvers all count as "rolling the army".
+- **Effects with a duration are `state.effects` and `effects.ts`, and nothing produces one yet.**
+  An effect targets an army *at a place* (it does not follow the units) or a unit (it does),
+  carries `Modifier`s and/or the `asleep` status, and ends at the start of its caster's next turn.
+  `expireEffects` runs in the `effects_expire` phase; `pruneEffects` runs from `stepGame` beside
+  `syncCaptures`, which is the rules' "checked at the end of each action". **Both must return the
+  same object when they drop nothing**, or `advance` never settles. Phase 4's Sleep and Galeforce
+  are the first casters, as the City is for promotion.
+  - **An army modifier must never reach a unit roll**, nor the reverse (full rules p. 28). That is
+    why the entry point is named `armyRoll`: Phase 4's sub-rolls are the first unit rolls in the
+    game and must gather their own.
 - **Terrain `face === 8` and `capturedBy !== null` must always agree.** `validateState` enforces
   it; both the win check and the revert-to-7 rule depend on it.
 - **Damage assignment must be maximal, and greedy does not find it.** 4 damage against units of
@@ -434,6 +456,11 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **The UI never computes an art filename.** The remote set is sparse and not derivable from
   (icon, count), so `tools/fetch_faces.py` resolves it and writes a manifest keyed by
   `<unitTypeId>#<faceIndex>`. Add a face, re-run `npm run art`.
+- **A die that cannot be picked says why.** A sleeping unit is dimmed and dashed (`.die-asleep`),
+  tapping it inspects rather than selects, and its `aria-label` ends "— asleep". The engine refuses
+  it as a retreat either way; this is what stops the choice being offered, and `sleepingIds` in
+  `prompts.ts` is the one place either client asks. `RandomAI` filters its retreat pool by the same
+  rule -- a decision that gains a dimension has to reach the fuzz opponent too.
 - **A unit tile does two jobs.** When a decision needs units chosen it selects; otherwise tapping
   *inspects*, opening the die to show every face it has. Without that the app showed outcomes but
   never capabilities — you could watch a die roll but not find out what it could roll.
@@ -500,6 +527,11 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 
 - **A save is `{ setup, actions }` replayed on load, never a serialised state.** A few KB however
   long the game runs, and it doubles as a reproducible bug report.
+- **A save in progress may be cleared before a phase lands.** Standing rule from v1 Phase 3 on, and
+  it settles what `SAVE_VERSION` is *for*: replay correctness, and nothing else. The Phase 1 and
+  Phase 2 second reason — "an old record goes on playing the old game with nothing on screen saying
+  which" — is answered by wiping the save, not by the version. If a later phase is ever in doubt,
+  bump and clear rather than reason about it.
 - **Bump `SAVE_VERSION` in `storage.ts` whenever a change would make old action logs replay
   differently** — new phases, changed decision order, altered dice consumption. A mismatch is
   discarded with a message rather than replayed into a wrong game.
@@ -529,7 +561,7 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   engine passes a lot of small integers around and mixing them up is silent.
 - Rules tests read as scenarios: build a state, apply an action list, assert. Combat and damage
   assignment get tests before implementation.
-- Keep `docs/RULES-V0.md` §10 and `docs/OVERVIEW.md` §8 current. When a rules question gets
+- Keep `docs/RULES-V0.md` §11 and `docs/OVERVIEW.md` §8 current. When a rules question gets
   answered, move it out of Open Questions and into the body.
 
 ## Git

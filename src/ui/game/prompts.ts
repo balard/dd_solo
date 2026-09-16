@@ -8,6 +8,7 @@
 import { terrainDie, terrainFaceAction, unitType } from '../../data/load'
 import type { TerrainFaceNumber, UnitClass } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
+import { isAsleep } from '../../engine/effects'
 import { legalDirections } from '../../engine/turn'
 import {
   TERRAIN_SLOTS,
@@ -362,6 +363,22 @@ export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): Sele
 /** Whether my army at `slot` is selectable under the current decision. */
 export function selectableAt(mode: SelectMode | null, slot: TerrainSlot): boolean {
   return mode?.side === 'mine' && (mode.slot === null || mode.slot === slot)
+}
+
+/**
+ * Units that cannot be rolled or moved -- Sleep, today.
+ *
+ * A set rather than a predicate per tile, because the grid asks about every die it
+ * draws. The engine refuses a sleeping unit as a retreat either way; this is what
+ * stops the button being offered in the first place, and what gives the die a visible
+ * reason for being unpickable.
+ */
+export function sleepingIds(state: GameState): ReadonlySet<UnitId> {
+  const ids = new Set<UnitId>()
+  for (const unit of Object.values(state.units)) {
+    if (isAsleep(state, unit.id)) ids.add(unit.id)
+  }
+  return ids
 }
 
 

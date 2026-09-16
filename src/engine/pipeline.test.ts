@@ -268,8 +268,8 @@ describe('rollArmy over the pipeline', () => {
   })
 
   it('doubles ID results as a step-9 modifier, and says so on the die', () => {
-    const [plain] = rollArmy(units, 'melee', rngFrom(12), V0_RULES, false)
-    const [doubled] = rollArmy(units, 'melee', rngFrom(12), V0_RULES, true)
+    const [plain] = rollArmy(units, 'melee', rngFrom(12), V0_RULES, [])
+    const [doubled] = rollArmy(units, 'melee', rngFrom(12), V0_RULES, [doubleIdsModifier('melee')])
 
     const idDice = plain.dice.filter((d) => d.face.icon === 'ID')
     const idResults = idDice.reduce((sum, d) => sum + d.results, 0)

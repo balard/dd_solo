@@ -22,7 +22,9 @@ interface GoldenGame {
   readonly decisions: number
   readonly stoppedBecause: string
   readonly record: GameRecord
-  readonly digest: StateDigest
+  /** `effects` is optional because the corpus was cut before the field existed; every
+   *  other field has been there since Phase G. */
+  readonly digest: Omit<StateDigest, 'effects'> & { readonly effects?: readonly string[] }
 }
 
 const corpus = JSON.parse(
@@ -58,6 +60,10 @@ describe('golden games', () => {
       expect(actual.rngCounter, `${label} rngCounter`).toEqual(game.digest.rngCounter)
       expect(actual.terrains, `${label} terrains`).toEqual(game.digest.terrains)
       expect(actual.turn, `${label} turn`).toEqual(game.digest.turn)
+      // The corpus predates `effects`, and an absent one means none -- which is what a
+      // `V0_RULES` game has, since nothing produces an effect until Phase 4. Read that
+      // way rather than regenerating 25 games for a field that is empty in all of them.
+      expect(actual.effects, `${label} effects`).toEqual(game.digest.effects ?? [])
       expect(actual.pending, `${label} pending`).toEqual(game.digest.pending)
       expect(actual.units, `${label} units`).toEqual(game.digest.units)
       expect(actual.log, `${label} log`).toEqual(game.digest.log)

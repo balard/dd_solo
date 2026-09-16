@@ -13,9 +13,10 @@
  * action, which is what guarantees the victory check runs after every state change
  * rather than only at end of turn.
  */
-import { doublesIds, legalActions, missileTargets, resolveAttack, terrainAction } from './combat'
+import { legalActions, missileTargets, resolveAttack, terrainAction } from './combat'
 import { damageAssignmentProblem, damageOptions } from './damage'
 import { killUnits } from './death'
+import { armyRoll, expireEffects, isAsleep, pruneEffects } from './effects'
 
 import { expectNoEffects, rollArmy } from './roll'
 import type { RollContext } from './sai'
@@ -454,11 +455,22 @@ export function stepGame(state: GameState): GameState {
   const synced = syncCaptures(state)
   if (synced !== state) return synced
 
+  // "The effect ends if there are no units remaining in the army. This is checked at
+  // the end of each action" (p. 28). `applyAction` never sets `pending`, so this runs
+  // after every action. Like `syncCaptures` it must return the same object when there
+  // is nothing to drop, or the advance loop never settles.
+  const pruned = pruneEffects(state)
+  if (pruned !== state) return pruned
+
   switch (state.turn.phase) {
-    // The three no-op phases. Real phases rather than omissions, because they are
-    // where spell expiry, eighth-face powers and dragons land in v1.
+    // No longer a no-op: effects with a duration end "at the beginning of your next
+    // turn", which is here. It takes no decision, so it expires and moves on in one
+    // step.
     case 'effects_expire':
-      return withTurn(state, { phase: 'eighth_face' })
+      return withTurn(expireEffects(state), { phase: 'eighth_face' })
+
+    // The two remaining no-op phases. Real phases rather than omissions, because they
+    // are where eighth-face powers and dragons land in v1.
     case 'eighth_face':
       return withTurn(state, { phase: 'dragon_attack' })
     case 'dragon_attack':
@@ -557,20 +569,22 @@ function applyContest(state: GameState, contest: boolean): GameState {
     })
   }
 
+  const marcher = armyRoll(state, player, slot, 'maneuver')
   const [marcherRoll, afterMarcher] = rollArmy(
-    armyAt(state, player, slot),
+    marcher.units,
     'maneuver',
     state.rng,
     state.ruleSet,
-    doublesIds(state, player, slot),
+    marcher.modifiers,
     MANEUVER_ROLL,
   )
+  const contester = armyRoll(state, opponentOf(player), slot, 'maneuver')
   const [defenderRoll, afterDefender] = rollArmy(
-    armyAt(state, opponentOf(player), slot),
+    contester.units,
     'maneuver',
     afterMarcher,
     state.ruleSet,
-    doublesIds(state, opponentOf(player), slot),
+    contester.modifiers,
     MANEUVER_ROLL,
   )
 
@@ -755,6 +769,12 @@ function applyRetreat(state: GameState, unitIds: readonly UnitId[]): GameState {
     if (unit.owner !== player) throw new IllegalActionError(`${id} is not yours to move`)
     if (unit.location.kind !== 'terrain') {
       throw new IllegalActionError(`${id} is not at a terrain`)
+    }
+    // Sleep: "cannot be rolled or leave the terrain they currently occupy". Retreat is
+    // the only mover in scope -- reinforce brings units *out* of Reserves, and a march
+    // turns the terrain die rather than moving anybody.
+    if (isAsleep(state, id)) {
+      throw new IllegalActionError(`${id} is asleep and cannot leave its terrain`)
     }
     units[id] = { ...unit, location: { kind: 'reserve' } }
   }

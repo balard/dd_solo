@@ -4,6 +4,7 @@ import { UNIT_TYPES, unitType } from '../data/load'
 import type { Face } from '../data/types'
 
 import { resolveAttack } from './combat'
+import { doubleIdsModifier } from './pipeline'
 import { advance } from './reduce'
 import { rngFrom, rollDice, type RngState } from './rng'
 import { maxResults, resolveRoll, rollArmy, saiPhrase, saisBehind, type DieRoll } from './roll'
@@ -338,8 +339,8 @@ describe('Rend', () => {
 
   it('doubles a rerolled ID face at a captured terrain, like any other', () => {
     const rng = rngShowing([vine, vine], [VINE_REND, VINE_ID])
-    const [plain] = rollArmy(armyOf(vine), 'melee', rng, SAI_RULES, false)
-    const [doubled] = rollArmy(armyOf(vine), 'melee', rng, SAI_RULES, true)
+    const [plain] = rollArmy(armyOf(vine), 'melee', rng, SAI_RULES, [])
+    const [doubled] = rollArmy(armyOf(vine), 'melee', rng, SAI_RULES, [doubleIdsModifier('melee')])
 
     // 4 from Rend, plus a 4-health ID face; the eighth face doubles the ID share
     // alone, and never the SAI results that joined at step 8.
@@ -391,6 +392,7 @@ function stage(options: {
     ruleSet: options.ruleSet ?? SAI_RULES,
     rng: options.rng,
     units,
+    effects: [],
     terrains: {
       p1_home: terrain('p1_home'),
       frontier: terrain('frontier'),

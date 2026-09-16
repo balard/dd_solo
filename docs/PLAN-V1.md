@@ -60,8 +60,7 @@ G  Golden files: 25 recorded v0 games          DONE  cut before anything moves
 |
 +--> 2 DUA, BUA, promotion --------+           DONE
 |                                  |
-+--> 3 Effects and durations ------+
-
++--> 3 Effects and durations ------+  DONE
                                    |
                         4 SAIs B: targeting
                                    |
@@ -646,46 +645,140 @@ serialised `ruleSet` object with **no `dua` key**, so replaying it would run the
 
 ---
 
-## Phase 3 — Effects and durations
+## Phase 3 — Effects and durations — **landed**
 
-**Deliverable.** `state.effects`, and the Effects Expire Phase stops being a no-op.
+**Delivered.** `GameState.effects`, `src/engine/effects.ts`, and the Effects Expire Phase doing
+something. `rollArmy`'s `doubleIds: boolean` became `modifiers: readonly Modifier[]`, and
+`armyRoll(state, player, ref, resultType)` is now the one door every army roll goes through: it
+returns the dice that may be rolled *and* everything modifying the result, together, so a call site
+cannot take one and forget the other. `doublesIds` moved out of `combat.ts` and into `effects.ts`
+with it. The 25 goldens replay byte-identical and unregenerated.
+
+**Sleep and Galeforce moved to Phase 4**, which is the decision this phase turns on; see *Where this
+section was wrong*. So it ships **machinery with no caller**, exactly as Phase 2's `promote` and
+`recruit` did, and `state.effects` is empty in every game the project can currently play.
 
 ```ts
-interface Effect {
-  readonly id: EffectId
+export type EffectTarget =
+  | { kind: 'army'; player: PlayerId; army: ArmyRef }
+  | { kind: 'unit'; unitId: UnitId }
+
+export interface Effect {
   readonly source: string                    // spell name, SAI name, breath element
-  readonly target:
-    | { kind: 'army'; player: PlayerId; army: ArmyRef }
-    | { kind: 'unit'; unitId: UnitId }
-    | { kind: 'terrain'; slot: TerrainSlot }
-  readonly modifier: Modifier                // feeds pipeline steps 6, 7, 9, 10
-  readonly expiresAtStartOfTurnOf: PlayerId | null   // null = instantaneous or permanent
+  readonly target: EffectTarget
+  readonly modifiers: readonly Modifier[]    // feeds pipeline steps 6, 7, 9, 10
+  readonly asleep?: true                     // Sleep: a status, not arithmetic
+  readonly expiresAtStartOfTurnOf: PlayerId
 }
 ```
 
-Three rules from *Army Modifiers* (p. 28) determine the shape:
+Three rules from *Army Modifiers* (p. 28) determine the shape, and a fourth from *Roll Modifiers* on
+the same page determines the entry point's name:
 
 - An army effect is **fixed to a location**, not to the units. If the army marches away, the effect
   does not follow. This is why `target` names an `ArmyRef`, not a unit list.
 - An army effect **ends when the army has no units left**, checked at the end of each action — but
-  not if every unit was replaced in a single exchange (Phase 2).
-- A unit effect **follows the unit** into another army.
+  not if every unit was replaced in a single exchange (Phase 2). `pruneEffects` runs from `stepGame`
+  beside `syncCaptures`, which *is* "the end of each action", since `applyAction` never sets
+  `pending`.
+- A unit effect **follows the unit** into another army, which it does for free by naming a `UnitId`.
+- "**Modifiers that affect an army do not affect the roll of an individual unit** from that army.
+  Modifiers that affect an individual unit do not affect the roll of an army." Hence `armyRoll`
+  rather than `rollModifiers`: Phase 4's sub-rolls are the first unit rolls in the game, and they
+  must not come through it.
 
-Completes **Sleep** (a unit that cannot be rolled or leave its terrain) and **Galeforce** (−4 save
-and −4 maneuver on any army at any terrain).
+### Where this section was wrong
 
-**Exit criterion.** An effect cast on turn N is gone at the start of turn N+1 of its owner, and not
-before. A sleeping unit contributes no dice to any roll and is rejected as a retreat or reinforce
-target.
+- **"Completes Sleep and Galeforce" was the whole scope, and it was not deliverable here.** Both are
+  *targeting* SAIs — "target one unit in an opponent's army at this terrain", "target an opposing
+  army at any terrain" — and both fire during an **attack** roll, so the target is chosen before the
+  defender rolls for saves. `resolveAttack` computes attack → saves → damage in one pure pass, so
+  resolving either correctly needs a pause in the middle of it: the same seam Phase 4 builds for
+  Wild Growth, Bullseye, Choke and Confuse. Phase 2 moved Wild Growth out for exactly this reason;
+  building the pause here for two SAIs and again there for six more is the same trade, refused the
+  same way. They are in the Phase 4 table below.
+- **No `RuleSet` flag, unlike Phases 1 and 2.** With no producer a flag would gate nothing
+  observable — the "field nothing reads" this project refuses elsewhere. The machinery is a no-op
+  over an empty list, so it simply runs. Phase 4 gates its producers with `sai: 'full'`, which it
+  was going to do anyway.
+- **`Effect` lost three things the sketch gave it.** No `id`/`EffectId`: nothing removes an effect by
+  name — expiry is by player, pruning is by predicate — and Phase 7's Dispel Magic is the first
+  thing that would need one. No `terrain` target: the p. 28 rule above has an army side and a unit
+  side, so a third member would be a branch nothing gathers. And `expiresAtStartOfTurnOf` is **not
+  nullable**: an instantaneous effect never enters the list and nothing in scope is permanent, so
+  the null branch was unreachable.
+- **`modifier: Modifier` had to become `modifiers: readonly Modifier[]`.** Galeforce is two of them
+  — subtract 4 save, subtract 4 maneuver — and a `Modifier` carries exactly one `resultType`.
+- **"Two castings of a non-cumulative effect do not combine" describes nothing in scope.** The only
+  caps the rules state are one divide and one multiply per result type, which `applyModifiers`
+  already enforces; two Galeforces are two subtracts and stack to −8. There is no non-cumulative
+  effect to contrast it with until spells arrive.
+- **"Rejected as a … reinforce target" is not a reachable case.** Sleep targets a unit in an army at
+  a terrain, and the Reinforce Step moves units *out* of Reserves — so retreat is the only mover a
+  sleeping unit can be refused by. Phase 4's free moves are the next one.
 
-**Tests.**
+### One thing that would have shipped silently
 
-- Expiry is at the start of *your* next turn, not the next turn — the opponent's turn happens in
-  between and the effect is still live.
-- An army wiped out mid-turn drops its effects; an army fully exchanged keeps them.
-- Two castings of a cumulative effect combine; two of a non-cumulative one do not.
-- A sleeping unit in an army that is attacked still *dies* normally — it cannot roll, it is not
-  immune.
+**`expireEffects` and `pruneEffects` must return the same object when they drop nothing.** `advance`
+loops on `stepGame` until it returns the state it was handed, so an unconditional
+`{ ...state, effects }` in either is an infinite loop — and `pruneEffects` is called from `stepGame`
+on every step. It fails loudly (`advance` throws after 1000 steps) rather than silently, but it is
+the first thing to check if the game stops settling. Both are tests.
+
+Also worth knowing: **the victory check runs before the prune**, so on a board where one side has no
+units `stepGame` ends the game and never prunes. That is the right order, and it cost one test its
+first draft.
+
+**Exit criterion.** An effect cast on turn N is gone at the start of turn N+1 of its owner and not
+before; a sleeping unit contributes no dice to any roll, is refused as a retreat, and still dies
+normally. Restated for a phase with no caller: **the machinery does all of that to a hand-built
+effect, while a `V0_RULES` game plays die for die as it did before.** ✅
+
+> **The fuzz was skipped a third time**, as in Phases 1 and 2: `npm test` still fuzzes `V0_RULES`
+> only. It is doing more than it looks here — it is what proves the `rollArmy` signature change and
+> the new `stepGame` prune step broke nothing — but no game it plays can produce an effect, so
+> nothing this phase adds has a deadlock net either. The gap is now three phases wide; see Risks.
+
+**Tests, as delivered.** `src/engine/effects.test.ts` (18 cases), plus one in `prompts.test.ts`.
+
+| Case | Expected |
+|---|---|
+| Cast on p1's turn | survives p2's whole turn; gone at p1's next `effects_expire`, `effects_expired` logged |
+| A real turn change through `reduce` | the Retreat Step ends the turn and the next player's Effects Expire Phase does the work |
+| `expireEffects` / `pruneEffects` with nothing to drop | the **same object**, or `advance` never settles |
+| An army with no units left | its effects are gone by the next `stepGame` |
+| An army whose every unit is exchanged | keeps them — `exchangeWithDua` is one pass, so the army is never observed empty |
+| A unit effect, unit moved to Reserves | follows it |
+| An army effect, a die retreating out from under it | stays at the terrain; the Reserve Army picks nothing up |
+| `armyRoll` at a captured terrain under Galeforce | two subtracts **and** the eighth face's one multiplier |
+| Two castings on one army | stack; two dividers on one type still throw |
+| A sleeping unit in a melee, save or maneuver roll | not in the roll, and **no randomness consumed for it** |
+| A sleeping unit in an attacked army | still in `armyAt`, still counts toward the army, still dies |
+| Retreating a sleeping unit | `IllegalActionError`; the die beside it still goes |
+| `validateState` on an unpruned effect, or one naming a vanished unit | one named complaint each |
+
+**`SAVE_VERSION` stays at 5**, and this is the first phase where the answer is simply "no". Nothing
+here changes phases, decision order or dice consumption — modifiers consume no randomness, the prune
+step returns the same object, and `setupGame` starts `effects` empty — so a version-5 record replays
+byte-identically. The Phase 1 and Phase 2 *second* reason, "an old record goes on playing the old
+game with nothing on screen saying which", no longer applies at all: **a save in progress may be
+cleared before a phase lands**, which is the standing rule from here on (`CLAUDE.md`, *Saving*), so
+the version guards replay correctness and nothing else.
+
+`digestState` gained an `effects` line and `golden.test.ts` reads an absent one as `[]` — the corpus
+predates the field, and an absent one means none, which is what a `V0_RULES` game has. That is the
+honest alternative to regenerating 25 games for a field empty in all of them.
+
+### What later phases inherit
+
+- `armyRoll`, where Phases 4, 6, 7 and 8 hang everything they add to a roll. A new source of
+  modifiers is an entry in `state.effects`, not a new parameter at six call sites.
+- The army-versus-unit rule above, already stated in the naming: Phase 4's sub-rolls must **not**
+  call `armyRoll`, and that is the first test that rule can have.
+- `expireEffects`, the home for every duration in Phases 6, 7 and 8 — dragon breath, and every spell
+  lasting "until the beginning of your next turn".
+- The `asleep` status and its two consumers — the retreat refusal, and the clients' selection
+  filters — waiting for the Sleep that Phase 4 now owns.
 
 ---
 
@@ -694,7 +787,17 @@ target.
 **Deliverable.** `sai: 'full'`. The SAIs that pick targets, plus the two that move units.
 
 `Bullseye`, `Double Strike`, `Smother`, `Firecloud`, `Seize`, `Choke`, `Confuse`, `Flame`,
-`Wild Growth`, and the free-move halves of `Firewalking` and `Teleport`.
+`Wild Growth`, `Sleep`, `Galeforce`, and the free-move halves of `Firewalking` and `Teleport`.
+
+**Sleep and Galeforce arrived here from Phase 3**, which built everything they do and none of what
+they need to be *cast*. Both choose a target during an attack roll -- one unit in the opposing army
+at this terrain, one opposing army anywhere -- so both need the pause below, and they need it at a
+point Wild Growth does not: **after the attack roll and before the defender's save roll**, since a
+slept die cannot be rolled for those saves and a Galeforced army saves at -4 in the very exchange
+that cast it. So `CombatState` has to be able to hold a half-finished *attack* as well as a
+half-finished save roll. What they need from `effects.ts` is nothing: `Effect`, `armyRoll`,
+`expireEffects` and the `asleep` status are already there, and a cast is one entry appended to
+`state.effects`.
 
 **Wild Growth arrived here from Phase 2**, which could not hold it: "X save results *or* promote X
 health-worth, split as you choose" is a decision taken between the save roll and the damage
@@ -775,8 +878,8 @@ code.
 
 | Rise from the Ashes | 4 saves / death trigger to Reserves | 1 ✅ / 2 ✅ |
 
-| Sleep | unit status with a duration | 3 |
-| Galeforce | army effect with a duration, any terrain | 3 |
+| Sleep | unit status (Phase 3 ✅) **plus targeting and a pause before the save roll** | 4 |
+| Galeforce | army effect (Phase 3 ✅) **plus targeting and a pause before the save roll** | 4 |
 | Bullseye | targeting + save sub-roll + reroll | 4 |
 | Double Strike | targeting + save sub-roll + reroll | 4 |
 | Smother | targeting + maneuver sub-roll | 4 |
@@ -1137,10 +1240,12 @@ make each game longer. `advance` throws after 1000 steps, which is a generous bo
 not be for a game with summoning and resurrection — expect to raise it, and be suspicious the first
 time you do.
 
-The sharper risk is that the fuzz now covers a configuration **nobody plays, and the gap is two
+The sharper risk is that the fuzz now covers a configuration **nobody plays, and the gap is three
 phases wide.** Phase 1 turned the app over to `SAI_RULES` and did not add a fuzz for it; Phase 2
 turned it over to `DUA_RULES` and did not either. Both were verified by a hand-run of the same
-harness, which is worth something and is not a test. So the only automated net over the live rules
+harness, which is worth something and is not a test. Phase 3 widened it a third way rather than a
+second: it changed every roll call site in the engine, and the only automated proof that it changed
+no outcome is a corpus and a fuzz that both run the *old* rules. So the only automated net over the live rules
 is the unit tests, while `V0_RULES` keeps the 1000 games *and* the 25 goldens — the one config that
 least needs them. Every phase from here widens it further. Closing it is one `it.each` over two
 rulesets — and per-rule trigger counters, or a clean run proves nothing about the rare faces.

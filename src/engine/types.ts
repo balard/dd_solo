@@ -6,6 +6,7 @@
  */
 import { unitType } from '../data/load'
 
+import type { Effect } from './effects'
 import type { DieRoll } from './roll'
 import type { RngState } from './rng'
 
@@ -322,6 +323,17 @@ export type LogEntry =
    */
   | { readonly kind: 'units_risen'; readonly player: PlayerId; readonly unitIds: readonly UnitId[] }
   | { readonly kind: 'counter_declined'; readonly player: PlayerId }
+  /**
+   * The Effects Expire Phase actually removing something.
+   *
+   * Named by `source` rather than by any identity, because that is what a player
+   * recognises: "Galeforce wears off", not "effect 3 ends". Nothing writes this
+   * until Phase 4 produces the first effect; it is written by `expireEffects` now
+   * rather than then, because the machine that silently removes state is worse than
+   * the one that says so, and a writer with no renderer is how the browser and the
+   * terminal start describing one game differently.
+   */
+  | { readonly kind: 'effects_expired'; readonly player: PlayerId; readonly sources: readonly string[] }
 
   /** Surprise. A separate entry rather than a flag on `combat_resolved`: without it
    *  the march simply ends, with no `counter_declined` and no explanation. */
@@ -401,6 +413,16 @@ export interface GameState {
   readonly rng: RngState
   readonly units: Readonly<Record<UnitId, UnitInstance>>
   readonly terrains: Readonly<Record<TerrainSlot, TerrainInPlay>>
+  /**
+   * Effects with a duration, targeting an army or a unit. See `effects.ts`.
+   *
+   * A flat list rather than a field on the thing affected, for the same reason armies
+   * are derived: one place to look, nothing to keep in sync. Empty in every v0 game
+   * and in every game so far -- nothing produces one until Phase 4 -- and the
+   * machinery over it is a no-op on an empty list, which is why no `RuleSet` flag
+   * gates it.
+   */
+  readonly effects: readonly Effect[]
   readonly turn: TurnState
   readonly pending: Pending | null
   readonly log: readonly LogEntry[]

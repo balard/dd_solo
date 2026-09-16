@@ -22,6 +22,7 @@ import {
   reinforcePlan,
   selectModeFor,
   selectableAt,
+  sleepingIds,
   slotLabel,
 } from './prompts'
 
@@ -425,6 +426,28 @@ describe('selection targeting', () => {
   it('selects nothing when no decision is pending', () => {
     expect(selectModeFor(null, 'p1')).toBeNull()
     expect(selectableAt(null, 'frontier')).toBe(false)
+  })
+
+  it('names the sleeping dice, which the grid must not offer', () => {
+    // The engine refuses a sleeping unit as a retreat either way; this is what keeps
+    // the button from being offered, and what gives the die a visible reason.
+    const state = fresh()
+    expect(sleepingIds(state).size).toBe(0)
+
+    const victim = armyAt(state, 'p1', 'p1_home')[0]!
+    const asleep: GameState = {
+      ...state,
+      effects: [
+        {
+          source: 'Sleep',
+          target: { kind: 'unit', unitId: victim.id },
+          modifiers: [],
+          asleep: true,
+          expiresAtStartOfTurnOf: 'p2',
+        },
+      ],
+    }
+    expect([...sleepingIds(asleep)]).toEqual([victim.id])
   })
 })
 

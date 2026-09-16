@@ -202,8 +202,10 @@ function rollForFirstPlayer(
   let state = rng
 
   for (let attempt = 0; attempt < MAX_TIE_REROLLS; attempt++) {
-    const [p1Roll, afterP1] = rollArmy(hordes.p1, 'maneuver', state, ruleSet, false, MANEUVER_ROLL)
-    const [p2Roll, afterP2] = rollArmy(hordes.p2, 'maneuver', afterP1, ruleSet, false, MANEUVER_ROLL)
+    // No modifiers, and not `armyRoll`: no terrain is captured and no effect can exist
+    // before the game has started, and the units are not at their slots yet either.
+    const [p1Roll, afterP1] = rollArmy(hordes.p1, 'maneuver', state, ruleSet, [], MANEUVER_ROLL)
+    const [p2Roll, afterP2] = rollArmy(hordes.p2, 'maneuver', afterP1, ruleSet, [], MANEUVER_ROLL)
     state = afterP2
 
     // The roll-off is a maneuver roll, so Fly, Hoof, Trample and the rest count --
@@ -325,6 +327,7 @@ export function setupGame(options: SetupOptions): GameState {
     rng,
     units,
     terrains,
+    effects: [],
     turn: {
       marching: firstPlayer,
       phase: 'effects_expire',

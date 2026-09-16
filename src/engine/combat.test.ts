@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { doublesIds, legalActions, magicDamage, missileTargets, terrainAction } from './combat'
+import { legalActions, magicDamage, missileTargets, terrainAction } from './combat'
 import { damageOptions } from './damage'
+import { doublesIds } from './effects'
+import { doubleIdsModifier } from './pipeline'
 import { begin, reduce } from './reduce'
 import { rollArmy } from './roll'
 import { setupGame, STARTER_FORCES } from './setup'
@@ -441,8 +443,8 @@ describe('the eighth face', () => {
     it('doubles ID results and leaves every other face alone', () => {
       const state = begin(fresh())
       const army = armyAt(state, 'p1', 'frontier')
-      const [plain] = rollArmy(army, 'melee', state.rng, V0_RULES, false)
-      const [bonus] = rollArmy(army, 'melee', state.rng, V0_RULES, true)
+      const [plain] = rollArmy(army, 'melee', state.rng, V0_RULES, [])
+      const [bonus] = rollArmy(army, 'melee', state.rng, V0_RULES, [doubleIdsModifier('melee')])
 
       // Same rng in, same faces out -- only the ID results differ.
       expect(bonus.dice.map((d) => d.faceIndex)).toEqual(plain.dice.map((d) => d.faceIndex))
@@ -459,8 +461,8 @@ describe('the eighth face', () => {
     it('consumes exactly the same randomness either way', () => {
       const state = begin(fresh())
       const army = armyAt(state, 'p1', 'frontier')
-      const [, plainRng] = rollArmy(army, 'melee', state.rng, V0_RULES, false)
-      const [, bonusRng] = rollArmy(army, 'melee', state.rng, V0_RULES, true)
+      const [, plainRng] = rollArmy(army, 'melee', state.rng, V0_RULES, [])
+      const [, bonusRng] = rollArmy(army, 'melee', state.rng, V0_RULES, [doubleIdsModifier('melee')])
       expect(bonusRng).toEqual(plainRng)
     })
 

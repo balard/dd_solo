@@ -26,7 +26,7 @@ import {
 import { DiceGrid } from './DiceGrid'
 import { ElementDots, speciesInfo } from './Elements'
 import { Glyph, type GlyphName } from './Glyph'
-import { selectableAt, slotLabel, type SelectMode } from './prompts'
+import { selectableAt, sleepingIds, slotLabel, type SelectMode } from './prompts'
 import { useFaceArt } from './useFaceArt'
 
 /**
@@ -155,6 +155,7 @@ function ArmySide({
   species,
   units,
   selectable,
+  asleep,
   selected,
   onToggle,
   inspecting,
@@ -164,6 +165,7 @@ function ArmySide({
   species: Species
   units: readonly UnitInstance[]
   selectable: boolean
+  asleep: ReadonlySet<UnitId>
   selected: ReadonlySet<UnitId>
   onToggle: (id: UnitId) => void
   inspecting: UnitId | null
@@ -188,6 +190,7 @@ function ArmySide({
       <DiceGrid
         units={units}
         selectable={selectable}
+        asleep={asleep}
         selected={selected}
         onToggle={onToggle}
         inspecting={inspecting}
@@ -226,6 +229,9 @@ export function Board({
   theirSpecies: Species
 }) {
   const enemy: PlayerId = human === 'p1' ? 'p2' : 'p1'
+  // Both sides: a sleeping enemy die is not selectable either way, but it should read
+  // as asleep when you are looking at what you are about to attack.
+  const asleep = sleepingIds(state)
   const art = useFaceArt()
 
   return (
@@ -295,6 +301,7 @@ export function Board({
               species={theirSpecies}
               units={armyAt(state, enemy, slot)}
               selectable={false}
+              asleep={asleep}
               selected={selected}
               onToggle={onToggle}
               inspecting={inspecting}
@@ -305,6 +312,7 @@ export function Board({
               species={mySpecies}
               units={armyAt(state, human, slot)}
               selectable={selectableHere}
+              asleep={asleep}
               selected={selected}
               onToggle={onToggle}
               inspecting={inspecting}

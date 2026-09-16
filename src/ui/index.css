@@ -185,6 +185,16 @@ body {
   background: color-mix(in srgb, var(--melee) 14%, var(--panel));
   text-decoration: line-through;
 }
+/*
+ * Asleep: the die is still there and still takes damage, it just cannot be rolled or
+ * moved. Drawn as a dimmed tile with a dashed edge rather than hidden -- an army's
+ * strength is what you are reading off the board, and a sleeping die is part of it.
+ */
+.die-asleep {
+  border-style: dashed;
+  opacity: .55;
+}
+
 /* Plain text: colour on the dice is being saved for the species elements. */
 .die-kind {
   font-size: .68rem;

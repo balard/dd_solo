@@ -6,6 +6,7 @@
  * phases, infinite loops and crashes far faster than hand-written scenarios can.
  */
 import { damageOptions } from '../engine/damage'
+import { isAsleep } from '../engine/effects'
 import { nextInt, type RngState } from '../engine/rng'
 import {
   TERRAIN_SLOTS,
@@ -118,8 +119,14 @@ export const randomAi: AiPlayer = {
 
 
       case 'retreat': {
+        // A sleeping unit cannot leave its terrain, and the engine throws on one --
+        // so the fuzz opponent has to know the rule too, or a decision that gained a
+        // dimension quietly narrows the games it can produce.
         const deployed = Object.values(state.units).filter(
-          (u) => u.owner === pending.player && u.location.kind === 'terrain',
+          (u) =>
+            u.owner === pending.player &&
+            u.location.kind === 'terrain' &&
+            !isAsleep(state, u.id),
         )
         const [count, next] = nextInt(rng, Math.min(deployed.length, 4) + 1)
         return [

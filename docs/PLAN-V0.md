@@ -312,7 +312,7 @@ walk across the terrain faces. Phase 6 formalises this as `RandomAI`.
   Behind `ruleSet.magic === 'simplified'`.
 
 Keep `magicDamage()` a named function taking the ruleset. Flipping to real spells should change one
-call site, and the `floor` vs `ceil` question in `RULES-V0.md` §10 should be a one-line change.
+call site, and the `floor` vs `ceil` question in `RULES-V0.md` §11 should be a one-line change.
 
 **Exit criterion.** Scripted combat scenarios produce hand-computed damage.
 

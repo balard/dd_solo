@@ -7,6 +7,7 @@
 import { terrainFaceAction } from '../data/load'
 import type { TerrainFaceNumber } from '../data/types'
 
+import { armyRoll } from './effects'
 import type { RollEffect } from './pipeline'
 import { rollArmy, type RollResult } from './roll'
 import type { RngState } from './rng'
@@ -30,16 +31,6 @@ export function terrainAction(state: GameState, slot: TerrainSlot): ActionKind |
   const terrain = state.terrains[slot]
   if (terrain.face === 8) return null
   return terrainFaceAction(terrain.dieId, terrain.face as TerrainFaceNumber).toLowerCase() as ActionKind
-}
-
-/**
- * Whether this player's rolls at this terrain double their ID results.
- *
- * The eighth-face holder's bonus. Gated on the ruleset so `captureOnly` still plays
- * the old alpha game, where a capture won and did nothing else.
- */
-export function doublesIds(state: GameState, player: PlayerId, slot: TerrainSlot): boolean {
-  return state.ruleSet.eighthFace !== 'captureOnly' && state.terrains[slot].capturedBy === player
 }
 
 /** A Home Terrain, as opposed to the Frontier. */
@@ -200,19 +191,20 @@ function expectOnly(
  *    the roll.
  */
 export function resolveAttack(state: GameState, spec: AttackSpec): AttackOutcome {
-  const attackers = armyAt(state, spec.attacker, spec.attackerSlot)
-  const defenders = armyAt(state, spec.defender, spec.defenderSlot)
+  // Both halves from one call: which dice may be rolled, and what modifies the
+  // result. A sleeping die is not in `units` and the eighth face is in `modifiers`.
+  const attackers = armyRoll(state, spec.attacker, spec.attackerSlot, spec.action)
 
   const attackContext: RollContext = {
     purpose: { kind: 'attack', action: spec.action },
     isCounter: spec.isCounter,
   }
   const [attackRoll, afterAttack] = rollArmy(
-    attackers,
+    attackers.units,
     spec.action,
     state.rng,
     state.ruleSet,
-    doublesIds(state, spec.attacker, spec.attackerSlot),
+    attackers.modifiers,
     attackContext,
   )
 
@@ -258,12 +250,13 @@ export function resolveAttack(state: GameState, spec: AttackSpec): AttackOutcome
     purpose: { kind: 'save', against: spec.action },
     isCounter: spec.isCounter,
   }
+  const defenders = armyRoll(state, spec.defender, spec.defenderSlot, 'save')
   const [saveRoll, afterSave] = rollArmy(
-    defenders,
+    defenders.units,
     'save',
     afterAttack,
     state.ruleSet,
-    doublesIds(state, spec.defender, spec.defenderSlot),
+    defenders.modifiers,
     saveContext,
   )
 
