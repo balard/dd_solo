@@ -6,7 +6,9 @@ import type { Face } from '../data/types'
 import { resolveAttack } from './combat'
 import { advance } from './reduce'
 import { rngFrom, rollDice, type RngState } from './rng'
-import { maxResults, resolveRoll, rollArmy, type DieRoll } from './roll'
+import { maxResults, resolveRoll, rollArmy, saiPhrase, saisBehind, type DieRoll } from './roll'
+
+
 import {
   LIVE_SAIS,
   saiEffects,
@@ -449,7 +451,64 @@ describe('Smite in an exchange', () => {
     expect(die?.effects).toEqual([{ kind: 'unsavable', damage: 3 }])
   })
 
+  it('names the SAI behind the damage, so the log can attribute it', () => {
+    const rng = rngShowing([oakLord], [OAK_LORD_SMITE])
+    const state = stage({ p1: { frontier: [oakLord] }, p2: { frontier: ['treefolk.oakling'] }, rng })
+    const { attackRoll } = attackAt(state, 'melee')
+
+    expect(saisBehind(attackRoll.dice, 'unsavable')).toEqual(['Smite'])
+    expect(saisBehind(attackRoll.dice, 'riposte')).toEqual([])
+    expect(saiPhrase(attackRoll.dice, 'unsavable')).toBe('Smite')
+    // Null, not '', so the caller writes a different sentence rather than one with
+    // a hole in it.
+    expect(saiPhrase(attackRoll.dice, 'riposte')).toBeNull()
+  })
+
+  it('joins several names into one phrase', () => {
+    // Counter and Volley can both fire on one save roll, from different dice.
+    const dice: DieRoll[] = [
+      {
+        unitId: 'a',
+        typeId: oakLord,
+        faceIndex: 0,
+        face: { count: 4, icon: 'SAI', sai: 'Counter' },
+        results: 4,
+        effects: [{ kind: 'riposte', damage: 4 }],
+      },
+      {
+        unitId: 'b',
+        typeId: oakLord,
+        faceIndex: 0,
+        face: { count: 3, icon: 'SAI', sai: 'Volley' },
+        results: 3,
+        effects: [{ kind: 'riposte', damage: 3 }],
+      },
+      // Same SAI again: named once, not twice.
+      {
+        unitId: 'c',
+        typeId: oakLord,
+        faceIndex: 0,
+        face: { count: 2, icon: 'SAI', sai: 'Counter' },
+        results: 2,
+        effects: [{ kind: 'riposte', damage: 2 }],
+      },
+      // No effect, so it contributes no name even though it is an SAI face.
+      {
+        unitId: 'd',
+        typeId: oakLord,
+        faceIndex: 0,
+        face: { count: 4, icon: 'SAI', sai: 'Fly' },
+        results: 4,
+      },
+    ]
+
+    expect(saisBehind(dice, 'riposte')).toEqual(['Counter', 'Volley'])
+    expect(saiPhrase(dice, 'riposte')).toBe('Counter and Volley')
+  })
+
+
   it('leaves the field off a die that produced no effect', () => {
+
     // Omitted, never `[]`: a die is rendered into every golden log entry.
     const rng = rngShowing([oakLord], [0])
     const state = stage({ p1: { frontier: [oakLord] }, p2: { frontier: ['treefolk.oakling'] }, rng })

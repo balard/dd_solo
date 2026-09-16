@@ -10,6 +10,9 @@ import { Fragment, type ReactElement } from 'react'
 
 
 import { unitType } from '../../data/load'
+import { saiPhrase, saisBehind } from '../../engine/roll'
+
+
 import {
   TERRAIN_SLOTS,
   type GameState,
@@ -27,6 +30,23 @@ import { slotLabel } from './prompts'
 function actionName(action: string): string {
   return action.charAt(0).toUpperCase() + action.slice(1)
 }
+
+/** Every die a combat entry rolled, both ends of the exchange. */
+const allDice = (entry: Extract<LogEntry, { kind: 'combat_resolved' }>) => [
+  ...entry.attackDice,
+  ...(entry.saveDice ?? []),
+]
+
+const namesIn = (
+  entry: Extract<LogEntry, { kind: 'combat_resolved' }>,
+  kind: 'riposte' | 'unsavable',
+): string | null => saiPhrase(allDice(entry), kind)
+
+const plural = (
+  entry: Extract<LogEntry, { kind: 'combat_resolved' }>,
+  kind: 'riposte' | 'unsavable',
+): boolean => saisBehind(allDice(entry), kind).length > 1
+
 
 /**
  * The return type is written out rather than inferred so that a new `LogEntry` kind
@@ -173,29 +193,48 @@ function Line({
               <RollStrip dice={entry.saveDice} />
             </>
           )}
-          {/* Smite and the rest are named, or the sum reads as broken arithmetic:
-              "3 melee - 5 saves = 4 damage" with no sign of where the 4 came from. */}
+          {/* The SAI is named, not just its arithmetic. "3 melee - 11 saves = 0
+              damage and 4 straight back" is a correct sum that explains nothing:
+              which die did that, and why is it not saveable? The names come off the
+              dice above, where `resolveRoll` stamped them. */}
           <div className="roll-sum">
             {entry.saveTotal === null
               ? `${entry.attackTotal} ${entry.action}${entry.action === 'magic' ? ' ÷ 2' : ''}`
               : `${entry.attackTotal} ${entry.action} − ${entry.saveTotal} saves`}
-            {entry.unsavable !== undefined && ` + ${entry.unsavable} unsavable`}
+            {entry.unsavable !== undefined && (
+              <>
+                {' + '}
+                {entry.unsavable} unsavable
+                {namesIn(entry, 'unsavable') === null ? '' : ` from ${namesIn(entry, 'unsavable')}`}
+              </>
+            )}
             {' = '}
             <b>{entry.damage}</b> damage
           </div>
           {entry.riposte !== undefined && (
             <div className="roll-sum">
-              and <b>{entry.riposte}</b> straight back, which no save can stop
+              {namesIn(entry, 'riposte') === null ? (
+                <>
+                  and <b>{entry.riposte}</b> straight back, which no save can stop
+                </>
+              ) : (
+                <>
+                  <b>{namesIn(entry, 'riposte')}</b> {plural(entry, 'riposte') ? 'send' : 'sends'}{' '}
+                  <b>{entry.riposte}</b> straight back, which no save can stop
+                </>
+              )}
             </div>
           )}
+
         </div>
       )
 
     case 'counter_suppressed':
       return (
         <p className="log-line">
-          {who(entry.player)} {verb(entry.player, 'is', 'are')} taken by surprise and cannot
+          {who(entry.player)} {verb(entry.player, 'is', 'are')} taken by <b>Surprise</b> and cannot
           counter-attack
+
         </p>
       )
 

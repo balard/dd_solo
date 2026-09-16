@@ -108,7 +108,52 @@ export interface DieRoll {
 }
 
 
+/**
+ * Which SAIs produced an effect of this kind, by name, in roll order and without
+ * repeats.
+ *
+ * `combat_resolved` carries the totals -- 4 riposte, 4 unsavable -- and the
+ * attribution is on the dice, so this is what lets a log line say *Counter* sent 4
+ * back rather than "4 straight back, which no save can stop". Both clients need it,
+ * which is why it lives beside `DieRoll` rather than in either of them.
+ *
+ * Empty for a roll from before `DieRoll.effects` existed, or one under a ruleset
+ * where no SAI fires -- so a caller has to have a wording that works without names.
+ */
+export function saisBehind(
+  dice: readonly DieRoll[],
+  kind: RollEffectBody['kind'],
+): readonly string[] {
+  const names: string[] = []
+  for (const die of dice) {
+    if (die.face.icon !== 'SAI') continue
+    if (!(die.effects ?? []).some((effect) => effect.kind === kind)) continue
+    if (!names.includes(die.face.sai)) names.push(die.face.sai)
+  }
+  return names
+}
+
+/**
+ * The same names as one phrase -- "Counter", or "Counter and Volley" -- or null when
+ * the roll named none.
+ *
+ * Null rather than an empty string because the two cases want different sentences,
+ * not the same sentence with a hole in it. Shared so the browser and the terminal
+ * cannot drift into wording the other does not have.
+ */
+export function saiPhrase(
+  dice: readonly DieRoll[],
+  kind: RollEffectBody['kind'],
+): string | null {
+  const names = saisBehind(dice, kind)
+  if (names.length === 0) return null
+  if (names.length === 1) return names[0] ?? null
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
 export interface RollResult {
+
+
   readonly resultType: ResultType
   readonly dice: readonly DieRoll[]
   readonly total: number

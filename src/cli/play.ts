@@ -22,6 +22,9 @@ import type { TerrainFaceNumber } from '../data/types'
 import { damageOptions } from '../engine/damage'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
+import { saiPhrase } from '../engine/roll'
+
+
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
 import {
   DUA_RULES,
@@ -157,12 +160,24 @@ function describe(entry: LogEntry, state: GameState): string | null {
         entry.saveTotal === null
           ? `${entry.attackTotal} ${entry.action}${entry.action === 'magic' ? ' ÷ 2' : ''}`
           : `${entry.attackTotal} ${entry.action} − ${entry.saveTotal} saves`
-      // Naming the unsavable share keeps the line adding up; without it a Smite
-      // reads as arithmetic that does not work.
-      const sum = entry.unsavable === undefined ? base : `${base} + ${entry.unsavable} unsavable`
+      // The SAI is named, not just its arithmetic. Without the number the line does
+      // not add up; without the name it adds up and explains nothing.
+      const from = (kind: 'riposte' | 'unsavable') => {
+        const names = saiPhrase([...entry.attackDice, ...(entry.saveDice ?? [])], kind)
+        return names === null ? '' : ` from ${names}`
+      }
+
+
+      const sum =
+        entry.unsavable === undefined
+          ? base
+          : `${base} + ${entry.unsavable} unsavable${from('unsavable')}`
       const back =
-        entry.riposte === undefined ? '' : ` (${bold(String(entry.riposte))} straight back)`
+        entry.riposte === undefined
+          ? ''
+          : ` (${bold(String(entry.riposte))} straight back${from('riposte')}, no save)`
       return `  ${arrow}: ${sum} = ${bold(String(entry.damage))} damage${back}`
+
     }
     case 'units_killed':
       return red(
@@ -180,7 +195,8 @@ function describe(entry: LogEntry, state: GameState): string | null {
       return dim(`${entry.player} declines to counter-attack`)
 
     case 'counter_suppressed':
-      return yellow(`  ${entry.player} is taken by surprise and cannot counter-attack`)
+      return yellow(`  ${entry.player} is taken by Surprise and cannot counter-attack`)
+
     case 'victory':
       return bold(green(`\n*** ${entry.player} wins by ${entry.reason} ***`))
     case 'reinforced': {
