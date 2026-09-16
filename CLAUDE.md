@@ -454,3 +454,13 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   assignment get tests before implementation.
 - Keep `docs/RULES-V0.md` §9 and `docs/OVERVIEW.md` §8 current. When a rules question gets
   answered, move it out of Open Questions and into the body.
+
+## Git
+
+- **Commit to `main`. Do not open a branch for a phase.** This is a solo project with a linear
+  history and no review step, so a branch per phase buys nothing and costs a merge. Branch only
+  when asked for one by name.
+- **A phase is one commit**, with a message that carries what a future reader needs rather than a
+  file list: what the plan predicted wrongly, anything that would have shipped silently, and
+  anything deliberately *not* done — a skipped fuzz or an unregenerated golden file has to be
+  visible as a decision, or the next person reads it as an oversight.
