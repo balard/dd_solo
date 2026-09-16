@@ -203,9 +203,23 @@ function Line({
             .join(', ')}
         </p>
       )
+    case 'units_risen':
+      return (
+        <p className="log-line big">
+          {entry.unitIds
+            .map((id) => {
+              const unit = state.units[id]
+              return unit ? unitType(unit.typeId).name : id
+            })
+            .join(', ')}{' '}
+          rises from the ashes into {entry.player === human ? 'your' : "the enemy's"} reserves
+
+        </p>
+      )
     case 'counter_declined':
       return (
         <p className="log-line muted">
+
           {who(entry.player)} {verb(entry.player, 'declines', 'decline')} to counter
         </p>
       )

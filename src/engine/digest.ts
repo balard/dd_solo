@@ -74,8 +74,11 @@ function whereIs(location: Location): string {
       return 'reserve'
     case 'dua':
       return 'dua'
+    case 'bua':
+      return 'bua'
   }
 }
+
 
 export function digestState(state: GameState): StateDigest {
   const unitIds = (Object.keys(state.units) as UnitId[]).sort()

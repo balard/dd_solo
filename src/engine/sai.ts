@@ -200,8 +200,15 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
   /** Identical to Firewalking, and likewise half-implemented until Phase 4. */
   Teleport: (x, ctx) => (ctx.purpose.kind === 'maneuver' ? gives('maneuver', x) : NOTHING),
 
-  /** "During a save roll, Rise from the Ashes generates X save results." Its death
-   *  trigger -- roll the unit when killed, an ID sends it to Reserves -- is Phase 2. */
+  /**
+   * "During a save roll, Rise from the Ashes generates X save results."
+   *
+   * Its other half -- roll the unit whenever it is killed *or buried*, and a Rise
+   * from the Ashes face sends it to Reserves -- is `death.ts`, because it fires
+   * outside any roll and so has nowhere to live here. Note that it is a Rise face
+   * and not an ID: this comment said ID until Phase 2 read the reference again.
+   */
+
   'Rise from the Ashes': (x, ctx) => (ctx.purpose.kind === 'save' ? gives('save', x) : NOTHING),
 }
 

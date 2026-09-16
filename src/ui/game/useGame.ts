@@ -13,7 +13,7 @@ import { begin, reduce } from '../../engine/reduce'
 import { replay, type GameRecord } from '../../engine/replay'
 import { rngFrom, type RngState } from '../../engine/rng'
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec, type SetupOptions } from '../../engine/setup'
-import { SAI_RULES, type GameAction, type GameState, type PlayerId } from '../../engine/types'
+import { DUA_RULES, type GameAction, type GameState, type PlayerId } from '../../engine/types'
 
 import { clearSave, readSave, writeSave } from './storage'
 
@@ -85,7 +85,7 @@ export function parseGameRequest(
     }
   }
 
-  const setup: SetupOptions = { seed, forces, ruleSet: SAI_RULES }
+  const setup: SetupOptions = { seed, forces, ruleSet: DUA_RULES }
   return problem === null
     ? { setup, origin: { kind: 'requested', forces: name, seed } }
     : { setup, origin: { kind: 'recovered', reason: problem } }
@@ -125,7 +125,7 @@ interface Session {
 function fresh(seed: number, origin: GameOrigin = { kind: 'new' }): Session {
   // Named explicitly rather than left to `setupGame`'s `V0_RULES` default, so the
   // record says which rules it was played under and replays under them for good.
-  const setup: SetupOptions = { seed, forces: { kind: 'random' }, ruleSet: SAI_RULES }
+  const setup: SetupOptions = { seed, forces: { kind: 'random' }, ruleSet: DUA_RULES }
   return { state: begin(setupGame(setup)), setup, actions: [], origin }
 }
 

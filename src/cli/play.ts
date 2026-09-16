@@ -24,10 +24,12 @@ import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
 import {
-  SAI_RULES,
+  DUA_RULES,
   TERRAIN_SLOTS,
   armyAt,
+  buriedUnits,
   deadUnits,
+
   livingUnits,
   speciesOf,
   type GameAction,
@@ -93,12 +95,18 @@ function board(state: GameState, human: PlayerId): string {
 
   const reserve = (p: PlayerId) =>
     livingUnits(state, p).filter((u) => u.location.kind === 'reserve').length
+  const buried = (p: PlayerId) => buriedUnits(state, p).length
   lines.push(
     dim(
       `  dead  P1 ${deadUnits(state, 'p1').length}  P2 ${deadUnits(state, 'p2').length}` +
-        `   ·   reserve  P1 ${reserve('p1')}  P2 ${reserve('p2')}`,
+        `   ·   reserve  P1 ${reserve('p1')}  P2 ${reserve('p2')}` +
+        // Nothing buries until Phase 4, so this stays off the board until it does.
+        (buried('p1') + buried('p2') > 0
+          ? `   ·   buried  P1 ${buried('p1')}  P2 ${buried('p2')}`
+          : ''),
     ),
   )
+
   return lines.join('\n')
 }
 
@@ -162,8 +170,15 @@ function describe(entry: LogEntry, state: GameState): string | null {
           .map((id) => (state.units[id] ? name(state.units[id]!) : id))
           .join(', ')}`,
       )
+    case 'units_risen':
+      return green(
+        `  ${entry.unitIds
+          .map((id) => (state.units[id] ? name(state.units[id]!) : id))
+          .join(', ')} rises from the ashes into ${entry.player}'s reserves`,
+      )
     case 'counter_declined':
       return dim(`${entry.player} declines to counter-attack`)
+
     case 'counter_suppressed':
       return yellow(`  ${entry.player} is taken by surprise and cannot counter-attack`)
     case 'victory':
@@ -417,7 +432,7 @@ async function main() {
   const { seed, ai, forces }: { seed: number; ai: AiPlayer; forces: ForceSpec } = parseArgs()
   const human: PlayerId = 'p1'
 
-  let state = begin(setupGame({ seed, forces, ruleSet: SAI_RULES }))
+  let state = begin(setupGame({ seed, forces, ruleSet: DUA_RULES }))
 
   // Which species you are is a roll now, so the banner reads it off the board
   // rather than stating it.

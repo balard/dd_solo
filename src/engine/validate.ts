@@ -8,17 +8,27 @@
  * Note what is *not* checked: "every unit is in exactly one place" is structurally
  * guaranteed, because a unit's location is a field on the unit and there is no
  * parallel list of armies or dead units to drift out of sync. That was the point of
- * deriving armies by query.
+ * deriving armies by query, and adding the BUA did not weaken it -- `PLAN-V1.md`
+ * asked Phase 2 for that check, and it would still be a check that cannot fail.
+ *
+ * What Phase 2 *did* make reachable is a unit changing sides: `exchangeWithDua` is
+ * the only operation in the game that moves a die between two players' areas, and a
+ * promotion that picked the wrong partner would be silent -- `speciesOf` reads the
+ * species off whichever unit it finds first. Hence the species check below.
  */
-import { UNIT_TYPES, terrainDie } from '../data/load'
+import { UNIT_TYPES, terrainDie, unitType } from '../data/load'
 
 import {
   TERRAIN_SLOTS,
   capturedCount,
   livingUnits,
+  unitsOf,
   type GameState,
   type PlayerId,
 } from './types'
+
+const LOCATION_KINDS: readonly string[] = ['terrain', 'reserve', 'dua', 'bua']
+
 
 const PLAYERS: readonly PlayerId[] = ['p1', 'p2']
 
@@ -36,10 +46,27 @@ export function validateState(state: GameState): string[] {
     if (unit.owner !== 'p1' && unit.owner !== 'p2') {
       problems.push(`unit ${unit.id}: unknown owner ${String(unit.owner)}`)
     }
+    if (!LOCATION_KINDS.includes(unit.location.kind)) {
+      problems.push(`unit ${unit.id}: unknown location ${String(unit.location.kind)}`)
+    }
     if (unit.location.kind === 'terrain' && !TERRAIN_SLOTS.includes(unit.location.slot)) {
       problems.push(`unit ${unit.id}: unknown terrain slot ${String(unit.location.slot)}`)
     }
   }
+
+  // A force is one species, dead and buried dice included. Only an exchange with the
+  // DUA can break this, and only by pairing across owners or across species.
+  for (const player of PLAYERS) {
+    const species = new Set(
+      unitsOf(state, player)
+        .filter((u) => knownTypes.has(u.typeId))
+        .map((u) => unitType(u.typeId).species),
+    )
+    if (species.size > 1) {
+      problems.push(`${player}: fields more than one species (${[...species].sort().join(', ')})`)
+    }
+  }
+
 
   for (const slot of TERRAIN_SLOTS) {
     const terrain = state.terrains[slot] as GameState['terrains'][typeof slot] | undefined

@@ -58,9 +58,10 @@ G  Golden files: 25 recorded v0 games          DONE  cut before anything moves
 |
 +--> 1 SAIs A: result generators               DONE
 |
-+--> 2 DUA, BUA, promotion --------+
++--> 2 DUA, BUA, promotion --------+           DONE
 |                                  |
 +--> 3 Effects and durations ------+
+
                                    |
                         4 SAIs B: targeting
                                    |
@@ -541,41 +542,107 @@ or untestable:
 
 ---
 
-## Phase 2 — DUA, BUA, promotion, recruitment
+## Phase 2 — DUA, BUA, promotion, recruitment — **landed**
 
-**Deliverable.** The dead-unit machinery that four later phases all need.
-
-`Location` already has `dua`. Add `bua`, and:
-
-```ts
-promote(state, unitId)            // exchange for a same-species unit one health larger
-recruit(state, unitId, slot)      // move a 1-health unit from the DUA into an army
-bury(state, unitIds)              // DUA or army -> BUA
-exchangeWithDua(state, pairs)     // the general form; all exchanges resolve simultaneously
-```
+**Delivered.** `Location` gained `bua`; `src/engine/dua.ts` holds `promotionPartners`,
+`promotionMatching`, `promote`, `recruit`, `bury` and `exchangeWithDua`; `src/engine/death.ts`
+holds `killUnits` and `buryUnits`. A new `ruleSet.dua: 'inert' | 'active'` switches it on, and
+`DUA_RULES` (`SAI_RULES` + `dua: 'active'`) is now what the browser app and the CLI play.
+`V0_RULES` is untouched and the 25 goldens replay byte-identical, unregenerated.
 
 **Promotion is an exchange, not a stat change.** Invariant 4 says damage kills whole units; the same
 logic applies upward. A 2-health Oak promotes by swapping with a 3-health Treefolk unit *in the
-DUA* — if the DUA has no such unit, promotion simply does not happen. Nothing gains hit points.
+DUA* — if the DUA has no such unit, promotion simply does not happen. Nothing gains hit points, and
+the swap moves `location` and never `typeId`: a unit id embeds its type's short name, so rewriting
+the type would make every id and every golden digest line lie about the die it names.
 
-Three rules from p. 30 are easy to miss and each gets a test: multiple exchanges resolve
+Three rules from p. 31 are easy to miss and each got a test: multiple exchanges resolve
 **simultaneously** (choose all partners, then swap); an army whose every unit is exchanged is still
 considered present, so army-targeted effects survive; exchanged units are **never considered
 killed**, so no death trigger fires.
 
-This phase completes **Wild Growth** (promotion on a non-maneuver roll) and the death-trigger half
-of **Rise from the Ashes**, and unblocks City, Temple, dragon-slaying promotion, Resurrect Dead and
-Accelerated Growth.
+### Where this section was wrong
+
+- **Wild Growth is not in this phase. It moved to Phase 4.** "Completes Wild Growth" read it as
+  needing only promotion; the rulebook (p. 44) lets the roller *split X between save results and
+  promotions*, which is a decision taken between the save roll and the damage calculation.
+  `resolveAttack` is a pure roll → saves → damage pass and `resolveExchange` logs `combat_resolved`
+  off its result, so the split needs a new `COMBAT_SEQUENCE` step and a `CombatState` that can hold
+  a half-finished save roll — the same seam Phase 4 builds for Bullseye, Double Strike, Smother,
+  Firecloud, Choke and Confuse. Building it here for one SAI on two Treefolk dice and again there
+  for six more was the trade refused. `sai.test.ts`'s pinned 12 / 13 rung split is therefore
+  untouched by this phase.
+- **The scope flag is `RuleSet.dua`, not a fourth `sai` rung.** What this phase switches on is a
+  fact about the DUA, not about roll resolution: the death trigger fires on burial and (Phase 6) on
+  dragon breath, in no roll at all, and City, Temple, dragon-slaying and Resurrect Dead all need
+  the machinery while keying off their own flags. A fourth `sai` value would have redefined a rung
+  that had already landed and re-gated the `'full'` throw.
+- **"`validateState` gains a check that no unit is in two places" was a check that cannot fail.**
+  A unit's location is one field on the unit and there is no parallel DUA list to drift from —
+  `validate.ts` says so in its own header. What Phase 2 *did* make reachable is a unit changing
+  sides, since `exchangeWithDua` is the only operation in the game that moves a die between two
+  players' areas and `speciesOf` reads the species off whichever unit it finds first. So the check
+  added is **every unit of a player shares one species**, plus a location-kind guard.
+- **Rise from the Ashes was documented wrong in `sai.ts`.** Its comment said an *ID* sends the unit
+  to Reserves; the reference says "If **Rise from the Ashes** is rolled" — 2 faces in 10 on the
+  Phoenix, not 1. It also fires on **burial as well as death**, and an effect that both kills and
+  buries gives two rolls with the first success preventing the burial. All three are tests.
+
+### Two things that would have shipped silently
+
+1. **`livingUnits` was `location.kind !== 'dua'`** — a negative test. The moment `bua` existed that
+   would have counted every buried die as alive, so a player whose last unit was buried would never
+   lose, and `validateState`'s winner-has-units check would have agreed with it. It is now stated
+   positively over `terrain | reserve`, so a future `Location` member has to be opted *into* it.
+2. **The death trigger consumes randomness, on the one path every v0 game takes.** `killUnits` is
+   `applyDamage` and nothing else under `dua: 'inert'` — one stray draw there shifts `rng.counter`
+   and every die after it in all 25 goldens. That is a first-class test rather than something the
+   corpus is left to notice.
 
 **Exit criterion.** A unit can travel army → DUA → army by promotion and by recruitment, and
-army → BUA with no way back. `validateState` gains a check that no unit is in two places.
+army → BUA with no way back. ✅
 
-**Tests.**
+> **Landed with the fuzz deliberately skipped again**, as in Phase 1: `npm test` still fuzzes
+> `V0_RULES` only, so `DUA_RULES` has no standing deadlock net. Two runs *were* done by hand as
+> verification — 1000 rolled-force games and 400 bestiary ones, 0 stuck, 0 throws, `validateState`
+> clean throughout, 57 and 33 rises respectively, and nothing ever buried — but none of it is in the
+> suite. The gap is now two phases wide; see Risks.
 
-- Promote with an empty DUA: no-op, no error.
-- Promote three units at once where only two partners exist: two promote, chosen before any swap.
-- An army of one unit, exchanged: the army still exists at that terrain.
-- A buried unit is not in the DUA and cannot be promoted into, recruited, or resurrected.
+**Tests, as delivered.** `src/engine/dua.test.ts` (18 cases) and `src/engine/death.test.ts` (13).
+
+| Case | Expected |
+|---|---|
+| Promote with an empty DUA | no pairs, no-op, no error |
+| Three Oaks, two dead Oak Lords | two promote; the third does not, and no Oak demoted by this exchange is used as a partner |
+| An Oakling beside a promoting Oak | the Oak's arrival in the DUA is not available to the Oakling — simultaneity, and the case that fails if the implementation loops |
+| The same pairs in reverse order | identical `units`, because every location is read off the original state |
+| An army of one unit, exchanged | still length 1 at that terrain |
+| A partner two health up, or of another species | refused |
+| A buried unit | not in the DUA, not a promotion partner, not recruitable, and not in `livingUnits` |
+| `recruit` of a 2-health unit | refused: only small units are recruited |
+| A Phoenix killed under `dua: 'inert'` | in the DUA, and `rng` is byte-identical — no draw at all |
+| A Phoenix seeded onto a Rise face | in Reserves, one draw, `units_risen` logged |
+| A Phoenix seeded onto any other face | dead, one draw — the condition is a Rise face, not an ID |
+| A Fireshadow killed under `dua: 'active'` | no draw: it does not carry the SAI |
+| The same units named in another order | identical result — the roll order is the board's, not the player's |
+| Kill-and-bury | two rolls, and a success on the first means there is no second |
+| An `assign_damage` answer through `reduce` | `units_killed` then `units_risen`, and nothing logged when nothing rises |
+
+**Bumped `SAVE_VERSION` to 5.** Two reasons, and the second is the stronger: a version-4 record is
+a version-4 game with nothing on screen saying so (the Phase 1 reason, again), and it carries a
+serialised `ruleSet` object with **no `dua` key**, so replaying it would run the engine against a
+`RuleSet` the type says cannot exist — behaving as `'inert'` by accident rather than by decision.
+
+### What later phases inherit
+
+- `exchangeWithDua` and its simultaneity rule, which City, Temple, dragon-slaying and Resurrect
+  Dead all sit on. **Nothing calls promotion or recruitment in a game yet** — that starts with the
+  City in Phase 5, and the Frontier is always a City.
+- `bury` and `buryUnits`, so Phase 4's Flame is one call.
+- `killUnits` as the seam every death now passes through, which is where Phase 8's Treefolk
+  Replanting and Phase 6's Fire breath plug in.
+- A warning for Phase 4: `units_killed` carries a `TerrainSlot`, and a burial out of the DUA has
+  none. Either that field widens or burial needs its own log entry.
 
 ---
 
@@ -626,12 +693,26 @@ target.
 
 **Deliverable.** `sai: 'full'`. The SAIs that pick targets, plus the two that move units.
 
-`Bullseye`, `Double Strike`, `Smother`, `Firecloud`, `Seize`, `Choke`, `Confuse`, `Flame`, and the
-free-move halves of `Firewalking` and `Teleport`.
+`Bullseye`, `Double Strike`, `Smother`, `Firecloud`, `Seize`, `Choke`, `Confuse`, `Flame`,
+`Wild Growth`, and the free-move halves of `Firewalking` and `Teleport`.
 
-Two new mechanisms:
+**Wild Growth arrived here from Phase 2**, which could not hold it: "X save results *or* promote X
+health-worth, split as you choose" is a decision taken between the save roll and the damage
+calculation, which is the same seam Choke, Confuse, Bullseye and Double Strike all need. Its
+promotion machinery is already built and waiting in `dua.ts`; what it needs from this phase is the
+pause. Note also that its X is a *health budget* that one unit may spend twice — an Oakling
+promoting to an Oak and on to an Oak Lord costs 2 — which `promotionMatching` deliberately does not
+model, since every other caller promotes by exactly one step.
 
-- **A sub-roll.** Smother and Firecloud make their targets take a *maneuver* roll; Bullseye and
+Three new mechanisms:
+
+- **A pause inside a roll.** Wild Growth has to ask its roller how to spend X before the save total
+  is final, which today it cannot: `resolveAttack` computes roll → saves → damage in one pure pass
+  and `resolveExchange` logs `combat_resolved` off the result. This is a new `COMBAT_SEQUENCE` step
+  plus a `CombatState` that can carry a half-finished save roll — and every field it adds must be
+  **optional and omitted**, because four goldens end mid-combat.
+- **A sub-roll.**
+ Smother and Firecloud make their targets take a *maneuver* roll; Bullseye and
   Double Strike a *save* roll; Seize an *ID* roll. These are rolls of a chosen subset of units,
   outside the normal attack/save exchange. `rollUnits(state, unitIds, context)` — the pipeline from
   Phase 0b already accepts an arbitrary die set.
@@ -681,8 +762,10 @@ code.
 | Smite | unsavable damage channel | 1 |
 | Surprise | combat flag suppressing the counter | 1 |
 | Rend | reroll (step 3) | 1 |
-| Wild Growth | promotion | 2 |
-| Rise from the Ashes | 4 saves / death trigger to Reserves | 1 / 2 |
+| Wild Growth | promotion (Phase 2) **plus a pause mid-roll to split X** | 4 |
+
+| Rise from the Ashes | 4 saves / death trigger to Reserves | 1 ✅ / 2 ✅ |
+
 | Sleep | unit status with a duration | 3 |
 | Galeforce | army effect with a duration, any terrain | 3 |
 | Bullseye | targeting + save sub-roll + reroll | 4 |
@@ -692,7 +775,8 @@ code.
 | Seize | targeting + ID sub-roll + move to Reserves | 4 |
 | Choke | delayed until after saves; ID detection; save suppression | 4 |
 | Confuse | delayed until after saves; reroll of targets | 4 |
-| Flame | targeting + burial | 2 / 4 |
+| Flame | targeting + burial | 2 ✅ / 4 |
+
 | Firewalking | maneuver results / free move on non-maneuver rolls | 1 / 4 |
 | Teleport | maneuver results / free move on non-maneuver rolls | 1 / 4 |
 | Cantrip | spells | 7 |
@@ -853,7 +937,7 @@ games clean with `dragons: true`.
 
 **The v0 magic house rule ends here.** `floor(M / 2)`, the same-terrain restriction, the absent
 save roll and the absent counter-attack are all replaced, and the rounding question that
-`RULES-V0.md` §9 carried since the alpha expires rather than gets answered — there is no rounding
+`RULES-V0.md` §10 carried since the alpha expires rather than gets answered — there is no rounding
 left to tune. `magic: 'simplified'` survives only as the `V0_RULES` regression baseline; it is not
 a configuration anyone plays or balances after this phase.
 
@@ -989,8 +1073,9 @@ on a phone, and the log explains every number in it.
 | Eighth face grants only the two standard advantages | Phase 5 |
 | No dragons | Phase 6 |
 | No spells | Phase 7 |
-| No promotion | Phase 2 |
-| No burying | Phase 2 |
+| No promotion | Phase 2 ✅ (machinery; first in-game caller is Phase 5's City) |
+| No burying | Phase 2 ✅ (machinery; first in-game caller is Phase 4's Flame) |
+
 | Three fixed terrains, all Towers | Phase 5 |
 | Two hand-authored 30-health forces, fixed race per player | Phase 0a |
 | The Frontier is a constant, and both forces must propose the same die | Phase 0a |
@@ -1013,9 +1098,11 @@ export const V1_RULES: RuleSet = {
   magic: 'spells',
   sai: 'full',
   eighthFace: 'full',
+  dua: 'active',            // new flag, Phase 2 -- landed
   dragons: true,
   speciesAbilities: true,   // new flag, Phase 8
 }
+
 ```
 
 ---
@@ -1037,12 +1124,14 @@ make each game longer. `advance` throws after 1000 steps, which is a generous bo
 not be for a game with summoning and resurrection — expect to raise it, and be suspicious the first
 time you do.
 
-The sharper risk is that the fuzz now covers a configuration **nobody plays**. Phase 1 turned the
-app over to `SAI_RULES` and did not add a fuzz for it, so the only automated net over the live
-rules is the unit tests; `V0_RULES` keeps the 1000 games *and* the 25 goldens, which is the one
-config that least needs them. Every phase from here widens that gap. Closing it is one `it.each`
-over two rulesets — and per-SAI trigger counters, or a clean run proves nothing about the rare
-faces.
+The sharper risk is that the fuzz now covers a configuration **nobody plays, and the gap is two
+phases wide.** Phase 1 turned the app over to `SAI_RULES` and did not add a fuzz for it; Phase 2
+turned it over to `DUA_RULES` and did not either. Both were verified by a hand-run of the same
+harness, which is worth something and is not a test. So the only automated net over the live rules
+is the unit tests, while `V0_RULES` keeps the 1000 games *and* the 25 goldens — the one config that
+least needs them. Every phase from here widens it further. Closing it is one `it.each` over two
+rulesets — and per-rule trigger counters, or a clean run proves nothing about the rare faces.
+
 
 **Spells are where the balance stops being ours.** v0's magic house rule was explicitly a guess to
 be tuned. Real spells are not tunable — they are the game. Expect Phase 7 to make the game feel

@@ -3,28 +3,33 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: v0 alpha complete; v1 Phases 0 and 1 landed.** All nine phases of `docs/PLAN-V0.md` are done.
+> **Status: v0 alpha complete; v1 Phases 0, 1 and 2 landed.** All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > installable as a PWA, and resumes where you left off. Since the alpha landed, the board grew to
 > show every army at once and the eighth face started granting its two standard advantages
 > (`eighthFace: 'standard'`).
 >
-> **Phases 0 and 1 of `docs/PLAN-V1.md` are done.** Phase 0 landed in three commits: a golden
+> **Phases 0, 1 and 2 of `docs/PLAN-V1.md` are done.** Phase 0 landed in three commits: a golden
 > corpus of 25 recorded games (Phase G), the rulebook's ten-step roll pipeline replacing the sum
 > inside `rollArmy` (0b), and forces rolled from the seed with the Frontier placed by the roll-off
 > loser (0a). **Phase 1 added `sai: 'results'`** — the twelve SAIs that only add results, plus
-> Rend's reroll — and the app and CLI now play it. The ladder after it is eighth-face **icon**
-> powers, spells, then dragons, each a `RuleSet` flag with a home already prepared.
+> Rend's reroll. **Phase 2 added `dua: 'active'`** — the BUA, the promotion/recruitment/burial
+> machinery, and Rise from the Ashes' death trigger. The app and CLI play `DUA_RULES`, which is
+> both. The ladder after it is eighth-face **icon** powers, spells, then dragons, each a `RuleSet`
+> flag with a home already prepared.
 >
-> **Phase 1's own findings are written up in `PLAN-V1.md`, Phase 1** — what that section got wrong before
-> it was built, and five bugs that would have shipped green. Three of them are the same shape and
-> Phase 4 meets all three again, so read it before starting the targeting SAIs.
+> **Each landed phase's findings are written up in `PLAN-V1.md` under its own heading** — what that
+> section got wrong before it was built, and what would have shipped green. Phase 1's list is the
+> one to read before starting Phase 4: three of its five bugs are the same shape, and Phase 4 meets
+> all three again. Phase 2's says why Wild Growth moved out of it and into Phase 4.
 >
 > Worth knowing before picking one up: **both home terrains are Towers and the Frontier is a City**
 > (Phase 0a gave each species a second die of its own type). So Tower's "may attack any terrain in
 > play during a missile action" is the icon power that covers two of the three terrains here, and
 > it is the smallest of the four — one condition inside `missileTargets` — which makes it a cheap
-> way to start the eighth face long before Temple and Standing Stones become reachable.
+> way to start the eighth face long before Temple and Standing Stones become reachable. The City is
+> now the *other* cheap one: Phase 2 built everything it needs, so it is a `Pending` and an
+> `eighth_face` phase handler away, and it fires at the Frontier every turn.
 
 ## Read these first
 
@@ -98,10 +103,13 @@ These are the things that break the project if violated:
    non-maximal assignment must be rejected by the reducer. See `RULES-V0.md` §6 — this is the rule
    most often gotten wrong by reflex.
 5. **Scope is controlled by the `RuleSet` config**, not by scattered `if`s. `V0_RULES` is
-   `magic: 'simplified'`, `sai: 'inert'`, `eighthFace: 'standard'`, `dragons: false`, and stays
-   exactly that -- it is what the golden corpus is recorded against. What the app plays is
-   `SAI_RULES`, which is `V0_RULES` with `sai: 'results'`. Adding a cut feature means implementing
-   behind its flag, not deleting a condition.
+   `magic: 'simplified'`, `sai: 'inert'`, `eighthFace: 'standard'`, `dua: 'inert'`,
+   `dragons: false`, and stays exactly that -- it is what the golden corpus is recorded against.
+   What the app plays is `DUA_RULES` = `SAI_RULES` + `dua: 'active'` = `V0_RULES` +
+   `sai: 'results'` + `dua: 'active'`. Adding a cut feature means implementing behind its flag,
+   not deleting a condition -- and adding a key to `V0_RULES` is safe for the goldens, because
+   `digestState` excludes `ruleSet` and `setupGame` pins an absent one to `V0_RULES`.
+
 6. **Die faces are data, in `data/`, validated against the schemas.** Never hard-code a die's
    faces in TypeScript.
 7. **A face carries a count of icons, not one icon.** The count is already the final answer:
@@ -125,12 +133,19 @@ These are the things that break the project if violated:
   `<count> SAI:<Name>`. That count is a result count for some SAIs and an X parameter for others
   (`2 SAI:Flame` targets two health-worth of units), so let each SAI interpret its own number.
   Twelve of the 25 are live under `sai: 'results'`; see `RULES-V0.md` §8 and `src/engine/sai.ts`.
+- **The DUA is a graveyard under `dua: 'inert'` and a resource under `'active'`** -- promotion,
+  recruitment, burial and Rise from the Ashes' death trigger. See `RULES-V0.md` §9. Still true of
+  both rungs: **nothing in a game calls promotion or recruitment yet** (Phase 5's City is the first
+  caller) and **nothing buries** (Phase 4's Flame).
+
 - **Eighth face captures and wins** (two captures = victory) **and grants its two standard
   advantages**: the holder's army doubles all ID results when rolling *anything* there — attack,
   save or maneuver — and may take melee, missile or magic, while any army facing them at that
   terrain is restricted to melee. Still cut: the icon powers (City, Standing Stones, Temple,
   Tower), which is what `eighthFace: 'full'` will add.
-- **No dragons, no spells, no promotion, no burying.**
+- **No dragons and no spells.** Promotion and burying exist as machinery from v1 Phase 2, but
+  `V0_RULES` still reaches neither.
+
 
 ## Die data
 
@@ -165,8 +180,12 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 ## Engine notes
 
 - **Armies are derived, not stored.** A unit has a `location`; `armyAt(state, player, slot)` is a
-  query. Home/Campaign/Horde are setup vocabulary only. Never add a parallel army or DUA list —
-  the absence of one is what makes desync impossible.
+  query. Home/Campaign/Horde are setup vocabulary only. Never add a parallel army, DUA or BUA list
+  — the absence of one is what makes desync impossible, and it is why `validateState` still does
+  not check "every unit is in exactly one place" (`PLAN-V1.md` Phase 2 asked for that check; it
+  cannot fail). What it *does* check, since an exchange is the one thing that can move a die
+  between two players' areas, is that **every unit of a player shares one species**.
+
 - **`rollArmy` has no special case for ID icons or monsters, and must not grow one.** The count
   printed on the face is already the answer. `faceResults` is three lines; keep it that way.
 - **`setupGame` rolls the whole opening from the seed.** One RNG stream, in this order, and the
@@ -274,6 +293,30 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     read as the target, meant the origin, and dropped the target entirely. Name both ends.
 - **`applyDamage` does not check for victory.** The caller does, because the win check runs after
   every state change.
+- **Every death goes through `killUnits` (`death.ts`), not `applyDamage`.** It is `applyDamage`
+  and nothing else under `dua: 'inert'` -- *including consuming no randomness*, which is what keeps
+  the 25 goldens byte-identical, and is a test rather than something the corpus is left to notice.
+  Under `'active'` it is where Rise from the Ashes fires, and it is the seam Phase 8's Replanting
+  and Phase 6's Fire breath plug into. `buryUnits` is its twin for burial.
+  - **Rise from the Ashes triggers on a *Rise face*, not an ID**, and on **burial as well as
+    death**; kill-and-bury gives two rolls, and a success on the first means the unit is never
+    buried. `sai.ts` said "an ID" until Phase 2 read the reference again.
+  - Units that carry no Rise face consume no randomness, and the roll order is the board's order
+    (`Object.values(state.units)`), not the order the player typed into `assign_damage`.
+- **`livingUnits` is stated positively — `terrain | reserve` — and must stay that way.** It was
+  `!== 'dua'`, which would have counted every buried die as alive the moment the BUA existed: a
+  player whose last unit was buried would never lose, and `validateState` would have agreed. A new
+  `Location` member has to be opted *into* it.
+- **The DUA machinery is `dua.ts`, and promotion is an exchange.** A 2-health Oak promotes by
+  swapping *places* with a 3-health Treefolk unit in the DUA -- invariant 4 upward, nothing gains
+  health. The swap moves `location` and **never `typeId`**: a unit id embeds its type's short name,
+  so rewriting the type makes every id and every golden digest line lie.
+  - **Every exchange resolves in one pass over the original state**, which is the rules' "choose
+    all partners before performing the exchange". It is also what makes an army whose every unit is
+    exchanged still present, and why order of `pairs` cannot matter.
+  - **Exchanged units are never considered killed** -- no log entry, no death trigger.
+  - `promotionMatching` promotes by exactly one step. Health-budget promotion, where one unit may
+    spend X twice (1 -> 2 -> 3), belongs to Wild Growth and the City and is deliberately not there.
 - **`applyAction` clears `pending` and must never set one; `stepGame` is the only thing that sets
   it.** This is why the victory check runs after every state change: an action leaves `pending`
   null, so `advance` always runs `stepGame` at least once afterwards. Set `pending` inside
@@ -440,9 +483,15 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   on playing the v0 game while New Game starts a `'results'` one, with nothing on screen saying
   which. A bump justified by a hazard that does not exist trains reflexive bumping and devalues the
   discipline.
-- **A record written by the app now names its ruleset.** `useGame` passes `ruleSet: SAI_RULES`
+  - **A `RuleSet` that gains a key gives the next bump a second, harder reason.** A record stores
+    its `ruleSet` as JSON, so a save written before the key existed would replay against an object
+    the type says cannot exist — the new flag reading `undefined`, behaving as its off value by
+    accident rather than by decision. That is the reason `storage.ts` records for version 5, beside
+    the version-4 one.
+- **A record written by the app names its ruleset.** `useGame` passes `ruleSet: DUA_RULES`
   explicitly rather than leaning on the default, so a save says which rules it was played under and
   goes on replaying under them.
+
 - **Wrap every `localStorage` access.** It throws in private windows, with site data blocked, and
   on a full quota. A game that cannot be saved must still be playable.
 
@@ -452,7 +501,7 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   engine passes a lot of small integers around and mixing them up is silent.
 - Rules tests read as scenarios: build a state, apply an action list, assert. Combat and damage
   assignment get tests before implementation.
-- Keep `docs/RULES-V0.md` §9 and `docs/OVERVIEW.md` §8 current. When a rules question gets
+- Keep `docs/RULES-V0.md` §10 and `docs/OVERVIEW.md` §8 current. When a rules question gets
   answered, move it out of Open Questions and into the body.
 
 ## Git

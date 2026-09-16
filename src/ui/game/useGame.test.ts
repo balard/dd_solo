@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { BESTIARY_FORCES, STARTER_FORCES } from '../../engine/setup'
-import { SAI_RULES } from '../../engine/types'
+import { DUA_RULES } from '../../engine/types'
 
 import { parseGameRequest } from './useGame'
 
@@ -21,7 +21,7 @@ describe('parseGameRequest', () => {
 
   it('names a force and a seed', () => {
     const request = parseGameRequest('?forces=bestiary&seed=7', FALLBACK)
-    expect(request?.setup).toEqual({ seed: 7, forces: BESTIARY_FORCES, ruleSet: SAI_RULES })
+    expect(request?.setup).toEqual({ seed: 7, forces: BESTIARY_FORCES, ruleSet: DUA_RULES })
     expect(request?.origin).toEqual({ kind: 'requested', forces: 'bestiary', seed: 7 })
   })
 
@@ -33,7 +33,7 @@ describe('parseGameRequest', () => {
 
   it('takes a seed on its own, and still rolls the forces', () => {
     const request = parseGameRequest('?seed=1234', FALLBACK)
-    expect(request?.setup).toEqual({ seed: 1234, forces: { kind: 'random' }, ruleSet: SAI_RULES })
+    expect(request?.setup).toEqual({ seed: 1234, forces: { kind: 'random' }, ruleSet: DUA_RULES })
     expect(request?.origin).toEqual({ kind: 'requested', forces: null, seed: 1234 })
   })
 
@@ -65,9 +65,9 @@ describe('parseGameRequest', () => {
     expect(parseGameRequest('?forces=bestiary&seed=', FALLBACK)?.setup.seed).toBe(FALLBACK)
   })
 
-  /** Every game the app starts is played under `SAI_RULES`, link or no link. */
+  /** Every game the app starts is played under `DUA_RULES`, link or no link. */
   it('never starts a game on a different ruleset', () => {
-    expect(parseGameRequest('?forces=bestiary', FALLBACK)?.setup.ruleSet).toBe(SAI_RULES)
-    expect(parseGameRequest('?forces=nope', FALLBACK)?.setup.ruleSet).toBe(SAI_RULES)
+    expect(parseGameRequest('?forces=bestiary', FALLBACK)?.setup.ruleSet).toBe(DUA_RULES)
+    expect(parseGameRequest('?forces=nope', FALLBACK)?.setup.ruleSet).toBe(DUA_RULES)
   })
 })

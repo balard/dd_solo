@@ -25,7 +25,9 @@ below together with the phase that retires it. **This document stays normative r
 - Maneuver, including **contested maneuver rolls**.
 - Melee (with counter-attack), Missile, and **simplified Magic** (§4).
 - **Reserves Phase**: Reinforce then Retreat.
-- **Dead Unit Area (DUA)**. Units killed go there and stay there.
+- **Dead Unit Area (DUA)**. Units killed go there; under `dua: 'active'` (§9) they can come back
+  out of it.
+
 - Capturing a terrain by maneuvering it to face 8. **Two captures wins.**
 - Elimination of all enemy units wins.
 
@@ -38,8 +40,9 @@ below together with the phase that retires it. **This document stays normative r
 | **SAIs** | **25** distinct icons, many with delayed effects and targeting. Faces are *recorded* in the data as `<count> SAI:<Name>` but produce **zero results** under `sai: 'inert'` — that is 58 of the 280 faces, so roughly one die in five rolls a blank. **Twelve of the 25 are live under `sai: 'results'`** (§8), which is what the app now plays; `V0_RULES` keeps all 25 inert. | v1 (partly landed) |
 | **Eighth-face icon powers** (City, Temple, Standing Stones, Tower) | Each is a separate subsystem. Which icon a die carries **is** recorded in the data; in v0 all four behave identically, so the choice is cosmetic. | v1 |
 | ~~Eighth-face combat bonuses~~ | **Now in.** ID doubling and the melee-only restriction are implemented; see §5. | — |
-| **Buried Unit Area (BUA)** | Only reachable via SAIs, spells and Temple. Nothing can bury in v0. | v1 |
-| **Promotion / recruitment** | Only reachable via dragon-slaying, Wild Growth and the City. | v1 |
+| ~~**Buried Unit Area (BUA)**~~ | **Now in**, under `dua: 'active'` — see §9. `V0_RULES` still has no way to bury anything, and neither does the live rung until Phase 4's Flame. | — |
+| ~~**Promotion / recruitment**~~ | **The machinery is in**, under `dua: 'active'` — see §9. Nothing calls it in a game until the City lands in Phase 5. | — |
+
 | **Species abilities** | The *starter* book grants Treefolk/Firewalkers none, so against our release target there is nothing to implement. The full rules give each species two, plus a turn phase of their own that `Phase` does not model. | v1 |
 | **Items, minor terrains, Dragonkin, Eldarim, multiplayer** | Advanced rules, far out of scope. | later |
 | **Effects Expire phase** | Nothing in v0 creates a lasting effect. Kept as a no-op phase so the turn structure is already correct. | v1 |
@@ -218,7 +221,8 @@ Live:
 | Surprise | The defender may not counter-attack. No effect during a counter-attack. |
 | Rend | Melee attack: X melee **and roll the die again**, both faces counting. Maneuver roll: X maneuver, no reroll. |
 | Firewalking, Teleport | X maneuver on a maneuver roll. Their free move is Phase 4. |
-| Rise from the Ashes | X saves. Its death trigger is Phase 2. |
+| Rise from the Ashes | X saves. Its death trigger needs `dua: 'active'` — §9. |
+
 
 Deliberately inert on this rung, each waiting on machinery a later phase builds: Bullseye, Cantrip,
 Choke, Confuse, Dispel Magic, Double Strike, Firecloud, Flame, Galeforce, Seize, Sleep, Smother,
@@ -241,7 +245,39 @@ having finished rerolls.
   has been rolled once. With one Rend face on one unit type no other order is distinguishable
   today, but a recorded game depends on it forever.
 
-## 9. Open questions
+## 9. The DUA under `dua: 'active'` (v1 Phase 2)
+
+`V0_RULES` is unchanged: its DUA is still a graveyard, nothing is ever buried, and **killing a
+unit rolls no die**. This section describes `DUA_RULES`, which is what `npm run dev` and
+`npm run play` now use — `SAI_RULES` plus `dua: 'active'`.
+
+Four movements exist, and only the last one happens in a game today:
+
+| | Rule |
+|---|---|
+| **Promotion** | Exchange a unit for one in your DUA of the **same species and exactly one health larger**. With no such unit in the DUA, promotion simply does not happen. It is an exchange, not a stat change: the promoted unit's place in the DUA is taken by the unit it replaced. Class is not a constraint — an Oak may come back as a Noble Willow. |
+| **Recruitment** | Move a **one-health** unit from the DUA into an army. Not an exchange; nothing goes back. |
+| **Burial** | Move units to the **Buried Unit Area**, from the DUA or straight off the board. For these two species there is no route out of it. |
+| **Rise from the Ashes** | Whenever a unit carrying the SAI is **killed or buried**, roll it. A Rise from the Ashes face sends it to your **Reserve Area** instead. An effect that both kills and buries gives it two rolls, and a success on the first means it is never buried. |
+
+Three rules govern every exchange with the DUA (full rules p. 31), and each has a test:
+
+- Multiple exchanges resolve **simultaneously**: all partners are chosen before any unit moves, so
+  a unit demoted into the DUA by an exchange can never be another pair's partner.
+- An army whose **every** unit is exchanged is still considered present at its terrain.
+- Exchanged units are **never considered killed**, so no death trigger fires on one.
+
+**Nothing calls promotion or recruitment in a game yet.** The City (Phase 5), Temple (Phase 5),
+dragon-slaying (Phase 6) and Resurrect Dead (Phase 7) are the four callers, and Flame (Phase 4) is
+the only thing that buries. Rise from the Ashes is the one rule this rung switches on that a
+player can actually see.
+
+**Wild Growth is not on this rung**, though `PLAN-V1.md` originally placed it here. It lets the
+roller split X between save results and promotions, which is a decision taken in the middle of a
+roll — the seam Phase 4 builds for Bullseye, Choke and Confuse. It stays inert until then.
+
+## 10. Open questions
+
 
 - **Army builder** in the alpha, or only the two 30-health presets? (Currently: presets only.)
   Still open, and deliberately outside `PLAN-V1.md` — an army builder is what makes *more species*

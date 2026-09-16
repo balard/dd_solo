@@ -14,7 +14,9 @@
  * rather than only at end of turn.
  */
 import { doublesIds, legalActions, missileTargets, resolveAttack, terrainAction } from './combat'
-import { applyDamage, damageAssignmentProblem, damageOptions } from './damage'
+import { damageAssignmentProblem, damageOptions } from './damage'
+import { killUnits } from './death'
+
 import { expectNoEffects, rollArmy } from './roll'
 import type { RollContext } from './sai'
 import {
@@ -698,14 +700,24 @@ function applyAssignDamage(state: GameState, unitIds: readonly UnitId[]): GameSt
   const problem = damageAssignmentProblem(army, damageAt(state, step), unitIds)
   if (problem !== null) throw new IllegalActionError(problem)
 
-  const killed = withLog(applyDamage(state, unitIds), {
-    kind: 'units_killed',
-    player: victim,
-    slot,
-    unitIds,
-  })
+  // Not `applyDamage`: a death is a moment a rule can intervene in. Under
+  // `dua: 'inert'` this is `applyDamage` and consumes no randomness, which is what
+  // keeps the golden corpus byte-identical.
+  const { state: dead, risen } = killUnits(state, unitIds)
+
+  const killed = withLog(
+    dead,
+    { kind: 'units_killed', player: victim, slot, unitIds },
+    // A subset of the line above, and a second entry rather than a field on it: the
+    // unit really was killed, and then moved. Omitted entirely when nothing rose,
+    // because every golden digest carries every log entry verbatim.
+    ...(risen.length > 0
+      ? [{ kind: 'units_risen', player: victim, unitIds: risen } as const]
+      : []),
+  )
 
   return afterCombatStep(killed, step)
+
 }
 
 function applyReinforce(

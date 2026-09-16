@@ -9,7 +9,9 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { unitType } from '../data/load'
 import {
+  buriedUnits,
   deadUnits,
+
   livingUnits,
   speciesOf,
   type PlayerId,
@@ -70,6 +72,13 @@ export function App() {
   const reserve = livingUnits(state, human).filter((u) => u.location.kind === 'reserve')
   const myFallen = deadUnits(state, human)
   const theirFallen = deadUnits(state, enemy)
+  // Shown in the same disclosure as the fallen, and labelled apart from them: the
+  // DUA is a resource units come back out of, the BUA is where they stop. Nothing
+  // buries until Phase 4, so these two are empty in every game today.
+  const myBuried = buriedUnits(state, human)
+  const theirBuried = buriedUnits(state, enemy)
+  const anyBuried = myBuried.length > 0 || theirBuried.length > 0
+
   const health = (units: readonly { typeId: string }[]) =>
     units.reduce((n, u) => n + unitType(u.typeId).health, 0)
 
@@ -178,8 +187,9 @@ export function App() {
           </section>
         )}
 
-        {(myFallen.length > 0 || theirFallen.length > 0) && (
+        {(myFallen.length > 0 || theirFallen.length > 0 || anyBuried) && (
           <section className="army off-board">
+
             <h3>
               <button
                 type="button"
@@ -190,6 +200,7 @@ export function App() {
                 <span className="muted">
                   {' '}
                   you {myFallen.length} · enemy {theirFallen.length}
+                  {anyBuried ? ` · buried ${myBuried.length}/${theirBuried.length}` : ''}
                 </span>
               </button>
             </h3>
@@ -199,8 +210,21 @@ export function App() {
                 <DiceGrid units={myFallen} inspecting={inspecting} onInspect={setInspecting} />
                 <p className="fallen-side muted">Enemy</p>
                 <DiceGrid units={theirFallen} inspecting={inspecting} onInspect={setInspecting} />
+                {myBuried.length > 0 && (
+                  <>
+                    <p className="fallen-side muted">Yours, buried</p>
+                    <DiceGrid units={myBuried} inspecting={inspecting} onInspect={setInspecting} />
+                  </>
+                )}
+                {theirBuried.length > 0 && (
+                  <>
+                    <p className="fallen-side muted">Enemy, buried</p>
+                    <DiceGrid units={theirBuried} inspecting={inspecting} onInspect={setInspecting} />
+                  </>
+                )}
               </div>
             )}
+
           </section>
         )}
 

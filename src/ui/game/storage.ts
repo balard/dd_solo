@@ -36,8 +36,16 @@ const KEY = 'dd_solo.save'
  *    is that it would go on replaying the v0 game -- no Smite, no Counter, no
  *    rerolls -- while the New Game button starts a different one, and nothing on
  *    screen says which you are playing. Discarding it is the honest option.
+ *
+ * 5: the app now sets `ruleSet: DUA_RULES`, and a killed Phoenix rolls a die that
+ *    version 4 never rolled. Two reasons, and the second is the stronger one: a
+ *    version-4 record is a version-4 game with nothing on screen saying so, exactly
+ *    as in 4 above; and it carries a serialised `ruleSet` object with no `dua` key
+ *    at all, so replaying it would run the engine against a `RuleSet` the type says
+ *    cannot exist -- behaving as `'inert'` by accident rather than by decision.
  */
-export const SAVE_VERSION = 4
+export const SAVE_VERSION = 5
+
 
 export interface SavedGame {
   readonly version: number

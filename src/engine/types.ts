@@ -29,6 +29,10 @@ export type Location =
   | { readonly kind: 'terrain'; readonly slot: TerrainSlot }
   | { readonly kind: 'reserve' }
   | { readonly kind: 'dua' }
+  /** The Buried Unit Area. Reachable only under `dua: 'active'`, and one-way: for
+   *  Treefolk and Firewalkers nothing brings a buried unit back. */
+  | { readonly kind: 'bua' }
+
 
 /** An army for the purpose of marching: a terrain, or the Reserve Area. */
 export type ArmyRef = TerrainSlot | 'reserve'
@@ -307,7 +311,18 @@ export type LogEntry =
       readonly slot: TerrainSlot
       readonly unitIds: readonly UnitId[]
     }
+  /**
+   * Rise from the Ashes: units that were killed and then rolled their way into
+   * Reserves instead of staying in the DUA.
+   *
+   * A separate entry rather than a field on `units_killed`, and for the same reason
+   * `counter_suppressed` is one: the unit really was killed, and then moved, and the
+   * log has to be able to say both. The ids here are always a subset of the
+   * `units_killed` entry immediately before it.
+   */
+  | { readonly kind: 'units_risen'; readonly player: PlayerId; readonly unitIds: readonly UnitId[] }
   | { readonly kind: 'counter_declined'; readonly player: PlayerId }
+
   /** Surprise. A separate entry rather than a flag on `combat_resolved`: without it
    *  the march simply ends, with no `counter_declined` and no explanation. */
   | { readonly kind: 'counter_suppressed'; readonly player: PlayerId; readonly slot: TerrainSlot }
@@ -344,6 +359,19 @@ export interface RuleSet {
    *                 Temple, Tower), which are still cut.
    */
   readonly eighthFace: 'captureOnly' | 'standard' | 'full'
+  /**
+   * `inert`  -- the Dead Unit Area is a graveyard: nothing leaves it, nothing is ever
+   *            buried, no death trigger fires, and killing a unit rolls no die. The
+   *            v0 game.
+   * `active` -- promotion, recruitment, burial, and Rise from the Ashes' death roll.
+   *
+   * A flag of its own rather than a fourth `sai` rung, because what it switches on is
+   * a fact about the DUA and not about roll resolution: the death trigger fires on
+   * burial and (Phase 6) on dragon breath, in no roll at all, and four later features
+   * -- City, Temple, dragon-slaying promotion and Resurrect Dead -- need this
+   * machinery while keying off their own flags.
+   */
+  readonly dua: 'inert' | 'active'
   readonly dragons: boolean
 }
 
@@ -351,17 +379,22 @@ export const V0_RULES: RuleSet = {
   magic: 'simplified',
   sai: 'inert',
   eighthFace: 'standard',
+  dua: 'inert',
   dragons: false,
 }
 
+/** `V0_RULES` plus the twelve result-generating SAIs. Phase 1's rung. */
+export const SAI_RULES: RuleSet = { ...V0_RULES, sai: 'results' }
+
 /**
- * What the app and the CLI actually play from v1 Phase 1 on.
+ * What the app and the CLI actually play from v1 Phase 2 on.
  *
  * `V0_RULES` stays exactly as it was -- it is the regression baseline the golden
- * corpus is recorded against, and invariant 5 is the reason it is a flag rather than
- * a deleted branch.
+ * corpus is recorded against, and invariant 5 is the reason each of these is a flag
+ * rather than a deleted branch.
  */
-export const SAI_RULES: RuleSet = { ...V0_RULES, sai: 'results' }
+export const DUA_RULES: RuleSet = { ...SAI_RULES, dua: 'active' }
+
 
 export interface GameState {
   readonly ruleSet: RuleSet
@@ -424,10 +457,24 @@ export function deadUnits(state: GameState, player: PlayerId): readonly UnitInst
   return Object.values(state.units).filter((u) => u.owner === player && u.location.kind === 'dua')
 }
 
-/** Units still in play -- not in the Dead Unit Area. A player with none has lost. */
-export function livingUnits(state: GameState, player: PlayerId): readonly UnitInstance[] {
-  return Object.values(state.units).filter((u) => u.owner === player && u.location.kind !== 'dua')
+export function buriedUnits(state: GameState, player: PlayerId): readonly UnitInstance[] {
+  return Object.values(state.units).filter((u) => u.owner === player && u.location.kind === 'bua')
 }
+
+/**
+ * Units still in play -- at a terrain or in Reserves. A player with none has lost.
+ *
+ * Stated positively, deliberately. This was `!== 'dua'` while the DUA was the only
+ * way off the board, and the moment the BUA existed that reading would have counted
+ * every buried unit as alive -- so a player whose last die was buried would never
+ * lose. A new `Location` member must be opted *into* this list, not out of it.
+ */
+export function livingUnits(state: GameState, player: PlayerId): readonly UnitInstance[] {
+  return Object.values(state.units).filter(
+    (u) => u.owner === player && (u.location.kind === 'terrain' || u.location.kind === 'reserve'),
+  )
+}
+
 
 export function army(state: GameState, player: PlayerId, ref: ArmyRef): readonly UnitInstance[] {
   return ref === 'reserve' ? reserveArmy(state, player) : armyAt(state, player, ref)
