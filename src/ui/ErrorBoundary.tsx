@@ -7,7 +7,7 @@
  */
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
-import { clearSave, readSave } from './game/storage'
+import { currentRecord } from './game/useGame'
 
 interface Props {
   readonly children: ReactNode
@@ -32,8 +32,9 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error } = this.state
     if (error === null) return this.props.children
 
-    const result = readSave()
-    const record = result.kind === 'ok' ? result.save.record : null
+    // Off the hook rather than out of storage: saving is switched off, and by the
+    // time this renders the tree that held the game is gone.
+    const record = currentRecord()
 
     return (
       <div className="app">
@@ -55,22 +56,8 @@ export class ErrorBoundary extends Component<Props, State> {
           )}
 
           <div className="choices">
-            <button
-              type="button"
-              className="choice"
-              onClick={() => {
-                clearSave()
-                window.location.reload()
-              }}
-            >
-              Discard and start over
-            </button>
-            <button
-              type="button"
-              className="choice secondary"
-              onClick={() => window.location.reload()}
-            >
-              Try reloading
+            <button type="button" className="choice" onClick={() => window.location.reload()}>
+              Start over
             </button>
           </div>
         </div>

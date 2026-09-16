@@ -10,6 +10,16 @@
  * Every access is wrapped: `localStorage` throws in a private window, when site
  * data is blocked, and when the quota is full. A game that cannot be saved should
  * still be playable.
+ *
+ * **Switched off, not gone.** `useGame` calls only `clearSave`, so every launch and
+ * every reload starts at the start screen instead of resuming. That is deliberate
+ * while the rules are still moving under the save format weekly: a record written on
+ * Monday's rules and replayed on Friday's is a worse outcome than no record, and
+ * "pick the forces again" is two clicks. Turning it back on is `readSave` in
+ * `useGame`'s opening and `writeSave` in an effect after every action -- which is
+ * why this file and its tests are kept whole rather than deleted, and why
+ * `SAVE_VERSION` did **not** move for this: nothing replays, and the version is
+ * about replay correctness and nothing else.
  */
 import type { GameRecord } from '../../engine/replay'
 

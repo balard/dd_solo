@@ -411,7 +411,6 @@ body {
   }
   .choices { max-width: 640px; }
 }
-}
 
 /* --- banners and recovery -------------------------------------------------- */
 
@@ -452,6 +451,44 @@ body {
   padding: 8px;
   resize: vertical;
 }
+
+/* --- the start screen ------------------------------------------------------ */
+
+/*
+ * A page, not an overlay -- `ErrorBoundary`'s shape, for the same reason: it is
+ * only ever the whole window, and this project has no modal shell to borrow.
+ */
+.new-game { padding-block: 24px; max-width: 460px; }
+.new-game h1 { font-size: 1.15rem; margin: 0 0 6px; }
+.new-game > .muted { margin: 0 0 18px; font-size: .86rem; }
+
+.new-game-field { display: block; margin-bottom: 16px; }
+.new-game-label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: .82rem;
+  font-weight: 600;
+}
+.new-game select,
+.new-game input {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 11px;
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font: inherit;
+}
+.new-game select:focus-visible,
+.new-game input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The line that says what you just picked: species, health, and how the dice are
+   split. Health is the only thing that decides whether two forces may meet, so it
+   is on screen before the Start button has to explain itself. */
+.new-game-note { display: block; margin-top: 5px; font-size: .78rem; line-height: 1.35; }
+
+.new-game .banner { margin-bottom: 14px; }
+.new-game .choices { margin-top: 20px; }
 
 /* --- elements -------------------------------------------------------------- */
 

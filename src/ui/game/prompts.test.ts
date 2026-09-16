@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import { unitType } from '../../data/load'
+import type { UnitType } from '../../data/types'
 import { begin } from '../../engine/reduce'
-import { setupGame, STARTER_FORCES } from '../../engine/setup'
+import { BESTIARY_FORCES, setupGame, STARTER_FORCES } from '../../engine/setup'
 import {
   TERRAIN_SLOTS,
   armyAt,
@@ -455,15 +456,29 @@ describe('display order', () => {
   const at = (state: GameState, slot: 'p1_home' | 'frontier' | 'p2_home') =>
     orderedForDisplay(armyAt(state, 'p1', slot)).map((u) => unitType(u.typeId))
 
-  it('groups by class in HM, LM, MI, CA, MA order', () => {
+  it('groups by class in HM, LM, MI, CA, MA order, monsters ahead of all of them', () => {
     const order = ['heavy_melee', 'light_melee', 'missile', 'cavalry', 'magic']
+    const rank = (t: UnitType) => (t.size === 'monster' ? -1 : order.indexOf(t.unitClass))
     for (const slot of TERRAIN_SLOTS) {
-      const seen = at(fresh(), slot).map((t) => order.indexOf(t.unitClass))
+      const seen = at(fresh(), slot).map(rank)
       expect(seen).toEqual([...seen].sort((a, b) => a - b))
     }
   })
 
-  it('puts the biggest die first inside each class', () => {
+  /** A monster is filed under a class in the data -- Strangle Vine under missile --
+   *  and plays none of it, so it must not sort into that line. A bestiary army is
+   *  what shows the difference: the starters field one monster each, and both of
+   *  those happen to be heavy melee, which already sorts first. */
+  it('keeps monsters together whatever class line they are filed under', () => {
+    const state = begin(setupGame({ seed: 5, forces: BESTIARY_FORCES, firstPlayer: 'p1' }))
+    for (const slot of TERRAIN_SLOTS) {
+      const types = orderedForDisplay(armyAt(state, 'p1', slot)).map((u) => unitType(u.typeId))
+      const monsters = types.filter((t) => t.size === 'monster')
+      expect(types.slice(0, monsters.length)).toEqual(monsters)
+    }
+  })
+
+  it('puts the biggest die first inside each group', () => {
     for (const slot of TERRAIN_SLOTS) {
       const types = at(fresh(), slot)
       for (let i = 1; i < types.length; i++) {

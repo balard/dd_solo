@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { unitType } from '../data/load'
+import { UNIT_TYPES, unitType } from '../data/load'
 import { PRESETS, maxArmyHealth, preset, speciesProfile } from '../data/presets'
 
 import { reduce } from './reduce'
@@ -44,10 +44,60 @@ describe('presets', () => {
   it('loads every hand-authored force', () => {
     expect(PRESETS.map((p) => p.id).sort()).toEqual([
       'firewalkers_bestiary',
+      'firewalkers_fireshadow',
+      'firewalkers_genie',
+      'firewalkers_gorgon',
+      'firewalkers_phoenix',
+      'firewalkers_salamander',
       'firewalkers_starter',
       'treefolk_bestiary',
+      'treefolk_darktree',
+      'treefolk_redwood',
+      'treefolk_satyr',
       'treefolk_starter',
+      'treefolk_strangle_vine',
+      'treefolk_unicorn',
     ])
+  })
+
+  /**
+   * The monster fixtures, derived rather than listed: a monster added to the data
+   * later has to fail here rather than quietly go without a board you can watch it
+   * on. Six is not a taste -- the setup cap is half the force, so three at home is
+   * the most a 24-health force may start with, and six is the smallest force whose
+   * half is three whole monsters.
+   */
+  it('gives every monster in the data a fixture of its own', () => {
+    const monsters = UNIT_TYPES.filter((t) => t.size === 'monster')
+    expect(monsters.length).toBe(10)
+
+    for (const monster of monsters) {
+      const id = `${monster.species}_${monster.id.split('.')[1]}`
+      const fixture = preset(id)
+      const all = Object.values(fixture.armies).flat()
+
+      expect(new Set(all), id).toEqual(new Set([monster.id]))
+      expect(all.length, id).toBe(6)
+      expect(presetHealthOf(fixture), id).toBe(24)
+      expect(
+        [fixture.armies.home.length, fixture.armies.campaign.length, fixture.armies.horde.length],
+        id,
+      ).toEqual([3, 2, 1])
+    }
+  })
+
+  /** All 24 health, so any two of them are a legal game -- mirrors included, which
+   *  is the most useful board of the lot for reading one die against itself. */
+  it('pairs any two fixtures, including a mirror', () => {
+    for (const forces of [
+      { p1: 'treefolk_satyr', p2: 'firewalkers_gorgon' },
+      { p1: 'treefolk_unicorn', p2: 'treefolk_unicorn' },
+    ]) {
+      const state = setupGame({ seed: 7, forces: { kind: 'named', forces } })
+      validateState(state)
+      expect(livingUnits(state, 'p1')).toHaveLength(6)
+      expect(livingUnits(state, 'p2')).toHaveLength(6)
+    }
   })
 
   /**

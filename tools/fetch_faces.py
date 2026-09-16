@@ -50,17 +50,54 @@ CLASS_SHORT = {
 }
 FACE_RE = re.compile(r"^(\d+) (.+)$")
 
-# Two dice of one species can print the same icon with genuinely different art, and
-# the candidate order below cannot tell them apart -- it asks the same question for
-# both and gets the same answer. Redwood and Unicorn both carry `4 SAI:Trample` and
-# both resolved to `trample-m.svg`, which is neither of them; the remote does have
-# the per-die variants, so they are named here.
+# **A die face has exactly one image.** Where several dice of one species print the
+# same icon, the candidate order below cannot tell them apart -- it asks the same
+# question for each and gets the same answer -- so the ones that differ are pinned
+# here. `resolve` reports any face it finds more than one image for, which is how a
+# missing entry announces itself instead of quietly drawing the wrong die.
 #
-# Keyed by (unit id, icon) rather than by face index, because it is a fact about the
-# die rather than about one side of it -- Redwood prints Trample twice.
+# Both tables are keyed by (unit id, icon) rather than by face index, because it is a
+# fact about the die rather than about one side of it -- Redwood prints Trample twice.
+#
+# **Pin the variant, not the path, whenever the name follows the generator's rule.**
+# A die can print one icon at two different counts -- Nymph maneuvers for 1 on one
+# face and for 2 on another -- and those are two different files, so a table of paths
+# can only ever name one of them. The variant is the part that is actually a fact
+# about the die; the count comes from the face.
+FACE_ART_VARIANTS = {
+    # Redwood and Unicorn both carry `4 SAI:Trample` and both resolved to
+    # `trample-m.svg`, which is neither of them.
+    ("treefolk.redwood", "SAI:Trample"): 2,
+    ("treefolk.unicorn", "SAI:Trample"): 1,
+    # The same shape again: one generic `cantrip-m.svg` landed on all three
+    # firewalkers monsters at once.
+    ("firewalkers.fireshadow", "SAI:Cantrip"): 2,
+    ("firewalkers.genie", "SAI:Cantrip"): 2,
+    ("firewalkers.salamander", "SAI:Cantrip"): 2,
+    # Treefolk draw maneuver twice: variant 1 is a bare humanoid footprint, variant 2
+    # a clawed root-foot. The split is by what the creature is, not by its count or
+    # class -- the willow and pine lines are trees and take the claw, while the
+    # nymph/naiad/Lady Nereid line are water spirits and keep the foot. Firewalkers
+    # have only one maneuver image, so nothing there needs pinning.
+    ("treefolk.willowling", "MANEUVER"): 2,
+    ("treefolk.willow", "MANEUVER"): 2,
+    ("treefolk.noble_willow", "MANEUVER"): 2,
+    ("treefolk.redwood", "MANEUVER"): 2,
+    ("treefolk.pineling", "MANEUVER"): 2,
+    ("treefolk.pine", "MANEUVER"): 2,
+    ("treefolk.strangle_vine", "MANEUVER"): 2,
+    ("treefolk.nymph", "MANEUVER"): 1,
+    ("treefolk.naiad", "MANEUVER"): 1,
+    ("treefolk.lady_nereid", "MANEUVER"): 1,
+}
+
+# For a name the generator's rule cannot reach at all. Ashbringer is a *large* die,
+# so the generator would append its health as the suffix and ask for `cantrip-1-3`;
+# the `-m` in the file it actually wants is part of the remote's name for that image,
+# not the "monster" suffix. Prefer FACE_ART_VARIANTS above unless the name is
+# genuinely irregular like this one.
 FACE_ART_OVERRIDES = {
-    ("treefolk.redwood", "SAI:Trample"): "treefolk/sais/trample-2-m.svg",
-    ("treefolk.unicorn", "SAI:Trample"): "treefolk/sais/trample-1-m.svg",
+    ("firewalkers.ashbringer", "SAI:Cantrip"): "firewalkers/sais/cantrip-1-m.svg",
 }
 
 
@@ -88,6 +125,11 @@ def unit_candidates(unit, face):
         stem, folder = icon.lower(), species
 
     suffix = "m" if unit["size"] == "monster" else str(count)
+
+    variant = FACE_ART_VARIANTS.get((unit["id"], icon))
+    if variant is not None:
+        return [f"{folder}/{stem}-{variant}-{suffix}.svg"]
+
     return [
         f"{folder}/{stem}-{suffix}.svg",
         f"{folder}/{stem}-1-{suffix}.svg",
@@ -127,18 +169,44 @@ def fetch(path, dry_run, source=None):
     return True
 
 
+def exists(path, dry_run, source=None):
+    """Whether one file is there, without downloading it."""
+    if (OUT / path).exists():
+        return True
+    if source is not None:
+        return (source / path).exists()
+    if dry_run:
+        # Nothing to ask without the network. `main` knows not to judge ambiguity on
+        # this, since answering yes to everything makes everything look ambiguous.
+        return True
+    request = urllib.request.Request(f"{BASE}/{path}", method="HEAD")
+    try:
+        with urllib.request.urlopen(request, timeout=20):
+            found = True
+    except urllib.error.HTTPError:
+        found = False
+    except Exception as error:  # noqa: BLE001
+        print(f"  {path}: {type(error).__name__}")
+        found = False
+    time.sleep(0.12)  # be polite to their server
+    return found
+
+
 def resolve(candidates, dry_run, cache, source=None):
-    """First candidate that actually exists, or None."""
+    """The candidates that exist, best guess first.
+
+    Every candidate is probed rather than stopping at the first hit, because a face
+    has exactly one image and two hits mean the guess cannot say which -- that is
+    what put one generic `cantrip-m.svg` on three different monsters. The caller
+    takes the first and reports anything longer.
+    """
+    found = []
     for path in candidates:
-        if path in cache:
-            if cache[path]:
-                return path
-            continue
-        ok = fetch(path, dry_run, source)
-        cache[path] = ok
-        if ok:
-            return path
-    return None
+        if path not in cache:
+            cache[path] = exists(path, dry_run, source)
+        if cache[path]:
+            found.append(path)
+    return found
 
 
 def main() -> int:
@@ -159,6 +227,9 @@ def main() -> int:
     cache: dict[str, bool] = {}
     manifest_units: dict[str, str] = {}
     missing: list[str] = []
+    ambiguous: list[str] = []
+    # A remote dry run answers yes to every probe, so every face would look ambiguous.
+    can_judge = source is not None or not dry_run
 
     for unit in units_doc["units"]:
         for index, face in enumerate(unit["faces"]):
@@ -166,10 +237,13 @@ def main() -> int:
                 continue
             found = resolve(unit_candidates(unit, face), dry_run, cache, source)
             key = f"{unit['id']}#{index}"
-            if found:
-                manifest_units[key] = found
-            else:
+            if not found:
                 missing.append(f"{key} ({face})")
+                continue
+            if len(found) > 1 and can_judge:
+                ambiguous.append(f"{key} ({face}) -> {', '.join(found)}")
+            manifest_units[key] = found[0]
+            fetch(found[0], dry_run, source)
 
     manifest_terrains: dict[str, str] = {}
     if TERRAINS.exists():
@@ -179,6 +253,7 @@ def main() -> int:
                 path = f"terrain/sais/{icon.lower()}-{number}.svg"
                 if resolve([path], dry_run, cache, source):
                     manifest_terrains[f"{type_id}#{number}"] = path
+                    fetch(path, dry_run, source)
                 else:
                     missing.append(f"terrain {type_id}#{number}")
         for die in terrains_doc["terrains"]:
@@ -186,6 +261,7 @@ def main() -> int:
             path = f"terrain/sais/{eighth}-8.svg"
             if resolve([path], dry_run, cache, source):
                 manifest_terrains[f"eighth#{die['eighthFace']}"] = path
+                fetch(path, dry_run, source)
 
     if not dry_run:
         OUT.mkdir(parents=True, exist_ok=True)
@@ -198,12 +274,19 @@ def main() -> int:
             encoding="utf-8",
         )
 
-    fetched = sum(1 for ok in cache.values() if ok)
+    used = len(set(manifest_units.values()) | set(manifest_terrains.values()))
     print(f"{len(manifest_units)} unit faces and {len(manifest_terrains)} terrain faces mapped")
-    print(f"{fetched} distinct files in {OUT.relative_to(ROOT)}/ (gitignored)")
+    print(f"{used} distinct files in {OUT.relative_to(ROOT)}/ (gitignored)")
     if missing:
         print(f"\n{len(missing)} could not be resolved (they fall back to our glyphs):")
         for item in missing[:20]:
+            print(f"  {item}")
+    if ambiguous:
+        print(
+            f"\n{len(ambiguous)} face(s) matched more than one image. A face has exactly"
+            "\none, so the first was taken -- name the right one in FACE_ART_OVERRIDES:"
+        )
+        for item in ambiguous[:20]:
             print(f"  {item}")
     return 0
 

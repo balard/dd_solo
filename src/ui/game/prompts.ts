@@ -6,7 +6,7 @@
  * state or decides what is legal -- the engine already did both.
  */
 import { terrainDie, terrainFaceAction, unitType } from '../../data/load'
-import type { TerrainFaceNumber, UnitClass } from '../../data/types'
+import type { TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
 import { isAsleep } from '../../engine/effects'
 import { legalDirections } from '../../engine/turn'
@@ -383,13 +383,20 @@ export function sleepingIds(state: GameState): ReadonlySet<UnitId> {
 
 
 /**
- * Display order for an army: grouped by class, biggest first inside each group.
+ * Display order for an army: monsters first, then by class, biggest first inside
+ * each group.
  *
  * The class order is the one a player thinks in -- heavy melee, light melee,
  * missile, cavalry, magic -- not alphabetical. Within a class the heaviest die
  * leads, so the units that decide a damage assignment are where the eye lands
  * first, and identical dice end up side by side instead of scattered by whatever
  * order the preset happened to list them in.
+ *
+ * **Monsters are their own group**, ahead of the rest, because a monster has no
+ * class. The data files each one under a class line -- Strangle Vine under missile,
+ * Gorgon under cavalry -- but that is how the box is organised, not what the die
+ * does: Strangle Vine has no missile face beyond its ID. Sorting a monster into a
+ * class it does not play was the same claim the tile badge used to make.
  *
  * Presentation only. Selection is by unit id and damage suggestions come from the
  * engine, so nothing downstream depends on this order.
@@ -406,7 +413,10 @@ export function orderedForDisplay(units: readonly UnitInstance[]): readonly Unit
   return [...units].sort((a, b) => {
     const left = unitType(a.typeId)
     const right = unitType(b.typeId)
-    const byClass = CLASS_ORDER.indexOf(left.unitClass) - CLASS_ORDER.indexOf(right.unitClass)
+    // A monster sorts by being a monster, never by the class line it is filed under.
+    const rank = (t: UnitType) =>
+      t.size === 'monster' ? -1 : CLASS_ORDER.indexOf(t.unitClass)
+    const byClass = rank(left) - rank(right)
     if (byClass !== 0) return byClass
     if (left.health !== right.health) return right.health - left.health
     // A stable, readable tiebreak, so two dice of the same class and size always

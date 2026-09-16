@@ -13,7 +13,7 @@
 import { Fragment } from 'react'
 
 import { unitType } from '../../data/load'
-import type { Face, UnitType } from '../../data/types'
+import type { Face, UnitClass, UnitType } from '../../data/types'
 import type { RollEffectBody } from '../../engine/pipeline'
 import type { UnitId, UnitInstance } from '../../engine/types'
 
@@ -30,6 +30,13 @@ import { useFaceArt } from './useFaceArt'
  * It used to read S/M/L/M+, which the health digit in the other corner already says
  * exactly (size determines health: 1/2/3/4) and the tile's own size says a third
  * time. Class is the one thing about a die that nothing else on the tile shows.
+ *
+ * **A monster has no class, and reads `MO`.** The data gives every monster one --
+ * Strangle Vine is filed under missile, Gorgon under cavalry -- because each species
+ * fields one monster per class line, but that is a fact about the *box*, not about
+ * the die: Strangle Vine carries no missile face at all beyond its ID, so a `MI`
+ * badge on it is a promise its faces do not keep. `classOf` is therefore the one
+ * place either question is asked.
  */
 const CLASS_BADGE: Record<string, string> = {
   heavy_melee: 'HM',
@@ -37,6 +44,14 @@ const CLASS_BADGE: Record<string, string> = {
   cavalry: 'CA',
   missile: 'MI',
   magic: 'MA',
+}
+
+const MONSTER_BADGE = 'MO'
+const MONSTER_LABEL = 'monster'
+
+/** The class a die actually has, or null for a monster, which has none. */
+function classOf(type: UnitType): UnitClass | null {
+  return type.size === 'monster' ? null : type.unitClass
 }
 
 /**
@@ -67,17 +82,20 @@ const PORTRAIT_SIZE: Record<string, number> = {
 }
 
 /**
- * What a die is, in one line: "Darktree — monster heavy melee".
+ * What a die is, in one line: "Oak Lord — large heavy melee", "Darktree — monster".
  *
  * No health: size *is* health in this data (small 1, medium 2, large 3, monster 4,
  * checked across all 40), so printing both says the same thing twice. The tile still
  * shows the number, where it earns its place doing arithmetic during damage.
  *
  * `size` doubles as the word for it, and `monster` is the interesting one -- it is a
- * size in the data but reads as a kind of die at the table.
+ * size in the data but reads as a kind of die at the table, and it is the whole of
+ * what a monster is: no class follows it.
  */
 function describe(type: UnitType): string {
-  return `${type.name} — ${type.size} ${CLASS_LABEL[type.unitClass] ?? type.unitClass}`
+  const unitClass = classOf(type)
+  if (unitClass === null) return `${type.name} — ${MONSTER_LABEL}`
+  return `${type.name} — ${type.size} ${CLASS_LABEL[unitClass] ?? unitClass}`
 }
 
 const CLASS_LABEL: Record<string, string> = {
@@ -86,6 +104,18 @@ const CLASS_LABEL: Record<string, string> = {
   cavalry: 'cavalry',
   missile: 'missile',
   magic: 'magic',
+}
+
+function badgeFor(type: UnitType): string {
+  const unitClass = classOf(type)
+  if (unitClass === null) return MONSTER_BADGE
+  return CLASS_BADGE[unitClass] ?? '??'
+}
+
+/** The third item on the inspector's head line: a class, or "monster". */
+function kindOf(type: UnitType): string {
+  const unitClass = classOf(type)
+  return unitClass === null ? MONSTER_LABEL : (CLASS_LABEL[unitClass] ?? unitClass)
 }
 
 /**
@@ -177,7 +207,7 @@ export function DiceGrid({
               title={label}
               aria-label={label}
             >
-              <span className="die-kind">{CLASS_BADGE[type.unitClass] ?? '??'}</span>
+              <span className="die-kind">{badgeFor(type)}</span>
               {/*
                * The portrait replaces the name only when we actually have the art.
                * Without it every ID face would draw the same generic glyph and the
@@ -209,7 +239,7 @@ export function DiceGrid({
                 <p className="detail-head">
                   <b>{type.name}</b>
                   <span className="muted">
-                    {type.health} health · {type.dieType} · {CLASS_LABEL[type.unitClass]}
+                    {type.health} health · {type.dieType} · {kindOf(type)}
                   </span>
                   {species && <ElementDots elements={species.elements} />}
                 </p>

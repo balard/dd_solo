@@ -4,6 +4,10 @@
  * Layout is phone-first: a compact always-visible board strip, one focused terrain
  * where the playing happens, the running log, and a sticky action bar driven
  * entirely by `state.pending`. Wider screens just get more room.
+ *
+ * `App` itself is only the fork between the start screen and the board. The split is
+ * forced rather than tidy: `GameView` holds hooks for the selection and inspection
+ * drafts, so the phase check cannot be an early return inside it.
  */
 import { useEffect, useMemo, useState } from 'react'
 
@@ -31,11 +35,20 @@ import {
   type ReinforceMove,
 } from './game/prompts'
 
-import { useGame } from './game/useGame'
+import { NewGameScreen } from './game/NewGameScreen'
+import { useGame, type PlayingGame } from './game/useGame'
 
 export function App() {
   const game = useGame()
-  const { state, human, seed, origin, saving, dispatch, newGame, opponentThinking } = game
+  return game.phase === 'choosing' ? (
+    <NewGameScreen onStart={game.start} />
+  ) : (
+    <GameView game={game} />
+  )
+}
+
+function GameView({ game }: { readonly game: PlayingGame }) {
+  const { state, human, seed, origin, dispatch, newGame, opponentThinking } = game
   const enemy: PlayerId = human === 'p1' ? 'p2' : 'p1'
   const pending = state.pending
 
@@ -134,7 +147,7 @@ export function App() {
             if (
               state.winner !== null ||
               !started ||
-              window.confirm('Abandon this game and start a new one?')
+              window.confirm('Abandon this game and pick new forces?')
             ) {
               newGame()
             }
@@ -149,12 +162,10 @@ export function App() {
           Started a new game &mdash; {origin.reason}.
         </p>
       )}
-      {origin.kind === 'resumed' && state.winner === null && (
-        <p className="banner muted">Resumed your saved game.</p>
-      )}
-      {/* The address bar named this game, and has been cleared so a refresh resumes
-          it rather than starting it again. Saying so is the only sign the request
-          was honoured -- a bestiary board otherwise just looks like a lucky roll. */}
+      {/* The address bar named this game, and has been cleared so a refresh lands on
+          the start screen rather than running the link again. Saying so is the only
+          sign the request was honoured -- a bestiary board otherwise just looks like
+          a lucky roll. */}
       {origin.kind === 'requested' && (
         <p className="banner muted">
           {origin.forces === null ? (
@@ -164,15 +175,9 @@ export function App() {
           ) : (
             <>
               Started the <b>{origin.forces}</b> forces on seed <b>{origin.seed}</b>, as the link
-              asked. New game rolls its own.
+              asked.
             </>
           )}
-        </p>
-      )}
-      {!saving && (
-        <p className="banner warn">
-          This game cannot be saved &mdash; the browser is refusing to store it. It will be lost
-          when you close the tab.
         </p>
       )}
 

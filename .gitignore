@@ -29,3 +29,6 @@ __pycache__/
 # artwork, and the app falls back to our own glyphs when this is absent.
 public/faces/
 assets/faces/
+# And the archive it arrives in, which `assets/faces/` does not cover -- one
+# `git add -A` is all it would take to put their artwork in the history for good.
+assets*.zip

@@ -5,7 +5,8 @@ the dice and the opponent.
 
 > **Status: v0 alpha complete; v1 Phases 0, 1, 2 and 3 landed.** All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
-> installable as a PWA, and resumes where you left off. Since the alpha landed, the board grew to
+> and installable as a PWA. It opens on a screen that picks the two forces and the seed; saving is
+> switched off while v1 lands, so a reload starts there too. Since the alpha landed, the board grew to
 > show every army at once and the eighth face started granting its two standard advantages
 > (`eighthFace: 'standard'`).
 >
@@ -223,6 +224,20 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - **A preset is not required to be 30 health.** The rule is that the two sides of a *game* bring
     the same total and no army exceeds half of it; "every preset is 30" was a fact about there
     being only two of them, and `setup.test.ts` used to assert it.
+- **The ten monster fixtures are one preset per monster die** -- `treefolk_satyr`,
+  `firewalkers_gorgon` and so on -- **six copies of that one monster, split 3/2/1** across home,
+  Frontier and the enemy home. They exist because a bestiary buries the die you are testing among
+  nineteen others that may never roll, and every SAI from Phase 1 on lives on a monster face: six
+  of one die against six of another is a game made of nothing but the two faces under test.
+  - **Six is the setup cap, not a taste.** No starting army may exceed half the force, so a
+    24-health force allows three monsters at home, and six is the smallest force whose half is
+    three whole monsters. Four at home needs eight dice; that is the arithmetic, and it is why the
+    split is 3/2/1 rather than the 4/1/1 it reads like it wants to be.
+  - All ten are 24 health, so **any two of them pair, mirrors included** -- a mirror is the most
+    useful board of the lot, being one die read against itself. None of them pairs with a starter
+    (30) or a bestiary (35); `newGame.ts` refuses that before `setupGame` can throw.
+  - `setup.test.ts` derives the roster from `UNIT_TYPES` rather than listing it, so **a monster
+    added to the data later fails there** instead of quietly going without a fixture.
 - **Species is derived, like armies are.** `speciesOf(state, player)` reads it off any of that
   player's dice, dead ones included; a rolled force has no preset id to look up, and a second copy
   of the fact could drift.
@@ -424,17 +439,32 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     client, because the first draft wrote the "X and Y" join out twice and that is how the browser
     and the terminal start describing one roll differently.
 
-- **`?forces=bestiary&seed=7` starts a named game**, which is the only way the hand-authored
-  pairings are reachable from the browser -- New Game always rolls. Names come from `FORCE_SETS` in
-  `setup.ts`, shared with the terminal's `--forces`, so a new pairing is reachable from both at
-  once. An unknown name is reported in the banner rather than quietly rolled, because a random
-  force looks exactly like a preset that does not work.
-  - **The request is stripped from the address bar in an effect, not in `restore`.** `restore` is a
-    `useState` initializer and StrictMode runs those twice in development: clearing the query on
-    the first pass left the second reading a bare URL and rolling a random game. Keep `restore`
-    free of side effects.
-  - **It is cleared at all** so a refresh resumes the game rather than restarting it. Losing a game
-    in progress to a reload would be a worse bug than the feature is a feature.
+- **The app opens on a start screen, and `useGame` has two phases.** `null` is the screen, a
+  `Session` is a game; `App` is a three-line fork between `NewGameScreen` and `GameView`. The split
+  is forced rather than tidy -- `GameView` holds the selection and inspection drafts in hooks, so
+  the phase check cannot be an early return inside it.
+  - **Every rule the screen applies is in `newGame.ts`**, tested in node the way `prompts.ts` is:
+    which forces may face each other, what an empty seed box means, what a setup is built from.
+    The component's only job is to *show* the problem -- a disabled Start with no reason beside it
+    is the same bug as a crash, slower.
+  - **Health parity is checked before the click, not after.** `setupGame` throws when the two sides
+    bring different totals, and a throw out of an `onClick` is a blank page. The pickers are
+    `<optgroup>`ed by health for the same reason: the legal pairings are visible before anything is
+    clicked.
+  - **An empty seed box means "roll one"** -- the same rule `parseGameRequest` applies to `?seed=`,
+    because `Number('')` is 0, a perfectly legal seed and a silently different game. A seed that is
+    *mistyped* is reported, never quietly randomised: that is the one outcome that loses the exact
+    run you were trying to repeat.
+  - **New Game returns to the screen**; it used to roll a random game on the spot.
+- **`?forces=bestiary&seed=7` still starts a named game directly**, bypassing the screen -- a link
+  is how you hand someone the exact board you are looking at. Names come from `FORCE_SETS` in
+  `setup.ts`, shared with the terminal's `--forces`. An unknown name is reported in the banner
+  rather than quietly rolled, because a random force looks exactly like a preset that does not work.
+  - **The request is stripped from the address bar in an effect, not in the `useState` initializer.**
+    StrictMode runs those twice in development: clearing the query on the first pass left the second
+    reading a bare URL. Keep the initializer free of side effects.
+  - **It is cleared at all** so a refresh lands on the start screen rather than re-running the link.
+    A link you cannot get back out of is a worse feature than no link.
 - **The dice grid is also the selection surface** for damage, retreat and reinforce. One gesture,
   no modals.
 - **A Reinforce Step sends dice to any and all terrains**, so its destination buttons *stage* into
@@ -456,6 +486,24 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **The UI never computes an art filename.** The remote set is sparse and not derivable from
   (icon, count), so `tools/fetch_faces.py` resolves it and writes a manifest keyed by
   `<unitTypeId>#<faceIndex>`. Add a face, re-run `npm run art`.
+  - **A face has exactly one image, and the resolver now checks it.** It guesses up to three
+    filenames per face and used to take the first that existed, which silently put one generic
+    image on several different dice — `trample-m.svg` on both Redwood and Unicorn, then
+    `cantrip-m.svg` on all three firewalkers monsters at once. It now probes every candidate with a
+    HEAD and **prints any face that matched more than one**, telling you to name the right file in
+    `FACE_ART_OVERRIDES`. A silent wrong picture is the one failure mode the glyph fallback does
+    not cover: a missing face is obvious, a wrong one is not.
+  - **Pin the variant, not the path.** `FACE_ART_VARIANTS` says which numbered image a die uses and
+    lets the count come from the face; `FACE_ART_OVERRIDES` names a whole path and is for names the
+    generator's rule cannot reach at all — `cantrip-1-m.svg` belongs to Ashbringer, a *large* die,
+    so the `-m` there is part of the remote's name and not the monster suffix. A path table alone
+    cannot express **a die that prints one icon at two counts**: Nymph maneuvers for 1 on one face
+    and 2 on another, which are two files, and only the variant is a fact about the die.
+  - Worked example: **Treefolk draw maneuver twice** — variant 1 a bare humanoid footprint,
+    variant 2 a clawed root-foot — and the split is by what the creature is, not its class or
+    count. The willow and pine lines are trees and take the claw; the nymph/naiad/Lady Nereid line
+    are water spirits and keep the foot. Firewalkers have one maneuver image, so nothing there
+    needs pinning. All 280 unit faces now resolve with no ambiguity reported.
 - **A die that cannot be picked says why.** A sleeping unit is dimmed and dashed (`.die-asleep`),
   tapping it inspects rather than selects, and its `aria-label` ends "— asleep". The engine refuses
   it as a retreat either way; this is what stops the choice being offered, and `sleepingIds` in
@@ -474,10 +522,19 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     digit already states exactly (size *is* health: 1/2/3/4) and the tile's own size states a
     third time; class is the one thing about a die nothing else on the tile shows. It is **plain
     text, deliberately** — colour on the dice is reserved for the species elements.
-  - **A grid is ordered by `orderedForDisplay`**: grouped by class in HM, LM, MI, CA, MA order,
-    heaviest die first inside each group, name as a stable tiebreak so identical dice sit together
-    and nothing shuffles between renders. Presentation only — selection is by unit id and damage
-    suggestions come from the engine, so no rule depends on it.
+  - **A monster has no class, and reads `MO` everywhere** — badge, tooltip ("Darktree — monster"),
+    inspector head. The data gives every monster one because each species fields one monster per
+    class line, but that is a fact about how the box is organised, not about the die: **Strangle
+    Vine is filed under missile and has no missile face at all** beyond its ID, so `MI` on it was a
+    promise its faces do not keep. `classOf` in `DiceGrid.tsx` is the one place either question is
+    asked, and it is a display rule only — `unitClass` in the data is untouched and still what
+    `npm run data` validates.
+  - **A grid is ordered by `orderedForDisplay`**: monsters first as their own group, then by class
+    in HM, LM, MI, CA, MA order, heaviest die first inside each group, name as a stable tiebreak so
+    identical dice sit together and nothing shuffles between renders. Monsters lead for the same
+    reason they lose the badge — sorting one into a class line it does not play is the same false
+    claim. Presentation only — selection is by unit id and damage suggestions come from the engine,
+    so no rule depends on it.
   - **`.dice-grid` is `align-items: flex-end`.** The default `stretch` equalises heights and erases
     the whole effect; flex-end also makes the dice sit on one line, like on a table.
   - **Two floors box the numbers in**: 30px of art (below that a glyph reads better — measured,
@@ -525,6 +582,19 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 
 ## Saving
 
+- **Saving is switched off, and the app opens on the start screen instead.** `useGame` calls only
+  `clearSave`; `storage.ts` and `storage.test.ts` are kept whole and dormant, so turning it back on
+  is `readSave` in the opening and `writeSave` in an effect after every action. The reason is the
+  ladder: the rules move under the save format every phase, and a record written on Monday's rules
+  and replayed on Friday's is a worse outcome than no record, while "pick the forces again" is two
+  clicks. Everything below still holds for whenever it comes back.
+  - **`SAVE_VERSION` did not move for this**, and that is the rule working rather than an
+    oversight: nothing replays, so nothing can replay wrongly. The version is about replay
+    correctness and nothing else -- see "Check the reason before bumping".
+  - **`ErrorBoundary` reads the record off `useGame`, not out of storage.** `currentRecord()` is a
+    module-level variable because the boundary sits *above* the hook: by the time it renders, the
+    tree that held the game is gone. The seed plus the moves is the one thing worth having off a
+    crash, so it survives saving being off.
 - **A save is `{ setup, actions }` replayed on load, never a serialised state.** A few KB however
   long the game runs, and it doubles as a reproducible bug report.
 - **A save in progress may be cleared before a phase lands.** Standing rule from v1 Phase 3 on, and

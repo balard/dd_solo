@@ -37,7 +37,7 @@ Supporting choices, all cheap to revisit:
 | Test runner | Vitest | Same config as Vite; the engine is the part that needs heavy testing |
 | State binding | Zustand (or plain `useReducer`) | The engine *is* the state machine; the store is a thin subscription layer over it |
 | Styling | CSS Modules or Tailwind | Either is fine; decide when the first screen is built |
-| Persistence | `localStorage` | Serialize the action log, not the state (see §2) |
+| Persistence | `localStorage`, currently off | Serialize the action log, not the state (see §2). Switched off while v1 is landing: the app opens on a force-and-seed screen instead of resuming, because a record written on last week's rules is worse than no record |
 | Dice art | Our own SVG glyphs | We cannot ship SFR's icon art (§5) |
 
 ## 2. Architecture — the engine
@@ -54,6 +54,7 @@ No side effects, no clocks, no ambient randomness. Everything else follows from 
   Replaying the action log reproduces a game exactly, die for die.
 - **Testing.** Rules tests are a list of actions and an expected state. No mocking.
 - **Save/load and undo are free.** Persist the seed plus the action log — a few KB — and replay.
+  (Saving is off for now — `src/ui/game/storage.ts` — but this is why it costs nothing to turn back on.)
 - **The AI is not special.** It is a function `(state) => action` feeding the same reducer as
   the human. Nothing in the engine knows which side is which.
 - **Hotseat and networked play cost nothing later**, because they are just other action sources.

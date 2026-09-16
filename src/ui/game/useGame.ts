@@ -1,55 +1,72 @@
 /**
- * Binds the engine to React, and keeps the game on disk.
+ * Binds the engine to React.
  *
  * Thin on purpose: the engine already *is* the state machine, so this holds a
- * `GameState`, dispatches actions into `reduce`, records them for replay, lets the
- * AI answer whatever is addressed to it, and persists the record after every move.
+ * `GameState`, dispatches actions into `reduce`, records them for replay, and lets
+ * the AI answer whatever is addressed to it.
+ *
+ * It has two phases, because there is no longer a game until someone asks for one.
+ * `null` is the start screen; a `Session` is a game in progress. Saving is off (see
+ * `storage.ts`), so every launch and every reload starts at the screen -- which is
+ * the point of it while the rules underneath are still changing weekly.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { passiveAi } from '../../ai/passive'
 import type { AiPlayer } from '../../ai/types'
 import { begin, reduce } from '../../engine/reduce'
-import { replay, type GameRecord } from '../../engine/replay'
+import { type GameRecord } from '../../engine/replay'
 import { rngFrom, type RngState } from '../../engine/rng'
-import { FORCE_SETS, namedForces, setupGame, type ForceSpec, type SetupOptions } from '../../engine/setup'
+import {
+  FORCE_SETS,
+  namedForces,
+  setupGame,
+  type ForceSpec,
+  type SetupOptions,
+} from '../../engine/setup'
 import { DUA_RULES, type GameAction, type GameState, type PlayerId } from '../../engine/types'
 
-import { clearSave, readSave, writeSave } from './storage'
+import { clearSave } from './storage'
 
 /** How long to let the player read the opponent's move before the next one. */
 const AI_THINKING_MS = 650
 
 /** How the current game came to be, so the UI can say something honest about it. */
 export type GameOrigin =
-  | { readonly kind: 'new' }
-  | { readonly kind: 'resumed'; readonly savedAt: string }
+  | { readonly kind: 'chosen' }
   | { readonly kind: 'recovered'; readonly reason: string }
   /** Started from `?forces=` / `?seed=` in the address bar. */
   | { readonly kind: 'requested'; readonly forces: string | null; readonly seed: number }
 
-export interface Game {
+export interface ChoosingGame {
+  readonly phase: 'choosing'
+  readonly start: (setup: SetupOptions) => void
+}
+
+export interface PlayingGame {
+  readonly phase: 'playing'
   readonly state: GameState
   readonly human: PlayerId
   readonly seed: number
   readonly origin: GameOrigin
-  /** False when the browser refused to store the game (private window, full quota). */
-  readonly saving: boolean
   readonly opponentThinking: boolean
   readonly dispatch: (action: GameAction) => void
-  readonly newGame: (seed?: number) => void
+  /** Back to the start screen, to pick forces again. */
+  readonly newGame: () => void
   readonly record: GameRecord
 }
 
-const newSeed = () => Math.floor(Math.random() * 100_000)
+export type Game = ChoosingGame | PlayingGame
+
+export const newSeed = () => Math.floor(Math.random() * 100_000)
 
 /**
  * A game named in the address bar: `?forces=bestiary`, `?seed=1234`, or both.
  *
- * This is how the hand-authored pairings are reachable at all from the browser --
- * `data/presets.json` is content, and there is no reason a player should have to
- * rebuild the app to look at a board made of monsters. Returns null when the URL
- * asks for nothing, which is the ordinary case.
+ * The start screen has covered most of what this was for, but a link is still the
+ * one way to hand someone the exact board you are looking at, and it is how the
+ * pairings in `FORCE_SETS` stay reachable without a rebuild. Returns null when the
+ * URL asks for nothing, which is the ordinary case.
  *
  * An unrecognised `forces` name is reported rather than ignored: silently rolling a
  * random force would look exactly like a preset that does not work.
@@ -101,14 +118,14 @@ function requestedFromUrl(): { setup: SetupOptions; origin: GameOrigin } | null 
 /**
  * Takes the request out of the address bar once it has been honoured.
  *
- * Without this a refresh restarts the game instead of resuming it, and losing a
- * game in progress to a reload is a worse bug than the feature is a feature. The
- * link still works for whoever it is sent to; it just does not re-fire.
+ * Without this a refresh re-runs the link instead of landing on the start screen,
+ * and a link you cannot get back out of is a worse feature than no link. It still
+ * works for whoever it is sent to; it just does not re-fire.
  *
- * **Called from an effect, never from `restore`.** `restore` is a `useState`
- * initializer and StrictMode runs those twice in development: stripping the query
- * on the first pass left the second reading a bare URL and rolling a random game,
- * which is the whole feature not working and only in dev.
+ * **Called from an effect, never from the `useState` initializer.** StrictMode runs
+ * those twice in development: stripping the query on the first pass left the second
+ * reading a bare URL and showing the start screen, which is the whole feature not
+ * working and only in dev.
  */
 function clearUrlRequest(): void {
   if (typeof window === 'undefined' || typeof window.history?.replaceState !== 'function') return
@@ -122,125 +139,77 @@ interface Session {
   readonly origin: GameOrigin
 }
 
-function fresh(seed: number, origin: GameOrigin = { kind: 'new' }): Session {
-  // Named explicitly rather than left to `setupGame`'s `V0_RULES` default, so the
-  // record says which rules it was played under and replays under them for good.
-  const setup: SetupOptions = { seed, forces: { kind: 'random' }, ruleSet: DUA_RULES }
+function sessionFrom(setup: SetupOptions, origin: GameOrigin): Session {
   return { state: begin(setupGame(setup)), setup, actions: [], origin }
 }
 
-/**
- * Restores the saved game, or explains why it could not and starts a new one.
- *
- * Replay can fail even on a well-formed save if the rules have changed underneath
- * it -- a decision that was legal last week may not be now. That is a recoverable
- * situation, not a crash, so it is caught here and reported.
- */
-function restore(): Session {
-  // The address bar wins over the save: `?forces=bestiary` that quietly resumed
-  // yesterday's random game would look like a preset that does not work. The save
-  // itself needs no clearing -- the persist effect writes this game over it on
-  // mount -- and nothing here may have side effects anyway; see `clearUrlRequest`.
+/** The address bar, or the start screen. Nothing is read from storage: saving is
+ *  off, so there is never a game to resume. */
+function opening(): Session | null {
   const requested = requestedFromUrl()
-  if (requested !== null) {
-    return {
-      state: begin(setupGame(requested.setup)),
-      setup: requested.setup,
-      actions: [],
-      origin: requested.origin,
-    }
-  }
+  return requested === null ? null : sessionFrom(requested.setup, requested.origin)
+}
 
-  const result = readSave()
+/**
+ * The record of the game on screen, for `ErrorBoundary` to print when everything
+ * else has gone.
+ *
+ * A module-level variable rather than a prop, because the boundary sits *above* the
+ * hook -- by the time it renders, the tree that held the game is gone. It used to
+ * read the record back out of `localStorage`, which stopped working when saving did,
+ * and the seed plus the moves is the one thing worth having off a crash: a game is
+ * its record, so that is enough to reproduce the failure exactly.
+ */
+let lastRecord: GameRecord | null = null
 
-  switch (result.kind) {
-    case 'none':
-      return fresh(newSeed())
-    case 'outdated':
-      clearSave()
-      return fresh(newSeed(), {
-        kind: 'recovered',
-        reason: 'that save was made by an older version of the rules',
-      })
-    case 'unreadable':
-      clearSave()
-      return fresh(newSeed(), { kind: 'recovered', reason: result.reason })
-    case 'ok':
-      break
-  }
-
-  try {
-    const state = replay(result.save.record)
-    return {
-      state,
-      setup: result.save.record.setup,
-      actions: result.save.record.actions,
-      origin: { kind: 'resumed', savedAt: result.save.savedAt },
-    }
-  } catch (error) {
-    clearSave()
-    return fresh(newSeed(), {
-      kind: 'recovered',
-      reason: `the saved moves no longer replay (${String(error)})`,
-    })
-  }
+export function currentRecord(): GameRecord | null {
+  return lastRecord
 }
 
 export function useGame(ai: AiPlayer = passiveAi): Game {
-  const [session, setSession] = useState<Session>(restore)
-  const [saving, setSaving] = useState(true)
+  const [session, setSession] = useState<Session | null>(opening)
   const [opponentThinking, setOpponentThinking] = useState(false)
 
   const human: PlayerId = 'p1'
-  const seed = session.setup.seed
+  const seed = session?.setup.seed ?? -1
 
-  // Honoured, so take it out of the address bar -- in an effect, because this is a
-  // side effect and `restore` must stay callable twice.
   useEffect(() => {
-    if (session.origin.kind === 'requested') clearUrlRequest()
-    // Once, for the game the app opened with.
+    // Honoured, so take it out of the address bar -- in an effect, because this is a
+    // side effect and `opening` must stay callable twice.
+    if (session?.origin.kind === 'requested') clearUrlRequest()
+    // A save written back when the app still saved would otherwise sit there for good.
+    clearSave()
+    // Once, for whatever the app opened with.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
   const aiRng = useRef<RngState>(rngFrom(seed ^ 0x5eed))
 
-  // The AI's own randomness is derived from the seed and how far the game has got,
-  // so a resumed game continues the same way a live one would.
-  useEffect(() => {
-    aiRng.current = rngFrom((seed ^ 0x5eed) + session.actions.length)
-    // Only on a change of game, not on every move.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed])
-
   const dispatch = useCallback((action: GameAction) => {
-    setSession((current) => ({
-      ...current,
-      state: reduce(current.state, action),
-      actions: [...current.actions, action],
-    }))
+    setSession((current) =>
+      current === null
+        ? current
+        : {
+            ...current,
+            state: reduce(current.state, action),
+            actions: [...current.actions, action],
+          },
+    )
   }, [])
 
-  const newGame = useCallback((next?: number) => {
-    const value = next ?? newSeed()
-    aiRng.current = rngFrom(value ^ 0x5eed)
-    clearSave()
-    setSession(fresh(value))
+  const start = useCallback((setup: SetupOptions) => {
+    aiRng.current = rngFrom(setup.seed ^ 0x5eed)
+    setSession(sessionFrom(setup, { kind: 'chosen' }))
   }, [])
 
-  // Persist after every move. Writing the record rather than the state means this
-  // stays a few KB however long the game runs.
-  const record: GameRecord = { setup: session.setup, actions: session.actions }
-  useEffect(() => {
-    setSaving(writeSave(record))
-    // The action count is what changes; the setup does not.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, session.actions.length])
+  const newGame = useCallback(() => setSession(null), [])
 
   // The opponent answers anything addressed to it, after a beat so the player can
   // read what just happened rather than watching the board jump.
-  const { state } = session
-  const pending = state.pending
+  const state = session?.state ?? null
+  const pending = state?.pending ?? null
   useEffect(() => {
-    if (state.winner !== null || pending === null || pending.player === human) {
+    if (state === null || state.winner !== null || pending === null || pending.player === human) {
       setOpponentThinking(false)
       return
     }
@@ -255,12 +224,20 @@ export function useGame(ai: AiPlayer = passiveAi): Game {
     return () => clearTimeout(timer)
   }, [state, pending, ai, dispatch, human])
 
+  if (session === null) {
+    lastRecord = null
+    return { phase: 'choosing', start }
+  }
+
+  const record: GameRecord = { setup: session.setup, actions: session.actions }
+  lastRecord = record
+
   return {
-    state,
+    phase: 'playing',
+    state: session.state,
     human,
     seed,
     origin: session.origin,
-    saving,
     opponentThinking,
     dispatch,
     newGame,
