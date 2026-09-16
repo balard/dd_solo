@@ -301,6 +301,11 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - **Rise from the Ashes triggers on a *Rise face*, not an ID**, and on **burial as well as
     death**; kill-and-bury gives two rolls, and a success on the first means the unit is never
     buried. `sai.ts` said "an ID" until Phase 2 read the reference again.
+  - **Burial is DUA -> BUA, and `bury` throws on a unit that is still in play.** An effect that
+    kills and buries -- Flame, Fire breath, the Temple -- calls `killAndBury`, which is two steps
+    because the rules are two steps. That is pure bookkeeping for every die except a Phoenix, and
+    the short-cut would silently halve its chances with nothing but a probability to show for it.
+
   - Units that carry no Rise face consume no randomness, and the roll order is the board's order
     (`Object.values(state.units)`), not the order the player typed into `assign_damage`.
 - **`livingUnits` is stated positively — `terrain | reserve` — and must stay that way.** It was

@@ -10,16 +10,21 @@ import type { TerrainFaceNumber, UnitClass } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
 import { legalDirections } from '../../engine/turn'
 import {
+  TERRAIN_SLOTS,
   armyAt,
+  reserveArmy,
   type Direction,
+
   type GameAction,
   type GameState,
   type Pending,
+  type PlayerId,
   type TerrainFace,
   type TerrainSlot,
   type UnitId,
   type UnitInstance,
 } from '../../engine/types'
+
 
 export const SLOT_LABEL: Record<TerrainSlot, string> = {
   p1_home: 'Your home',
@@ -256,6 +261,65 @@ export function damageSelection(
   }, 0)
 
   return { absorbed, required, ready: absorbed === required, suggestion }
+}
+
+/**
+ * A reinforce draft: which reserve dice are going where.
+ *
+ * "You may move any or all of them to **any terrains**. You may split the reserve
+ * units up, sending some to one terrain and some to another." The action has always
+ * carried a slot per unit, but the sheet sent every chosen die to a single
+ * destination and dispatched on the spot, so a reserve could only ever be committed
+ * to one terrain per turn -- half the Reinforce Step, and the half that matters when
+ * two fronts both need a die.
+ *
+ * So the destination buttons *stage* rather than dispatch, and this is the draft
+ * they build up. It stays a draft answer to one question, like the damage selection:
+ * one action still reaches the engine, and `App` throws it away when `pending`
+ * changes.
+ */
+export interface ReinforceMove {
+  readonly unitId: UnitId
+  readonly slot: TerrainSlot
+}
+
+export interface ReinforcePlan {
+  /** Reserve dice with no destination yet -- what the grid still offers. */
+  readonly unassigned: readonly UnitInstance[]
+  /** The answer, once the player is done. */
+  readonly moves: readonly ReinforceMove[]
+  /** Staged dice grouped by where they are going, in board order, empties dropped. */
+  readonly byDestination: readonly {
+    readonly slot: TerrainSlot
+    readonly units: readonly UnitInstance[]
+  }[]
+}
+
+export function reinforcePlan(
+  state: GameState,
+  player: PlayerId,
+  staged: readonly ReinforceMove[],
+): ReinforcePlan {
+  const reserve = reserveArmy(state, player)
+
+  // Filtered against the live reserve rather than trusted: a draft outlives nothing,
+  // but it costs one line to make that true instead of assumed.
+  const moves = staged.filter((move) => reserve.some((unit) => unit.id === move.unitId))
+  const assigned = new Set(moves.map((move) => move.unitId))
+
+  const unitOf = (id: UnitId) => reserve.find((unit) => unit.id === id)
+
+  return {
+    unassigned: reserve.filter((unit) => !assigned.has(unit.id)),
+    moves,
+    byDestination: TERRAIN_SLOTS.map((slot) => ({
+      slot,
+      units: moves
+        .filter((move) => move.slot === slot)
+        .map((move) => unitOf(move.unitId))
+        .filter((unit): unit is UnitInstance => unit !== undefined),
+    })).filter((group) => group.units.length > 0),
+  }
 }
 
 /** Which terrain the player should be looking at right now. */

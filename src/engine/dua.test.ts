@@ -291,29 +291,42 @@ describe('recruit', () => {
 })
 
 describe('bury', () => {
-  it('takes units from the DUA or straight off the board, and there is no way back', () => {
+  it('takes units out of the DUA, and there is no way back', () => {
     const state = board(
-      { id: 'oak', typeId: OAK, at: home },
       { id: 'oakling', typeId: OAKLING, at: dua },
       { id: 'lord', typeId: OAK_LORD, at: dua },
     )
 
-    const after = bury(state, ['oak', 'oakling'])
+    const after = bury(state, ['oakling'])
 
-    expect(idsIn(buriedUnits(after, 'p1'))).toEqual(['oak', 'oakling'])
-    // Gone from the DUA, so nothing can promote into them or recruit them.
+    expect(idsIn(buriedUnits(after, 'p1'))).toEqual(['oakling'])
+    // Gone from the DUA, so nothing can promote into it or recruit it.
     expect(idsIn(deadUnits(after, 'p1'))).toEqual(['lord'])
     expect(promotionPartners(after, 'oakling')).toEqual([])
     expect(() => recruit(after, ['oakling'], 'p1_home')).toThrow(/not in the DUA/)
-    expect(() => bury(after, ['oak'])).toThrow(/already buried/)
+    expect(() => bury(after, ['oakling'])).toThrow(/already buried/)
     expect(validateState(after)).toEqual([])
+  })
+
+  it('refuses a unit that is still in play: burial is DUA to BUA', () => {
+    // Everything passes through the DUA on its way to the BUA -- the Dragonkin
+    // exception only needs stating because of it. Short-cutting a live unit straight
+    // into the BUA would cost a Phoenix one of its two Rise rolls, and nothing but a
+    // probability would show it. `killAndBury` is the door for kill-and-bury effects.
+    const state = board(
+      { id: 'oak', typeId: OAK, at: home },
+      { id: 'reserved', typeId: OAKLING, at: { kind: 'reserve' } },
+    )
+
+    expect(() => bury(state, ['oak'])).toThrow(/still in play \(terrain\)/)
+    expect(() => bury(state, ['reserved'])).toThrow(/still in play \(reserve\)/)
   })
 
   it('excludes buried units from livingUnits, so a routed player still loses', () => {
     // The trap this phase was most likely to ship: `livingUnits` used to be
     // `location.kind !== 'dua'`, which would have counted every buried die as alive.
     const state = board(
-      { id: 'oak', typeId: OAK, at: home },
+      { id: 'oak', typeId: OAK, at: dua },
       { id: 'oakling', typeId: OAKLING, at: dua },
     )
 
@@ -321,6 +334,7 @@ describe('bury', () => {
     expect(livingUnits(after, 'p1')).toEqual([])
     expect(reserveArmy(after, 'p1')).toEqual([])
   })
+
 })
 
 describe('validateState', () => {

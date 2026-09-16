@@ -6,8 +6,9 @@ import { describe, expect, it } from 'vitest'
 
 import { unitType } from '../data/load'
 
-import { buryUnits, killUnits, RISE_FROM_THE_ASHES } from './death'
+import { buryUnits, killAndBury, killUnits, RISE_FROM_THE_ASHES } from './death'
 import { reduce } from './reduce'
+
 import { rngFrom, rollDie, type RngState } from './rng'
 import { LIVE_SAIS } from './sai'
 import { setupGame, STARTER_FORCES } from './setup'
@@ -195,35 +196,66 @@ describe('buryUnits', () => {
     expect(buriedUnits(after, 'p2').map((u) => u.id)).toEqual(['phoenix'])
   })
 
-  it('kill-and-bury rolls twice, and a success on the first means no second roll', () => {
-    // "If an effect both kills and buries this unit, it may roll once when killed
-    // and again when buried. If the first roll is successful, the unit is not
-    // buried." The caller's job is to pass on only what the kill did not rescue.
+  it('refuses a unit that is still in play, because burial is DUA to BUA', () => {
     const rng = rises(PHOENIX)
     const state = board(DUA_RULES, rng, { id: 'phoenix', typeId: PHOENIX, at: frontier })
 
-    const killed = killUnits(state, ['phoenix'])
-    expect(killed.risen).toEqual(['phoenix'])
+    expect(() => buryUnits(state, ['phoenix'])).toThrow(/still in play/)
+  })
+})
 
-    const survivors = ['phoenix'].filter((id) => !killed.risen.includes(id))
-    const buried = buryUnits(killed.state, survivors)
+describe('killAndBury', () => {
+  it('rescues on the first roll, and then there is no second', () => {
+    // "If an effect both kills and buries this unit, it may roll once when killed
+    // and again when buried. If the first roll is successful, the unit is not
+    // buried."
+    const rng = rises(PHOENIX)
+    const state = board(DUA_RULES, rng, { id: 'phoenix', typeId: PHOENIX, at: frontier })
 
-    expect(survivors).toEqual([])
-    expect(buried.state.rng.counter).toBe(rng.counter + 1)
-    expect(reserveArmy(buried.state, 'p2').map((u) => u.id)).toEqual(['phoenix'])
+    const { state: after, risen } = killAndBury(state, ['phoenix'])
+
+    expect(risen).toEqual(['phoenix'])
+    expect(after.rng.counter).toBe(rng.counter + 1)
+    expect(reserveArmy(after, 'p2').map((u) => u.id)).toEqual(['phoenix'])
+    expect(buriedUnits(after, 'p2')).toEqual([])
   })
 
   it('rolls a second time when the kill did not rescue it', () => {
+    // The whole reason this is two steps and not one move to the BUA: a single move
+    // would silently cost the Phoenix one of its two chances.
     const rng = staysDead(PHOENIX)
     const state = board(DUA_RULES, rng, { id: 'phoenix', typeId: PHOENIX, at: frontier })
 
-    const killed = killUnits(state, ['phoenix'])
-    expect(killed.risen).toEqual([])
+    const { state: after } = killAndBury(state, ['phoenix'])
 
-    const buried = buryUnits(killed.state, ['phoenix'])
-    expect(buried.state.rng.counter).toBe(rng.counter + 2)
+    expect(after.rng.counter).toBe(rng.counter + 2)
+  })
+
+  it('takes a live unit all the way to the BUA under dua: active', () => {
+    const rng = staysDead(FIRESHADOW)
+    const state = board(DUA_RULES, rng, { id: 'shadow', typeId: FIRESHADOW, at: frontier })
+
+    const { state: after, risen } = killAndBury(state, ['shadow'])
+
+    expect(risen).toEqual([])
+    expect(buriedUnits(after, 'p2').map((u) => u.id)).toEqual(['shadow'])
+    // No Rise face, so neither step rolled anything.
+    expect(after.rng).toEqual(rng)
+    expect(validateState(after)).toEqual([])
+  })
+
+  it('under dua: inert is two plain moves and no roll at all', () => {
+    const rng = rises(PHOENIX)
+    const state = board(V0_RULES, rng, { id: 'phoenix', typeId: PHOENIX, at: frontier })
+
+    const { state: after, risen } = killAndBury(state, ['phoenix'])
+
+    expect(risen).toEqual([])
+    expect(after.rng).toEqual(rng)
+    expect(buriedUnits(after, 'p2').map((u) => u.id)).toEqual(['phoenix'])
   })
 })
+
 
 describe('the reducer', () => {
   /**

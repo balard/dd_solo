@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { chainRerolls, type StripDie } from './DiceGrid'
+import { chainRerolls, effectSummary, type StripDie } from './DiceGrid'
+
 
 /**
  * The engine appends rerolls at the end of a roll, because that is the order the
@@ -54,5 +55,32 @@ describe('chainRerolls', () => {
   /** A reroll with nothing to attach to should still be drawn rather than lost. */
   it('stands a stray reroll on its own', () => {
     expect(shape([die('a', 1, true), die('b', 2)])).toEqual([['a@1'], ['b@2']])
+  })
+})
+
+/**
+ * A die whose whole contribution is an effect generates no results, so the strip's
+ * "grey out anything that contributed nothing" rule hid it completely: a Fireshadow
+ * that Smote for 4 looked exactly like a Fly that did nothing, beside a log line
+ * reporting 4 damage from nowhere.
+ */
+describe('effectSummary', () => {
+  it('says nothing for a die that produced no effect', () => {
+    expect(effectSummary([])).toBeNull()
+  })
+
+  it('names Smite as damage no save can stop, which is not a melee result', () => {
+    expect(effectSummary([{ kind: 'unsavable', damage: 4 }])).toBe('4 damage, no save possible')
+  })
+
+  it('names a riposte and a suppressed counter', () => {
+    expect(effectSummary([{ kind: 'riposte', damage: 3 }])).toBe('3 damage straight back')
+    expect(effectSummary([{ kind: 'suppress_counter' }])).toBe('no counter-attack')
+  })
+
+  it('joins several effects from one face', () => {
+    expect(
+      effectSummary([{ kind: 'unsavable', damage: 4 }, { kind: 'suppress_counter' }]),
+    ).toBe('4 damage, no save possible; no counter-attack')
   })
 })

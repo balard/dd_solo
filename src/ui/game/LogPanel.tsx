@@ -6,10 +6,18 @@
  * also how the rules get learned.
  */
 
-import type { ReactElement } from 'react'
+import { Fragment, type ReactElement } from 'react'
+
 
 import { unitType } from '../../data/load'
-import type { GameState, LogEntry, PlayerId, TerrainSlot } from '../../engine/types'
+import {
+  TERRAIN_SLOTS,
+  type GameState,
+  type LogEntry,
+  type PlayerId,
+  type TerrainSlot,
+} from '../../engine/types'
+
 
 import { RollStrip } from './DiceGrid'
 import { speciesInfo } from './Elements'
@@ -223,12 +231,33 @@ function Line({
           {who(entry.player)} {verb(entry.player, 'declines', 'decline')} to counter
         </p>
       )
-    case 'reinforced':
+    case 'reinforced': {
+      // One Reinforce Step can now split a reserve across terrains, so "reinforces
+      // from reserve" stopped being the whole story: which dice went where is the
+      // decision, and the board shows only the result.
+      const groups = TERRAIN_SLOTS.map((slot) => ({
+        slot,
+        names: entry.moves
+          .filter((move) => move.slot === slot)
+          .map((move) => {
+            const unit = state.units[move.unitId]
+            return unit ? unitType(unit.typeId).name : move.unitId
+          }),
+      })).filter((group) => group.names.length > 0)
+
       return (
         <p className="log-line">
-          {who(entry.player)} {verb(entry.player, 'reinforces', 'reinforce')} from reserve
+          {who(entry.player)} {verb(entry.player, 'reinforces', 'reinforce')}{' '}
+          {groups.map((group, i) => (
+            <Fragment key={group.slot}>
+              {i > 0 && (i === groups.length - 1 ? ' and ' : ', ')}
+              {where(group.slot)} with {group.names.join(', ')}
+            </Fragment>
+          ))}
         </p>
       )
+    }
+
     case 'retreated':
       return (
         <p className="log-line">

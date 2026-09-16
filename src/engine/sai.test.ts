@@ -438,6 +438,27 @@ describe('Smite in an exchange', () => {
     expect(outcome.rng.counter - rng.counter).toBe(1)
   })
 
+  it('marks the die that smote, so the roll strip does not draw it as a blank', () => {
+    // The die contributes 0 results and 3 damage. Without this the strip greyed it
+    // out and printed nothing on it, beside a log line reporting damage from nowhere.
+    const rng = rngShowing([oakLord], [OAK_LORD_SMITE])
+    const state = stage({ p1: { frontier: [oakLord] }, p2: { frontier: ['treefolk.oakling'] }, rng })
+    const [die] = attackAt(state, 'melee').attackRoll.dice
+
+    expect(die?.results).toBe(0)
+    expect(die?.effects).toEqual([{ kind: 'unsavable', damage: 3 }])
+  })
+
+  it('leaves the field off a die that produced no effect', () => {
+    // Omitted, never `[]`: a die is rendered into every golden log entry.
+    const rng = rngShowing([oakLord], [0])
+    const state = stage({ p1: { frontier: [oakLord] }, p2: { frontier: ['treefolk.oakling'] }, rng })
+    const [die] = attackAt(state, 'melee').attackRoll.dice
+
+    expect(die === undefined ? null : 'effects' in die).toBe(false)
+  })
+
+
   it('adds on top of a save total rather than being reduced by it', () => {
     // oak_lord rolls Smite; the defender saves everything it can and still takes 3.
     const rng = rngShowing([oakLord, 'treefolk.oakling'], [OAK_LORD_SMITE, 0])

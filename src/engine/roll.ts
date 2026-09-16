@@ -91,7 +91,22 @@ export interface DieRoll {
    *  when true, and invisible to the golden digest, which renders a die as
    *  `unitId@faceIndex=results`. */
   readonly reroll?: true
+  /**
+   * What this die produced that was not a number -- Smite's unsavable damage,
+   * Counter's riposte, Surprise's suppression.
+   *
+   * Display only: `RollOutcome.effects` is the authoritative copy and the one the
+   * engine reads, stamped with the unit that made each one. This is here because the
+   * roll strip had no way to tell a die that did nothing from a die whose whole
+   * contribution was an effect -- a Fireshadow that Smote for 4 rendered greyed out
+   * and blank, next to a log line reporting 4 damage from nowhere.
+   *
+   * Omitted when empty, and invisible to the golden digest either way, which renders
+   * a die as `unitId@faceIndex=results`.
+   */
+  readonly effects?: readonly RollEffectBody[]
 }
+
 
 export interface RollResult {
   readonly resultType: ResultType
@@ -280,7 +295,9 @@ export function resolveRoll(
       face,
       results: perDieResults(face, contribution, primary, spec.modifiers),
       ...(isReroll ? { reroll: true as const } : {}),
+      ...(contribution.effects.length > 0 ? { effects: contribution.effects } : {}),
     })
+
 
     return contribution.reroll
   }

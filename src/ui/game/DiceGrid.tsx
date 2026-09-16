@@ -14,7 +14,9 @@ import { Fragment } from 'react'
 
 import { unitType } from '../../data/load'
 import type { Face, UnitType } from '../../data/types'
+import type { RollEffectBody } from '../../engine/pipeline'
 import type { UnitId, UnitInstance } from '../../engine/types'
+
 
 import { ElementDots, speciesInfo } from './Elements'
 import { FaceArt } from './FaceArt'
@@ -220,7 +222,43 @@ export interface StripDie {
   readonly face: Face
   readonly results: number
   readonly reroll?: true
+  readonly effects?: readonly RollEffectBody[]
 }
+
+/**
+ * What a die's effects did, in words.
+ *
+ * A die whose whole contribution is an effect generates **no results**, so the strip
+ * used to grey it out and print nothing on it: a Fireshadow that Smote for 4 looked
+ * exactly like a Fly that did nothing, beside a log line reporting damage from
+ * nowhere. The face art already names the SAI; this says what it did.
+ */
+export function effectSummary(effects: readonly RollEffectBody[]): string | null {
+  if (effects.length === 0) return null
+
+  return effects
+    .map((effect) => {
+      switch (effect.kind) {
+        case 'unsavable':
+          return `${effect.damage} damage, no save possible`
+        case 'riposte':
+          return `${effect.damage} damage straight back`
+        case 'suppress_counter':
+          return 'no counter-attack'
+      }
+    })
+    .join('; ')
+}
+
+const effectOf = (die: StripDie): string | null => effectSummary(die.effects ?? [])
+
+/** The number to print on a die that generated an effect rather than results. */
+
+function effectDamage(effects: readonly RollEffectBody[]): number | null {
+  const total = effects.reduce((sum, e) => sum + ('damage' in e ? e.damage : 0), 0)
+  return total > 0 ? total : null
+}
+
 
 /**
  * Puts each reroll beside the die that caused it.
@@ -268,15 +306,32 @@ export function RollStrip({ dice }: { dice: readonly StripDie[] }) {
                 </span>
               )}
               <span
-                className={`rolled i-${die.face.icon} ${die.results === 0 ? 'rolled-blank' : ''}`}
+                className={[
+                  `rolled i-${die.face.icon}`,
+                  // Blank only when the die really did nothing. An effect is not a
+                  // result and never shows in `results`, so keying the grey-out on
+                  // `results` alone hid Smite, Counter and Surprise completely.
+                  die.results === 0 && effectOf(die) === null ? 'rolled-blank' : '',
+                  effectOf(die) === null ? '' : 'rolled-effect',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
                 title={
                   `${unitType(die.typeId).name}: ${faceLabel(die.face)}` +
+                  (effectOf(die) === null ? '' : ` — ${effectOf(die)}`) +
                   (i > 0 ? ' (rerolled)' : '')
                 }
               >
                 <FaceArt typeId={die.typeId} faceIndex={die.faceIndex} face={die.face} size={30} />
                 {die.results > 0 && <b>{die.results}</b>}
+                {/* The effect's damage, marked apart from the result count beside it:
+                    4 unsavable damage is not 4 melee results, and the two can appear
+                    on the same die. */}
+                {effectDamage(die.effects ?? []) !== null && (
+                  <b className="effect-damage">+{effectDamage(die.effects ?? [])}</b>
+                )}
               </span>
+
             </Fragment>
           ))}
         </span>

@@ -19,10 +19,12 @@ import {
   describeFace,
   plainLabel,
   promptFor,
+  reinforcePlan,
   selectModeFor,
   selectableAt,
   slotLabel,
 } from './prompts'
+
 
 const fresh = () =>
   begin(
@@ -282,6 +284,91 @@ describe('damageSelection', () => {
         `damage ${damage}`,
       ).toBe(true)
     }
+  })
+})
+
+/**
+ * "You may move any or all of them to any terrains. You may split the reserve units
+ * up, sending some to one terrain and some to another."
+ *
+ * The sheet used to send every chosen die to one destination and dispatch on the
+ * spot, so a reserve could only ever be committed to a single terrain per turn.
+ * The destination buttons now stage into this plan instead.
+ */
+describe('reinforcePlan', () => {
+  /** Puts the whole of p1's force into Reserves, so there is something to split. */
+  const withReserves = (): GameState => {
+    const state = fresh()
+    const units = { ...state.units }
+    for (const unit of Object.values(units)) {
+      if (unit.owner === 'p1') units[unit.id] = { ...unit, location: { kind: 'reserve' } }
+    }
+    return { ...state, units }
+  }
+
+  const ids = (state: GameState) =>
+    Object.values(state.units)
+      .filter((u) => u.owner === 'p1')
+      .map((u) => u.id)
+
+  it('offers every reserve die while nothing is staged', () => {
+    const state = withReserves()
+    const plan = reinforcePlan(state, 'p1', [])
+
+    expect(plan.unassigned).toHaveLength(ids(state).length)
+    expect(plan.moves).toEqual([])
+    expect(plan.byDestination).toEqual([])
+  })
+
+  it('splits a reserve across two terrains, which is the whole point', () => {
+    const state = withReserves()
+    const [a, b, c] = ids(state)
+    const staged = [
+      { unitId: a!, slot: 'p1_home' as const },
+      { unitId: b!, slot: 'frontier' as const },
+      { unitId: c!, slot: 'frontier' as const },
+    ]
+
+    const plan = reinforcePlan(state, 'p1', staged)
+
+    expect(plan.moves).toEqual(staged)
+    expect(plan.byDestination.map((g) => [g.slot, g.units.map((u) => u.id)])).toEqual([
+      ['p1_home', [a]],
+      ['frontier', [b, c]],
+    ])
+  })
+
+  it('drops a staged die from the pool, so it cannot be sent twice', () => {
+    const state = withReserves()
+    const [a] = ids(state)
+    const plan = reinforcePlan(state, 'p1', [{ unitId: a!, slot: 'frontier' }])
+
+    expect(plan.unassigned.some((u) => u.id === a)).toBe(false)
+    expect(plan.unassigned).toHaveLength(ids(state).length - 1)
+  })
+
+  it('ignores a staged die that is no longer in reserve', () => {
+    // A draft is a draft: it is filtered against the live reserve rather than
+    // trusted, so a stale entry cannot reach the engine as an illegal move.
+    const state = withReserves()
+    const [a] = ids(state)
+    const moved = {
+      ...state,
+      units: { ...state.units, [a!]: { ...state.units[a!]!, location: { kind: 'dua' as const } } },
+    }
+
+    expect(reinforcePlan(moved, 'p1', [{ unitId: a!, slot: 'frontier' }]).moves).toEqual([])
+  })
+
+  it('lists destinations in board order, whatever order they were staged in', () => {
+    const state = withReserves()
+    const [a, b] = ids(state)
+    const plan = reinforcePlan(state, 'p1', [
+      { unitId: a!, slot: 'p2_home' },
+      { unitId: b!, slot: 'p1_home' },
+    ])
+
+    expect(plan.byDestination.map((g) => g.slot)).toEqual(['p1_home', 'p2_home'])
   })
 })
 

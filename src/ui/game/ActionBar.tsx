@@ -8,7 +8,8 @@
  */
 import { Fragment } from 'react'
 
-import { terrainDie, terrainFaceAction } from '../../data/load'
+import { terrainDie, terrainFaceAction, unitType } from '../../data/load'
+
 import type { TerrainFaceNumber } from '../../data/types'
 
 import {
@@ -27,9 +28,12 @@ import {
   describeFace,
   plainLabel,
   promptFor,
+  reinforcePlan,
   slotLabel,
   type FaceHint,
+  type ReinforceMove,
 } from './prompts'
+
 import { useFaceArt } from './useFaceArt'
 
 export function ActionBar({
@@ -38,17 +42,28 @@ export function ActionBar({
   pending,
   opponentThinking,
   selection,
+  staged,
+  onStage,
   onClearSelection,
+  onClearDraft,
   dispatch,
 }: {
+
   state: GameState
   human: PlayerId
   pending: Pending | null
   opponentThinking: boolean
   selection: ReadonlySet<UnitId>
+  /** The reinforce draft: which reserve dice are going where, so far. */
+  staged: readonly ReinforceMove[]
+  onStage: (moves: readonly ReinforceMove[]) => void
   onClearSelection: () => void
+  /** Clear is not "unselect": mid-reinforce it has to drop the staged moves too. */
+  onClearDraft: () => void
+
   dispatch: (action: GameAction) => void
 }) {
+
   if (state.winner !== null) {
     return (
       <div className="action-bar">
@@ -132,11 +147,87 @@ export function ActionBar({
     )
   }
 
-  if (prompt.custom === 'reinforce' || prompt.custom === 'retreat') {
-    const movable =
-      prompt.custom === 'reinforce'
-        ? livingUnits(state, human).filter((u) => u.location.kind === 'reserve')
-        : livingUnits(state, human).filter((u) => u.location.kind === 'terrain')
+  if (prompt.custom === 'reinforce') {
+    // "You may move any or all of them to any terrains. You may split the reserve
+    // units up, sending some to one terrain and some to another." So a destination
+    // button stages rather than dispatches, and one action still reaches the engine
+    // when the player is done.
+    const plan = reinforcePlan(state, human, staged)
+    const chosen = [...selection].filter((id) => plan.unassigned.some((u) => u.id === id))
+
+    return (
+      <div className="action-bar">
+        <p className="question">
+          {prompt.question}
+          <span className="muted">
+            {chosen.length > 0
+              ? ` — ${chosen.length} chosen; send ${chosen.length === 1 ? 'it' : 'them'} where?`
+              : plan.unassigned.length > 0
+                ? ' — tap units below'
+                : ' — every die has a destination'}
+          </span>
+        </p>
+
+        {plan.byDestination.length > 0 && (
+          <p className="staged muted">
+            {plan.byDestination.map((group, i) => (
+              <Fragment key={group.slot}>
+                {i > 0 && ' · '}
+                <b>{slotLabel(group.slot, human)}</b>{' '}
+                {group.units.map((u) => unitType(u.typeId).name).join(', ')}
+              </Fragment>
+            ))}
+          </p>
+        )}
+
+        <div className="choices">
+          {chosen.length > 0 ? (
+            (['p1_home', 'frontier', 'p2_home'] as TerrainSlot[]).map((slot) => (
+              <button
+                key={slot}
+                type="button"
+                className="choice"
+                onClick={() => {
+                  onStage(chosen.map((unitId) => ({ unitId, slot })))
+                  onClearSelection()
+                }}
+              >
+                To {slotLabel(slot, human)}
+              </button>
+            ))
+          ) : plan.moves.length > 0 ? (
+            <button
+              type="button"
+              className="choice"
+              onClick={() => {
+                dispatch({ kind: 'reinforce', moves: plan.moves })
+                onClearSelection()
+              }}
+            >
+              Send {plan.moves.length}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="choice"
+              onClick={() => dispatch({ kind: 'reinforce', moves: [] })}
+            >
+              Leave them in reserve
+            </button>
+          )}
+          {(chosen.length > 0 || plan.moves.length > 0) && (
+            <button type="button" className="choice secondary" onClick={onClearDraft}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (prompt.custom === 'retreat') {
+
+    const movable = livingUnits(state, human).filter((u) => u.location.kind === 'terrain')
     const chosen = [...selection].filter((id) => movable.some((u) => u.id === id))
 
     return (
@@ -149,47 +240,16 @@ export function ActionBar({
           </span>
         </p>
         <div className="choices">
-          {prompt.custom === 'retreat' ? (
-            <button
-              type="button"
-              className="choice"
-              onClick={() => {
-                dispatch({ kind: 'retreat', unitIds: chosen })
-                onClearSelection()
-              }}
-            >
-              {chosen.length === 0 ? 'Keep everyone deployed' : `Pull back ${chosen.length}`}
-            </button>
-          ) : (
-            <>
-              {chosen.length === 0 ? (
-                <button
-                  type="button"
-                  className="choice"
-                  onClick={() => dispatch({ kind: 'reinforce', moves: [] })}
-                >
-                  Leave them in reserve
-                </button>
-              ) : (
-                (['p1_home', 'frontier', 'p2_home'] as TerrainSlot[]).map((slot) => (
-                  <button
-                    key={slot}
-                    type="button"
-                    className="choice"
-                    onClick={() => {
-                      dispatch({
-                        kind: 'reinforce',
-                        moves: chosen.map((unitId) => ({ unitId, slot })),
-                      })
-                      onClearSelection()
-                    }}
-                  >
-                    To {slotLabel(slot, human)}
-                  </button>
-                ))
-              )}
-            </>
-          )}
+          <button
+            type="button"
+            className="choice"
+            onClick={() => {
+              dispatch({ kind: 'retreat', unitIds: chosen })
+              onClearSelection()
+            }}
+          >
+            {chosen.length === 0 ? 'Keep everyone deployed' : `Pull back ${chosen.length}`}
+          </button>
           {chosen.length > 0 && (
             <button type="button" className="choice secondary" onClick={onClearSelection}>
               Clear

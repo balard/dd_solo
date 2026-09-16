@@ -24,7 +24,13 @@ import { Board } from './game/Board'
 import { DiceGrid } from './game/DiceGrid'
 import { speciesInfo } from './game/Elements'
 import { LogPanel } from './game/LogPanel'
-import { focusedSlot, selectModeFor } from './game/prompts'
+import {
+  focusedSlot,
+  reinforcePlan,
+  selectModeFor,
+  type ReinforceMove,
+} from './game/prompts'
+
 import { useGame } from './game/useGame'
 
 export function App() {
@@ -34,6 +40,11 @@ export function App() {
   const pending = state.pending
 
   const [selection, setSelection] = useState<ReadonlySet<UnitId>>(new Set())
+  // The other half of the reinforce draft. Selection says *which* dice; this says
+  // where the ones already placed are going, so the Reinforce Step can split a
+  // reserve across terrains instead of committing it all to one.
+  const [staged, setStaged] = useState<readonly ReinforceMove[]>([])
+
   const [inspecting, setInspecting] = useState<UnitId | null>(null)
   const [showFallen, setShowFallen] = useState(false)
   const [openTerrain, setOpenTerrain] = useState<TerrainSlot | null>(null)
@@ -43,14 +54,22 @@ export function App() {
   const pendingKey = pending === null ? 'none' : `${pending.kind}:${pending.player}`
   useEffect(() => {
     setSelection(new Set())
+    setStaged([])
     setInspecting(null)
   }, [pendingKey])
+
 
   // Every army is on screen now, so there is nothing to look away *to*: this only
   // marks which terrain the current decision is about.
   const focused = focusedSlot(state)
 
+  const clearDraft = () => {
+    setSelection(new Set())
+    setStaged([])
+  }
+
   const toggle = (id: UnitId) =>
+
     setSelection((current) => {
       if (id === '') return current
       const next = new Set(current)
@@ -70,6 +89,14 @@ export function App() {
   const theirSpecies = speciesName(enemy)
 
   const reserve = livingUnits(state, human).filter((u) => u.location.kind === 'reserve')
+  // Mid-reinforce the grid offers only the dice still without a destination, so a
+  // die cannot be staged twice and the count reads as "still to place".
+  const plan =
+    pending?.kind === 'reinforce' && pending.player === human
+      ? reinforcePlan(state, human, staged)
+      : null
+  const reserveShown = plan?.unassigned ?? reserve
+
   const myFallen = deadUnits(state, human)
   const theirFallen = deadUnits(state, enemy)
   // Shown in the same disclosure as the fallen, and labelled apart from them: the
@@ -168,16 +195,19 @@ export function App() {
           theirSpecies={theirSpecies}
         />
 
-        {(reserve.length > 0 || selectMode?.side === 'reserve') && (
+        {(reserveShown.length > 0 || selectMode?.side === 'reserve') && (
+
           <section className="army off-board">
             <h3>
               Your reserve{' '}
               <span className="muted">
-                {reserve.length}d / {health(reserve)}h
+                {reserveShown.length}d / {health(reserveShown)}h
+                {plan !== null && plan.moves.length > 0 ? ' still to place' : ''}
               </span>
             </h3>
             <DiceGrid
-              units={reserve}
+              units={reserveShown}
+
               selectable={selectMode?.side === 'reserve'}
               selected={selection}
               onToggle={toggle}
@@ -189,11 +219,11 @@ export function App() {
 
         {(myFallen.length > 0 || theirFallen.length > 0 || anyBuried) && (
           <section className="army off-board">
-
             <h3>
               <button
                 type="button"
                 className="fallen-toggle"
+
                 onClick={() => setShowFallen((v) => !v)}
               >
                 {showFallen ? '▾' : '▸'} Fallen
@@ -224,8 +254,8 @@ export function App() {
                 )}
               </div>
             )}
-
           </section>
+
         )}
 
         <LogPanel state={state} human={human} />
@@ -237,9 +267,13 @@ export function App() {
         pending={pending}
         opponentThinking={opponentThinking}
         selection={selection}
+        staged={staged}
+        onStage={(moves) => setStaged((current) => [...current, ...moves])}
         onClearSelection={() => setSelection(new Set())}
+        onClearDraft={clearDraft}
         dispatch={dispatch}
       />
+
     </div>
   )
 }

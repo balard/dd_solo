@@ -737,6 +737,15 @@ pending kind.
 - Choke kills only units that rolled an ID, *and* removes their save contribution from the total.
 - Confuse rerolls its targets and discards the previous results entirely.
 - Flame's targets go to the BUA, not the DUA, and cannot be resurrected.
+- **Flame calls `killAndBury`, never `bury` or `buryUnits`.** "The targets are killed and buried"
+  is two steps, because a live unit passes through the DUA on its way to the BUA — the Dragonkin
+  exception ("may still be buried by a single effect that both kills and buries a unit, even though
+  they do not pass into the DUA") only needs stating because everything else does pass through.
+  That is bookkeeping for every die in the game except a Phoenix, which "may roll once when killed
+  and again when buried", so a short-cut would silently halve its chances with nothing but a
+  probability to show for it. Phase 2 made `bury` throw on a unit that is still in play so the
+  short-cut cannot be taken by accident; the test is that a Flamed Phoenix consumes **two** draws.
+
 - Seize: an ID goes to Reserve, anything else dies.
 - `2 SAI:Flame` targets two health-worth — the face count is an X parameter here, not a result
   count. A test that would pass if it were read as a count is the point of this one.

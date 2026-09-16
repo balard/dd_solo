@@ -257,7 +257,8 @@ Four movements exist, and only the last one happens in a game today:
 |---|---|
 | **Promotion** | Exchange a unit for one in your DUA of the **same species and exactly one health larger**. With no such unit in the DUA, promotion simply does not happen. It is an exchange, not a stat change: the promoted unit's place in the DUA is taken by the unit it replaced. Class is not a constraint — an Oak may come back as a Noble Willow. |
 | **Recruitment** | Move a **one-health** unit from the DUA into an army. Not an exchange; nothing goes back. |
-| **Burial** | Move units to the **Buried Unit Area**, from the DUA or straight off the board. For these two species there is no route out of it. |
+| **Burial** | Move units from the DUA to the **Buried Unit Area**. For these two species there is no route out of it. A live unit is *killed and buried* — it passes through the DUA, which matters only for Rise from the Ashes, which then gets a roll at each step. |
+
 | **Rise from the Ashes** | Whenever a unit carrying the SAI is **killed or buried**, roll it. A Rise from the Ashes face sends it to your **Reserve Area** instead. An effect that both kills and buries gives it two rolls, and a success on the first means it is never buried. |
 
 Three rules govern every exchange with the DUA (full rules p. 31), and each has a test:

@@ -210,15 +210,21 @@ export function recruit(
 }
 
 /**
- * Moves units to the Buried Unit Area, from the DUA or straight off the board.
+ * Moves units from the DUA to the Buried Unit Area. One-way: neither species in
+ * scope has anything that recovers a buried unit.
  *
- * Both sources are real: the glossary routes burial through the DUA, but several
- * effects -- Flame, Fire breath, the Temple -- kill and bury in one step. One-way
- * for the two species in scope, neither of which has anything that recovers a buried
- * unit.
+ * **Burial is DUA -> BUA, and a live unit must be killed first.** The glossary says
+ * so -- "Buried units are removed from the Dead Unit Area and placed in your Buried
+ * Unit Area" -- and the Dragonkin exception proves it, because it only needs stating
+ * that Dragonkin "may still be buried by a single effect that both kills and buries a
+ * unit, even though they do not pass into the DUA". Everything else passes through.
  *
- * The death trigger a burial can provoke is `buryUnits` in `death.ts`; this is the
- * movement alone.
+ * So this refuses a unit that is still in play rather than short-cutting it into the
+ * BUA. An effect that kills *and* buries -- Flame, Fire breath, the Temple -- is
+ * `killAndBury` in `death.ts`, and the difference is not bookkeeping: Rise from the
+ * Ashes gets a roll at each step, so the short-cut would silently halve a Phoenix's
+ * chances. (Dragonkin are advanced rules and out of this plan; when they arrive they
+ * are the exception that needs its own door, not a reason to widen this one.)
  */
 export function bury(state: GameState, unitIds: readonly UnitId[]): GameState {
   if (unitIds.length === 0) return state
@@ -228,8 +234,15 @@ export function bury(state: GameState, unitIds: readonly UnitId[]): GameState {
   for (const id of unitIds) {
     const unit = lookup(state, id, 'bury')
     if (unit.location.kind === 'bua') throw new Error(`bury: ${id} is already buried`)
+    if (unit.location.kind !== 'dua') {
+      throw new Error(
+        `bury: ${id} is still in play (${unit.location.kind}) -- burial is DUA to BUA. ` +
+          `An effect that kills and buries is killAndBury in death.ts`,
+      )
+    }
     units[id] = { ...unit, location: { kind: 'bua' } }
   }
 
   return { ...state, units }
 }
+

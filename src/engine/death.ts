@@ -105,16 +105,38 @@ export function killUnits(state: GameState, unitIds: readonly UnitId[]): DeathOu
 }
 
 /**
- * Buries units -- from the DUA or straight off the board -- then the death trigger.
+ * Buries units that are already in the DUA, then the death trigger.
  *
- * Kill-and-bury is `killUnits` followed by `buryUnits` over whatever the first call
- * did not rescue: two rolls, and a success on the first means the unit is never
- * passed to the second. Its only caller is Phase 4's Flame; it ships now so that
- * Flame is one line then, and so that the two-roll rule is written down while the
- * paragraph it comes from is in front of us.
+ * `bury` refuses a unit that is still in play, so an effect that kills *and* buries
+ * must go through `killAndBury` below rather than calling this directly.
  */
 export function buryUnits(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
   const buried = bury(state, unitIds)
   if (state.ruleSet.dua !== 'active') return { state: buried, risen: [] }
   return riseFromTheAshes(buried, unitIds)
 }
+
+/**
+ * An effect that kills *and* buries -- Flame, Fire breath, the Temple.
+ *
+ * Two steps, because the rules are two steps: a live unit passes through the DUA on
+ * its way to the BUA. That is bookkeeping for every other die in the game and it is
+ * not bookkeeping for a Phoenix, which "may roll once when killed and again when
+ * buried" -- so collapsing this into one move would silently halve its chances, and
+ * the only evidence would be a probability nobody measures.
+ *
+ * "If the first roll is successful, the unit is not buried", which is why the second
+ * step is passed only what the first did not rescue.
+ *
+ * Its first caller is Phase 4's Flame. It ships now so that Flame is one line then,
+ * and so that the rule is written down while the paragraph it comes from is in front
+ * of us rather than reconstructed later from a comment.
+ */
+export function killAndBury(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
+  const killed = killUnits(state, unitIds)
+  const survivors = unitIds.filter((id) => !killed.risen.includes(id))
+  const buried = buryUnits(killed.state, survivors)
+
+  return { state: buried.state, risen: [...killed.risen, ...buried.risen] }
+}
+

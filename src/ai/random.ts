@@ -13,8 +13,11 @@ import {
   type GameAction,
   type GameState,
   type Pending,
+  type TerrainSlot,
+  type UnitId,
   type UnitInstance,
 } from '../engine/types'
+
 
 import type { AiPlayer } from './types'
 
@@ -93,19 +96,26 @@ export const randomAi: AiPlayer = {
       }
 
       case 'reinforce': {
+        // A destination *per unit*, not one for the batch: "you may split the reserve
+        // units up, sending some to one terrain and some to another". One slot for
+        // everybody left the split half of the Reinforce Step unreachable, so the
+        // fuzz never once produced a reserve arriving at two terrains.
         const reserves = Object.values(state.units).filter(
           (u) => u.owner === pending.player && u.location.kind === 'reserve',
         )
-        const [slot, afterSlot] = pick(rng, TERRAIN_SLOTS)
-        const [count, next] = nextInt(afterSlot, reserves.length + 1)
-        return [
-          {
-            kind: 'reinforce',
-            moves: reserves.slice(0, count).map((u) => ({ unitId: u.id, slot })),
-          } as GameAction,
-          next,
-        ] as const
+        const [count, afterCount] = nextInt(rng, reserves.length + 1)
+
+        const moves: { unitId: UnitId; slot: TerrainSlot }[] = []
+        let next = afterCount
+        for (const unit of reserves.slice(0, count)) {
+          const [slot, afterSlot] = pick(next, TERRAIN_SLOTS)
+          moves.push({ unitId: unit.id, slot })
+          next = afterSlot
+        }
+
+        return [{ kind: 'reinforce', moves } as GameAction, next] as const
       }
+
 
       case 'retreat': {
         const deployed = Object.values(state.units).filter(

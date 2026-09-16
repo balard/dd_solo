@@ -183,12 +183,27 @@ function describe(entry: LogEntry, state: GameState): string | null {
       return yellow(`  ${entry.player} is taken by surprise and cannot counter-attack`)
     case 'victory':
       return bold(green(`\n*** ${entry.player} wins by ${entry.reason} ***`))
+    case 'reinforced': {
+      // Named per destination, because one Reinforce Step can split a reserve across
+      // terrains and the board only shows where they ended up.
+      const groups = TERRAIN_SLOTS.map((slot) => ({
+        slot,
+        names: entry.moves
+          .filter((move) => move.slot === slot)
+          .map((move) => (state.units[move.unitId] ? name(state.units[move.unitId]!) : move.unitId)),
+      })).filter((group) => group.names.length > 0)
+
+      return dim(
+        `${entry.player} reinforces ` +
+          groups.map((g) => `${SLOT_LABEL[g.slot]} with ${g.names.join(', ')}`).join('; '),
+      )
+    }
     case 'turn_end':
     case 'game_start':
     case 'terrain_placed':
-    case 'reinforced':
     case 'retreated':
       return null
+
   }
 }
 
@@ -346,34 +361,66 @@ async function askDamage(state: GameState, pending: Pending): Promise<GameAction
 
 async function askUnits(state: GameState, pending: Pending): Promise<GameAction> {
   const player = pending.player
-  const movable =
-    pending.kind === 'reinforce'
-      ? livingUnits(state, player).filter((u) => u.location.kind === 'reserve')
-      : livingUnits(state, player).filter((u) => u.location.kind === 'terrain')
+  if (pending.kind === 'reinforce') return askReinforce(state, player)
 
-  const verb = pending.kind === 'reinforce' ? 'Reinforce' : 'Retreat'
-  console.log(`\n${bold(verb)} ${dim('— space-separated numbers, or enter for none')}`)
+  const movable = livingUnits(state, player).filter((u) => u.location.kind === 'terrain')
+
+  console.log(`\n${bold('Retreat')} ${dim('— space-separated numbers, or enter for none')}`)
   movable.forEach((unit, i) => {
-    const where =
-      unit.location.kind === 'terrain' ? SLOT_LABEL[unit.location.slot] : 'reserve'
+    const where = unit.location.kind === 'terrain' ? SLOT_LABEL[unit.location.slot] : 'reserve'
     console.log(`  ${i + 1}) ${name(unit)} ${dim(`(${unitType(unit.typeId).health}h, ${where})`)}`)
   })
 
-  const reply = (await ask('> ')).trim()
-  const picked = reply
+  const picked = pick(movable, (await ask('> ')).trim())
+  return { kind: 'retreat', unitIds: picked.map((u) => u.id) }
+}
+
+const pick = (from: readonly UnitInstance[], reply: string): readonly UnitInstance[] =>
+  reply
     .split(/\s+/)
     .filter(Boolean)
-    .map((t) => movable[Number(t) - 1])
+    .map((t) => from[Number(t) - 1])
     .filter((u): u is UnitInstance => u !== undefined)
 
-  if (pending.kind === 'retreat') return { kind: 'retreat', unitIds: picked.map((u) => u.id) }
+/**
+ * The Reinforce Step, one destination at a time.
+ *
+ * "You may move any or all of them to any terrains. You may split the reserve units
+ * up, sending some to one terrain and some to another." So this loops: pick some
+ * dice, name a terrain, repeat, then send. It used to ask once and send everything
+ * to a single slot, which is half the step -- and the half that matters when two
+ * fronts both need a die.
+ */
+async function askReinforce(state: GameState, player: PlayerId): Promise<GameAction> {
+  const reserve = livingUnits(state, player).filter((u) => u.location.kind === 'reserve')
+  const moves: { unitId: string; slot: TerrainSlot }[] = []
 
-  if (picked.length === 0) return { kind: 'reinforce', moves: [] }
-  console.log(dim('  send them to which terrain?'))
-  TERRAIN_SLOTS.forEach((slot, i) => console.log(`  ${i + 1}) ${SLOT_LABEL[slot]}`))
-  const slotReply = (await ask('> ')).trim()
-  const slot = TERRAIN_SLOTS[Number(slotReply) - 1] ?? 'frontier'
-  return { kind: 'reinforce', moves: picked.map((u) => ({ unitId: u.id, slot })) }
+  for (;;) {
+    const assigned = new Set(moves.map((m) => m.unitId))
+    const left = reserve.filter((u) => !assigned.has(u.id))
+
+    console.log(
+      `\n${bold('Reinforce')} ${dim('— space-separated numbers, then a terrain. Enter to send.')}`,
+    )
+    left.forEach((unit, i) => {
+      console.log(`  ${i + 1}) ${name(unit)} ${dim(`(${unitType(unit.typeId).health}h)`)}`)
+    })
+    for (const slot of TERRAIN_SLOTS) {
+      const going = moves.filter((m) => m.slot === slot)
+      if (going.length === 0) continue
+      const names = going.map((m) => name(state.units[m.unitId]!)).join(', ')
+      console.log(dim(`  -> ${SLOT_LABEL[slot]}: ${names}`))
+    }
+    if (left.length === 0 && moves.length === 0) return { kind: 'reinforce', moves: [] }
+
+    const picked = pick(left, (await ask('> ')).trim())
+    if (picked.length === 0) return { kind: 'reinforce', moves }
+
+    console.log(dim('  send them to which terrain?'))
+    TERRAIN_SLOTS.forEach((slot, i) => console.log(`  ${i + 1}) ${SLOT_LABEL[slot]}`))
+    const slot = TERRAIN_SLOTS[Number((await ask('> ')).trim()) - 1] ?? 'frontier'
+    for (const unit of picked) moves.push({ unitId: unit.id, slot })
+  }
 }
 
 async function askHuman(state: GameState, pending: Pending): Promise<GameAction> {
