@@ -1056,7 +1056,11 @@ by its own phase; this is for the things a player needs to **see**.
   should show the subtotal, each modifier, and the final — the pipeline's ten steps are the
   explanation, so expose them. Phase 1 started this rather than waiting: `combat_resolved` carries
   `unsavable` and `riposte` so the line adds up, and a rerolled die is drawn beside the die it came
-  from with an arrow. **That is the pattern to extend, not replace** — each phase that can make a
+  from with an arrow. After Phase 2 the strip also stopped drawing an effect-only die as a blank,
+  and the log names the SAI behind each number — "**Counter** sends 4 straight back", "+ 3
+  unsavable **from Smite**" — via `saisBehind` / `saiPhrase` over `DieRoll.effects`. **That is the
+  pattern to extend, not replace**
+ — each phase that can make a
   number unexplainable pays for its own explanation, because a phase that defers it ships a log
   that lies for however long Phase 9 takes.
 - **The AI needs a real opinion.** `PassiveAI` answering "cast nothing, target nothing" for 18

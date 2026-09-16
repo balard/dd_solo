@@ -358,6 +358,11 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     path a random player can reach. Not rule correctness, and not coverage — Rend is one face on
     one of forty unit types, so a clean 1000-game run can easily never have executed it. A fuzz
     over new rules wants per-SAI trigger counters asserted `> 0` beside `stuck === 0`.
+  - **It also only catches what `RandomAI` can express.** `RandomAI` picked one destination for the
+    whole batch at `reinforce`, so a thousand games never once produced a reserve arriving at two
+    terrains -- and the bug that made the UI unable to do it lived on for exactly as long. When a
+    decision gains a dimension, the fuzz opponent has to gain it too or the fuzz quietly narrows.
+
   - **It runs `V0_RULES` only**, which is no longer the configuration anyone plays. Phase 1 turned
     the app over to `SAI_RULES` and deliberately did not add a second fuzz, so the live rules have
     no standing deadlock net — only unit tests. Worth knowing before trusting a green suite.
@@ -386,6 +391,17 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   right that leaves a Rend at the front of the strip and its second face near the back joined by
   nothing. `chainRerolls` groups them for display only -- never reordering *within* a chain, since
   the arrow means "and then this".
+- **A die that produced an *effect* is not a blank, and the log names the SAI behind it.** The strip
+  greys out anything that contributed nothing, keyed on `results` -- and an effect is not a result,
+  so a Fireshadow that Smote for 4 rendered greyed and empty beside a log line reporting damage
+  from nowhere. `DieRoll.effects` (display only; `RollOutcome.effects` stays authoritative, and the
+  digest renders a die as `unitId@faceIndex=results` either way) carries the attribution, so:
+  - the die keeps full opacity, takes an accent border and prints the damage as `+4`;
+  - `saisBehind` / `saiPhrase` in `roll.ts` turn the same dice into "**Counter** sends 4 straight
+    back" and "+ 3 unsavable **from Smite**". Both live beside `DieRoll` rather than in either
+    client, because the first draft wrote the "X and Y" join out twice and that is how the browser
+    and the terminal start describing one roll differently.
+
 - **`?forces=bestiary&seed=7` starts a named game**, which is the only way the hand-authored
   pairings are reachable from the browser -- New Game always rolls. Names come from `FORCE_SETS` in
   `setup.ts`, shared with the terminal's `--forces`, so a new pairing is reachable from both at
@@ -399,6 +415,13 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     in progress to a reload would be a worse bug than the feature is a feature.
 - **The dice grid is also the selection surface** for damage, retreat and reinforce. One gesture,
   no modals.
+- **A Reinforce Step sends dice to any and all terrains**, so its destination buttons *stage* into
+  the `reinforcePlan` draft rather than dispatching. One action still reaches the engine -- the
+  draft is `App` state, cleared with the selection, not wizard state in a component. `GameAction`
+  always carried a slot per unit; it was the sheet that sent every chosen die to one destination
+  and dispatched on the spot, which is half the Reserves Phase and the half that matters when two
+  fronts both need a die. The `reinforced` log entry names each destination for the same reason.
+
 - **Logic lives in pure functions in `prompts.ts`, not in components.** `damageSelection` is the
   example: the confirm-button rule is testable without a DOM. Keep it that way rather than
   reaching for jsdom.
