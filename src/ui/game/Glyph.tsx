@@ -8,6 +8,7 @@
  * come from CSS and a glyph never needs a light and dark variant.
  */
 import type { Face, NormalIcon } from '../../data/types'
+import { LIVE_SAIS } from '../../engine/sai'
 
 export type GlyphName = NormalIcon | 'SAI'
 
@@ -90,8 +91,18 @@ export function FaceGlyph({ face, size = 20 }: { face: Face; size?: number }) {
   )
 }
 
+/**
+ * What a face says on hover.
+ *
+ * An SAI is annotated only when this build cannot resolve it. `LIVE_SAIS` is the set
+ * `sai.ts` has handlers for -- a fact about the code rather than about the ruleset --
+ * so this needs no `RuleSet` threaded down through every die tile and roll strip. It
+ * used to read "(inert in v0)", which stopped being true the moment twelve of them
+ * started generating results.
+ */
 export function faceLabel(face: Face): string {
-  return face.icon === 'SAI'
-    ? `${face.count} ${face.sai} (inert in v0)`
-    : `${face.count} ${face.icon.toLowerCase()}`
+  if (face.icon !== 'SAI') return `${face.count} ${face.icon.toLowerCase()}`
+  return LIVE_SAIS.includes(face.sai)
+    ? `${face.count} ${face.sai}`
+    : `${face.count} ${face.sai} — not yet implemented`
 }

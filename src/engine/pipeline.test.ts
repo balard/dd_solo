@@ -10,7 +10,7 @@ import {
   type Share,
 } from './pipeline'
 import { rngFrom } from './rng'
-import { faceResults, resolveRoll, rollArmy } from './roll'
+import { defaultContextFor, faceResults, resolveRoll, rollArmy } from './roll'
 import { V0_RULES, type UnitInstance } from './types'
 
 const share = (id: number, normal: number, sai = 0): Share => ({ id, normal, sai })
@@ -189,7 +189,7 @@ describe('a combination roll', () => {
   const kinds: ResultType[] = ['melee', 'missile', 'save']
   const rng = rngFrom(31)
 
-  const [reference] = resolveRoll(units, { kinds: ['melee'], modifiers: [] }, rng, V0_RULES)
+  const [reference] = resolveRoll(units, { kinds: ['melee'], modifiers: [], context: defaultContextFor('melee') }, rng, V0_RULES)
   const idPool = reference.dice.reduce(
     (sum, die) => sum + (die.face.icon === 'ID' ? die.face.count : 0),
     0,
@@ -213,7 +213,7 @@ describe('a combination roll', () => {
 
   it('spends each ID result on exactly one type', () => {
     const allocation = { melee: idPool, missile: 0, save: 0 }
-    const [outcome] = resolveRoll(units, { kinds, modifiers: [], idAllocation: allocation }, rng, V0_RULES)
+    const [outcome] = resolveRoll(units, { kinds, modifiers: [], context: defaultContextFor('melee'), idAllocation: allocation }, rng, V0_RULES)
 
     const total = kinds.reduce((sum, kind) => sum + (outcome.totals[kind] ?? 0), 0)
     const expected = kinds.reduce((sum, kind) => sum + withoutIds[kind], 0) + idPool
@@ -222,7 +222,7 @@ describe('a combination roll', () => {
 
   it('splits them however the owner likes, without changing the sum', () => {
     const spread = { melee: 0, missile: 1, save: idPool - 1 }
-    const [outcome] = resolveRoll(units, { kinds, modifiers: [], idAllocation: spread }, rng, V0_RULES)
+    const [outcome] = resolveRoll(units, { kinds, modifiers: [], context: defaultContextFor('melee'), idAllocation: spread }, rng, V0_RULES)
 
     expect(outcome.totals['missile']).toBe(withoutIds['missile'] + 1)
     expect(outcome.totals['save']).toBe(withoutIds['save'] + idPool - 1)
@@ -232,11 +232,16 @@ describe('a combination roll', () => {
   it('rolls the same dice as any other roll of the same army on the same seed', () => {
     const [outcome, after] = resolveRoll(
       units,
-      { kinds, modifiers: [], idAllocation: { melee: idPool, missile: 0, save: 0 } },
+      {
+        kinds,
+        modifiers: [],
+        context: defaultContextFor('melee'),
+        idAllocation: { melee: idPool, missile: 0, save: 0 },
+      },
       rng,
       V0_RULES,
     )
-    const [, afterSingle] = resolveRoll(units, { kinds: ['melee'], modifiers: [] }, rng, V0_RULES)
+    const [, afterSingle] = resolveRoll(units, { kinds: ['melee'], modifiers: [], context: defaultContextFor('melee') }, rng, V0_RULES)
 
     expect(outcome.dice.map((d) => d.faceIndex)).toEqual(reference.dice.map((d) => d.faceIndex))
     // Counting a roll for three types costs no more randomness than counting it
@@ -252,7 +257,7 @@ describe('rollArmy over the pipeline', () => {
     const [roll, afterRoll] = rollArmy(units, 'melee', rngFrom(12), V0_RULES)
     const [outcome, afterResolve] = resolveRoll(
       units,
-      { kinds: ['melee'], modifiers: [] },
+      { kinds: ['melee'], modifiers: [], context: defaultContextFor('melee') },
       rngFrom(12),
       V0_RULES,
     )

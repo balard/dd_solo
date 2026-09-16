@@ -50,6 +50,19 @@ CLASS_SHORT = {
 }
 FACE_RE = re.compile(r"^(\d+) (.+)$")
 
+# Two dice of one species can print the same icon with genuinely different art, and
+# the candidate order below cannot tell them apart -- it asks the same question for
+# both and gets the same answer. Redwood and Unicorn both carry `4 SAI:Trample` and
+# both resolved to `trample-m.svg`, which is neither of them; the remote does have
+# the per-die variants, so they are named here.
+#
+# Keyed by (unit id, icon) rather than by face index, because it is a fact about the
+# die rather than about one side of it -- Redwood prints Trample twice.
+FACE_ART_OVERRIDES = {
+    ("treefolk.redwood", "SAI:Trample"): "treefolk/sais/trample-2-m.svg",
+    ("treefolk.unicorn", "SAI:Trample"): "treefolk/sais/trample-1-m.svg",
+}
+
 
 def unit_candidates(unit, face):
     """Remote paths to try for one unit face, best guess first."""
@@ -58,6 +71,10 @@ def unit_candidates(unit, face):
     if not match:
         return []
     count, icon = int(match.group(1)), match.group(2)
+
+    override = FACE_ART_OVERRIDES.get((unit["id"], icon))
+    if override is not None:
+        return [override]
 
     if icon == "ID":
         if unit["size"] == "monster":

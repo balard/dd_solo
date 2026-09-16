@@ -18,10 +18,10 @@
  * after the divide. Collapse the triple into a subtotal and neither can be
  * expressed. It collapses at step 10 and not before.
  *
- * Steps 1 to 4 -- rolling, delayed effects, rerolls and SAIs -- are Phases 1, 3
- * and 4. Nothing produces a `Modifier` yet except the eighth face; the steps still
- * run, and the tests drive them with hand-built lists, so the ordering is settled
- * before anything depends on it.
+ * Steps 1, 3 and 4 -- rolling, rerolls and applying SAIs -- live in `roll.ts` and
+ * `sai.ts`; step 2's delayed effects are Phase 4. Nothing produces a `Modifier` yet
+ * except the eighth face; the steps still run, and the tests drive them with
+ * hand-built lists, so the ordering is settled before anything depends on it.
  */
 import type { ResultType } from '../data/types'
 
@@ -52,13 +52,30 @@ export function doubleIdsModifier(resultType: ResultType): Modifier {
 }
 
 /**
- * Everything a roll produces that is not a number -- targeting, rerolls, unsavable
- * damage, free moves.
+ * Everything a roll produces that is not a number -- damage owed in the other
+ * direction, damage no save can stop, a counter-attack refused. Phase 4 adds
+ * targeting and free moves.
  *
- * `never` until Phase 1, so `effects` can only be empty, and the day a real member
- * arrives every place that ignores one becomes a compile error at once.
+ * Rerolls are deliberately *not* here. They happen at step 3, inside the roll, and
+ * an effect handed back to the caller could not be applied before the totals the
+ * caller is being given were computed. `SaiOutcome.reroll` carries them instead.
  */
-export type RollEffect = never
+export type RollEffectBody =
+  /** Counter and Volley: damage straight back at the attacking army, which gets no
+   *  save roll of its own. */
+  | { readonly kind: 'riposte'; readonly damage: number }
+  /** Smite: damage the defender's save total does not reduce. */
+  | { readonly kind: 'unsavable'; readonly damage: number }
+  /** Surprise: the defending army may not counter-attack. */
+  | { readonly kind: 'suppress_counter' }
+
+/** A `RollEffectBody` once `resolveRoll` has stamped it with the die that made it,
+ *  so the log can say *which* Fireshadow smote you. */
+export type RollEffect = RollEffectBody & {
+  /** A plain `string` rather than `UnitId`: this file stays clear of `GameState`. */
+  readonly unitId: string
+  readonly sai: string
+}
 
 /** How many ID results each result type receives. See `allocateIds`. */
 export type IdAllocation = Readonly<Partial<Record<ResultType, number>>>

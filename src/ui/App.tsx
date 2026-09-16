@@ -116,6 +116,23 @@ export function App() {
       {origin.kind === 'resumed' && state.winner === null && (
         <p className="banner muted">Resumed your saved game.</p>
       )}
+      {/* The address bar named this game, and has been cleared so a refresh resumes
+          it rather than starting it again. Saying so is the only sign the request
+          was honoured -- a bestiary board otherwise just looks like a lucky roll. */}
+      {origin.kind === 'requested' && (
+        <p className="banner muted">
+          {origin.forces === null ? (
+            <>
+              Started seed <b>{origin.seed}</b>, as the link asked.
+            </>
+          ) : (
+            <>
+              Started the <b>{origin.forces}</b> forces on seed <b>{origin.seed}</b>, as the link
+              asked. New game rolls its own.
+            </>
+          )}
+        </p>
+      )}
       {!saving && (
         <p className="banner warn">
           This game cannot be saved &mdash; the browser is refusing to store it. It will be lost

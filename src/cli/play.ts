@@ -8,7 +8,8 @@
  *   npm run play               -- you are p1, PassiveAI is p2
  *   npm run play -- --seed 42  -- a specific game
  *   npm run play -- --ai random
- *   npm run play -- --forces starter   -- the two hand-authored 30-health lists
+ *   npm run play -- --forces starter    -- the two hand-authored 30-health lists
+ *   npm run play -- --forces bestiary   -- every monster and large die, so every SAI
  */
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
@@ -21,8 +22,9 @@ import type { TerrainFaceNumber } from '../data/types'
 import { damageOptions } from '../engine/damage'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
-import { setupGame, STARTER_FORCES, type ForceSpec } from '../engine/setup'
+import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
 import {
+  SAI_RULES,
   TERRAIN_SLOTS,
   armyAt,
   deadUnits,
@@ -143,11 +145,16 @@ function describe(entry: LogEntry, state: GameState): string | null {
         entry.attackerSlot === entry.defenderSlot
           ? `${kind} at ${SLOT_LABEL[entry.defenderSlot]}`
           : `${kind} ${SLOT_LABEL[entry.attackerSlot]} -> ${SLOT_LABEL[entry.defenderSlot]}`
-      const sum =
+      const base =
         entry.saveTotal === null
           ? `${entry.attackTotal} ${entry.action}${entry.action === 'magic' ? ' ÷ 2' : ''}`
           : `${entry.attackTotal} ${entry.action} − ${entry.saveTotal} saves`
-      return `  ${arrow}: ${sum} = ${bold(String(entry.damage))} damage`
+      // Naming the unsavable share keeps the line adding up; without it a Smite
+      // reads as arithmetic that does not work.
+      const sum = entry.unsavable === undefined ? base : `${base} + ${entry.unsavable} unsavable`
+      const back =
+        entry.riposte === undefined ? '' : ` (${bold(String(entry.riposte))} straight back)`
+      return `  ${arrow}: ${sum} = ${bold(String(entry.damage))} damage${back}`
     }
     case 'units_killed':
       return red(
@@ -157,6 +164,8 @@ function describe(entry: LogEntry, state: GameState): string | null {
       )
     case 'counter_declined':
       return dim(`${entry.player} declines to counter-attack`)
+    case 'counter_suppressed':
+      return yellow(`  ${entry.player} is taken by surprise and cannot counter-attack`)
     case 'victory':
       return bold(green(`\n*** ${entry.player} wins by ${entry.reason} ***`))
     case 'turn_end':
@@ -373,6 +382,20 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
 
 // --- main --------------------------------------------------------------------
 
+/** `--forces <name>`, or rolled from the seed when it is absent. An unknown name is
+ *  answered with the list rather than a silent fallback to random. */
+function forcesArg(name: string | undefined): ForceSpec {
+  if (name === undefined) return { kind: 'random' }
+  const found = namedForces(name)
+  if (found === null) {
+    console.error(
+      `unknown --forces ${name}; try ${Object.keys(FORCE_SETS).join(', ')}, or omit it to roll them`,
+    )
+    process.exit(1)
+  }
+  return found
+}
+
 function parseArgs() {
   const args = process.argv.slice(2)
   const get = (flag: string) => {
@@ -383,9 +406,10 @@ function parseArgs() {
   return {
     seed: seedArg === undefined ? Math.floor(Math.random() * 100_000) : Number(seedArg),
     ai: get('--ai') === 'random' ? randomAi : passiveAi,
-    // The seed decides the forces now. `--forces starter` brings back the two
-    // hand-authored 30-health lists, which is what the tests still play.
-    forces: get('--forces') === 'starter' ? STARTER_FORCES : ({ kind: 'random' } as ForceSpec),
+    // The seed decides the forces now. A name brings back one of the hand-authored
+    // pairs instead -- `starter` is what the tests and the goldens play, `bestiary`
+    // puts every monster and large die on the board.
+    forces: forcesArg(get('--forces')),
   }
 }
 
@@ -393,7 +417,7 @@ async function main() {
   const { seed, ai, forces }: { seed: number; ai: AiPlayer; forces: ForceSpec } = parseArgs()
   const human: PlayerId = 'p1'
 
-  let state = begin(setupGame({ seed, forces }))
+  let state = begin(setupGame({ seed, forces, ruleSet: SAI_RULES }))
 
   // Which species you are is a roll now, so the banner reads it off the board
   // rather than stating it.

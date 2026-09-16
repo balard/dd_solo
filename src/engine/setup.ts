@@ -23,7 +23,8 @@ import {
 
 import { generateForces, type GeneratedForce } from './force'
 import { nextInt, rngFrom, type RngState } from './rng'
-import { rollArmy, type DieRoll } from './roll'
+import { expectNoEffects, rollArmy, type DieRoll } from './roll'
+import type { RollContext } from './sai'
 import {
   V0_RULES,
   opponentOf,
@@ -53,6 +54,38 @@ export type ForceSpec =
 export const STARTER_FORCES: ForceSpec = {
   kind: 'named',
   forces: { p1: 'treefolk_starter', p2: 'firewalkers_starter' },
+}
+
+/**
+ * One of every monster and every large die, 35 health a side.
+ *
+ * Every SAI in the game appears on this board -- all 25, against the starter lists'
+ * 10 -- because the fifteen the starters never reach live almost entirely on the
+ * monster dice, and each starter fields exactly one monster. A rolled force turns
+ * them up eventually; this turns all of them up at once, which is what makes it
+ * worth having as a named force rather than another seed.
+ */
+export const BESTIARY_FORCES: ForceSpec = {
+  kind: 'named',
+  forces: { p1: 'treefolk_bestiary', p2: 'firewalkers_bestiary' },
+}
+
+/**
+ * The hand-authored pairings, by the name a front end takes for them.
+ *
+ * One registry rather than one per client: the terminal's `--forces` and the app's
+ * `?forces=` name the same things, and a pairing that only half the project can
+ * reach is a pairing nobody remembers exists.
+ */
+export const FORCE_SETS: Readonly<Record<string, ForceSpec>> = {
+  starter: STARTER_FORCES,
+  bestiary: BESTIARY_FORCES,
+}
+
+/** The named pairing, or null -- so a caller can say what it wants done about a
+ *  name nobody recognises, rather than being handed a silent fallback. */
+export function namedForces(name: string): ForceSpec | null {
+  return FORCE_SETS[name] ?? null
 }
 
 export interface SetupOptions {
@@ -153,6 +186,9 @@ const MAX_TIE_REROLLS = 50
  *
  * The rules do not say what happens on a tie. Rerolling is the natural reading.
  */
+/** The roll-off is a maneuver roll like any other. */
+const MANEUVER_ROLL: RollContext = { purpose: { kind: 'maneuver' }, isCounter: false }
+
 function rollForFirstPlayer(
   hordes: Readonly<Record<PlayerId, readonly UnitInstance[]>>,
   rng: RngState,
@@ -166,9 +202,15 @@ function rollForFirstPlayer(
   let state = rng
 
   for (let attempt = 0; attempt < MAX_TIE_REROLLS; attempt++) {
-    const [p1Roll, afterP1] = rollArmy(hordes.p1, 'maneuver', state, ruleSet)
-    const [p2Roll, afterP2] = rollArmy(hordes.p2, 'maneuver', afterP1, ruleSet)
+    const [p1Roll, afterP1] = rollArmy(hordes.p1, 'maneuver', state, ruleSet, false, MANEUVER_ROLL)
+    const [p2Roll, afterP2] = rollArmy(hordes.p2, 'maneuver', afterP1, ruleSet, false, MANEUVER_ROLL)
     state = afterP2
+
+    // The roll-off is a maneuver roll, so Fly, Hoof, Trample and the rest count --
+    // but setup has nowhere to put an effect, and Phase 4 gives Firewalking and
+    // Teleport one. Refuse rather than drop it.
+    expectNoEffects(p1Roll, 'the p1 order-of-play roll')
+    expectNoEffects(p2Roll, 'the p2 order-of-play roll')
 
     if (p1Roll.total !== p2Roll.total) {
       const winner: PlayerId = p1Roll.total > p2Roll.total ? 'p1' : 'p2'

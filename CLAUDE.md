@@ -3,17 +3,22 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: v0 alpha complete; v1 Phase 0 landed.** All nine phases of `docs/PLAN-V0.md` are done.
+> **Status: v0 alpha complete; v1 Phases 0 and 1 landed.** All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > installable as a PWA, and resumes where you left off. Since the alpha landed, the board grew to
 > show every army at once and the eighth face started granting its two standard advantages
 > (`eighthFace: 'standard'`).
 >
-> **Phase 0 of `docs/PLAN-V1.md` is done**, in three commits: a golden corpus of 25 recorded games
-> (Phase G), the rulebook's ten-step roll pipeline replacing the sum inside `rollArmy` (0b), and
-> forces rolled from the seed with the Frontier placed by the roll-off loser (0a). Phase 1 — SAIs
-> that generate results — is next, and the ladder after it is eighth-face **icon** powers, spells,
-> then dragons, each a `RuleSet` flag with a home already prepared.
+> **Phases 0 and 1 of `docs/PLAN-V1.md` are done.** Phase 0 landed in three commits: a golden
+> corpus of 25 recorded games (Phase G), the rulebook's ten-step roll pipeline replacing the sum
+> inside `rollArmy` (0b), and forces rolled from the seed with the Frontier placed by the roll-off
+> loser (0a). **Phase 1 added `sai: 'results'`** — the twelve SAIs that only add results, plus
+> Rend's reroll — and the app and CLI now play it. The ladder after it is eighth-face **icon**
+> powers, spells, then dragons, each a `RuleSet` flag with a home already prepared.
+>
+> **Phase 1's own findings are written up in `PLAN-V1.md`, Phase 1** — what that section got wrong before
+> it was built, and five bugs that would have shipped green. Three of them are the same shape and
+> Phase 4 meets all three again, so read it before starting the targeting SAIs.
 >
 > Worth knowing before picking one up: **both home terrains are Towers and the Frontier is a City**
 > (Phase 0a gave each species a second die of its own type). So Tower's "may attack any terrain in
@@ -46,12 +51,14 @@ npm run typecheck   # tsc --noEmit
 npm run build       # typecheck + production build
 npm run data        # regenerate and validate data/starter/ from data/raw/
 npm run art         # optional: mirror real face art into public/faces/ (gitignored)
-npm run play        # play a game in the terminal (--seed N, --ai random, --forces starter)
+npm run play        # play a game in the terminal (--seed N, --ai random, --forces starter|bestiary)
 npm run goldens     # re-record the golden corpus -- see below before you do
 ```
 
-**`npm test` is slow on purpose** — around 30-50s, most of it the 1000-game fuzz and the replay
-check that replays 25 full games. `vite.config.ts` sets `testTimeout: 30_000` because vitest's 5s
+**`npm test` is slow on purpose** — tens of seconds, most of it the 1000-game fuzz and the replay
+check that replays 25 full games. How slow is very machine-dependent: the figure here was once
+30-50s and the same suite now finishes in about 10s on a fast machine, so treat a number in this
+file as an order of magnitude and not a baseline to measure against. `vite.config.ts` sets `testTimeout: 30_000` because vitest's 5s
 default fails those outright; do not read a long run as a hang, and do not lower it back. A real
 hang still fails fast on its own, since `advance` throws after 1000 steps.
 
@@ -90,9 +97,11 @@ These are the things that break the project if violated:
    units whose total health is ≤ the damage and is **maximal**. Excess damage is lost. Any
    non-maximal assignment must be rejected by the reducer. See `RULES-V0.md` §6 — this is the rule
    most often gotten wrong by reflex.
-5. **Scope is controlled by the `RuleSet` config**, not by scattered `if`s. Alpha values:
-   `magic: 'simplified'`, `sai: 'inert'`, `eighthFace: 'standard'`, `dragons: false`.
-   Adding a cut feature means implementing behind its flag, not deleting a condition.
+5. **Scope is controlled by the `RuleSet` config**, not by scattered `if`s. `V0_RULES` is
+   `magic: 'simplified'`, `sai: 'inert'`, `eighthFace: 'standard'`, `dragons: false`, and stays
+   exactly that -- it is what the golden corpus is recorded against. What the app plays is
+   `SAI_RULES`, which is `V0_RULES` with `sai: 'results'`. Adding a cut feature means implementing
+   behind its flag, not deleting a condition.
 6. **Die faces are data, in `data/`, validated against the schemas.** Never hard-code a die's
    faces in TypeScript.
 7. **A face carries a count of icons, not one icon.** The count is already the final answer:
@@ -112,9 +121,10 @@ These are the things that break the project if violated:
 - **Magic is a melee variant**: same terrain only, roll magic, `damage = floor(total / 2)`. No
   save roll, no counter-attack. Elements ignored.
 - **No magic from reserves**, so a Reserve Army cannot march at all in v0.
-- **SAI faces produce zero results** — but the face is still stored as `<count> SAI:<Name>`.
-  That count is a result count for some SAIs and an X parameter for others (`2 SAI:Flame` targets
-  two health-worth of units), so let each SAI interpret its own number.
+- **SAI faces produce zero results under `sai: 'inert'`** — but the face is still stored as
+  `<count> SAI:<Name>`. That count is a result count for some SAIs and an X parameter for others
+  (`2 SAI:Flame` targets two health-worth of units), so let each SAI interpret its own number.
+  Twelve of the 25 are live under `sai: 'results'`; see `RULES-V0.md` §8 and `src/engine/sai.ts`.
 - **Eighth face captures and wins** (two captures = victory) **and grants its two standard
   advantages**: the holder's army doubles all ID results when rolling *anything* there — attack,
   save or maneuver — and may take melee, missile or magic, while any army facing them at that
@@ -177,6 +187,15 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **`SetupOptions.terrains` pins a die to a slot.** That is how a test says "a Tower, here", and it
   is what lets the golden corpus keep replaying the board it was recorded on now that the Frontier
   moves. Applied last, over whatever the species would have brought.
+- **Named forces are `data/presets.json`, which the importers never touch.** `STARTER_FORCES` is
+  the 30-health pair the alpha shipped with and the one the goldens are recorded against -- do not
+  edit those two lists. `BESTIARY_FORCES` is 35 health and holds one of every monster and every
+  large die, which puts **all 25 SAIs** on the board against the starters' 10; reach for it when a
+  rule needs a die a rolled force might not draw. Both are in `FORCE_SETS` in `src/cli/play.ts`, so
+  a new pair needs adding there to be playable from the terminal.
+  - **A preset is not required to be 30 health.** The rule is that the two sides of a *game* bring
+    the same total and no army exceeds half of it; "every preset is 30" was a fact about there
+    being only two of them, and `setup.test.ts` used to assert it.
 - **Species is derived, like armies are.** `speciesOf(state, player)` reads it off any of that
   player's dice, dead ones included; a rolled force has no preset id to look up, and a second copy
   of the fact could drift.
@@ -185,6 +204,52 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   rest of the engine uses. **The running value is a triple per result type — `{ id, normal, sai }`
   — and that is forced, not stylistic**: step 6 removes ID results *last* and step 8 adds SAI
   results *after* step 7's divide, and neither survives a single subtotal.
+- **An SAI is a pure function of its face and what the roll is for** (`sai.ts`). No `GameState`, no
+  unit, no RNG, so every one is testable from a face literal the way `faceResults` is; `resolveRoll`
+  stamps the die onto whatever effects come back. Two rules do most of the work:
+  - **`X` is the count printed on the face** (full rules p. 31), which is invariant 7 again —
+    nothing looks up a unit's size. `4 SAI:Smite` on a monster is four, `3 SAI:Smite` on an Oak Lord
+    is three, and a test uses the Oak Lord precisely because a hardcoded 4 passes everywhere else.
+  - **An SAI applies only to the rolls its `Applies` column names.** "If a type of roll is not
+    listed ... that SAI has no effect in that type of roll" — so a Fly on a monster face is four
+    unmissable icons worth exactly nothing in a melee attack. That is the rule, not a bug.
+  - **An SAI this rung does not implement is silently inert, and that is deliberate.** It is what
+    makes `'results'` playable rather than a half-built `'full'`; `'full'` is the rung that refuses.
+    `sai.test.ts` asserts every name in the data is claimed by exactly one rung, so `npm run data`
+    cannot add one that falls through unnoticed.
+- **What a roll *counts* and what it is *for* are two questions.** `RollSpec.kinds` is the first;
+  `RollSpec.context` (a `RollPurpose` plus `isCounter`) is the second, and it is what decides
+  whether an SAI face does anything at all — "if a type of roll is not listed ... that SAI has no
+  effect in that type of roll". They agree for every roll in Phase 1 and stop agreeing at Phase 6's
+  dragon combination roll, so neither is derived from the other.
+- **`resolveRoll` rolls every die once, and only then rerolls** (steps 1 and 3, in that order). So
+  `dice` always begins with one entry per unit in unit order and every entry after it is a reroll,
+  marked `reroll: true`. The queue is drained **FIFO**: with Rend on one face of one unit type no
+  other order is distinguishable today and a recorded game depends on it forever.
+- **`rollArmy` must pass `RollResult.effects` on, and somebody must read them.** `combat.ts` only
+  ever calls `rollArmy`, so a riposte or a Smite that `resolveRoll` computed correctly would
+  otherwise be dropped on the floor with every test still green. Rolls with nowhere to put an
+  effect say so: `expectNoEffects` at the maneuver and roll-off sites, `expectOnly` in
+  `resolveAttack`.
+- **One combat exchange is up to seven steps, and `COMBAT_SEQUENCE` is the only thing that knows
+  the order.** Four of them assign damage — the attack's, the riposte back at the attacker, the
+  counter-attack's, and the riposte back at *that*. `resolveExchange` and `applyAssignDamage` both
+  route through `afterCombatStep`; they used to decide independently, which was survivable with one
+  assignment per exchange and is not with two.
+  - **`resolve_counter` is a gate, not a step to skip past.** Everything after it belongs to an
+    exchange that happens only if the defender accepts, and its assignments read a `combat.damage`
+    the counter has not written yet.
+  - **Whether the counter is actually offered is decided in `stepMarch`, not in `stepHasWork`.**
+    The march reaches `offer_counter` and only then finds nothing to do, which is what v0 did: when
+    an attack wipes out the defender the game is already won, `stepGame` returns on the victory
+    check first, and four golden games end standing on that step.
+  - **Build the next `CombatState` field by field, never `{ ...combat, damage }`.** A stale
+    `riposte` carried from the attack into the counter-attack assigns the same damage twice, and no
+    golden or total-checking test would see it.
+- **New `CombatState` and `combat_resolved` fields are optional and omitted, never `0` or
+  `false`.** `digestState` puts `stableJson(state.turn)` and every log entry in the golden digest,
+  and four of the twenty-five recorded games end mid-combat. `counterSuppressed` is typed `?: true`
+  rather than `?: boolean` so the falsy-but-present value is a compile error.
 - **ID doubling is a step-9 modifier, and lives in neither `faceResults` nor the roller.** It is a
   fact about the board, not the face: the same die doubles or not depending on where it stands, so
   `faceResults` stays a pure face-to-results function and the bonus rides in on `rollArmy`'s
@@ -219,6 +284,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   randomness. Magic never allows a save whatever it rolls.
 - **No `assign_damage` decision is raised when `maxAbsorbable` is 0** — damage too small to kill
   anything is simply dropped.
+- **`maxArmyResults` no longer bounds a roll's total.** Rend puts a die in the roll that the army
+  does not contain, so the ceiling is over the roll's own `dice` —
+  `Σ maxResults(unitType(die.typeId), ...)` — which is a better property anyway and survives any
+  future reroll source.
 - **`advance` throws after 1000 steps** rather than hanging. If you hit that, a phase handler is
   failing to either reach a decision or change the state.
 
@@ -237,6 +306,13 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **`RandomAI` is a test tool, not an opponent.** `runGame` + 1000 seeded self-play games is the
   cheapest bug detector here; a `stoppedBecause === 'stuck'` result means the machine ran out of
   moves without ending, and is always a bug.
+  - **What it catches is narrow**: deadlock, a `validateState` breach mid-game, and a throw on any
+    path a random player can reach. Not rule correctness, and not coverage — Rend is one face on
+    one of forty unit types, so a clean 1000-game run can easily never have executed it. A fuzz
+    over new rules wants per-SAI trigger counters asserted `> 0` beside `stuck === 0`.
+  - **It runs `V0_RULES` only**, which is no longer the configuration anyone plays. Phase 1 turned
+    the app over to `SAI_RULES` and deliberately did not add a second fuzz, so the live rules have
+    no standing deadlock net — only unit tests. Worth knowing before trusting a green suite.
 - **A game record is `{ setup, actions }` and nothing else.** Replaying it reproduces the game die
   for die. `replayTo(record, n)` is undo.
 - **The golden corpus is the guard on "this changed no outcome".** `src/engine/__golden__/` holds
@@ -248,9 +324,31 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 
 ## UI
 
-- **Every screen renders from `state.pending`.** `promptFor(pending, human)` turns it into a
+- **Every screen renders from `state.pending`.** `promptFor(pending, human, state)` turns it into a
   sentence and the legal buttons; no component decides what is legal or tracks where it is in a
   multi-step move.
+- **A prompt button draws the real terrain face art, not a glyph** -- the one place worth breaking
+  the 30px floor, because a terrain die has the *number* printed on it as well as the action icon,
+  and "go to face 4" is a different answer from "go to a missile face somewhere". `FaceHint` is
+  therefore `{ dieId, face }` and the component resolves the art; `describeFace` is the words, for
+  `aria-label` and for the no-art fallback. The art is black line work, so `.choice-face` flattens
+  it onto the button -- white on the accent, ink on a secondary.
+- **A rerolled die is drawn beside the die it came from, joined by an arrow.** `resolveRoll`
+  appends rerolls at the end, which is the true throwing order and the RNG order, and read left to
+  right that leaves a Rend at the front of the strip and its second face near the back joined by
+  nothing. `chainRerolls` groups them for display only -- never reordering *within* a chain, since
+  the arrow means "and then this".
+- **`?forces=bestiary&seed=7` starts a named game**, which is the only way the hand-authored
+  pairings are reachable from the browser -- New Game always rolls. Names come from `FORCE_SETS` in
+  `setup.ts`, shared with the terminal's `--forces`, so a new pairing is reachable from both at
+  once. An unknown name is reported in the banner rather than quietly rolled, because a random
+  force looks exactly like a preset that does not work.
+  - **The request is stripped from the address bar in an effect, not in `restore`.** `restore` is a
+    `useState` initializer and StrictMode runs those twice in development: clearing the query on
+    the first pass left the second reading a bare URL and rolling a random game. Keep `restore`
+    free of side effects.
+  - **It is cleared at all** so a refresh resumes the game rather than restarting it. Losing a game
+    in progress to a reload would be a worse bug than the feature is a feature.
 - **The dice grid is also the selection surface** for damage, retreat and reinforce. One gesture,
   no modals.
 - **Logic lives in pure functions in `prompts.ts`, not in components.** `damageSelection` is the
@@ -334,6 +432,17 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **Bump `SAVE_VERSION` in `storage.ts` whenever a change would make old action logs replay
   differently** — new phases, changed decision order, altered dice consumption. A mismatch is
   discarded with a message rather than replayed into a wrong game.
+- **Check the reason before bumping, and write the true one down.** A record carries its
+  `SetupOptions`, and `setupGame` pins an absent `ruleSet` to `V0_RULES` for good — so a save made
+  before a rules flag existed replays under the old flag *correctly*, however much the engine has
+  grown. Phase 1 is the worked example: `PLAN-V1.md` said to bump because rerolls change dice
+  consumption, which was simply false. It bumped anyway, for the real reason — an old save would go
+  on playing the v0 game while New Game starts a `'results'` one, with nothing on screen saying
+  which. A bump justified by a hazard that does not exist trains reflexive bumping and devalues the
+  discipline.
+- **A record written by the app now names its ruleset.** `useGame` passes `ruleSet: SAI_RULES`
+  explicitly rather than leaning on the default, so a save says which rules it was played under and
+  goes on replaying under them.
 - **Wrap every `localStorage` access.** It throws in private windows, with site data blocked, and
   on a full quota. A game that cannot be saved must still be playable.
 
@@ -343,5 +452,5 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   engine passes a lot of small integers around and mixing them up is silent.
 - Rules tests read as scenarios: build a state, apply an action list, assert. Combat and damage
   assignment get tests before implementation.
-- Keep `docs/RULES-V0.md` §8 and `docs/OVERVIEW.md` §8 current. When a rules question gets
+- Keep `docs/RULES-V0.md` §9 and `docs/OVERVIEW.md` §8 current. When a rules question gets
   answered, move it out of Open Questions and into the body.

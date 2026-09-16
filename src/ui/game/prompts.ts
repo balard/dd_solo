@@ -5,14 +5,17 @@
  * bar renders whatever this returns, so no component ever tracks its own wizard
  * state or decides what is legal -- the engine already did both.
  */
-import { unitType } from '../../data/load'
-import type { UnitClass } from '../../data/types'
+import { terrainDie, terrainFaceAction, unitType } from '../../data/load'
+import type { TerrainFaceNumber, UnitClass } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
+import { legalDirections } from '../../engine/turn'
 import {
   armyAt,
+  type Direction,
   type GameAction,
   type GameState,
   type Pending,
+  type TerrainFace,
   type TerrainSlot,
   type UnitId,
   type UnitInstance,
@@ -31,11 +34,48 @@ export function slotLabel(slot: TerrainSlot, human: 'p1' | 'p2'): string {
   return isOwn ? 'Your home' : 'Enemy home'
 }
 
+/**
+ * A terrain face a button wants to draw.
+ *
+ * The die and the number, not the action: the real face art carries both the number
+ * and the action icon, which is the whole reason a button shows the face rather than
+ * a bare glyph. Resolving the art is the component's job.
+ */
+export interface FaceHint {
+  readonly dieId: string
+  readonly face: TerrainFace
+}
+
 export interface Choice {
+  /**
+   * The button's text, with `{}` wherever one of `faces` belongs: `'No (stays at
+   * {})'`. A template rather than a pre-split list so the source reads as the
+   * sentence the player sees, and so `prompts.ts` stays free of JSX.
+   */
   readonly label: string
+  /** Fills the `{}` slots in `label`, in order. */
+  readonly faces?: readonly FaceHint[]
   readonly action: GameAction
   /** Marks the "do nothing" option so it can be styled as secondary. */
   readonly passive?: boolean
+}
+
+/**
+ * The same sentence a `Choice` renders, with its faces spelled out as words.
+ *
+ * The buttons draw pictures of die faces, which reach assistive tech as nothing at
+ * all -- "Maneuver (go to  or )". This is what goes in their `aria-label`, and it is
+ * here rather than in the component so it can be tested without a DOM.
+ */
+export function plainLabel(choice: Choice): string {
+  const faces = choice.faces ?? []
+  return choice.label
+    .split('{}')
+    .map((text, i) => {
+      const hint = faces[i]
+      return hint === undefined ? text : text + describeFace(hint)
+    })
+    .join('')
 }
 
 export interface Prompt {
@@ -45,7 +85,21 @@ export interface Prompt {
   readonly custom?: 'assign_damage' | 'reinforce' | 'retreat'
 }
 
-export function promptFor(pending: Pending, human: 'p1' | 'p2'): Prompt {
+const stepFace = (face: TerrainFace, direction: Direction): TerrainFace =>
+  (direction === 'up' ? face + 1 : face - 1) as TerrainFace
+
+/**
+ * A face in words, for `aria-label` and for anywhere the art cannot be drawn.
+ *
+ * Face 8 has no action -- it has the die's eighth-face icon instead -- which is why
+ * this is not simply the action name.
+ */
+export function describeFace({ dieId, face }: FaceHint): string {
+  if (face === 8) return `the eighth face, ${terrainDie(dieId).eighthFace.replace(/_/g, ' ')}`
+  return `face ${face}, ${terrainFaceAction(dieId, face as TerrainFaceNumber).toLowerCase()}`
+}
+
+export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState): Prompt {
   const label = (slot: TerrainSlot) => slotLabel(slot, human)
 
   switch (pending.kind) {
@@ -61,14 +115,36 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2'): Prompt {
         ],
       }
 
-    case 'choose_maneuver':
+    case 'choose_maneuver': {
+      const terrain = state.terrains[pending.slot]
+      const dieId = terrain.dieId
+
+      // Every face the maneuver could reach, including one that keeps the same
+      // action: the face art carries the *number* as well as the icon, so face 2 and
+      // face 4 are two different answers even when both say missile. The marcher
+      // declares before choosing a direction, so both are honestly on offer.
+      const reachable = legalDirections(terrain.face).map((direction) => ({
+        dieId,
+        face: stepFace(terrain.face, direction),
+      }))
+
       return {
         question: `Maneuver the terrain at ${label(pending.slot)}?`,
         choices: [
-          { label: 'Maneuver', action: { kind: 'choose_maneuver', maneuver: true } },
-          { label: 'No', action: { kind: 'choose_maneuver', maneuver: false }, passive: true },
+          {
+            label: `Maneuver (go to ${reachable.map(() => '{}').join(' or ')})`,
+            faces: reachable,
+            action: { kind: 'choose_maneuver', maneuver: true },
+          },
+          {
+            label: 'No (stays at {})',
+            faces: [{ dieId, face: terrain.face }],
+            action: { kind: 'choose_maneuver', maneuver: false },
+            passive: true,
+          },
         ],
       }
+    }
 
     case 'contest_maneuver':
       return {
@@ -81,14 +157,22 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2'): Prompt {
         ],
       }
 
-    case 'choose_direction':
+    case 'choose_direction': {
+      const terrain = state.terrains[pending.slot]
+
       return {
         question: `Turn ${label(pending.slot)} which way?`,
+        // The direction word and the face it lands on, and nothing else. The face
+        // art says what the terrain becomes better than any wording could, and the
+        // word is still needed because only one of the two is progress towards
+        // capturing the terrain.
         choices: pending.options.map((direction) => ({
-          label: direction === 'up' ? 'Up — closer' : 'Down — further',
+          label: `${direction === 'up' ? 'Up' : 'Down'} — {}`,
+          faces: [{ dieId: terrain.dieId, face: stepFace(terrain.face, direction) }],
           action: { kind: 'choose_direction', direction } as GameAction,
         })),
       }
+    }
 
     case 'choose_action':
       return {

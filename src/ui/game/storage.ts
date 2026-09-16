@@ -29,8 +29,15 @@ const KEY = 'dd_solo.save'
  * 3: forces are rolled from the seed, and the Frontier die is the roll-off loser's
  *    second terrain rather than a fixed Highland. An old log replays onto a board
  *    with different armies on different terrains -- a different game entirely.
+ *
+ * 4: the app now sets `ruleSet: SAI_RULES`. Note what this bump is *not* for: a
+ *    version-3 record still replays byte-identically, because it carries no
+ *    `ruleSet` and `setupGame` pins an absent one to `V0_RULES` for good. The reason
+ *    is that it would go on replaying the v0 game -- no Smite, no Counter, no
+ *    rerolls -- while the New Game button starts a different one, and nothing on
+ *    screen says which you are playing. Discarding it is the honest option.
  */
-export const SAVE_VERSION = 3
+export const SAVE_VERSION = 4
 
 export interface SavedGame {
   readonly version: number

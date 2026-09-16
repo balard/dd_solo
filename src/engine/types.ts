@@ -90,17 +90,32 @@ export type MarchStep =
   | 'choose_target'
   | 'resolve_attack'
   | 'assign_attack_damage'
+  | 'assign_attack_riposte'
   | 'offer_counter'
   | 'resolve_counter'
   | 'assign_counter_damage'
+  | 'assign_counter_riposte'
 
-/** The exchange currently being resolved. */
+/**
+ * The exchange currently being resolved.
+ *
+ * **The two Phase 1 fields are optional and must be omitted, never written as `0` or
+ * `false`.** `digestState` puts `stableJson(state.turn)` in the golden digest and
+ * four of the twenty-five recorded games end with a non-null combat, so a field that
+ * is always present rewrites those digests for nothing. `counterSuppressed` is typed
+ * `?: true` rather than `?: boolean` so that under `exactOptionalPropertyTypes` the
+ * falsy-but-present value cannot even be written.
+ */
 export interface CombatState {
   readonly action: ActionKind
   /** The terrain holding the army under attack. */
   readonly targetSlot: TerrainSlot
   /** Damage awaiting assignment by whoever is about to lose units. */
   readonly damage: number
+  /** Counter/Volley damage owed back to whoever made *this* exchange's attack roll. */
+  readonly riposte?: number
+  /** Surprise, rolled by the attacker: the defender may not counter-attack. */
+  readonly counterSuppressed?: true
 }
 
 export interface TurnState {
@@ -269,6 +284,18 @@ export type LogEntry =
       /** null when no save roll was made: magic allows none, a zero attack earns none. */
       readonly saveTotal: number | null
       readonly damage: number
+      /**
+       * Smite: damage inside `damage` that the save total did not reduce. Without it
+       * the line reads "3 melee - 5 saves = 4 damage" and looks like broken
+       * arithmetic.
+       *
+       * Optional and **omitted when zero**, like the two `CombatState` fields and for
+       * the same reason: every golden digest carries every log entry verbatim.
+       */
+      readonly unsavable?: number
+      /** Counter/Volley: damage this roll sent back the other way, assigned
+       *  separately. Omitted when zero. */
+      readonly riposte?: number
       /** The dice themselves, so the UI can show what landed rather than only the sum.
        *  Log-only: a saved game is `{ setup, actions }`, so this costs nothing on disk. */
       readonly attackDice: readonly DieRoll[]
@@ -281,6 +308,9 @@ export type LogEntry =
       readonly unitIds: readonly UnitId[]
     }
   | { readonly kind: 'counter_declined'; readonly player: PlayerId }
+  /** Surprise. A separate entry rather than a flag on `combat_resolved`: without it
+   *  the march simply ends, with no `counter_declined` and no explanation. */
+  | { readonly kind: 'counter_suppressed'; readonly player: PlayerId; readonly slot: TerrainSlot }
   | { readonly kind: 'turn_end'; readonly player: PlayerId }
   | {
       readonly kind: 'victory'
@@ -297,7 +327,14 @@ export type LogEntry =
  */
 export interface RuleSet {
   readonly magic: 'simplified' | 'spells'
-  readonly sai: 'inert' | 'full'
+  /**
+   * `inert`   — an SAI face produces nothing at all. The v0 game.
+   * `results` — the twelve SAIs that only add results, plus Rend's reroll. The other
+   *             thirteen need targeting, a sub-roll, a duration or the DUA, and stay
+   *             silently inert here; see `sai.ts`.
+   * `full`    — plus those thirteen, which is Phase 4. Throws until then.
+   */
+  readonly sai: 'inert' | 'results' | 'full'
   /**
    * `captureOnly` — a captured terrain wins the game and does nothing else.
    * `standard`    — plus the two advantages the rules grant any holder: ID results
@@ -316,6 +353,15 @@ export const V0_RULES: RuleSet = {
   eighthFace: 'standard',
   dragons: false,
 }
+
+/**
+ * What the app and the CLI actually play from v1 Phase 1 on.
+ *
+ * `V0_RULES` stays exactly as it was -- it is the regression baseline the golden
+ * corpus is recorded against, and invariant 5 is the reason it is a flag rather than
+ * a deleted branch.
+ */
+export const SAI_RULES: RuleSet = { ...V0_RULES, sai: 'results' }
 
 export interface GameState {
   readonly ruleSet: RuleSet

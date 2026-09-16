@@ -6,6 +6,11 @@
  * engine already knows both. The one piece of local state is the damage selection,
  * which is a draft answer rather than wizard position.
  */
+import { Fragment } from 'react'
+
+import { terrainDie, terrainFaceAction } from '../../data/load'
+import type { TerrainFaceNumber } from '../../data/types'
+
 import {
   livingUnits,
   type GameAction,
@@ -16,7 +21,16 @@ import {
   type UnitId,
 } from '../../engine/types'
 
-import { damageSelection, promptFor, slotLabel } from './prompts'
+import { Glyph, type GlyphName } from './Glyph'
+import {
+  damageSelection,
+  describeFace,
+  plainLabel,
+  promptFor,
+  slotLabel,
+  type FaceHint,
+} from './prompts'
+import { useFaceArt } from './useFaceArt'
 
 export function ActionBar({
   state,
@@ -61,7 +75,7 @@ export function ActionBar({
     )
   }
 
-  const prompt = promptFor(pending, human)
+  const prompt = promptFor(pending, human, state)
 
   if (prompt.custom === 'assign_damage' && pending.kind === 'assign_damage') {
     const { absorbed, required, ready, suggestion } = damageSelection(state, pending, selection)
@@ -195,14 +209,79 @@ export function ActionBar({
             key={i}
             type="button"
             className={`choice ${choice.passive ? 'secondary' : ''}`}
+            // The glyphs inside reach a screen reader as nothing, so the whole
+            // sentence is repeated here in words.
+            aria-label={plainLabel(choice)}
             onClick={() => {
               dispatch(choice.action)
             }}
           >
-            {choice.label}
+            <ChoiceLabel label={choice.label} faces={choice.faces ?? []} />
           </button>
         ))}
       </div>
     </div>
+  )
+}
+
+const ACTION_GLYPH: Record<string, GlyphName> = {
+  MELEE: 'MELEE',
+  MISSILE: 'MISSILE',
+  MAGIC: 'MAGIC',
+}
+
+/**
+ * One terrain face inside a button.
+ *
+ * The real art, not our glyph, and this is the one place that is worth the extra
+ * pixels: a terrain die has the *number* drawn into it as well as the action icon,
+ * and the number is half of what the button is telling you -- "go to face 4" rather
+ * than "go to a missile face somewhere". Without the art there is nothing that says
+ * both, so the fallback draws them side by side.
+ */
+function ChoiceFace({ hint }: { hint: FaceHint }) {
+  const art = useFaceArt()
+  const die = terrainDie(hint.dieId)
+  const label = describeFace(hint)
+
+  const url =
+    hint.face === 8 ? art.eighthFace(die.eighthFace) : art.terrainFace(die.type, hint.face)
+  if (url !== null) {
+    return <img className="choice-face" src={url} width={28} height={28} alt={label} title={label} />
+  }
+
+  if (hint.face === 8) return <b>{die.eighthFace.replace(/_/g, ' ')}</b>
+  const icon = terrainFaceAction(hint.dieId, hint.face as TerrainFaceNumber)
+  return (
+    <span className="inline-glyph" title={label}>
+      <b>{hint.face}</b>
+      <Glyph name={ACTION_GLYPH[icon] ?? 'MELEE'} size={16} />
+    </span>
+  )
+}
+
+/**
+ * A choice's label with its terrain faces drawn into it.
+ *
+ * `label` is a template -- "No (stays at {})" -- and each `{}` takes the next hint,
+ * so the sentence in `prompts.ts` reads as the one the player sees and that file
+ * stays free of JSX.
+ */
+function ChoiceLabel({ label, faces }: { label: string; faces: readonly FaceHint[] }) {
+  return (
+    <>
+      {label.split('{}').map((text, i) => {
+        const hint = faces[i]
+        return (
+          // A fragment, not a span: the face is a block-level image, so the text
+          // around it has to stay in ordinary flow or "(go to" and ")" land on
+          // separate lines.
+          <Fragment key={i}>
+            {text}
+            {hint !== undefined && <ChoiceFace hint={hint} />}
+          </Fragment>
+        )
+      })}
+    </>
   )
 }

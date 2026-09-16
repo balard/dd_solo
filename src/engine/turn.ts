@@ -15,7 +15,8 @@
  */
 import { doublesIds, legalActions, missileTargets, resolveAttack, terrainAction } from './combat'
 import { applyDamage, damageAssignmentProblem, damageOptions } from './damage'
-import { rollArmy } from './roll'
+import { expectNoEffects, rollArmy } from './roll'
+import type { RollContext } from './sai'
 import {
   IllegalActionError,
   TERRAIN_SLOTS,
@@ -25,10 +26,12 @@ import {
   opponentOf,
   type ActionKind,
   type ArmyRef,
+  type CombatState,
   type Direction,
   type GameAction,
   type GameState,
   type LogEntry,
+  type MarchStep,
   type PlayerId,
   type TerrainFace,
   type TerrainSlot,
@@ -212,29 +215,144 @@ function stepMarch(state: GameState): GameState {
       return resolveExchange(state, true)
 
     case 'assign_attack_damage':
-    case 'assign_counter_damage': {
-      const combat = requireCombat(state)
-      const victim =
-        state.turn.marchStep === 'assign_attack_damage' ? opponentOf(player) : player
-      const slot =
-        state.turn.marchStep === 'assign_attack_damage' ? combat.targetSlot : marchingSlot(state)
+    case 'assign_attack_riposte':
+    case 'assign_counter_damage':
+    case 'assign_counter_riposte': {
+      const step = state.turn.marchStep
+      const target = damageTarget(state, step)
       return {
         ...state,
-        pending: { kind: 'assign_damage', player: victim, slot, damage: combat.damage },
+        pending: {
+          kind: 'assign_damage',
+          player: target.player,
+          slot: target.slot,
+          damage: damageAt(state, step),
+        },
       }
     }
 
     case 'offer_counter': {
       const combat = requireCombat(state)
       const defender = opponentOf(player)
-      // "A defending army reduced to zero units does not counter-attack."
+      // Three reasons there may be no offer to make: Surprise; "a defending army
+      // reduced to zero units does not counter-attack"; and nothing left to counter
+      // *with*, which is newly reachable now that a riposte or a Smite can empty the
+      // attacking army first.
+      //
+      // All three live here rather than in `stepHasWork` deliberately. The march
+      // reaches this step and only then finds nothing to do, which is what v0 did:
+      // when the attack wipes out the defender the game is already won, `stepGame`
+      // returns on the victory check before this runs, and the recorded final state
+      // is left standing on `offer_counter`. Deciding it one step earlier would end
+      // the march first and change the state every golden was recorded in.
+      if (combat.counterSuppressed === true) return endMarch(state)
       if (armyAt(state, defender, combat.targetSlot).length === 0) return endMarch(state)
+      if (armyAt(state, player, marchingSlot(state)).length === 0) return endMarch(state)
       return {
         ...state,
         pending: { kind: 'choose_counter_attack', player: defender, slot: combat.targetSlot },
       }
     }
   }
+}
+
+// --- the combat sequence -----------------------------------------------------
+// One exchange is up to seven steps, and most of them are skipped most of the time.
+// Which one comes next used to be decided independently in `resolveExchange` and in
+// `applyAssignDamage`; with two damage assignments per exchange rather than one,
+// two copies of that would drift, and the way they would drift is damage being
+// assigned twice or not at all.
+
+const COMBAT_SEQUENCE = [
+  'resolve_attack',
+  'assign_attack_damage',
+  'assign_attack_riposte',
+  'offer_counter',
+  'resolve_counter',
+  'assign_counter_damage',
+  'assign_counter_riposte',
+] as const satisfies readonly MarchStep[]
+
+type CombatStep = (typeof COMBAT_SEQUENCE)[number]
+
+type AssignStep = Extract<CombatStep, `assign_${string}`>
+
+const isAssignStep = (step: MarchStep): step is AssignStep => step.startsWith('assign_')
+
+/**
+ * Who loses units at an assignment step, and where they are standing.
+ *
+ * The four mirror each other: an exchange's damage goes to whoever it was aimed at,
+ * and a Counter or Volley riposte goes straight back at whoever rolled the attack.
+ * The counter-attack swaps the two ends, which is why its pair is the reverse of
+ * the opening attack's.
+ */
+function damageTarget(
+  state: GameState,
+  step: AssignStep,
+): { readonly player: PlayerId; readonly slot: TerrainSlot } {
+  const combat = requireCombat(state)
+  const marcher = state.turn.marching
+  const atTarget = { player: opponentOf(marcher), slot: combat.targetSlot } as const
+  const atMarch = { player: marcher, slot: marchingSlot(state) } as const
+
+  switch (step) {
+    case 'assign_attack_damage':
+      return atTarget
+    case 'assign_attack_riposte':
+      return atMarch
+    case 'assign_counter_damage':
+      return atMarch
+    case 'assign_counter_riposte':
+      return atTarget
+  }
+}
+
+/** How much that step is assigning. */
+function damageAt(state: GameState, step: AssignStep): number {
+  const combat = requireCombat(state)
+  return step === 'assign_attack_riposte' || step === 'assign_counter_riposte'
+    ? (combat.riposte ?? 0)
+    : combat.damage
+}
+
+/**
+ * Whether a step has anything to do, and so whether the walk below should stop on it.
+ *
+ * The two `resolve_*` steps answer false: both are entered deliberately -- by
+ * choosing an action, and by accepting the counter-attack offer -- and never by the
+ * walk.
+ */
+function stepHasWork(state: GameState, step: CombatStep): boolean {
+  if (isAssignStep(step)) {
+    const target = damageTarget(state, step)
+    const army = armyAt(state, target.player, target.slot)
+    // Damage too small to kill anything is dropped rather than asked about.
+    return damageOptions(army, damageAt(state, step)).required > 0
+  }
+
+  // Only melee is countered, and a counter is never itself countered. Whether the
+  // offer is actually made -- Surprise, and whether either army still exists -- is
+  // decided in `stepMarch`, not here; see the note there.
+  if (step === 'offer_counter') return requireCombat(state).action === 'melee'
+
+  return false
+}
+
+/** Moves to the next combat step with work in it, or ends the march. */
+function afterCombatStep(state: GameState, done: CombatStep): GameState {
+  for (let i = COMBAT_SEQUENCE.indexOf(done) + 1; i < COMBAT_SEQUENCE.length; i += 1) {
+    const step = COMBAT_SEQUENCE[i]
+    if (step === undefined) break
+    // `resolve_counter` is a gate rather than a step to skip past. Everything after
+    // it belongs to an exchange that happens only if the defender accepts the offer,
+    // and its two assignments read a `combat.damage` that the counter has not
+    // written yet -- so walking through would assign the opening attack's damage a
+    // second time, to the wrong army.
+    if (step === 'resolve_counter') break
+    if (stepHasWork(state, step)) return withTurn(state, { marchStep: step })
+  }
+  return endMarch(state)
 }
 
 function requireCombat(state: GameState) {
@@ -268,37 +386,50 @@ function resolveExchange(state: GameState, isCounter: boolean): GameState {
     attackerSlot,
     defender,
     defenderSlot,
-  })
-
-  const logged = withLog({ ...state, rng: outcome.rng }, {
-    kind: 'combat_resolved',
-    attacker,
-    defender,
-    attackerSlot,
-    defenderSlot,
-    action: combat.action,
     isCounter,
-    attackTotal: outcome.attackTotal,
-    saveTotal: outcome.saveTotal,
-    damage: outcome.damage,
-    attackDice: outcome.attackRoll.dice,
-    saveDice: outcome.saveRoll?.dice ?? null,
   })
 
-  // Damage that cannot kill anything is dropped rather than asked about: a die that
-  // takes less damage than its health simply ignores it (RULES-V0.md section 6).
-  const required = damageOptions(armyAt(state, defender, defenderSlot), outcome.damage).required
-  const withCombat = withTurn(logged, { combat: { ...combat, damage: outcome.damage } })
-
-  if (required > 0) {
-    return withTurn(withCombat, {
-      marchStep: isCounter ? 'assign_counter_damage' : 'assign_attack_damage',
-    })
+  const entries: LogEntry[] = [
+    {
+      kind: 'combat_resolved',
+      attacker,
+      defender,
+      attackerSlot,
+      defenderSlot,
+      action: combat.action,
+      isCounter,
+      attackTotal: outcome.attackTotal,
+      saveTotal: outcome.saveTotal,
+      damage: outcome.damage,
+      // Omitted when zero, never written as 0: every golden digest carries every log
+      // entry verbatim, so an always-present field rewrites all twenty-five.
+      ...(outcome.unsavable > 0 ? { unsavable: outcome.unsavable } : {}),
+      ...(outcome.riposte > 0 ? { riposte: outcome.riposte } : {}),
+      attackDice: outcome.attackRoll.dice,
+      saveDice: outcome.saveRoll?.dice ?? null,
+    },
+  ]
+  if (outcome.counterSuppressed) {
+    entries.push({ kind: 'counter_suppressed', player: defender, slot: defenderSlot })
   }
-  if (isCounter) return endMarch(withCombat)
-  return combat.action === 'melee'
-    ? withTurn(withCombat, { marchStep: 'offer_counter' })
-    : endMarch(withCombat)
+
+  // Built field by field rather than spread over the old one: a stale `riposte` or
+  // `counterSuppressed` carried from the opening attack into the counter-attack
+  // would assign the same damage twice, and no total-checking test would see it.
+  const next: CombatState = {
+    action: combat.action,
+    targetSlot: combat.targetSlot,
+    // Damage that cannot kill anything is dropped rather than asked about: a die
+    // that takes less damage than its health simply ignores it (RULES-V0.md §6).
+    damage: outcome.damage,
+    ...(outcome.riposte > 0 ? { riposte: outcome.riposte } : {}),
+    ...(outcome.counterSuppressed ? { counterSuppressed: true as const } : {}),
+  }
+
+  return afterCombatStep(
+    withTurn(withLog({ ...state, rng: outcome.rng }, ...entries), { combat: next }),
+    isCounter ? 'resolve_counter' : 'resolve_attack',
+  )
 }
 
 /**
@@ -430,6 +561,7 @@ function applyContest(state: GameState, contest: boolean): GameState {
     state.rng,
     state.ruleSet,
     doublesIds(state, player, slot),
+    MANEUVER_ROLL,
   )
   const [defenderRoll, afterDefender] = rollArmy(
     armyAt(state, opponentOf(player), slot),
@@ -437,7 +569,14 @@ function applyContest(state: GameState, contest: boolean): GameState {
     afterMarcher,
     state.ruleSet,
     doublesIds(state, opponentOf(player), slot),
+    MANEUVER_ROLL,
   )
+
+  // No SAI that applies to a maneuver roll produces an effect in Phase 1, and a
+  // contest has nowhere to put one. Phase 4's Firewalking and Teleport will, so this
+  // is what stops them being silently dropped here.
+  expectNoEffects(marcherRoll, 'the maneuver roll of the marching army')
+  expectNoEffects(defenderRoll, 'the roll of the counter-maneuvering army')
 
   // "The highest total wins (the marching army wins a tie)."
   const marcherWins = marcherRoll.total >= defenderRoll.total
@@ -537,6 +676,9 @@ function applyMissileTarget(state: GameState, slot: TerrainSlot): GameState {
   })
 }
 
+/** Every contested maneuver and the order-of-play roll-off share this. */
+const MANEUVER_ROLL: RollContext = { purpose: { kind: 'maneuver' }, isCounter: false }
+
 function applyCounterAttack(state: GameState, counter: boolean): GameState {
   const defender = opponentOf(state.turn.marching)
   if (!counter) {
@@ -546,14 +688,14 @@ function applyCounterAttack(state: GameState, counter: boolean): GameState {
 }
 
 function applyAssignDamage(state: GameState, unitIds: readonly UnitId[]): GameState {
-  const combat = requireCombat(state)
-  const isCounterDamage = state.turn.marchStep === 'assign_counter_damage'
-  const marcher = state.turn.marching
-  const victim = isCounterDamage ? marcher : opponentOf(marcher)
-  const slot = isCounterDamage ? marchingSlot(state) : combat.targetSlot
+  const step = state.turn.marchStep
+  if (!isAssignStep(step)) {
+    throw new IllegalActionError(`no damage is waiting to be assigned (march step ${step})`)
+  }
 
+  const { player: victim, slot } = damageTarget(state, step)
   const army = armyAt(state, victim, slot)
-  const problem = damageAssignmentProblem(army, combat.damage, unitIds)
+  const problem = damageAssignmentProblem(army, damageAt(state, step), unitIds)
   if (problem !== null) throw new IllegalActionError(problem)
 
   const killed = withLog(applyDamage(state, unitIds), {
@@ -563,10 +705,7 @@ function applyAssignDamage(state: GameState, unitIds: readonly UnitId[]): GameSt
     unitIds,
   })
 
-  if (isCounterDamage) return endMarch(killed)
-  return combat.action === 'melee'
-    ? withTurn(killed, { marchStep: 'offer_counter' })
-    : endMarch(killed)
+  return afterCombatStep(killed, step)
 }
 
 function applyReinforce(

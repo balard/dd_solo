@@ -165,14 +165,30 @@ function Line({
               <RollStrip dice={entry.saveDice} />
             </>
           )}
+          {/* Smite and the rest are named, or the sum reads as broken arithmetic:
+              "3 melee - 5 saves = 4 damage" with no sign of where the 4 came from. */}
           <div className="roll-sum">
             {entry.saveTotal === null
               ? `${entry.attackTotal} ${entry.action}${entry.action === 'magic' ? ' ÷ 2' : ''}`
               : `${entry.attackTotal} ${entry.action} − ${entry.saveTotal} saves`}
+            {entry.unsavable !== undefined && ` + ${entry.unsavable} unsavable`}
             {' = '}
             <b>{entry.damage}</b> damage
           </div>
+          {entry.riposte !== undefined && (
+            <div className="roll-sum">
+              and <b>{entry.riposte}</b> straight back, which no save can stop
+            </div>
+          )}
         </div>
+      )
+
+    case 'counter_suppressed':
+      return (
+        <p className="log-line">
+          {who(entry.player)} {verb(entry.player, 'is', 'are')} taken by surprise and cannot
+          counter-attack
+        </p>
       )
 
     case 'units_killed':

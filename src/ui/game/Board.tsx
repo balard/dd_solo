@@ -55,17 +55,17 @@ function renderFace(
 
   const url = art.terrainFace(die.type, terrain.face)
   const label = `face ${terrain.face} — ${icon?.toLowerCase() ?? ''}`
+
+  // The real art has the face number drawn into it, so printing the digit beside it
+  // says the same thing twice. Our glyph does not, so the fallback keeps it -- which
+  // is also the fresh-clone path, where no art has been fetched at all.
+  if (url !== null) {
+    return <img className="chip-art" src={url} width={34} height={34} alt={label} title={label} />
+  }
   return (
     <>
-      {/* The number stays outside the art. It is the most important thing on the
-          chip -- how close this terrain is to being captured -- and the digit drawn
-          into the die is far too small to read at a glance. */}
       <span className="chip-number">{terrain.face}</span>
-      {url !== null ? (
-        <img className="chip-art" src={url} width={28} height={28} alt={label} title={label} />
-      ) : (
-        icon && <Glyph name={icon} size={15} />
-      )}
+      {icon && <Glyph name={icon} size={15} />}
     </>
   )
 }

@@ -238,6 +238,29 @@ body {
 
 .glyph { display: block; flex: none; }
 .face-glyph { display: inline-flex; align-items: center; gap: 2px; }
+/* A glyph sitting inside a sentence -- `.glyph` is a block, so it needs this to
+   stay on the line with the words around it. */
+.inline-glyph { display: inline-flex; align-items: center; gap: 2px; vertical-align: -.2em; margin: 0 .15em; }
+
+/*
+ * A terrain face drawn inside a button.
+ *
+ * The art is black line work, so it needs flattening onto whatever the button is --
+ * white on the accent, ink on a secondary. That is the opposite of `.chip-art`
+ * below, which always sits on the page background.
+ */
+.choice-face {
+  display: inline-block;
+  vertical-align: -.5em;
+  margin: 0 .15em;
+  filter: brightness(0) invert(1);
+}
+.choice.secondary .choice-face { filter: brightness(0); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .choice.secondary .choice-face {
+    filter: brightness(0) invert(1);
+  }
+}
 .face-count { font-size: .7rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .i-ID { color: var(--id); }
@@ -279,6 +302,15 @@ body {
   margin-bottom: 3px;
 }
 .roll-strip { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+/* A die and its rerolls stay together and never break across lines -- the chain is
+   one die thrown more than once, and a wrap would read as separate dice. */
+.roll-chain { display: inline-flex; align-items: center; gap: 2px; }
+.roll-chain.is-rerolled {
+  padding: 1px 3px;
+  border-radius: 8px;
+  background: var(--line);
+}
+.reroll-arrow { font-size: .8rem; color: var(--muted); line-height: 1; }
 .rolled {
   display: inline-flex;
   align-items: center;

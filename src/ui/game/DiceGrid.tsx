@@ -10,6 +10,8 @@
  * but never find out what it was capable of rolling, which is exactly what you need
  * to decide whether to attack with it.
  */
+import { Fragment } from 'react'
+
 import { unitType } from '../../data/load'
 import type { Face, UnitType } from '../../data/types'
 import type { UnitId, UnitInstance } from '../../engine/types'
@@ -209,28 +211,74 @@ export function DiceGrid({
   )
 }
 
+/** The shape `RollStrip` needs of a `DieRoll`, kept structural so the log can pass
+ *  its own entries without importing the engine's type. */
+export interface StripDie {
+  readonly unitId: string
+  readonly typeId: string
+  readonly faceIndex: number
+  readonly face: Face
+  readonly results: number
+  readonly reroll?: true
+}
+
+/**
+ * Puts each reroll beside the die that caused it.
+ *
+ * The engine appends rerolls at the end of the roll, because that is genuinely the
+ * order the dice were thrown and the order the RNG was consumed -- steps 1 then 3 of
+ * the pipeline. Read left to right that leaves a Rend at the front of the strip and
+ * its second face somewhere near the back, connected by nothing. So the strip groups
+ * them: same unit, in roll order, drawn as a chain.
+ *
+ * Grouping only, never reordering within a chain -- the arrow means "and then this",
+ * so the sequence has to be the real one.
+ */
+export function chainRerolls(dice: readonly StripDie[]): readonly (readonly StripDie[])[] {
+  const chains: StripDie[][] = []
+  const byUnit = new Map<string, StripDie[]>()
+
+  for (const die of dice) {
+    const existing = byUnit.get(die.unitId)
+    if (die.reroll === true && existing !== undefined) {
+      existing.push(die)
+      continue
+    }
+    const chain = [die]
+    chains.push(chain)
+    byUnit.set(die.unitId, chain)
+  }
+  return chains
+}
+
 /** The dice of a roll, showing the face each one landed on. */
-export function RollStrip({
-  dice,
-}: {
-  dice: readonly {
-    unitId: string
-    typeId: string
-    faceIndex: number
-    face: Face
-    results: number
-  }[]
-}) {
+export function RollStrip({ dice }: { dice: readonly StripDie[] }) {
   return (
     <div className="roll-strip">
-      {dice.map((die, i) => (
-        <span
-          key={`${die.unitId}-${i}`}
-          className={`rolled i-${die.face.icon} ${die.results === 0 ? 'rolled-blank' : ''}`}
-          title={`${unitType(die.typeId).name}: ${faceLabel(die.face)}`}
-        >
-          <FaceArt typeId={die.typeId} faceIndex={die.faceIndex} face={die.face} size={30} />
-          {die.results > 0 && <b>{die.results}</b>}
+      {chainRerolls(dice).map((chain, c) => (
+        <span className={`roll-chain ${chain.length > 1 ? 'is-rerolled' : ''}`} key={c}>
+          {chain.map((die, i) => (
+            <Fragment key={`${die.unitId}-${i}`}>
+              {/* An arrow, not a gap: a rerolled die is one die that was thrown
+                  twice, and both faces count. Two dice sitting next to each other
+                  would read as two units. */}
+              {i > 0 && (
+                <span className="reroll-arrow" aria-hidden="true">
+                  &rarr;
+                </span>
+              )}
+              <span
+                className={`rolled i-${die.face.icon} ${die.results === 0 ? 'rolled-blank' : ''}`}
+                title={
+                  `${unitType(die.typeId).name}: ${faceLabel(die.face)}` +
+                  (i > 0 ? ' (rerolled)' : '')
+                }
+              >
+                <FaceArt typeId={die.typeId} faceIndex={die.faceIndex} face={die.face} size={30} />
+                {die.results > 0 && <b>{die.results}</b>}
+              </span>
+            </Fragment>
+          ))}
         </span>
       ))}
     </div>

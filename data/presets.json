@@ -1,5 +1,5 @@
 {
-  "_comment": "Hand-authored setup content. NOT generated -- the importers never touch this file. Two separate things live here. `species` is a per-species profile: the Home Terrain a species brings and the second terrain it proposes as the Frontier, which the loser of the Horde roll-off places (PLAN-V1.md Phase 0a). With only three terrain types in the box and element-matching leaving each species just two legal ones, both of which it would otherwise spend on its home, the second is a second die of its own type -- Tower at home, City at the Frontier, so the two dice differ. Phase 5 adds three more types and makes that a real choice. `presets` are named 30-health forces, kept because a test that wants a particular die on the board has to be able to say so, and because the golden corpus needs forces that never change. An ordinary game rolls its forces from the seed instead.",
+  "_comment": "Hand-authored setup content. NOT generated -- the importers never touch this file. Two separate things live here. `species` is a per-species profile: the Home Terrain a species brings and the second terrain it proposes as the Frontier, which the loser of the Horde roll-off places (PLAN-V1.md Phase 0a). With only three terrain types in the box and element-matching leaving each species just two legal ones, both of which it would otherwise spend on its home, the second is a second die of its own type -- Tower at home, City at the Frontier, so the two dice differ. Phase 5 adds three more types and makes that a real choice. `presets` are named forces, kept because a test that wants a particular die on the board has to be able to say so, and because the golden corpus needs forces that never change. The two `_starter` lists are the 30-health ones the alpha shipped with; the two `_bestiary` lists are 35 health and hold one of every monster and every large die of their species, which is the widest SAI coverage a legal force can reach. An ordinary game rolls its forces from the seed instead.",
   "species": {
     "treefolk": {
       "homeTerrain": "swampland_tower",
@@ -60,6 +60,50 @@
           "firewalkers.sunburst",
           "firewalkers.shadowchaser",
           "firewalkers.firestarter"
+        ]
+      }
+    },
+    "treefolk_bestiary": {
+      "name": "Treefolk bestiary",
+      "species": "treefolk",
+      "armies": {
+        "home": [
+          "treefolk.darktree",
+          "treefolk.oak_lord",
+          "treefolk.unicorn",
+          "treefolk.eldar_dryad"
+        ],
+        "campaign": [
+          "treefolk.redwood",
+          "treefolk.noble_willow",
+          "treefolk.strangle_vine",
+          "treefolk.pine_prince"
+        ],
+        "horde": [
+          "treefolk.satyr",
+          "treefolk.lady_nereid"
+        ]
+      }
+    },
+    "firewalkers_bestiary": {
+      "name": "Firewalkers bestiary",
+      "species": "firewalkers",
+      "armies": {
+        "home": [
+          "firewalkers.fireshadow",
+          "firewalkers.sentinel",
+          "firewalkers.salamander",
+          "firewalkers.ashbringer"
+        ],
+        "campaign": [
+          "firewalkers.genie",
+          "firewalkers.expeditioner",
+          "firewalkers.phoenix",
+          "firewalkers.firestormer"
+        ],
+        "horde": [
+          "firewalkers.gorgon",
+          "firewalkers.daybringer"
         ]
       }
     }

@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
 import { unitType } from '../data/load'
-import { PRESETS, preset, speciesProfile } from '../data/presets'
+import { PRESETS, maxArmyHealth, preset, speciesProfile } from '../data/presets'
 
 import { reduce } from './reduce'
 import { rngFrom } from './rng'
-import { rollStartingFace, setupGame, STARTER_FORCES, type SetupOptions } from './setup'
+import {
+  BESTIARY_FORCES,
+  rollStartingFace,
+  setupGame,
+  STARTER_FORCES,
+  type SetupOptions,
+} from './setup'
 import {
   IllegalActionError,
   TERRAIN_SLOTS,
@@ -29,31 +35,67 @@ const OPTIONS: SetupOptions = {
 const healthOf = (units: readonly { typeId: string }[]) =>
   units.reduce((sum, u) => sum + unitType(u.typeId).health, 0)
 
+const presetHealthOf = (p: (typeof PRESETS)[number]) =>
+  Object.values(p.armies)
+    .flat()
+    .reduce((sum, id) => sum + unitType(id).health, 0)
+
 describe('presets', () => {
-  it('loads both starter forces', () => {
+  it('loads every hand-authored force', () => {
     expect(PRESETS.map((p) => p.id).sort()).toEqual([
+      'firewalkers_bestiary',
       'firewalkers_starter',
+      'treefolk_bestiary',
       'treefolk_starter',
     ])
   })
 
-  it('gives each force 30 health', () => {
-    for (const p of PRESETS) {
-      const total = Object.values(p.armies)
-        .flat()
-        .reduce((sum, id) => sum + unitType(id).health, 0)
-      expect(total, p.id).toBe(30)
-    }
+  /**
+   * The rule is that the two sides of a *game* bring the same total, not that every
+   * preset is 30 -- which is what these assertions used to say, back when 30 was the
+   * only number any of them was. The bestiary lists are 35.
+   */
+  it.each([
+    ['starter', STARTER_FORCES],
+    ['bestiary', BESTIARY_FORCES],
+  ])('gives both sides of the %s pairing the same health', (_name, forces) => {
+    if (forces.kind !== 'named') throw new Error('a named pairing, or there is nothing to compare')
+    const totals = Object.values(forces.forces).map((id) => presetHealthOf(preset(id)))
+    expect(new Set(totals).size, `totals ${totals.join(' vs ')}`).toBe(1)
   })
 
-  it('keeps every starting army within the 15-health setup cap', () => {
+  it('keeps every starting army non-empty and within half the force', () => {
     for (const p of PRESETS) {
+      const cap = maxArmyHealth(presetHealthOf(p))
       for (const [name, ids] of Object.entries(p.armies)) {
         const health = ids.reduce((sum, id) => sum + unitType(id).health, 0)
-        expect(health, `${p.id} ${name}`).toBeLessThanOrEqual(15)
+        expect(health, `${p.id} ${name}`).toBeLessThanOrEqual(cap)
         expect(ids.length, `${p.id} ${name}`).toBeGreaterThan(0)
       }
     }
+  })
+
+  /**
+   * The reason this preset exists. The starter lists field one monster each and so
+   * reach 10 of the 25 SAIs; the fifteen they miss live almost entirely on the
+   * monster dice, which is what makes "one of every monster" the useful shape.
+   */
+  it('puts every SAI in the game on the board, which the starter lists do not', () => {
+    const saisOf = (forces: typeof BESTIARY_FORCES) => {
+      if (forces.kind !== 'named') throw new Error('a named pairing')
+      const names = new Set<string>()
+      for (const id of Object.values(forces.forces)) {
+        for (const unitId of Object.values(preset(id).armies).flat()) {
+          for (const face of unitType(unitId).faces) {
+            if (face.icon === 'SAI') names.add(face.sai)
+          }
+        }
+      }
+      return names
+    }
+
+    expect(saisOf(BESTIARY_FORCES).size).toBe(25)
+    expect(saisOf(STARTER_FORCES).size).toBe(10)
   })
 })
 

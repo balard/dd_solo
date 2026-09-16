@@ -7,8 +7,10 @@
 import { terrainFaceAction } from '../data/load'
 import type { TerrainFaceNumber } from '../data/types'
 
+import type { RollEffect } from './pipeline'
 import { rollArmy, type RollResult } from './roll'
 import type { RngState } from './rng'
+import type { RollContext } from './sai'
 import {
   TERRAIN_SLOTS,
   armyAt,
@@ -127,7 +129,17 @@ export interface AttackOutcome {
   readonly attackTotal: number
   /** null when no save roll was made -- magic allows none, and a zero attack earns none. */
   readonly saveTotal: number | null
+  /** Everything the defending army is about to lose units to, saves already taken
+   *  off: `max(0, attack - saves)` plus `unsavable`. */
   readonly damage: number
+  /** Smite: the part of `damage` the save roll never had a chance at. Reported
+   *  separately only so the log can explain itself. */
+  readonly unsavable: number
+  /** Counter and Volley: damage the *save* roll sent back at the attacking army,
+   *  which gets no save roll of its own. Assigned in its own step. */
+  readonly riposte: number
+  /** Surprise: this attack denies the defender their counter-attack. */
+  readonly counterSuppressed: boolean
   /** The dice themselves, so the UI can show what landed rather than only the sum. */
   readonly attackRoll: RollResult
   readonly saveRoll: RollResult | null
@@ -140,6 +152,39 @@ export interface AttackSpec {
   readonly attackerSlot: TerrainSlot
   readonly defender: PlayerId
   readonly defenderSlot: TerrainSlot
+  /**
+   * Whether this exchange is the counter-attack rather than the opening attack.
+   *
+   * Required rather than defaulted: it is what tells Surprise not to fire ("Surprise
+   * has no effect during a counter-attack"), while Counter on the same exchange
+   * still does, and a default would silently pick one side of that.
+   */
+  readonly isCounter: boolean
+}
+
+/** Total damage of one effect kind. */
+function damageFrom(effects: readonly RollEffect[], kind: 'riposte' | 'unsavable'): number {
+  return effects.reduce((sum, e) => (e.kind === kind ? sum + e.damage : sum), 0)
+}
+
+/**
+ * Refuses an effect this roll has nowhere to put.
+ *
+ * Every effect a roll produces must be consumed by someone. Phase 4's targeting and
+ * free-move effects will arrive on rolls that predate them, and the failure mode --
+ * an SAI that computes correctly and is then dropped on the floor, with every test
+ * green -- is the one this phase came closest to shipping.
+ */
+function expectOnly(
+  effects: readonly RollEffect[],
+  allowed: readonly RollEffect['kind'][],
+  what: string,
+): void {
+  for (const effect of effects) {
+    if (!allowed.includes(effect.kind)) {
+      throw new Error(`${what} produced a ${effect.kind} effect (${effect.sai}), which nothing reads`)
+    }
+  }
 }
 
 /**
@@ -158,42 +203,79 @@ export function resolveAttack(state: GameState, spec: AttackSpec): AttackOutcome
   const attackers = armyAt(state, spec.attacker, spec.attackerSlot)
   const defenders = armyAt(state, spec.defender, spec.defenderSlot)
 
+  const attackContext: RollContext = {
+    purpose: { kind: 'attack', action: spec.action },
+    isCounter: spec.isCounter,
+  }
   const [attackRoll, afterAttack] = rollArmy(
     attackers,
     spec.action,
     state.rng,
     state.ruleSet,
     doublesIds(state, spec.attacker, spec.attackerSlot),
+    attackContext,
   )
+
+  expectOnly(attackRoll.effects, ['unsavable', 'suppress_counter'], `a ${spec.action} attack`)
+  const unsavable = damageFrom(attackRoll.effects, 'unsavable')
+  const counterSuppressed = attackRoll.effects.some((e) => e.kind === 'suppress_counter')
 
   if (spec.action === 'magic') {
     return {
       attackTotal: attackRoll.total,
       saveTotal: null,
-      damage: magicDamage(attackRoll.total, state.ruleSet),
+      damage: magicDamage(attackRoll.total, state.ruleSet) + unsavable,
+      unsavable,
+      riposte: 0,
+      counterSuppressed,
       attackRoll,
       saveRoll: null,
       rng: afterAttack,
     }
   }
 
+  // No results, no save roll -- and so no randomness consumed. The condition is the
+  // *attack total*, not the damage: a Smite-only attack rolls zero melee, earns the
+  // defender no save roll, and still kills.
   if (attackRoll.total === 0) {
-    return { attackTotal: 0, saveTotal: null, damage: 0, attackRoll, saveRoll: null, rng: afterAttack }
+    return {
+      attackTotal: 0,
+      saveTotal: null,
+      damage: unsavable,
+      unsavable,
+      riposte: 0,
+      counterSuppressed,
+      attackRoll,
+      saveRoll: null,
+      rng: afterAttack,
+    }
   }
 
   // The save roll is "rolling the army" too, so the defender's own eighth face
-  // doubles their ID saves.
+  // doubles their ID saves. It is also where Counter and Volley hit back, which is
+  // why it needs to know what it is saving against.
+  const saveContext: RollContext = {
+    purpose: { kind: 'save', against: spec.action },
+    isCounter: spec.isCounter,
+  }
   const [saveRoll, afterSave] = rollArmy(
     defenders,
     'save',
     afterAttack,
     state.ruleSet,
     doublesIds(state, spec.defender, spec.defenderSlot),
+    saveContext,
   )
+
+  expectOnly(saveRoll.effects, ['riposte'], `a save roll against ${spec.action}`)
+
   return {
     attackTotal: attackRoll.total,
     saveTotal: saveRoll.total,
-    damage: Math.max(0, attackRoll.total - saveRoll.total),
+    damage: Math.max(0, attackRoll.total - saveRoll.total) + unsavable,
+    unsavable,
+    riposte: damageFrom(saveRoll.effects, 'riposte'),
+    counterSuppressed,
     attackRoll,
     saveRoll,
     rng: afterSave,

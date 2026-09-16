@@ -8,6 +8,7 @@ import {
   armyAt,
   type GameState,
   type Pending,
+  type TerrainFace,
   type UnitId,
 } from '../../engine/types'
 
@@ -15,6 +16,8 @@ import {
   damageSelection,
   focusedSlot,
   orderedForDisplay,
+  describeFace,
+  plainLabel,
   promptFor,
   selectModeFor,
   selectableAt,
@@ -46,12 +49,129 @@ describe('slotLabel', () => {
   })
 })
 
+/**
+ * A board with a Highland at the Frontier on a chosen face.
+ *
+ * Highland runs magic on 1-3, missile on 4-5 and melee on 6-7, so it is the die with
+ * a band wide enough to sit inside -- which is the case the labels exist for.
+ */
+const atFrontierFace = (face: TerrainFace): GameState => {
+  const state = begin(
+    setupGame({
+      seed: 1234,
+      forces: STARTER_FORCES,
+      firstPlayer: 'p1',
+      terrains: { frontier: 'highland_tower' },
+    }),
+  )
+  return {
+    ...state,
+    terrains: {
+      ...state.terrains,
+      frontier: { ...state.terrains.frontier, face, capturedBy: null },
+    },
+  }
+}
+
+const maneuverPending: Pending = { kind: 'choose_maneuver', player: 'p1', slot: 'frontier' }
+
+const directionPending = (options: readonly ('up' | 'down')[]): Pending => ({
+  kind: 'choose_direction',
+  player: 'p1',
+  slot: 'frontier',
+  options,
+})
+
+describe('the maneuver prompt shows the faces it could land on', () => {
+  const HIGHLAND = 'highland_tower'
+
+  it('offers every face a maneuver could reach, changed action or not', () => {
+    // Face 3 is the top of Highland's magic band: up is face 4 (missile), down is
+    // face 2 (still magic). Both are on offer, because the art carries the *number*
+    // as well as the icon -- "go to face 2" is a different answer from "stay on 3"
+    // even though neither changes what you can do.
+    const prompt = promptFor(maneuverPending, 'p1', atFrontierFace(3))
+    expect(prompt.choices[0]?.label).toBe('Maneuver (go to {} or {})')
+    expect(prompt.choices[0]?.faces).toEqual([
+      { dieId: HIGHLAND, face: 4 },
+      { dieId: HIGHLAND, face: 2 },
+    ])
+  })
+
+  it('offers one face at the ends of the die, where only one direction is legal', () => {
+    expect(promptFor(maneuverPending, 'p1', atFrontierFace(1)).choices[0]).toMatchObject({
+      label: 'Maneuver (go to {})',
+      faces: [{ dieId: HIGHLAND, face: 2 }],
+    })
+    expect(promptFor(maneuverPending, 'p1', atFrontierFace(8)).choices[0]).toMatchObject({
+      label: 'Maneuver (go to {})',
+      faces: [{ dieId: HIGHLAND, face: 7 }],
+    })
+  })
+
+  it('always says what declining leaves you on', () => {
+    const decline = promptFor(maneuverPending, 'p1', atFrontierFace(6)).choices.at(-1)
+    expect(decline?.passive).toBe(true)
+    expect(decline?.label).toBe('No (stays at {})')
+    expect(decline?.faces).toEqual([{ dieId: HIGHLAND, face: 6 }])
+  })
+
+  it('reaches the eighth face from face 7, which is how a terrain is captured', () => {
+    const prompt = promptFor(maneuverPending, 'p1', atFrontierFace(7))
+    expect(prompt.choices[0]?.faces).toContainEqual({ dieId: HIGHLAND, face: 8 })
+  })
+})
+
+describe('describeFace', () => {
+  it('names the number and the action, which is what the art draws', () => {
+    expect(describeFace({ dieId: 'highland_tower', face: 4 })).toBe('face 4, missile')
+    expect(describeFace({ dieId: 'highland_tower', face: 1 })).toBe('face 1, magic')
+  })
+
+  it('names the eighth-face icon instead, because face 8 has no action', () => {
+    expect(describeFace({ dieId: 'highland_tower', face: 8 })).toBe('the eighth face, tower')
+    expect(describeFace({ dieId: 'swampland_city', face: 8 })).toBe('the eighth face, city')
+  })
+})
+
+describe('plainLabel', () => {
+  it('spells out the faces, which reach a screen reader as nothing', () => {
+    const prompt = promptFor(maneuverPending, 'p1', atFrontierFace(6))
+    expect(plainLabel(prompt.choices[0]!)).toBe('Maneuver (go to face 7, melee or face 5, missile)')
+    expect(plainLabel(prompt.choices.at(-1)!)).toBe('No (stays at face 6, melee)')
+  })
+
+  it('leaves a label with no faces alone', () => {
+    expect(plainLabel({ label: 'Skip march', action: { kind: 'retreat', unitIds: [] } })).toBe(
+      'Skip march',
+    )
+  })
+})
+
+describe('the direction prompt shows the face it lands on', () => {
+  it('is the direction word and the face, and nothing else', () => {
+    const prompt = promptFor(directionPending(['up', 'down']), 'p1', atFrontierFace(5))
+    expect(prompt.choices.map((c) => c.label)).toEqual(['Up — {}', 'Down — {}'])
+    expect(prompt.choices.map((c) => c.faces)).toEqual([
+      [{ dieId: 'highland_tower', face: 6 }],
+      [{ dieId: 'highland_tower', face: 4 }],
+    ])
+  })
+
+  it('keeps the direction word, because only one way captures the terrain', () => {
+    expect(plainLabel(promptFor(directionPending(['up']), 'p1', atFrontierFace(7)).choices[0]!)).toBe(
+      'Up — the eighth face, tower',
+    )
+  })
+})
+
 describe('promptFor', () => {
   it('always offers a way to decline a march', () => {
     const prompt = promptFor(
-      { kind: 'choose_march_army', player: 'p1', options: ['frontier'] },
-      'p1',
-    )
+{ kind: 'choose_march_army', player: 'p1', options: ['frontier'] },
+'p1',
+fresh(),
+)
     expect(prompt.choices.map((c) => c.label)).toEqual(['Frontier', 'Skip march'])
     expect(prompt.choices.at(-1)?.passive).toBe(true)
   })
@@ -62,40 +182,43 @@ describe('promptFor', () => {
    * maneuver; the engine half is tested in turn.test.ts.
    */
   it('never leaks the maneuver direction while the contest is open', () => {
-    const prompt = promptFor({ kind: 'contest_maneuver', player: 'p2', slot: 'frontier' }, 'p2')
+    const prompt = promptFor({ kind: 'contest_maneuver', player: 'p2', slot: 'frontier' }, 'p2', fresh())
     expect(JSON.stringify(prompt)).not.toMatch(/\bup\b|\bdown\b/i)
   })
 
   it('offers only the legal actions, plus passing', () => {
     const prompt = promptFor(
-      { kind: 'choose_action', player: 'p1', slot: 'frontier', legal: ['melee'] },
-      'p1',
-    )
+{ kind: 'choose_action', player: 'p1', slot: 'frontier', legal: ['melee'] },
+'p1',
+fresh(),
+)
     expect(prompt.choices.map((c) => c.label)).toEqual(['Melee', 'No action'])
   })
 
   it('says so plainly when there is nothing to do', () => {
     const prompt = promptFor(
-      { kind: 'choose_action', player: 'p1', slot: 'frontier', legal: [] },
-      'p1',
-    )
+{ kind: 'choose_action', player: 'p1', slot: 'frontier', legal: [] },
+'p1',
+fresh(),
+)
     expect(prompt.question).toMatch(/No action is available/)
     expect(prompt.choices).toHaveLength(1)
   })
 
   it('offers only the legal directions', () => {
     const prompt = promptFor(
-      { kind: 'choose_direction', player: 'p1', slot: 'frontier', options: ['up'] },
-      'p1',
-    )
+{ kind: 'choose_direction', player: 'p1', slot: 'frontier', options: ['up'] },
+'p1',
+fresh(),
+)
     expect(prompt.choices).toHaveLength(1)
     expect(prompt.choices[0]?.label).toMatch(/Up/)
   })
 
   it('hands damage, reinforce and retreat to their own surfaces', () => {
-    expect(promptFor(damagePending(3), 'p1').custom).toBe('assign_damage')
-    expect(promptFor({ kind: 'reinforce', player: 'p1' }, 'p1').custom).toBe('reinforce')
-    expect(promptFor({ kind: 'retreat', player: 'p1' }, 'p1').custom).toBe('retreat')
+    expect(promptFor(damagePending(3), 'p1', fresh()).custom).toBe('assign_damage')
+    expect(promptFor({ kind: 'reinforce', player: 'p1' }, 'p1', fresh()).custom).toBe('reinforce')
+    expect(promptFor({ kind: 'retreat', player: 'p1' }, 'p1', fresh()).custom).toBe('retreat')
   })
 })
 

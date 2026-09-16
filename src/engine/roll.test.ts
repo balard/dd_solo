@@ -37,7 +37,7 @@ describe('faceResults', () => {
   it('refuses to guess once SAIs are switched on', () => {
     const full: RuleSet = { ...V0_RULES, sai: 'full' }
     expect(() => faceResults({ count: 4, icon: 'SAI', sai: 'Smite' }, 'melee', full)).toThrow(
-      /SAI resolution is not implemented/,
+      /targeting SAIs are not implemented/,
     )
   })
 
