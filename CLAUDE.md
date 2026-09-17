@@ -3,7 +3,8 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: v0 alpha complete; v1 Phases 0, 1, 2 and 3 landed.** All nine phases of `docs/PLAN-V0.md` are done.
+> **Status: v0 alpha complete; v1 Phases 0–3 landed, and Phase 4 is three slices into five.**
+> All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > and installable as a PWA. It opens on a screen that picks the two forces and the seed; saving is
 > switched off while v1 lands, so a reload starts there too. Since the alpha landed, the board grew to
@@ -60,7 +61,8 @@ the dice and the opponent.
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V0.md` | **The order of work.** Nine phases to a playable alpha, each with an exit criterion and its tests. Start here when writing code. |
+| `docs/PLAN-V1.md` | **The order of work now.** Eleven phases from the alpha to the complete basic game, each landed one carrying a write-up of what the plan got wrong. Start here when writing code. |
+| `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
 | `data/ICONS.md` | The die-face vocabulary. Required before touching `data/`. |
 | `docs/rules/starter-treefolk-vs-firewalkers.pdf` | The Kickstarter starter rules — the v1.0 release target. |
@@ -165,7 +167,8 @@ These are the things that break the project if violated:
 - **The DUA is a graveyard under `dua: 'inert'` and a resource under `'active'`** -- promotion,
   recruitment, burial and Rise from the Ashes' death trigger. See `RULES-V0.md` §9. Still true of
   both rungs: **nothing in a game calls promotion or recruitment yet** (Phase 5's City is the first
-  caller) and **nothing buries** (Phase 4's Flame).
+  caller). **Flame buries**, but it is on the `sai: 'full'` rung, so nothing the app plays reaches
+  it either.
 - **Sleep and Galeforce are the first effects with a duration** (v1 Phase 4c) -- `RULES-V0.md` §10.
   Phase 3 shipped `Effect`, `expireEffects`, `pruneEffects` and the `asleep` status with no caller
   at all, deliberately; these two are it. Both are cast during the *attacker's* roll and bite in
@@ -278,8 +281,8 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - Note the name: `rollFaces`, not `rollDice`, because `rng.ts` already has a `rollDice` that
     turns face counts into indices. Two functions of that name in one directory, both imported
     into `sai.test.ts`, is a collision worth avoiding rather than aliasing around.
-- **A roll is a ten-step pipeline, not a sum** (`pipeline.ts`, full rules p. 27). `resolveRoll`
-  rolls the dice and runs steps 5–10; `rollArmy` is the one-type, one-number door onto it that the
+- **A roll is a ten-step pipeline, not a sum** (`pipeline.ts`, full rules p. 27). `applyModifiers`
+  runs steps 6–10; `rollArmy` is the one-type, one-number door onto the whole thing that the
   rest of the engine uses. **The running value is a triple per result type — `{ id, normal, sai }`
   — and that is forced, not stylistic**: step 6 removes ID results *last* and step 8 adds SAI
   results *after* step 7's divide, and neither survives a single subtotal.
@@ -298,12 +301,13 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     `'full'` adds, because the rungs differ in *which SAIs exist* rather than in what any one of
     them does. Flame in the shared table means `SAI_RULES` — the configuration Phase 1 shipped —
     quietly starts burying dice.
-    **The refusal is per *name*, not blanket**: `saiEffects` resolves any SAI that has a handler and
-    throws only for one that has none, so a Phase 4 slice moves a name into `HANDLERS` and both
-    rungs change together, with no second table to keep in step. Cantrip and Dispel Magic get their
-    own message -- they wait on `magic: 'spells'`, not on this flag. `sai.test.ts` pins the exact
-    three-way partition *and* checks it against the engine, so `npm run data` cannot add a name that
-    falls through unnoticed and the list cannot drift from what actually throws.
+    **The refusal is per *name*, not blanket**: `saiEffects` resolves any SAI either table claims
+    and throws only for one neither does, so a Phase 4 slice moves a name into `FULL_HANDLERS` and
+    nothing else changes. Cantrip and Dispel Magic get their own message -- they wait on
+    `magic: 'spells'`, not on this flag. `sai.test.ts` pins the exact four-way partition
+    (`'results'`, `'full'`, unbuilt, needs-spells) *and* checks it against the engine, so
+    `npm run data` cannot add a name that falls through unnoticed and the list cannot drift from
+    what actually throws.
 - **What a roll *counts* and what it is *for* are two questions.** `RollSpec.kinds` is the first;
   `RollSpec.context` (a `RollPurpose` plus `isCounter`) is the second, and it is what decides
   whether an SAI face does anything at all — "if a type of roll is not listed ... that SAI has no
@@ -317,8 +321,13 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   ever calls `rollArmy`, so a riposte or a Smite that `resolveRoll` computed correctly would
   otherwise be dropped on the floor with every test still green. Rolls with nowhere to put an
   effect say so: `expectNoEffects` at the maneuver and roll-off sites, `expectOnly` in
-  `resolveAttack`.
-- **One combat exchange is up to nine steps, and `COMBAT_SEQUENCE` is the only thing that knows
+  `resolveSaves`.
+  - **`expectOnly`'s whitelist is what each Phase 4 slice forgets.** A new targeting kind is
+    consumed a step *earlier* than the whitelist that names it, so the effect resolves correctly and
+    the guard that exists to stop it being dropped refuses it instead. Missed in 4b for
+    `target_enemy` and again in 4c for `sleep` and `galeforce`. It fails loudly and a test catches
+    it in seconds -- but widen it in the same edit that adds the kind.
+- **One combat exchange is up to eleven steps, and `COMBAT_SEQUENCE` is the only thing that knows
   the order.** Four of them assign damage — the attack's, the riposte back at the attacker, the
   counter-attack's, and the riposte back at *that*. `finishExchange` and `applyAssignDamage` both
   route through `afterCombatStep`; they used to decide independently, which was survivable with one
@@ -377,15 +386,18 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   a Galeforce quietly not applying. `rollArmy` takes the modifier list; it used to take a
   `doubleIds: boolean`, which was enough while the eighth face was the only thing in the game with
   an opinion about a roll. Attacks, saves and contested maneuvers all count as "rolling the army".
-- **Effects with a duration are `state.effects` and `effects.ts`, and nothing produces one yet.**
+- **Effects with a duration are `state.effects` and `effects.ts`, and Sleep and Galeforce are what
+  produce them** (v1 Phase 4c, on the `sai: 'full'` rung -- so still nothing under `DUA_RULES`).
   An effect targets an army *at a place* (it does not follow the units) or a unit (it does),
   carries `Modifier`s and/or the `asleep` status, and ends at the start of its caster's next turn.
   `expireEffects` runs in the `effects_expire` phase; `pruneEffects` runs from `stepGame` beside
   `syncCaptures`, which is the rules' "checked at the end of each action". **Both must return the
-  same object when they drop nothing**, or `advance` never settles. Phase 4's Sleep and Galeforce
-  are the first casters, as the City is for promotion.
+  same object when they drop nothing**, or `advance` never settles.
+  - **"Its caster's next turn" is whoever made the *roll*,** which on a counter-attack is the
+    defending player rather than the marching one. `expireEffects` keys on that field, so getting
+    it wrong shortens or doubles the effect rather than failing.
   - **An army modifier must never reach a unit roll**, nor the reverse (full rules p. 28). That is
-    why the entry point is named `armyRoll`: Phase 4's sub-rolls are the first unit rolls in the
+    why the entry point is named `armyRoll`: Phase 4d's sub-rolls are the first unit rolls in the
     game and must gather their own.
 - **Terrain `face === 8` and `capturedBy !== null` must always agree.** `validateState` enforces
   it; both the win check and the revert-to-7 rule depend on it.

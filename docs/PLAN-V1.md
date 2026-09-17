@@ -62,7 +62,7 @@ G  Golden files: 25 recorded v0 games          DONE  cut before anything moves
 |                                  |
 +--> 3 Effects and durations ------+  DONE
                                    |
-                        4 SAIs B: targeting
+                        4 SAIs B: targeting     4a 4b 4c DONE; 4d 4e to go
                                    |
                         5 Terrains and eighth faces
                                    |
@@ -1040,113 +1040,117 @@ of your next turn", and left the Genie tile dashed with an `aria-label` ending "
 > be *inert* rather than refusing — trading the `'full'`-refuses-a-half-built-ruleset discipline for
 > a client surface that can actually be played. 4e restores it either way.
 
-### The rest of the phase
+### 4d and 4e — what is still owed
 
-`Bullseye`, `Double Strike`, `Smother`, `Firecloud`, `Seize`, `Choke`, `Confuse`, `Flame`,
-`Wild Growth`, `Sleep`, `Galeforce`, and the free-move halves of `Firewalking` and `Teleport`.
+Eight SAIs and two free moves: `Bullseye`, `Double Strike`, `Smother`, `Firecloud`, `Seize` (4d);
+`Wild Growth`, `Choke`, `Confuse` and the free-move halves of `Firewalking` and `Teleport` (4e).
 
-**Sleep and Galeforce arrived here from Phase 3**, which built everything they do and none of what
-they need to be *cast*. Both choose a target during an attack roll -- one unit in the opposing army
-at this terrain, one opposing army anywhere -- so both need the pause below, and they need it at a
-point Wild Growth does not: **after the attack roll and before the defender's save roll**, since a
-slept die cannot be rolled for those saves and a Galeforced army saves at -4 in the very exchange
-that cast it. So `CombatState` has to be able to hold a half-finished *attack* as well as a
-half-finished save roll. What they need from `effects.ts` is nothing: `Effect`, `armyRoll`,
-`expireEffects` and the `asleep` status are already there, and a cast is one entry appended to
-`state.effects`.
+**What the first three slices already supply**, so this is not the plan's original list of three
+new mechanisms any more:
 
-**Wild Growth arrived here from Phase 2**, which could not hold it: "X save results *or* promote X
-health-worth, split as you choose" is a decision taken between the save roll and the damage
-calculation, which is the same seam Choke, Confuse, Bullseye and Double Strike all need. Its
-promotion machinery is already built and waiting in `dua.ts`; what it needs from this phase is the
-pause. Note also that its X is a *health budget* that one unit may spend twice — an Oakling
-promoting to an Oak and on to an Oak Lord costs 2 — which `promotionMatching` deliberately does not
-model, since every other caller promotes by exactly one step.
+- The pause inside an exchange **exists**: `beginExchange` → `sai_target_*` → `finishExchange`, with
+  the raw dice parked in `CombatState.attack`. What 4e needs is a *second* pause, on the far side of
+  the save roll rather than before it.
+- `targeting.ts`, `Pending.sai_target`, `sai_target_army`, the enemy-selectable board, both CLI
+  sheets and both AI branches are built and tested.
+- `resolveFaces` is pure, so any mid-roll decision is *stash the faces, ask, recompute* with no
+  extra draw. `RollSpec.saiResults` is already the channel for a player-supplied step-8 number,
+  which is what Wild Growth's save share needs and the only thing currently using it is a test.
 
-Three new mechanisms:
+**4d — the sub-rolls.** Smother and Firecloud make their targets take a *maneuver* roll; Bullseye
+and Double Strike a *save* roll; Seize an *ID* roll. These are rolls of a chosen subset of units,
+outside the attack/save exchange.
 
-- **A pause inside a roll.** Wild Growth has to ask its roller how to spend X before the save total
-  is final, which today it cannot: `resolveAttack` computes roll → saves → damage in one pure pass
-  and `resolveExchange` logs `combat_resolved` off the result. This is a new `COMBAT_SEQUENCE` step
-  plus a `CombatState` that can carry a half-finished save roll — and every field it adds must be
-  **optional and omitted**, because four goldens end mid-combat.
-- **A sub-roll.**
- Smother and Firecloud make their targets take a *maneuver* roll; Bullseye and
-  Double Strike a *save* roll; Seize an *ID* roll. These are rolls of a chosen subset of units,
-  outside the normal attack/save exchange. `rollUnits(state, unitIds, context)` — the pipeline from
-  Phase 0b already accepts an arbitrary die set.
-- **A delayed effect.** Choke and Confuse are explicitly "delayed until after the target army rolls
-  for saves" (pipeline step 2). `CombatState` grows a `delayed: readonly DelayedEffect[]` queue
-  drained at that step. The `resolve_*` march steps were left in `MarchStep` for exactly this —
-  `PLAN-V0.md` Phase 5 says so.
+- `rollUnits` belongs in `roll.ts` and `unitRoll(state, unitId, resultType)` in `effects.ts` — the
+  gatherer being there is what makes *"modifiers that affect an army do not affect the roll of an
+  individual unit"* (p. 28) a testable rule rather than a comment. **No eighth-face ID doubling**:
+  that is an army bonus.
+- The kill test is **per die**, and `DieRoll.results` is the step-5 contribution only. A die showing
+  Fly, Hoof, Counter or Rise from the Ashes *did* generate a save result, at step 8 — so
+  `resolveFaces` has to stamp each die's SAI share onto `DieRoll` (display-only, like `effects`),
+  or every SAI-faced target dies to a Bullseye it should have survived.
+- Bullseye's and Double Strike's "roll this unit again" is free: `SaiOutcome.reroll = true`, which
+  `rerollSweep` already handles. Seize reads `die.face.icon === 'ID'`, not a total.
+- `target_enemy` already carries `escape` and `fate`; `applySaiTarget` throws a named "Phase 4d"
+  error for any `escape` other than `'none'`, which is the seam to fill.
 
-New pendings: `sai_target` (choose up to X health-worth from a named army) and `sai_move` (choose
-units and a destination). Both are health-budget selections, the same shape as `assign_damage` —
-reuse `damageSelection`'s "absorbed N / budget M" logic rather than writing a second one.
+**4e — the second pause, and the friendly selection rule.**
 
-**Watch the `UP TO` rule** (p. 29): when an SAI targets a **friendly** army you may pick any number
-including none; for anything else the maximum must be used. Two different selection rules, one
-pending kind.
+- **Wild Growth** splits X between save results and promotions, decided *after* the save roll lands
+  and before its total is final. Its X is a **health budget one unit may spend twice** — an Oakling
+  to an Oak and on to an Oak Lord costs 2 — which `promotionMatching` deliberately does not model,
+  so it needs `promotionPasses` / `promoteWithin` beside it rather than inside it.
+- **Choke and Confuse** are true step-2 delayed effects: roll the saves, *then* apply them, then
+  rerolls, then the totals. Choke needs the faces to exist before its targets can be chosen ("units
+  that rolled an ID icon"), so the save roll has to split the way the attack roll did in 4a — and
+  **the attacker chooses, during the defender's roll**, which is what 4b's `'theirs'` selection mode
+  was built for.
+- **The free moves** are the first *friendly* targets, and the `UP TO` rule (p. 29) is the opposite
+  of the one every slice so far has used: any number **including none**, where p. 32 forces the
+  maximum against an opponent. `DamageSelection.ready` relaxes from `===` to `<=` for these, and
+  `sai_move` is the pending that carries a destination as well as units.
+
+**Then the flip.** `FULL_RULES` exported, `useGame` and the CLI moved to it, the throwing set down
+to `{ Cantrip, Dispel Magic }` — which is also the first moment any of Phase 4 can be played or
+fuzzed. See Risks.
 
 **Exit criterion.** All 25 SAIs resolve except Cantrip and Dispel Magic, which throw a named
 "needs spells" error under `magic: 'simplified'`. 1000 fuzz games clean with `sai: 'full'`.
 
-**Tests.**
+**Tests still owed** (the ones 4a–4c delivered are listed under their own headings):
 
 - Choke kills only units that rolled an ID, *and* removes their save contribution from the total.
-- Confuse rerolls its targets and discards the previous results entirely.
-- Flame's targets go to the BUA, not the DUA, and cannot be resurrected.
-- **Flame calls `killAndBury`, never `bury` or `buryUnits`.** "The targets are killed and buried"
-  is two steps, because a live unit passes through the DUA on its way to the BUA — the Dragonkin
-  exception ("may still be buried by a single effect that both kills and buries a unit, even though
-  they do not pass into the DUA") only needs stating because everything else does pass through.
-  That is bookkeeping for every die in the game except a Phoenix, which "may roll once when killed
-  and again when buried", so a short-cut would silently halve its chances with nothing but a
-  probability to show for it. Phase 2 made `bury` throw on a unit that is still in play so the
-  short-cut cannot be taken by accident; the test is that a Flamed Phoenix consumes **two** draws.
-
+- Confuse rerolls its targets and discards the previous results entirely; the draw order is step 1,
+  then Confuse, then step 3.
 - Seize: an ID goes to Reserve, anything else dies.
-- `2 SAI:Flame` targets two health-worth — the face count is an X parameter here, not a result
-  count. A test that would pass if it were read as a count is the point of this one.
-- Firewalking on a save roll offers the move; on a maneuver roll it does not.
+- A sub-roll does **not** call `armyRoll` — a Galeforced army's −4 must not reach a Smother maneuver
+  roll (p. 28). This is the first test that rule can have, and 4c's Galeforce is what makes it
+  possible to write.
+- A target whose SAI face generates the escape result survives — the step-8 stamp, above.
+- Wild Growth: the save share joins undivided; an Oakling promoted twice costs 2 and
+  `exchangeWithDua` never sees it twice.
+- Firewalking on a save roll offers the move; on a maneuver roll it does not; declining moves
+  nothing and logs nothing.
 
-**Bump `SAVE_VERSION`.**
+**`SAVE_VERSION` is already at 6**, bumped in 4b for the decision-order change. 4d and 4e add more
+pendings to the same seam and need no further bump unless one of them changes dice consumption on a
+path a version-6 record could have taken — and no version-6 record can reach `sai: 'full'` at all.
 
 ### Where each of the 25 SAIs lands
 
-Phase 1 is done, so a `1` in this column means **live now**; `1 / n` means half of it is. The
-thirteen that are still inert are listed in `RULES-V0.md` §8, and `sai.test.ts` asserts that every
-name in the data is claimed by exactly one rung — so this table cannot quietly disagree with the
-code.
+A ✅ means **built**; `n / m` means the SAI lands in two pieces. `sai.test.ts` pins the exact
+partition — twelve on `'results'`, three on `'full'`, eight unbuilt, two waiting on spells — **and
+checks it against the engine**, so this table cannot quietly disagree with the code.
 
-| SAI | What it needs | Phase |
+Fifteen of the twenty-five are built. Note what "built" does *not* mean: the `'full'` rung refuses
+the eight unbuilt names, so Flame, Sleep and Galeforce cannot be reached in a playable game until
+4e, however finished they are.
+
+| SAI | What it needs | Where |
 |---|---|---|
-| Counter | roll context; damage back at the attacker | 1 |
-| Volley | roll context; damage back at the attacker | 1 |
-| Fly | roll context | 1 |
-| Hoof | roll context | 1 |
-| Trample | roll context, two result types at once | 1 |
-| Create Fireminions | roll context | 1 |
-| Smite | unsavable damage channel | 1 |
-| Surprise | combat flag suppressing the counter | 1 |
-| Rend | reroll (step 3) | 1 |
-| Wild Growth | promotion (Phase 2) **plus a pause mid-roll to split X** | 4 |
-
+| Counter | roll context; damage back at the attacker | 1 ✅ |
+| Volley | roll context; damage back at the attacker | 1 ✅ |
+| Fly | roll context | 1 ✅ |
+| Hoof | roll context | 1 ✅ |
+| Trample | roll context, two result types at once | 1 ✅ |
+| Create Fireminions | roll context | 1 ✅ |
+| Smite | unsavable damage channel | 1 ✅ |
+| Surprise | combat flag suppressing the counter | 1 ✅ |
+| Rend | reroll (step 3) | 1 ✅ |
 | Rise from the Ashes | 4 saves / death trigger to Reserves | 1 ✅ / 2 ✅ |
-
-| Sleep | unit status (Phase 3 ✅) **plus targeting and a pause before the save roll** | 4 |
-| Galeforce | army effect (Phase 3 ✅) **plus targeting and a pause before the save roll** | 4 |
-| Bullseye | targeting + save sub-roll + reroll | 4 |
-| Double Strike | targeting + save sub-roll + reroll | 4 |
-| Smother | targeting + maneuver sub-roll | 4 |
-| Firecloud | targeting + maneuver sub-roll | 4 |
-| Seize | targeting + ID sub-roll + move to Reserves | 4 |
-| Choke | delayed until after saves; ID detection; save suppression | 4 |
-| Confuse | delayed until after saves; reroll of targets | 4 |
-| Flame | targeting + burial | 2 ✅ / 4 |
-
-| Firewalking | maneuver results / free move on non-maneuver rolls | 1 / 4 |
-| Teleport | maneuver results / free move on non-maneuver rolls | 1 / 4 |
+| Flame | targeting + burial | 2 ✅ / **4b ✅** |
+| Sleep | unit status (3 ✅) + targeting + a pause before the save roll | 3 ✅ / **4c ✅** |
+| Galeforce | army effect (3 ✅) + targeting an army at any terrain | 3 ✅ / **4c ✅** |
+| Bullseye | targeting + save sub-roll + reroll | 4d |
+| Double Strike | targeting + save sub-roll + reroll | 4d |
+| Smother | targeting + maneuver sub-roll | 4d |
+| Firecloud | targeting + maneuver sub-roll | 4d |
+| Seize | targeting + ID sub-roll + move to Reserves | 4d |
+| Wild Growth | promotion (2 ✅) **plus a pause mid-roll to split X** | 4e |
+| Choke | delayed until after saves; ID detection; save suppression | 4e |
+| Confuse | delayed until after saves; reroll of targets | 4e |
+| Firewalking | maneuver results / free move on non-maneuver rolls | 1 ✅ / 4e |
+| Teleport | maneuver results / free move on non-maneuver rolls | 1 ✅ / 4e |
 | Cantrip | spells | 7 |
 | Dispel Magic | spells + an announce-before-resolve window | 7 |
 
@@ -1505,6 +1509,26 @@ no outcome is a corpus and a fuzz that both run the *old* rules. So the only aut
 is the unit tests, while `V0_RULES` keeps the 1000 games *and* the 25 goldens — the one config that
 least needs them. Every phase from here widens it further. Closing it is one `it.each` over two
 rulesets — and per-rule trigger counters, or a clean run proves nothing about the rare faces.
+
+**Phase 4 widened it a fourth way, and made it worse in a new direction.** 4a, 4b and 4c were each
+verified by a hand-run of 240 `RandomAI` games under `DUA_RULES` and `SAI_RULES` — but `sai: 'full'`
+**cannot be fuzzed at all** until 4e, because it refuses the unbuilt SAIs and every force in the
+project carries at least one. So the rung where the new code lives has no fuzz, not even a hand-run
+one, and will not have until the last slice. That is a direct consequence of the "`'full'` refuses
+a half-built ruleset" discipline, and it is the strongest argument for the question 4c ends on.
+
+**The verification scaffold is the other new risk, and it compounds.** With no playable `'full'`
+force, each slice's client surface has been checked in the browser against a temporary scaffold —
+4b needed a preset and a ruleset flip; 4c needed both refusal branches stubbed as well. Every one
+was reverted before its commit and the reverts are checked, but the trend is the wrong way: the
+scaffold is now larger than the thing it verifies, and a scaffold that big is itself a source of
+false confidence. Two ways out, and 4d should pick one deliberately:
+
+- **Flip the app to `FULL_RULES` at 4d** and let the remaining unbuilt SAIs be *inert* rather than
+  refusing. Costs the discipline for one slice; buys a playable client surface, a fuzzable rung and
+  no scaffold. 4e restores the refusal when the set is complete.
+- **Keep refusing** and accept that 4d and 4e are verified by unit tests plus a scaffold, with the
+  first real play-through happening only after 4e lands.
 
 
 **Spells are where the balance stops being ours.** v0's magic house rule was explicitly a guess to

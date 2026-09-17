@@ -224,10 +224,14 @@ Live:
 | Rise from the Ashes | X saves. Its death trigger needs `dua: 'active'` — §9. |
 
 
-Deliberately inert on this rung, each waiting on machinery a later phase builds: Bullseye, Cantrip,
-Choke, Confuse, Dispel Magic, Double Strike, Firecloud, Flame, Galeforce, Seize, Sleep, Smother,
-Wild Growth. They produce nothing and say nothing, which is what makes `'results'` playable rather
-than a half-built `'full'`; `sai: 'full'` is the rung that refuses. **Bullseye and Double Strike
+Deliberately inert on this rung: Bullseye, Cantrip, Choke, Confuse, Dispel Magic, Double Strike,
+Firecloud, Flame, Galeforce, Seize, Sleep, Smother, Wild Growth. They produce nothing and say
+nothing, which is what makes `'results'` playable rather than a half-built `'full'`; `sai: 'full'`
+is the rung that refuses.
+
+**Three of those thirteen are now built** — Flame, Sleep and Galeforce (§11) — and are inert here
+anyway, because the rungs differ in *which SAIs exist* rather than in what any one of them does.
+`'results'` is the configuration Phase 1 shipped and it does not change under it. **Bullseye and Double Strike
 also say "roll this unit again"** — Rend is the only reroll implemented, so do not read Phase 1 as
 having finished rerolls.
 
