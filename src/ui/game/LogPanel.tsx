@@ -19,6 +19,7 @@ import {
   type LogEntry,
   type PlayerId,
   type TerrainSlot,
+  type UnitId,
 } from '../../engine/types'
 
 
@@ -278,6 +279,47 @@ function Line({
           at {slotLabel(entry.slot, human)}
         </p>
       )
+    /**
+     * The sub-roll a Smother, a Seize or a Bullseye puts its targets through.
+     *
+     * The dice are shown for the same reason the combat rolls are: without them a die
+     * survives or dies on a number nobody saw. An ID roll counts nothing, so its whole
+     * strip reads as blanks -- which is honest, since what it produced is the face.
+     */
+    case 'sai_sub_roll': {
+      const names = (ids: readonly UnitId[]) =>
+        ids
+          .map((id) => {
+            const unit = state.units[id]
+            return unit ? unitType(unit.typeId).name : id
+          })
+          .join(', ')
+      const asked =
+        entry.test === 'id' ? 'an ID icon' : entry.test === 'save' ? 'a save' : 'a maneuver'
+
+      return (
+        <div className="log-roll">
+          <div className="roll-head">
+            <strong>{entry.sai}</strong> &middot; {asked} or die &middot; {where(entry.slot)}
+          </div>
+          <RollStrip dice={entry.dice} />
+          <div className="roll-sum">
+            {entry.escaped.length === 0 ? (
+              <span className="muted">none get away</span>
+            ) : (
+              <>
+                {names(entry.escaped)}{' '}
+                {entry.toReserve === true
+                  ? `escape${entry.escaped.length === 1 ? 's' : ''} to ${
+                      entry.player === human ? 'your' : "the enemy's"
+                    } reserves`
+                  : `get${entry.escaped.length === 1 ? 's' : ''} away`}
+              </>
+            )}
+          </div>
+        </div>
+      )
+    }
     case 'effect_cast': {
       const unit = entry.unitId === undefined ? undefined : state.units[entry.unitId]
       return (

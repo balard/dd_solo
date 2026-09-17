@@ -229,11 +229,12 @@ Firecloud, Flame, Galeforce, Seize, Sleep, Smother, Wild Growth. They produce no
 nothing, which is what makes `'results'` playable rather than a half-built `'full'`; `sai: 'full'`
 is the rung that refuses.
 
-**Three of those thirteen are now built** — Flame, Sleep and Galeforce (§11) — and are inert here
-anyway, because the rungs differ in *which SAIs exist* rather than in what any one of them does.
-`'results'` is the configuration Phase 1 shipped and it does not change under it. **Bullseye and Double Strike
-also say "roll this unit again"** — Rend is the only reroll implemented, so do not read Phase 1 as
-having finished rerolls.
+**Eight of those thirteen are now built** — Flame, Sleep, Galeforce, Bullseye, Double Strike,
+Smother, Firecloud and Seize (§11) — and are inert here anyway, because the rungs differ in *which
+SAIs exist* rather than in what any one of them does. `'results'` is the configuration Phase 1
+shipped and it does not change under it. That includes the rerolls: **Bullseye and Double Strike
+also say "roll this unit again"**, and on this rung they do not, because on this rung they do not
+exist. Rend is still the only reroll `'results'` can produce.
 
 ### House rules this rung adds
 
@@ -297,7 +298,7 @@ and ends at the beginning of its caster's next turn.
 | **When an army effect ends** | At the beginning of its caster's next turn — so it is live for the whole of the opponent's turn in between — or as soon as the army has no units left, checked at the end of each action. |
 | **The exchange exception** | An army whose every unit is replaced in a single exchange is still present, so its effects survive. Nothing implements this: an exchange resolves in one pass, so no state with the army empty is ever observed. |
 | **Where a unit effect lives** | On the unit. It follows it into another army, and ends with the unit if it is killed. |
-| **Army modifiers and unit rolls** | "Modifiers that affect an army do not affect the roll of an individual unit from that army", and the reverse. The only unit rolls today are the death trigger's, which consults no modifiers at all; Phase 4's sub-rolls are the first that could get this wrong. |
+| **Army modifiers and unit rolls** | "Modifiers that affect an army do not affect the roll of an individual unit from that army", and the reverse. Phase 4d's sub-rolls are the first rolls this can be got wrong on, and they gather through `unitRoll` rather than `armyRoll` for exactly that reason — §11. |
 | **Stacking** | Two castings of a subtracting effect both apply — though Galeforce, the only SAI that subtracts, is never *combined*, so two of them stack only when the roller aims both at the same army. The only caps the rules state are **one divide and one multiply per result type**, which the pipeline already enforces — and the eighth face's ID doubling *is* that type's one multiplier. |
 
 **Sleep is a status, not arithmetic.** A sleeping unit cannot be rolled and cannot leave the terrain
@@ -314,15 +315,40 @@ where an unbuilt SAI is silently inert. That is the difference between a playabl
 half-built one: `'results'` is a game, `'full'` is a promise, and a promise that quietly does
 nothing is worse than one that refuses.
 
-**Built so far: Flame, Sleep, Galeforce.** Cantrip and Dispel Magic are not on this rung at all —
-they cast a spell, so they wait on `magic: 'spells'` (Phase 7) and say so in their own words when
-refused.
+**Built so far: Flame, Sleep, Galeforce, Bullseye, Double Strike, Smother, Firecloud, Seize.**
+Three are left — Wild Growth, Choke and Confuse (Phase 4e). Cantrip and Dispel Magic are not on this
+rung at all: they cast a spell, so they wait on `magic: 'spells'` (Phase 7) and say so in their own
+words when refused.
 
 | SAI | What it does |
 |---|---|
 | Flame | During a melee attack, target up to two health-worth of units in the defending army. The targets are killed **and buried** — they go to the BUA, not the DUA, and nothing brings them back. |
 | Sleep | During a melee attack, target **one unit** in an opposing army at this terrain. It cannot be rolled or leave that terrain until the beginning of the roller's next turn. |
 | Galeforce | During a melee or missile attack, or a magic action, target an opposing army at **any** terrain. It subtracts four save and four maneuver results from every roll until the beginning of the roller's next turn. |
+| Bullseye | During a **missile** attack, target X health-worth in the defending army. The targets make a **save roll**; those generating no save result are killed. **Roll this unit again** and apply the new result as well. |
+| Double Strike | The same, on a **melee** attack, for **four** health-worth — flat, not X, and the one face in the data says 4. |
+| Smother | During a melee attack, target up to X health-worth. The targets make a **maneuver roll**; those generating no maneuver result are killed. |
+| Firecloud | Smother, on a melee **or missile** attack. |
+| Seize | During a missile attack, target up to X health-worth. **Roll the targets**: an **ID icon** moves that die to its owner's Reserve Area, anything else is killed. |
+
+**The last five give their targets a roll of their own** (v1 Phase 4d) — the first unit rolls in the
+game that are not the death trigger's. Four rules govern them, and only the first comes from the
+rulebook plainly:
+
+| | Rule |
+|---|---|
+| **No army modifiers** | "Modifiers that affect an army do not affect the roll of an individual unit from that army" (p. 28). A Galeforced army's −4 does not reach a Smother's maneuver roll, and the eighth face's ID doubling does not reach a Bullseye's save roll. |
+| **A die that cannot be rolled fails** | A sleeping target generates nothing, so it generates no save either, and it dies. It draws no die on the way. |
+| **The sub-roll is a save roll against *nothing*** | House rule. A Counter or Volley face on a Bullseye target generates its saves and sends no damage back — the narrow reading of "any other save roll", chosen because the wide one gives a sub-roll a damage channel the exchange has nowhere to put. |
+| **Roll order is the board's** | House rule, and the same one `death.ts` follows: targets roll in the order they stand in, not the order the roller named them, so two players naming the same dice differently get the same game. |
+
+**"Roll this unit again" is the roller's own die**, not the target's — Rend's sentence word for
+word, so Bullseye and Double Strike reroll at step 3 of the attack roll, and a reroll showing the
+same SAI again adds its budget to the same decision.
+
+**An escapee is not killed**, so no death trigger fires on one. A Seized die that rolls its ID goes
+to Reserves untouched; a Seized Phoenix that *fails* is killed like anything else and gets its Rise
+from the Ashes roll.
 
 **All three are cast during the attacker's roll and take hold in that same exchange.** A slept die
 is not in the save roll that follows it, and a Galeforced army saves at −4 in the very exchange that

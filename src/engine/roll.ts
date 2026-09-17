@@ -14,6 +14,7 @@
 import { unitType } from '../data/load'
 import type { Face, NormalIcon, ResultType, UnitType } from '../data/types'
 
+import type { UnitRollInput } from './effects'
 import {
   allocateIds,
   applyModifiers,
@@ -478,6 +479,62 @@ export function resolveRoll(
   const [rolled, afterRoll] = rollFaces(units, rng)
   const [swept, afterSweep] = rerollSweep(rolled, spec, ruleSet, afterRoll)
   return [resolveFaces(swept, spec, ruleSet), afterSweep] as const
+}
+
+/**
+ * One unit's own roll, and what became of it.
+ *
+ * `roll` is null when the unit could not be rolled at all -- a sleeping die -- which
+ * is not the same answer as a roll that came to zero and must not be flattened into
+ * one: the first consumed no randomness.
+ */
+export interface SubRoll {
+  readonly unitId: UnitId
+  readonly roll: RollResult | null
+}
+
+/**
+ * Rolls each unit on its own: Phase 4d's sub-rolls, where a Smother's targets "make a
+ * maneuver roll" one die at a time.
+ *
+ * `rollArmy`'s sibling, one rung down the p. 28 rule -- an army roll and a unit roll
+ * gather different modifiers, so the two doors share no gatherer. Take the inputs from
+ * `unitRoll` in `effects.ts`, in the order you want them rolled; a unit that cannot be
+ * rolled is skipped and **draws nothing**, the same discipline `death.ts` keeps for a
+ * unit with no Rise face.
+ *
+ * Seize does not come through here. "If they roll an ID icon" is a question about a
+ * face rather than a total, so it is `rollFaces` and a look at `faceOf(die).icon` --
+ * which also keeps it from tripping the `'full'` refusal on some unbuilt SAI a target
+ * happens to show.
+ */
+export function rollUnits(
+  inputs: readonly UnitRollInput[],
+  resultType: ResultType,
+  context: RollContext,
+  rng: RngState,
+  ruleSet: RuleSet,
+): readonly [readonly SubRoll[], RngState] {
+  const out: SubRoll[] = []
+  let state = rng
+
+  for (const input of inputs) {
+    if (!input.rollable) {
+      out.push({ unitId: input.unit.id, roll: null })
+      continue
+    }
+
+    const [outcome, next] = resolveRoll(
+      [input.unit],
+      { kinds: [resultType], modifiers: input.modifiers, context },
+      state,
+      ruleSet,
+    )
+    state = next
+    out.push({ unitId: input.unit.id, roll: asResult(outcome, resultType) })
+  }
+
+  return [out, state] as const
 }
 
 /**

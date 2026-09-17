@@ -198,6 +198,24 @@ function describe(entry: LogEntry, state: GameState): string | null {
           .map((id) => (state.units[id] ? name(state.units[id]!) : id))
           .join(', ')} at ${SLOT_LABEL[entry.slot]}`,
       )
+    // The sub-roll a Smother, a Seize or a Bullseye puts its targets through. No dice
+    // strip here -- the terminal log prints totals, not faces -- so the line says what
+    // was asked for and who managed it.
+    case 'sai_sub_roll': {
+      const who = entry.escaped
+        .map((id) => (state.units[id] ? name(state.units[id]!) : id))
+        .join(', ')
+      const one = entry.escaped.length === 1 ? 's' : ''
+      const asked =
+        entry.test === 'id' ? 'an ID icon' : entry.test === 'save' ? 'a save' : 'a maneuver'
+      const got =
+        entry.escaped.length === 0
+          ? 'none get away'
+          : entry.toReserve === true
+            ? `${who} escape${one} to ${entry.player}'s reserves`
+            : `${who} get${one} away`
+      return yellow(`  ${bold(entry.sai)}: ${asked} or die — ${got}`)
+    }
     // Says when it ends as well as what it hit: an effect with a duration is the one
     // thing in the log that is still true on the next line.
     case 'effect_cast': {

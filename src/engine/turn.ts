@@ -24,9 +24,17 @@ import {
 } from './combat'
 import { damageAssignmentProblem, damageOptions } from './damage'
 import { killAndBury, killUnits } from './death'
-import { armyRoll, expireEffects, isAsleep, pruneEffects, type Effect } from './effects'
+import { armyRoll, expireEffects, isAsleep, pruneEffects, unitRoll, type Effect } from './effects'
 
-import { expectNoEffects, rollArmy } from './roll'
+import {
+  defaultContextFor,
+  expectNoEffects,
+  faceOf,
+  rollArmy,
+  rollFaces,
+  rollUnits,
+  type DieRoll,
+} from './roll'
 import type { Modifier } from './pipeline'
 import type { RollContext } from './sai'
 import { targetTasks, type TargetTask } from './targeting'
@@ -683,14 +691,8 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
   const problem = damageAssignmentProblem(army, task.health, unitIds)
   if (problem !== null) throw new IllegalActionError(problem)
 
-  if (task.escape !== 'none') {
-    throw new Error(
-      `${task.sai}: letting a target roll to escape ('${task.escape}') is Phase 4d, not 4b`,
-    )
-  }
-
-  // Named before the deaths it causes, so the log reads as cause then effect rather
-  // than as dice dying from nowhere.
+  // Named before anything happens to the dice, so the log reads as cause then effect
+  // rather than as dice dying from nowhere.
   const named = withLog(state, {
     kind: 'sai_resolved',
     player: spec.attacker,
@@ -699,15 +701,26 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
     unitIds,
   })
 
+  // Bullseye, Double Strike, Smother, Firecloud and Seize give their targets a roll;
+  // Flame does not. What comes back is the state with the escapes logged and moved,
+  // and who is still standing there to be killed.
+  const { state: rolled, escaped } =
+    task.escape === 'none'
+      ? { state: named, escaped: [] as readonly UnitId[] }
+      : subRoll(named, spec, task, unitIds)
+
+  const doomed = unitIds.filter((id) => !escaped.includes(id))
+  if (doomed.length === 0) return withTurn(rolled, { combat: withTargets(combat, attack, rest) })
+
   // "The targets are killed and buried" is two steps because the rules are two, and a
   // Phoenix rolls Rise from the Ashes at each of them.
   const { state: dead, risen } =
-    task.fate === 'bury' ? killAndBury(named, unitIds) : killUnits(named, unitIds)
-  const buried = unitIds.filter((id) => dead.units[id]?.location.kind === 'bua')
+    task.fate === 'bury' ? killAndBury(rolled, doomed) : killUnits(rolled, doomed)
+  const buried = doomed.filter((id) => dead.units[id]?.location.kind === 'bua')
 
   const logged = withLog(
     dead,
-    { kind: 'units_killed', player: spec.defender, slot: spec.defenderSlot, unitIds },
+    { kind: 'units_killed', player: spec.defender, slot: spec.defenderSlot, unitIds: doomed },
     ...(risen.length > 0
       ? [{ kind: 'units_risen', player: spec.defender, unitIds: risen } as const]
       : []),
@@ -717,6 +730,117 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
   )
 
   return withTurn(logged, { combat: withTargets(combat, attack, rest) })
+}
+
+/**
+ * The order targets are rolled in: the board's, not the player's.
+ *
+ * `Object.values(state.units)` is the order `armyAt` returns and the order every roll
+ * in the engine deals dice, and it is what `death.ts` uses for the same reason: two
+ * players naming the same dice in a different order must get the same game. Both
+ * replay identically either way, since the action is what is recorded -- but only one
+ * of the two is canonical.
+ */
+function inBoardOrder(state: GameState, unitIds: readonly UnitId[]): readonly UnitId[] {
+  return Object.values(state.units)
+    .filter((unit) => unitIds.includes(unit.id))
+    .map((unit) => unit.id)
+}
+
+/**
+ * The sub-roll: the targets roll for their lives, and the ones that make it get out.
+ *
+ * Three escapes, from two questions. Bullseye and Double Strike ask for a **save**
+ * result, Smother and Firecloud for a **maneuver** one -- a question about a total, so
+ * those go through `rollUnits`. Seize asks whether the die shows an **ID icon** -- a
+ * question about a face, so it is `rollFaces` and a look at the face, which also keeps
+ * an ID roll from tripping the `'full'` refusal on an unbuilt SAI a target happens to
+ * show.
+ *
+ * Two rules the roll type does not decide, both `RULES-V0.md` section 11:
+ *
+ *  - **A unit that cannot be rolled fails.** A sleeping die generates nothing, so it
+ *    generates no save either -- and it draws no randomness on the way.
+ *  - **A sub-roll is a save roll against *nothing***, via `defaultContextFor`: a
+ *    Counter on a Bullseye target saves the die and sends no damage back. The narrow
+ *    reading deliberately, because an effect out of here would have nobody to consume
+ *    it -- which is what `expectNoEffects` refuses to let pass quietly.
+ */
+function subRoll(
+  state: GameState,
+  spec: AttackSpec,
+  task: Extract<TargetTask, { kind: 'enemy' }>,
+  unitIds: readonly UnitId[],
+): { readonly state: GameState; readonly escaped: readonly UnitId[] } {
+  const ordered = inBoardOrder(state, unitIds)
+  const inputs = ordered.map((id) => unitRoll(state, id))
+
+  let rng = state.rng
+  const dice: DieRoll[] = []
+  const escaped: UnitId[] = []
+
+  if (task.escape === 'id') {
+    const [raw, next] = rollFaces(
+      inputs.filter((input) => input.rollable).map((input) => input.unit),
+      rng,
+    )
+    rng = next
+    for (const die of raw) {
+      const face = faceOf(die)
+      // An ID roll counts nothing, so every die in the strip reads as a blank. That is
+      // honest: what this roll produced is a face, and `escaped` is what it was worth.
+      dice.push({
+        unitId: die.unitId,
+        typeId: die.typeId,
+        faceIndex: die.faceIndex,
+        face,
+        results: 0,
+      })
+      if (face.icon === 'ID') escaped.push(die.unitId)
+    }
+  } else {
+    const type = task.escape === 'save' ? 'save' : 'maneuver'
+    const [rolls, next] = rollUnits(inputs, type, defaultContextFor(type), rng, state.ruleSet)
+    rng = next
+    for (const sub of rolls) {
+      if (sub.roll === null) continue
+      expectNoEffects(sub.roll, `${task.sai}'s ${type} roll`)
+      dice.push(...sub.roll.dice)
+      if (sub.roll.total > 0) escaped.push(sub.unitId)
+    }
+  }
+
+  const entry: LogEntry = {
+    kind: 'sai_sub_roll',
+    player: spec.defender,
+    sai: task.sai,
+    slot: spec.defenderSlot,
+    test: task.escape === 'id' ? 'id' : task.escape === 'save' ? 'save' : 'maneuver',
+    dice,
+    escaped,
+    ...(task.escapeTo === 'reserve' ? { toReserve: true as const } : {}),
+  }
+
+  const logged = withLog({ ...state, rng }, entry)
+  return { state: moveEscapees(logged, task, escaped), escaped }
+}
+
+/** Seize: "they are immediately moved to their Reserve Area". An escapee is not
+ *  killed, so no death trigger fires on one. */
+function moveEscapees(
+  state: GameState,
+  task: Extract<TargetTask, { kind: 'enemy' }>,
+  escaped: readonly UnitId[],
+): GameState {
+  if (task.escapeTo !== 'reserve' || escaped.length === 0) return state
+
+  const units = { ...state.units }
+  for (const id of escaped) {
+    const unit = units[id]
+    if (unit === undefined) throw new Error(`cannot move unknown unit ${id} to reserves`)
+    units[id] = { ...unit, location: { kind: 'reserve' } }
+  }
+  return { ...state, units }
 }
 
 /**

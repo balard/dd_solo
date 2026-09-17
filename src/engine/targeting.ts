@@ -36,6 +36,8 @@ export type TargetTask =
       readonly health: number
       readonly escape: 'none' | 'save' | 'maneuver' | 'id'
       readonly fate: 'kill' | 'bury'
+      /** Seize: where an escapee goes. Omitted means it stays where it stood. */
+      readonly escapeTo?: 'reserve'
     }
   /** Sleep: one unit in the army being attacked. */
   | { readonly kind: 'sleep'; readonly sai: string }
@@ -79,6 +81,9 @@ export function targetTasks(effects: readonly RollEffect[]): readonly TargetTask
       health: effect.health,
       escape: effect.escape,
       fate: effect.fate,
+      // Omitted rather than defaulted: this object goes into `combat.attack.targets`,
+      // which `digestState` renders through `stableJson(state.turn)`.
+      ...(effect.escapeTo !== undefined ? { escapeTo: effect.escapeTo } : {}),
     })
   }
 

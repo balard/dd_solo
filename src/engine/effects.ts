@@ -24,14 +24,14 @@
  * And one from *Roll Modifiers*, same page, which is why the entry point is named
  * `armyRoll` and not `rollModifiers`: "Modifiers that affect an army do not affect
  * the roll of an individual unit from that army. Modifiers that affect an individual
- * unit do not affect the roll of an army." Phase 4's sub-rolls are the first unit
- * rolls in the game; they must not come through here.
+ * unit do not affect the roll of an army." Phase 4d's sub-rolls are the first unit
+ * rolls in the game, and they go through `unitRoll` below -- a sibling of `armyRoll`
+ * and deliberately not a call into it.
  *
- * **Nothing produces an `Effect` yet.** Sleep and Galeforce -- the two SAIs that
- * would -- both pick their target in the middle of an attack roll, which is the pause
- * Phase 4 builds for Wild Growth, Bullseye, Choke and Confuse; they land there. This
- * file is machinery waiting for a caller, exactly as `promote` and `recruit` have
- * been since Phase 2.
+ * **Sleep and Galeforce are what produce an `Effect`** (Phase 4c), three phases after
+ * this file was written -- both cast in the middle of an attack roll, at the pause the
+ * 4a seam exists for. They are on the `sai: 'full'` rung, so `state.effects` is still
+ * always empty in a `DUA_RULES` game, which is what the app plays.
  */
 import { doubleIdsModifier, type Modifier } from './pipeline'
 import type { ResultType } from '../data/types'
@@ -135,6 +135,49 @@ export function armyRoll(
     units: armyOf(state, player, ref).filter((unit) => !isAsleep(state, unit.id)),
     modifiers,
   }
+}
+
+/** What a *unit* roll needs: the die, whether it may be rolled at all, and everything
+ *  modifying it. `armyRoll`'s sibling, and deliberately not its subset. */
+export interface UnitRollInput {
+  readonly unit: UnitInstance
+  /** Sleep: "cannot be rolled". A unit that cannot be rolled generates nothing at all,
+   *  which for Phase 4d's sub-rolls means it fails whatever it was asked to roll. */
+  readonly rollable: boolean
+  readonly modifiers: readonly Modifier[]
+}
+
+/**
+ * The one door a single unit's roll goes through: Phase 4d's sub-rolls, and whatever
+ * later phase rolls one die on its own.
+ *
+ * It gathers **only unit effects** -- never an army effect, never the eighth face's ID
+ * doubling. That is *Roll Modifiers* (full rules p. 28) in code rather than in a
+ * comment: "modifiers that affect an army do not affect the roll of an individual unit
+ * from that army", which is why the army door is named `armyRoll` and this one is not
+ * a call into it. A Galeforced army's minus four must not reach a Smother's maneuver
+ * roll, and the only way to be sure of that is for the two gatherers to share nothing.
+ *
+ * No effect in the game carries a unit modifier yet -- Sleep is a status, not
+ * arithmetic -- so `modifiers` comes back empty today. The loop is written anyway,
+ * because a literal `[]` becomes a lie the first time a spell modifies one die, and
+ * silently.
+ *
+ * **No `resultType` parameter**, unlike `armyRoll`, which needs one only to build the
+ * eighth face's `doubleIdsModifier`. A unit roll never gathers that, so the argument
+ * would have had no reader -- the same answer 4a gave to threading a rung through
+ * `SaiHandler`.
+ */
+export function unitRoll(state: GameState, unitId: UnitId): UnitRollInput {
+  const unit = state.units[unitId]
+  if (unit === undefined) throw new Error(`no such unit ${unitId}`)
+
+  const modifiers: Modifier[] = []
+  for (const effect of state.effects) {
+    if (targetsUnit(effect, unitId)) modifiers.push(...effect.modifiers)
+  }
+
+  return { unit, rollable: !isAsleep(state, unitId), modifiers }
 }
 
 /**

@@ -275,6 +275,96 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
     ctx.purpose.kind === 'attack'
       ? { results: {}, effects: [{ kind: 'galeforce' }], reroll: false }
       : NOTHING,
+
+  /**
+   * "During a missile attack, target X health-worth of units in the defending army.
+   * The targets make a save roll. Those that do not generate a save result are
+   * killed. Roll this unit again and apply the new result as well."
+   *
+   * The reroll is of **this** die -- the roller's own, the way Rend's is -- so it is
+   * `reroll: true` and step 3 handles it; a reroll showing Bullseye again adds its
+   * budget to the same task, because `targetTasks` combines by name. Its dragon-attack
+   * half ("generates X missile results") is Phase 6, like every other dragon sentence
+   * in this file.
+   */
+  Bullseye: (x, ctx) =>
+    isAttack(ctx, 'missile')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: x, escape: 'save', fate: 'kill' }],
+          reroll: true,
+        }
+      : NOTHING,
+
+  /**
+   * "During a melee attack, target four health-worth of units in the defending army.
+   * The targets make a save roll. Those that do not generate a save result are
+   * killed. Roll this unit again and apply the new result as well."
+   *
+   * *Four*, not X -- and the one Double Strike face in the data is `4 SAI:Double
+   * Strike`, so reading the count off the face agrees with the reference exactly.
+   * Flame's "two" is the same arrangement, and the reason is invariant 7: the number
+   * printed on the face is the answer, and hardcoding it would disagree with the data
+   * the day another face is transcribed.
+   */
+  'Double Strike': (x, ctx) =>
+    isAttack(ctx, 'melee')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: x, escape: 'save', fate: 'kill' }],
+          reroll: true,
+        }
+      : NOTHING,
+
+  /**
+   * "During a melee attack, target up to X health-worth of units in the defending
+   * army. The targets make a maneuver roll. Those that do not generate a maneuver
+   * result are killed."
+   *
+   * "Up to X" rather than Bullseye's flat "X", which makes no difference here: p. 32
+   * forces the roller to the maximum either way, and both go through
+   * `damageAssignmentProblem`.
+   */
+  Smother: (x, ctx) =>
+    isAttack(ctx, 'melee')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: x, escape: 'maneuver', fate: 'kill' }],
+          reroll: false,
+        }
+      : NOTHING,
+
+  /** Smother's twin, one action wider: "During a melee **or missile** attack, target
+   *  up to X health-worth ... The targets make a maneuver roll." */
+  Firecloud: (x, ctx) =>
+    isAttack(ctx, 'melee') || isAttack(ctx, 'missile')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: x, escape: 'maneuver', fate: 'kill' }],
+          reroll: false,
+        }
+      : NOTHING,
+
+  /**
+   * "During a missile attack, target up to X health-worth of units in the defending
+   * army. Roll the targets. If they roll an ID icon, they are immediately moved to
+   * their Reserve Area. Any that do not roll an ID are killed."
+   *
+   * The only escape in the game that is a question about a *face* rather than a total,
+   * and the only one whose survivors go somewhere -- hence `escapeTo`, which is stated
+   * rather than inferred from `escape: 'id'`. Inferring it would be the Genie's-4
+   * mistake: true of the one ID-escape SAI in this box, and false of Swallow.
+   */
+  Seize: (x, ctx) =>
+    isAttack(ctx, 'missile')
+      ? {
+          results: {},
+          effects: [
+            { kind: 'target_enemy', health: x, escape: 'id', fate: 'kill', escapeTo: 'reserve' },
+          ],
+          reroll: false,
+        }
+      : NOTHING,
 }
 
 /** The SAI names `sai: 'results'` resolves. Anything else on a face is inert. */

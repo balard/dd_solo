@@ -152,7 +152,7 @@ describe('the rungs of ruleSet.sai', () => {
   it('is silently inert for an SAI this rung does not implement', () => {
     // Deliberate: `'results'` has to be playable, and the other thirteen land in
     // Phases 2, 3, 4 and 7.
-    for (const name of ['Choke', 'Smother', 'Wild Growth', 'Cantrip', 'Bullseye']) {
+    for (const name of ['Choke', 'Confuse', 'Wild Growth', 'Cantrip', 'Smother', 'Seize']) {
       expect(fires(name, melee), name).toEqual({ results: {}, effects: [], reroll: false })
     }
   })
@@ -179,7 +179,7 @@ describe('the rungs of ruleSet.sai', () => {
 
   it('refuses an unimplemented targeting SAI under sai: full', () => {
     expect(() =>
-      saiEffects(sai('Smother'), { purpose: melee, isCounter: false }, FULL_RULES),
+      saiEffects(sai('Choke'), { purpose: melee, isCounter: false }, FULL_RULES),
     ).toThrow(/targeting SAIs are not implemented/)
   })
 
@@ -210,6 +210,97 @@ describe('the rungs of ruleSet.sai', () => {
     }
   })
 
+  /**
+   * The five sub-roll SAIs of Phase 4d, read straight off their `Applies` columns.
+   *
+   * Worth one table rather than five tests, because the way these go wrong is a copied
+   * handler keeping the action it was copied from -- a Bullseye that fires on melee
+   * looks right in every other test in this file.
+   */
+  it('fires each sub-roll SAI only where its Applies column says', () => {
+    const cases: readonly [string, readonly RollPurpose[]][] = [
+      ['Bullseye', [missile]],
+      ['Double Strike', [melee]],
+      ['Smother', [melee]],
+      ['Firecloud', [melee, missile]],
+      ['Seize', [missile]],
+    ]
+
+    for (const [name, allowed] of cases) {
+      for (const purpose of [melee, missile, magic, maneuver, saveVs('melee'), saveVs(null)]) {
+        const effects = saiEffects(sai(name), { purpose, isCounter: false }, FULL_RULES).effects
+        expect(effects.length > 0, `${name} on ${JSON.stringify(purpose)}`).toBe(
+          allowed.includes(purpose),
+        )
+      }
+    }
+  })
+
+  /**
+   * What each one asks its targets for, and what becomes of the ones that fail.
+   *
+   * `escapeTo` is Seize's alone and is *stated* rather than inferred from
+   * `escape: 'id'` -- the Genie's-4 mistake, which would be true of the one ID-escape
+   * SAI in this box and false of Swallow.
+   */
+  it('gives each sub-roll SAI its own escape, budget and fate', () => {
+    const effect = (name: string, purpose: RollPurpose, count = 4) =>
+      saiEffects(sai(name, count), { purpose, isCounter: false }, FULL_RULES).effects[0]
+
+    expect(effect('Bullseye', missile)).toEqual({
+      kind: 'target_enemy',
+      health: 4,
+      escape: 'save',
+      fate: 'kill',
+    })
+    // "Target four health-worth", flat -- and the one face in the data says 4, so
+    // reading the count agrees with the reference exactly. Flame's "two" is the same
+    // arrangement, and this is the test that a 3 on the face would be honoured.
+    expect(effect('Double Strike', melee, 3)).toMatchObject({ health: 3, escape: 'save' })
+    expect(effect('Smother', melee)).toEqual({
+      kind: 'target_enemy',
+      health: 4,
+      escape: 'maneuver',
+      fate: 'kill',
+    })
+    expect(effect('Firecloud', missile)).toMatchObject({ escape: 'maneuver', fate: 'kill' })
+    expect(effect('Seize', missile)).toEqual({
+      kind: 'target_enemy',
+      health: 4,
+      escape: 'id',
+      fate: 'kill',
+      escapeTo: 'reserve',
+    })
+  })
+
+  /** "Roll this unit again and apply the new result as well" -- Rend's sentence, so
+   *  it is step 3 and the roller's own die, not the target's. The other three do not
+   *  carry it, and reading it onto them would consume a die roll the rules do not. */
+  it('rerolls for Bullseye and Double Strike, and for nothing else in 4d', () => {
+    expect(saiEffects(sai('Bullseye'), { purpose: missile, isCounter: false }, FULL_RULES).reroll)
+      .toBe(true)
+    expect(
+      saiEffects(sai('Double Strike'), { purpose: melee, isCounter: false }, FULL_RULES).reroll,
+    ).toBe(true)
+    for (const name of ['Smother', 'Firecloud', 'Seize']) {
+      expect(
+        saiEffects(sai(name), { purpose: melee, isCounter: false }, FULL_RULES).reroll,
+        name,
+      ).toBe(false)
+    }
+  })
+
+  /** None of the five generates a *result*, so the static bound is unmoved by them --
+   *  the check that a targeting effect was not written as melee results, the way
+   *  Smite's zero is. */
+  it('adds nothing to the result bound', () => {
+    for (const name of ['Bullseye', 'Double Strike', 'Smother', 'Firecloud', 'Seize']) {
+      for (const type of ['melee', 'missile', 'save', 'maneuver'] as const) {
+        expect(saiMaxResults(sai(name), type, FULL_RULES), `${name} ${type}`).toBe(0)
+      }
+    }
+  })
+
   it('says spells, not Phase 4, for the two SAIs that cast one', () => {
     for (const name of ['Cantrip', 'Dispel Magic']) {
       expect(() =>
@@ -219,7 +310,7 @@ describe('the rungs of ruleSet.sai', () => {
   })
 
   it('is silently inert for an unbuilt SAI under sai: results', () => {
-    expect(saiEffects(sai('Smother'), { purpose: melee, isCounter: false }, SAI_RULES)).toEqual({
+    expect(saiEffects(sai('Choke'), { purpose: melee, isCounter: false }, SAI_RULES)).toEqual({
       results: {},
       effects: [],
       reroll: false,
@@ -232,16 +323,7 @@ describe('the rungs of ruleSet.sai', () => {
     // edit rather than something that happens quietly. `needsSpells` never moves --
     // Cantrip and Dispel Magic wait on Phase 7, not on any rung of this flag.
     const needsSpells = new Set(['Cantrip', 'Dispel Magic'])
-    const deferred = new Set([
-      'Bullseye',
-      'Choke',
-      'Confuse',
-      'Double Strike',
-      'Firecloud',
-      'Seize',
-      'Smother',
-      'Wild Growth',
-    ])
+    const deferred = new Set(['Choke', 'Confuse', 'Wild Growth'])
     const live = new Set(LIVE_SAIS)
     const targeting = new Set(TARGETING_SAIS)
 
@@ -255,8 +337,8 @@ describe('the rungs of ruleSet.sai', () => {
     // all quote it, and nothing else would notice it going stale. Each Phase 4 slice
     // moves names from `deferred` into `TARGETING_SAIS` and edits these two numbers.
     expect(live.size, 'SAIs live under sai: results').toBe(12)
-    expect(targeting.size, 'targeting SAIs built so far').toBe(3)
-    expect(deferred.size, 'targeting SAIs still unbuilt').toBe(8)
+    expect(targeting.size, 'targeting SAIs built so far').toBe(8)
+    expect(deferred.size, 'targeting SAIs still unbuilt').toBe(3)
     expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(2)
 
     for (const name of names) {

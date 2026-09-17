@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { unitType } from '../data/load'
 
-import { armyRoll, expireEffects, isAsleep, pruneEffects } from './effects'
+import { armyRoll, expireEffects, isAsleep, pruneEffects, type Effect } from './effects'
 import type { RollEffect } from './pipeline'
 import { advance } from './reduce'
 import { rollDice, type RngState } from './rng'
@@ -12,6 +12,7 @@ import {
   IllegalActionError,
   V0_RULES,
   armyAt,
+  type ActionKind,
   type GameState,
   type RuleSet,
   type TerrainSlot,
@@ -60,6 +61,11 @@ function stage(options: {
   readonly rng: RngState
   /** Enemy dice standing somewhere else, for Galeforce's "an army at *any* terrain". */
   readonly elsewhere?: { readonly slot: TerrainSlot; readonly units: readonly string[] }
+  /** Bullseye, Firecloud and Seize are missile SAIs, so the exchange has to be one. */
+  readonly action?: ActionKind
+  /** A board that already has something on it -- a Sleep, a Galeforce -- which is how
+   *  the two rules a sub-roll must *not* obey get tested at all. */
+  readonly effects?: readonly Effect[]
 }): GameState {
   const units: Record<UnitId, UnitInstance> = {}
   const place = (
@@ -82,7 +88,7 @@ function stage(options: {
     ruleSet: { ...FULL_RULES, dua: 'active' },
     rng: options.rng,
     units,
-    effects: [],
+    effects: options.effects ?? [],
     terrains: {
       p1_home: terrain('p1_home'),
       frontier: terrain('frontier'),
@@ -95,7 +101,7 @@ function stage(options: {
       marchStep: 'resolve_attack',
       marchingArmy: 'frontier',
       armiesMarched: ['frontier'],
-      combat: { action: 'melee', targetSlot: 'frontier', damage: 0 },
+      combat: { action: options.action ?? 'melee', targetSlot: 'frontier', damage: 0 },
     },
     pending: null,
     log: [],
@@ -124,6 +130,39 @@ describe('targetTasks', () => {
   it('sums two dice of the same SAI into one larger effect', () => {
     expect(targetTasks([flame('a'), flame('b')])).toEqual([
       { kind: 'enemy', sai: 'Flame', health: 4, escape: 'none', fate: 'bury' },
+    ])
+  })
+
+  /** Bullseye rerolls its own die, so one Bullseye face can land twice in a roll --
+   *  and two of them are one budget of eight, not two budgets of four. */
+  it('sums two Bullseyes the way it sums two Flames', () => {
+    const bullseye = (unitId: string): RollEffect => ({
+      kind: 'target_enemy',
+      health: 4,
+      escape: 'save',
+      fate: 'kill',
+      unitId,
+      sai: 'Bullseye',
+    })
+    expect(targetTasks([bullseye('a'), bullseye('b')])).toEqual([
+      { kind: 'enemy', sai: 'Bullseye', health: 8, escape: 'save', fate: 'kill' },
+    ])
+  })
+
+  /** Grouping is by *name*, not by shape: both of these are `target_enemy`, and they
+   *  are two separate decisions. */
+  it('keeps a Smother and a Firecloud apart although both target health-worth', () => {
+    const firecloud: RollEffect = {
+      kind: 'target_enemy',
+      health: 4,
+      escape: 'maneuver',
+      fate: 'kill',
+      unitId: 'b',
+      sai: 'Firecloud',
+    }
+    expect(targetTasks([smother('a', 4), firecloud]).map((t) => t.sai)).toEqual([
+      'Smother',
+      'Firecloud',
     ])
   })
 
@@ -535,5 +574,311 @@ describe('Galeforce', () => {
       ),
     }
     expect(pruneEffects(emptied).effects).toEqual([])
+  })
+})
+
+// --- the sub-rolls: Bullseye, Double Strike, Smother, Firecloud, Seize ---------
+
+/**
+ * Phase 4d. Five SAIs whose targets roll dice of their own -- a save roll, a maneuver
+ * roll, or a look at the face for an ID icon.
+ *
+ * The face indices below are read off `data/starter/units.json`; `rngShowing` then
+ * finds a counter at which the whole sequence lands, which for these is *attack dice
+ * first, then the targets in board order*.
+ */
+describe('the sub-rolls', () => {
+  /** Darktree faces 4 and 9 are `4 SAI:Smother`. */
+  const SMOTHER_FACE = 4
+  /** Firestormer face 4 is `4 SAI:Bullseye` -- on a **3-health** die. */
+  const BULLSEYE_FACE = 4
+  /** Firestormer face 0 is its ID: a reroll that is not another Bullseye. */
+  const FIRESTORMER_ID = 0
+  /** Phoenix face 4 is `4 SAI:Seize`; 1 is `4 SAI:Fly`; 2 is Rise from the Ashes;
+   *  5 is `4 SAVE`; 0 is its ID. */
+  const SEIZE_FACE = 4
+  const PHOENIX_FLY = 1
+  const PHOENIX_RISE = 2
+  const PHOENIX_SAVE = 5
+  /** Willow faces 2 and 3 are `2 MANEUVER`; face 1 is `3 SAVE`, which is no maneuver
+   *  at all. Oak face 5 is `4 SAVE`, face 1 is `2 MELEE`, face 0 its ID. */
+  const WILLOW_MANEUVER = 2
+  const WILLOW_SAVE = 1
+  const OAK_SAVE = 5
+  const OAK_MELEE = 1
+  const OAK_ID = 0
+
+  const idsOf = (state: GameState, typeId: string) =>
+    Object.values(state.units)
+      .filter((u) => u.typeId === typeId)
+      .map((u) => u.id)
+
+  const subRollEntry = (state: GameState) =>
+    state.log.find((e) => e.kind === 'sai_sub_roll') as
+      | Extract<(typeof state.log)[number], { kind: 'sai_sub_roll' }>
+      | undefined
+
+  /** A Smother against two Willows: budget four, so both are taken, and then each
+   *  rolls for itself. */
+  const smotherBoard = (rng: RngState, effects?: readonly Effect[]) =>
+    stage({
+      attackers: ['treefolk.darktree'],
+      defenders: ['treefolk.willow', 'treefolk.willow'],
+      rng,
+      ...(effects === undefined ? {} : { effects }),
+    })
+
+  it('kills the targets that fail their roll and leaves the ones that make it', () => {
+    const start = advance(
+      smotherBoard(
+        rngShowing(
+          ['treefolk.darktree', 'treefolk.willow', 'treefolk.willow'],
+          [SMOTHER_FACE, WILLOW_MANEUVER, WILLOW_SAVE],
+        ),
+      ),
+    )
+
+    // X is the count printed on the face -- four, off a monster.
+    expect(start.pending).toMatchObject({
+      kind: 'sai_target',
+      sai: 'Smother',
+      limit: { kind: 'health', budget: 4 },
+    })
+
+    const [lucky, doomed] = idsOf(start, 'treefolk.willow') as [UnitId, UnitId]
+    const done = applyAction(start, { kind: 'sai_target', unitIds: [lucky, doomed] })
+
+    expect(done.units[lucky]?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(done.units[doomed]?.location).toEqual({ kind: 'dua' })
+    expect(subRollEntry(done)).toMatchObject({
+      sai: 'Smother',
+      test: 'maneuver',
+      escaped: [lucky],
+    })
+    // Cause, then the roll, then the effect -- and no `units_buried`: Smother kills.
+    expect(
+      done.log.map((e) => e.kind).filter((k) => k.startsWith('sai_') || k.startsWith('units_')),
+    ).toEqual(['sai_resolved', 'sai_sub_roll', 'units_killed'])
+    expect(validateState(done)).toEqual([])
+  })
+
+  /**
+   * Bullseye is a **missile** SAI, its X is the 4 printed on the face of a 3-health
+   * large die, and "roll this unit again" is the roller's own die at step 3 -- Rend's
+   * sentence word for word, so `rerollSweep` already does it. The reroll is what the
+   * second Firestormer draw below is.
+   */
+  it('asks for a save roll on a missile attack, budget off the face and not the die', () => {
+    const start = advance(
+      stage({
+        attackers: ['firewalkers.firestormer'],
+        defenders: ['treefolk.oak', 'treefolk.oak'],
+        action: 'missile',
+        rng: rngShowing(
+          ['firewalkers.firestormer', 'firewalkers.firestormer', 'treefolk.oak', 'treefolk.oak'],
+          [BULLSEYE_FACE, FIRESTORMER_ID, OAK_SAVE, OAK_MELEE],
+        ),
+      }),
+    )
+
+    expect(start.pending).toMatchObject({
+      kind: 'sai_target',
+      sai: 'Bullseye',
+      limit: { kind: 'health', budget: 4 },
+    })
+
+    const [saved, killed] = idsOf(start, 'treefolk.oak') as [UnitId, UnitId]
+    const done = applyAction(start, { kind: 'sai_target', unitIds: [saved, killed] })
+
+    expect(subRollEntry(done)).toMatchObject({ test: 'save', escaped: [saved] })
+    expect(done.units[killed]?.location).toEqual({ kind: 'dua' })
+  })
+
+  /**
+   * The step-8 stamp, which is the one a sub-roll gets wrong by default: a die showing
+   * Fly, Hoof, Counter or Rise from the Ashes *did* generate a save result, it just did
+   * it at step 8 rather than step 5. Kill it and every SAI-faced target dies to a
+   * Bullseye it should have survived.
+   */
+  it('spares a target whose save came from an SAI face rather than a save icon', () => {
+    const start = advance(
+      stage({
+        attackers: ['firewalkers.firestormer'],
+        defenders: ['firewalkers.phoenix'],
+        action: 'missile',
+        rng: rngShowing(
+          ['firewalkers.firestormer', 'firewalkers.firestormer', 'firewalkers.phoenix'],
+          [BULLSEYE_FACE, FIRESTORMER_ID, PHOENIX_FLY],
+        ),
+      }),
+    )
+
+    const [phoenix] = idsOf(start, 'firewalkers.phoenix') as [UnitId]
+    const done = applyAction(start, { kind: 'sai_target', unitIds: [phoenix] })
+
+    expect(done.units[phoenix]?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    const entry = subRollEntry(done)
+    expect(entry?.escaped).toEqual([phoenix])
+    // And the strip shows where the save came from, rather than a blank die beside a
+    // survival nobody can account for.
+    expect(entry?.dice[0]?.results).toBe(4)
+  })
+
+  /** "Roll the targets. If they roll an ID icon, they are immediately moved to their
+   *  Reserve Area. Any that do not roll an ID are killed." */
+  it('sends a Seized ID to Reserves and kills the rest', () => {
+    const start = advance(
+      stage({
+        attackers: ['firewalkers.phoenix'],
+        defenders: ['treefolk.oak', 'treefolk.oak'],
+        action: 'missile',
+        rng: rngShowing(
+          ['firewalkers.phoenix', 'treefolk.oak', 'treefolk.oak'],
+          [SEIZE_FACE, OAK_ID, OAK_MELEE],
+        ),
+      }),
+    )
+
+    const [seized, killed] = idsOf(start, 'treefolk.oak') as [UnitId, UnitId]
+    const done = applyAction(start, { kind: 'sai_target', unitIds: [seized, killed] })
+
+    expect(done.units[seized]?.location).toEqual({ kind: 'reserve' })
+    expect(done.units[killed]?.location).toEqual({ kind: 'dua' })
+    expect(subRollEntry(done)).toMatchObject({ test: 'id', escaped: [seized], toReserve: true })
+    // Moved, not killed: no death trigger fires on an escapee, so the Oak that got out
+    // is in no `units_killed` entry.
+    expect(
+      done.log.flatMap((e) => (e.kind === 'units_killed' ? [...e.unitIds] : [])),
+    ).toEqual([killed])
+    expect(validateState(done)).toEqual([])
+  })
+
+  /** A Seize that fails is an ordinary kill, so `killUnits` fires the death trigger --
+   *  two draws in all: the ID roll, and then the Rise roll. */
+  it('still gives a Seized Phoenix its Rise from the Ashes roll', () => {
+    const start = advance(
+      stage({
+        attackers: ['firewalkers.phoenix'],
+        defenders: ['firewalkers.phoenix'],
+        action: 'missile',
+        rng: rngShowing(
+          ['firewalkers.phoenix', 'firewalkers.phoenix', 'firewalkers.phoenix'],
+          [SEIZE_FACE, PHOENIX_SAVE, PHOENIX_RISE],
+        ),
+      }),
+    )
+
+    const [target] = idsOf(start, 'firewalkers.phoenix').filter(
+      (id) => start.units[id]?.owner === 'p2',
+    ) as [UnitId]
+    const before = start.rng.counter
+    const done = applyAction(start, { kind: 'sai_target', unitIds: [target] })
+
+    expect(done.rng.counter - before, 'the ID roll, then the Rise roll').toBe(2)
+    expect(done.units[target]?.location).toEqual({ kind: 'reserve' })
+    expect(done.log.some((e) => e.kind === 'units_risen')).toBe(true)
+  })
+
+  /**
+   * "The target unit is asleep and cannot be rolled" -- so it makes no save, generates
+   * no maneuver result, and dies to whatever asked for one. It also draws nothing on
+   * the way, which is the half of the rule a passing test could miss.
+   */
+  it('kills a sleeping target without rolling it', () => {
+    const rng = rngShowing(['treefolk.darktree', 'treefolk.willow'], [SMOTHER_FACE, WILLOW_MANEUVER])
+    const board = smotherBoard(rng)
+    const [asleepId, awake] = idsOf(board, 'treefolk.willow') as [UnitId, UnitId]
+    const start = advance({
+      ...board,
+      effects: [
+        {
+          source: 'Sleep',
+          target: { kind: 'unit', unitId: asleepId },
+          modifiers: [],
+          asleep: true,
+          expiresAtStartOfTurnOf: 'p1',
+        },
+      ],
+    })
+
+    const before = start.rng.counter
+    const done = applyAction(start, { kind: 'sai_target', unitIds: [asleepId, awake] })
+
+    expect(done.rng.counter - before, 'only the awake die was rolled').toBe(1)
+    expect(subRollEntry(done)?.dice).toHaveLength(1)
+    expect(done.units[asleepId]?.location).toEqual({ kind: 'dua' })
+    expect(done.units[awake]?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+  })
+
+  /**
+   * "Modifiers that affect an army do not affect the roll of an individual unit from
+   * that army" (full rules p. 28). This is the first test that rule can have, and 4c's
+   * Galeforce is what makes it writable: minus four maneuver would turn the Willow's
+   * two into nothing, and it must not reach this roll at all.
+   */
+  it('does not let an army modifier reach a unit roll', () => {
+    const galeforce: Effect = {
+      source: 'Galeforce',
+      target: { kind: 'army', player: 'p2', army: 'frontier' },
+      modifiers: [
+        { kind: 'subtract', resultType: 'save', amount: 4 },
+        { kind: 'subtract', resultType: 'maneuver', amount: 4 },
+      ],
+      expiresAtStartOfTurnOf: 'p1',
+    }
+    const start = advance(
+      stage({
+        attackers: ['treefolk.darktree'],
+        defenders: ['treefolk.willow'],
+        effects: [galeforce],
+        rng: rngShowing(['treefolk.darktree', 'treefolk.willow'], [SMOTHER_FACE, WILLOW_MANEUVER]),
+      }),
+    )
+
+    // The control: the army roll really is carrying the minus four.
+    expect(armyRoll(start, 'p2', 'frontier', 'maneuver').modifiers).toHaveLength(2)
+
+    const [willow] = idsOf(start, 'treefolk.willow') as [UnitId]
+    const done = applyAction(start, { kind: 'sai_target', unitIds: [willow] })
+
+    expect(done.units[willow]?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+  })
+
+  /** The roll order is the board's, not the order the player happened to type, for the
+   *  same reason `death.ts` picks one: two players naming the same dice differently
+   *  must get the same game. */
+  it('rolls the targets in board order whatever order they were named in', () => {
+    const rng = rngShowing(
+      ['treefolk.darktree', 'treefolk.willow', 'treefolk.willow'],
+      [SMOTHER_FACE, WILLOW_MANEUVER, WILLOW_SAVE],
+    )
+    const start = advance(smotherBoard(rng))
+    const [a, b] = idsOf(start, 'treefolk.willow') as [UnitId, UnitId]
+
+    const forwards = applyAction(start, { kind: 'sai_target', unitIds: [a, b] })
+    const backwards = applyAction(start, { kind: 'sai_target', unitIds: [b, a] })
+
+    const dead = (state: GameState) =>
+      Object.values(state.units)
+        .filter((u) => u.location.kind === 'dua')
+        .map((u) => u.id)
+
+    expect(dead(backwards)).toEqual(dead(forwards))
+    expect(backwards.rng.counter).toBe(forwards.rng.counter)
+  })
+
+  /** The rung that is still a game: a Smother face under `sai: 'results'` is an inert
+   *  face, exactly as it was before this slice. */
+  it('does nothing at all under sai: results', () => {
+    const base = smotherBoard(
+      rngShowing(
+        ['treefolk.darktree', 'treefolk.willow', 'treefolk.willow'],
+        [SMOTHER_FACE, WILLOW_MANEUVER, WILLOW_SAVE],
+      ),
+    )
+    const state = advance({ ...base, ruleSet: { ...base.ruleSet, sai: 'results' } })
+
+    expect(state.pending?.kind).not.toBe('sai_target')
+    expect(state.log.some((e) => e.kind === 'sai_sub_roll')).toBe(false)
   })
 })

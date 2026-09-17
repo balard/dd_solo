@@ -86,9 +86,26 @@ export type RollEffectBody =
        * number means.
        */
       readonly health: number
-      /** How a target gets out of it: by its own roll, or not at all. */
+      /**
+       * How a target gets out of it: by its own roll, or not at all.
+       *
+       * `'save'` and `'maneuver'` are questions about a *total* -- "those that do not
+       * generate a save result are killed" -- and `'id'` is a question about a face,
+       * which is why Seize rolls its targets without resolving them.
+       */
       readonly escape: 'none' | 'save' | 'maneuver' | 'id'
       readonly fate: 'kill' | 'bury'
+      /**
+       * Where a target that escaped ends up. Omitted means "where it was standing",
+       * which is every escape but Seize's.
+       *
+       * Stated rather than inferred from `escape: 'id'`. That inference is true of the
+       * one ID-escape SAI in this box and false of Swallow, which kills and buries on
+       * the same test -- the Genie's-4 mistake again. Optional-and-omitted because a
+       * `TargetTask` built from this lands in `combat.attack`, and so in the golden
+       * digest.
+       */
+      readonly escapeTo?: 'reserve'
     }
   /**
    * Sleep: one *unit* in an opposing army at this terrain, asleep until the roller's

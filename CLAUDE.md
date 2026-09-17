@@ -3,7 +3,7 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: v0 alpha complete; v1 Phases 0–3 landed, and Phase 4 is three slices into five.**
+> **Status: v0 alpha complete; v1 Phases 0–3 landed, and Phase 4 is four slices into five.**
 > All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > and installable as a PWA. It opens on a screen that picks the two forces and the seed; saving is
@@ -29,24 +29,25 @@ the dice and the opponent.
 > says why Sleep and Galeforce followed — **Phase 4 now owns five SAIs that all need one pause or
 > another in the middle of a roll**, which makes that seam the whole of its first half.
 >
-> **Phase 4 is landing in five slices; 4a, 4b and 4c are done.** 4a was the seam and nothing else:
-> the roll split four ways with `resolveFaces` pure, an exchange split into an attack step and a
-> save step with the raw dice stashed in `CombatState.attack`, and `sai: 'full'` refusing per *name*
-> rather than blanket. **4b added `sai_target` and `Flame`** — the first targeting SAI, the first
-> caller of `killAndBury`, and the first decision addressed to somebody other than the owner of the
-> dice at stake. **4c added `Sleep` and `Galeforce`** — the first two things in the project that
-> write to `state.effects`, so Phase 3's machinery has a caller three phases after it was built. The
-> 25 goldens replay byte-identical and unregenerated through all three. Still to come: 4d (the five
-> sub-roll SAIs), 4e (Wild Growth, the free moves, Choke and Confuse, then the flip to
-> `FULL_RULES`).
+> **Phase 4 is landing in five slices; 4a, 4b, 4c and 4d are done.** 4a was the seam and nothing
+> else: the roll split four ways with `resolveFaces` pure, an exchange split into an attack step and
+> a save step with the raw dice stashed in `CombatState.attack`, and `sai: 'full'` refusing per
+> *name* rather than blanket. **4b added `sai_target` and `Flame`** — the first targeting SAI, the
+> first caller of `killAndBury`, and the first decision addressed to somebody other than the owner
+> of the dice at stake. **4c added `Sleep` and `Galeforce`** — the first two things in the project
+> that write to `state.effects`, so Phase 3's machinery has a caller three phases after it was
+> built. **4d added the five sub-roll SAIs** — Bullseye, Double Strike, Smother, Firecloud and
+> Seize — and with them `unitRoll` / `rollUnits`, the first unit rolls that are not the death
+> trigger's. The 25 goldens replay byte-identical and unregenerated through all four. Still to come:
+> 4e (Wild Growth, the free moves, Choke and Confuse, then the flip to `FULL_RULES`).
 >
-> **The app still plays `DUA_RULES`, so nothing built in 4b or 4c happens in a real game yet.**
-> `'full'` refuses the eight unbuilt targeting SAIs *and* the two that need spells, so no force can
-> play it until 4e — not even a monster mirror, since the Satyr also carries Confuse and the Genie
-> carries Cantrip and Firecloud. Each slice has been verified in the browser against a **temporary
-> scaffold**, reverted before its commit; read `PLAN-V1.md` §4b and §4c *Verification* before
-> assuming the client surface is unexercised. **The scaffold is getting heavier each slice, and §4c
-> ends with the question of whether 4d should flip the app early instead.**
+> **The app still plays `DUA_RULES`, so nothing built in 4b–4d happens in a real game yet** — but
+> `sai: 'full'` **is playable**, on four of the ten monster fixtures. It refuses only Wild Growth,
+> Choke and Confuse (plus the two that need spells), and the Darktree, Redwood, Gorgon and Phoenix
+> fixtures carry none of them; all four are 24 health, so any pair is legal. A standing 120-game
+> fuzz in `ai.test.ts` runs on exactly that. Read `PLAN-V1.md` §4b before repeating the old claim
+> that no force could reach the rung: it was written down twice and was never true — two Flames
+> combine into a budget of 4, which is precisely what a Gorgon mirror is for.
 >
 > Worth knowing before picking one up: **both home terrains are Towers and the Frontier is a City**
 > (Phase 0a gave each species a second die of its own type). So Tower's "may attack any terrain in
@@ -160,10 +161,18 @@ These are the things that break the project if violated:
   (`2 SAI:Flame` targets two health-worth of units), so let each SAI interpret its own number.
   Twelve of the 25 are live under `sai: 'results'`; see `RULES-V0.md` §8 and `src/engine/sai.ts`.
 - **`sai: 'full'` adds the SAIs that pick targets**, and on that rung an unbuilt one **throws**
-  rather than going quiet -- the opposite of `'results'`. Flame, Sleep and Galeforce are built.
-  Resolution order is roll order and multiples of one SAI always combine -- except Sleep and
-  Galeforce, which p. 32 names as never combinable. All house rules, `RULES-V0.md` section 11.
-  Nothing reaches this rung in a real game until Phase 4e.
+  rather than going quiet -- the opposite of `'results'`. Eight are built: Flame, Sleep, Galeforce,
+  Bullseye, Double Strike, Smother, Firecloud and Seize. Resolution order is roll order and
+  multiples of one SAI always combine -- except Sleep and Galeforce, which p. 32 names as never
+  combinable. All house rules, `RULES-V0.md` section 11. The app does not play this rung until
+  Phase 4e; four monster fixtures already can.
+- **Five of those give their targets a roll** (v1 Phase 4d): a save roll for Bullseye and Double
+  Strike, a maneuver roll for Smother and Firecloud, and a look for an ID *face* for Seize, whose
+  survivors go to Reserves. Four rules, `RULES-V0.md` section 11: no army modifier reaches a unit
+  roll (p. 28), a die that cannot be rolled fails and draws nothing, the sub-roll is a save roll
+  against **nothing** (so a Counter on it saves but sends no damage back), and targets roll in board
+  order rather than the order the roller named them. "Roll this unit again" is the *roller's* die,
+  at step 3, exactly as in Rend.
 - **The DUA is a graveyard under `dua: 'inert'` and a resource under `'active'`** -- promotion,
   recruitment, burial and Rise from the Ashes' death trigger. See `RULES-V0.md` §9. Still true of
   both rungs: **nothing in a game calls promotion or recruitment yet** (Phase 5's City is the first
@@ -397,8 +406,19 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     defending player rather than the marching one. `expireEffects` keys on that field, so getting
     it wrong shortens or doubles the effect rather than failing.
   - **An army modifier must never reach a unit roll**, nor the reverse (full rules p. 28). That is
-    why the entry point is named `armyRoll`: Phase 4d's sub-rolls are the first unit rolls in the
-    game and must gather their own.
+    why the entry point is named `armyRoll`, and why **`unitRoll` is its sibling rather than a call
+    into it**: it gathers unit-targeted effects only -- no army effect, no eighth-face ID doubling
+    -- and returns `rollable: false` for a sleeping die. The two share no gatherer on purpose.
+    `rollUnits` in `roll.ts` then rolls each input once, skipping the unrollable, which **draws
+    nothing** for them. `unitRoll` takes no `resultType`: the only thing `armyRoll` needs one for is
+    `doubleIdsModifier`, which a unit roll never gathers.
+  - **Seize does not go through `rollUnits`.** "If they roll an ID icon" asks about a *face*, not a
+    total, so it is `rollFaces` plus `faceOf(die).icon === 'ID'` -- which also keeps an ID roll from
+    tripping `'full'`'s refusal on an unbuilt SAI a target happens to show. Two questions in the
+    rulebook, two code paths.
+  - **A sub-roll's targets roll in board order** (`Object.values(state.units)`), not in the order
+    the player named them -- `death.ts`'s rule, for `death.ts`'s reason. Both replay identically, so
+    no golden and no fuzz can see this; only a test can.
 - **Terrain `face === 8` and `capturedBy !== null` must always agree.** `validateState` enforces
   it; both the win check and the revert-to-7 rule depend on it.
 - **Damage assignment must be maximal, and greedy does not find it.** 4 damage against units of

@@ -62,7 +62,7 @@ G  Golden files: 25 recorded v0 games          DONE  cut before anything moves
 |                                  |
 +--> 3 Effects and durations ------+  DONE
                                    |
-                        4 SAIs B: targeting     4a 4b 4c DONE; 4d 4e to go
+                        4 SAIs B: targeting     4a 4b 4c 4d DONE; 4e to go
                                    |
                         5 Terrains and eighth faces
                                    |
@@ -786,14 +786,14 @@ honest alternative to regenerating 25 games for a field empty in all of them.
 
 **Deliverable.** `sai: 'full'`. The SAIs that pick targets, plus the two that move units.
 
-> **Landing in five slices, one commit each. 4a is done.**
+> **Landing in five slices, one commit each. 4a to 4d are done.**
 >
 > | Slice | Scope | State |
 > |---|---|---|
 > | **4a** | The seam: the roll split four ways, the exchange split in two, `'full'` refusing per name | ✅ landed |
 > | **4b** | `sai_target`, `targeting.ts`, **Flame**, and the whole client surface (enemy-selectable board, prompts, CLI, both AIs) | ✅ landed |
 > | **4c** | **Sleep** and **Galeforce** — the first `state.effects` producers, and `sai_target_army` | ✅ landed |
-> | 4d | The sub-rolls: **Bullseye, Double Strike, Smother, Firecloud, Seize**, via `rollUnits` / `unitRoll` | |
+> | **4d** | The sub-rolls: **Bullseye, Double Strike, Smother, Firecloud, Seize**, via `rollUnits` / `unitRoll` | ✅ landed |
 > | 4e | **Wild Growth**, the free moves, **Choke** and **Confuse**, then the flip to `FULL_RULES` | |
 >
 > One commit per slice rather than one for the phase, against `CLAUDE.md`'s usual rule, for the
@@ -945,11 +945,16 @@ forces under `DUA_RULES` and `SAI_RULES`; 12,250 exchanges, 0 stuck, `validateSt
 `units_buried` never logged — which is the check that 4b changed nothing for the rules the app
 plays).
 
-**The client surface cannot be reached by playing until 4e.** `'full'` refuses the ten unbuilt
-targeting SAIs, so no force in the project can play it: the starters carry Bullseye and Smother, the
-bestiary carries everything, and the Gorgon mirror — the one fixture whose only SAI is Flame — is
-six 4-health dice, which a 2-health budget can never take. So 4b was verified in the browser against
-a **temporary** scaffold (a 24-health preset of Oaks and Oaklings, `FULL_RULES`, both reverted
+**The client surface cannot be reached by playing until 4e** — *which was wrong, and 4d found out
+how.* `'full'` refuses the ten unbuilt targeting SAIs, and the starters (Bullseye, Smother, Wild
+Growth) and both bestiaries do carry some. But the **Gorgon mirror was playable all along**: its only
+SAI is Flame, which was built here. The claim below it — "six 4-health dice, which a 2-health budget
+can never take" — forgets the combination rule this very slice implemented: two Gorgons rolling Flame
+make **one budget of 4**, which takes a 4-health die exactly, about one melee attack in ten with
+three dice attacking. A single Flame raises no decision at all (`required === 0`), which makes that
+mirror the *cleanest* board for the combination rule rather than a useless one — and
+`targeting.test.ts` pins that case in as many words. The Redwood mirror (Trample only) was playable
+too. So 4b was verified in the browser against a **temporary** scaffold (a 24-health preset of Oaks and Oaklings, `FULL_RULES`, both reverted
 before commit): the attack stopped at the seam, only the targeted enemy army lit up, Confirm stayed
 disabled at 2 of 4 and enabled at 4, and the log read *Flame targets Oak, Oak* → *the enemy loses
 Oak, Oak* → *Oak, Oak are buried — no resurrection*. Worth knowing when reading 4c and 4d: their
@@ -1039,13 +1044,107 @@ of your next turn", and left the Genie tile dashed with an `aria-label` ending "
 > considering at 4d whether to flip the app to `FULL_RULES` early and let the remaining unbuilt SAIs
 > be *inert* rather than refusing — trading the `'full'`-refuses-a-half-built-ruleset discipline for
 > a client surface that can actually be played. 4e restores it either way.
+>
+> **4d kept the refusal, and the question turned out to rest on a false premise** — see §4b above.
+> Four fixtures carry no refused SAI once 4d lands, so 4d's scaffold was a *one-line ruleset flip*
+> with nothing stubbed, and the rung got a real fuzz rather than a hand-run. The scaffold shrank.
 
-### 4d and 4e — what is still owed
+### 4d — the sub-rolls — **landed**
 
-Eight SAIs and two free moves: `Bullseye`, `Double Strike`, `Smother`, `Firecloud`, `Seize` (4d);
-`Wild Growth`, `Choke`, `Confuse` and the free-move halves of `Firewalking` and `Teleport` (4e).
+**Delivered.** **Bullseye, Double Strike, Smother, Firecloud and Seize** — the five SAIs whose
+targets roll dice of their own. `unitRoll` in `effects.ts` and `rollUnits` in `roll.ts` are the unit
+side of the p. 28 modifier rule; `target_enemy` gained `escapeTo`; `LogEntry` gained `sai_sub_roll`,
+which carries the dice the way `combat_resolved` does. `sai: 'full'` now refuses exactly three
+names. The 25 goldens replay byte-identical and **unregenerated**.
 
-**What the first three slices already supply**, so this is not the plan's original list of three
+#### Where this section was wrong
+
+- **"`DieRoll.results` is the step-5 contribution only, so `resolveFaces` has to stamp each die's
+  SAI share onto it."** Already true since 4a: `perDieResults` adds the die's step-8 results. And
+  the deeper point is that the kill test is not per *die* at all — each target is one unit and one
+  unit is one die, so the test is `roll.total > 0` and the pipeline had already done the work. The
+  test the section asked for is still worth having (a Fly on a Bullseye save roll), and it is here;
+  it just needed no new code.
+- **The plan predicted three new mechanisms and 4d needed one.** No new `Pending`, no new
+  `GameAction`, no AI branch, no board change: a Smother asks the `sai_target` health-budget
+  question 4b built, so the *whole* client delta is two log-rendering arms. Worth knowing before
+  budgeting 4e, which is the opposite shape.
+- **`expectOnly` needed no widening**, for the first time in three slices — `target_enemy` was
+  already on the whitelist. The habit was right; the list was already right.
+- **Seize does not want `rollUnits`.** "If they roll an ID icon" asks about a *face*, not a total, so
+  it is `rollFaces` plus a look at the face — which also stops an ID roll tripping `'full'`'s
+  refusal on an unbuilt SAI a target happens to show. Two questions in the rulebook, two code paths.
+- **`unitRoll` takes no `resultType`.** `armyRoll` needs one only to build `doubleIdsModifier`, and
+  a unit roll never gathers that — so the parameter the plan sketched would have had no reader, the
+  same answer 4a gave to threading a rung through `SaiHandler`.
+- **The scaffold question 4c ends on rested on a false premise.** See §4b: the Gorgon mirror was
+  playable from 4b onward. 4d's scaffold was one line with nothing stubbed.
+
+#### Two things that would have shipped silently
+
+1. **The roll order.** Rolling the targets in the order the *player named them* replays identically —
+   the action is what is recorded — so no golden, no fuzz and no total-checking test would ever have
+   seen it. It is only wrong in the sense that matters: two players naming the same dice differently
+   get different dice. It is `Object.values(state.units)` order now, which is `death.ts`'s rule and
+   `armyAt`'s order, and the test names the ids backwards to prove it.
+2. **A sleeping target.** "Cannot be rolled" has to mean *fails whatever it was asked to roll* and
+   *draws no die*. Getting the first half right and the second wrong shifts every subsequent roll in
+   the game by one counter, with nothing on screen to say so. Both halves are asserted, the second
+   by counting draws.
+
+**Exit criterion.** A Smother's targets take a maneuver roll and the ones that generate nothing die;
+a Seize sends an ID to Reserves and kills the rest; neither sees an army modifier. ✅
+
+**Tests, as delivered.** `targeting.test.ts` grew to 35 cases, `sai.test.ts` to 60.
+
+| Case | Expected |
+|---|---|
+| Each of the five | fires only where its `Applies` column says, and nowhere else |
+| Their effects | the right `escape`, budget and `fate`; `escapeTo` on Seize alone |
+| Bullseye and Double Strike | `reroll: true`; the other three false |
+| All five | add **0** to `saiMaxResults` — the Smite check, that a targeting effect was not written as results |
+| A Smother against two Willows | the one with a maneuver face lives, the other dies; log reads `sai_resolved` → `sai_sub_roll` → `units_killed` |
+| A Bullseye | budget 4 off a **3-health** die, on a missile attack, with the attacker's own reroll in the draw sequence |
+| A Phoenix showing Fly on a Bullseye save roll | survives, and the strip shows the 4 it saved with |
+| A Seized ID | to Reserves, in no `units_killed` entry |
+| A Seized Phoenix that fails | 2 draws — the ID roll, then Rise from the Ashes |
+| A sleeping target | 1 draw for two targets, and the sleeper dies |
+| Galeforce then Smother | the Willow lives; `armyRoll` carries the −4 as the control |
+| The same targets named backwards | same deaths, same rng counter |
+| Two Bullseyes / a Smother and a Firecloud | one budget of 8 / two separate decisions |
+| Any of it under `sai: 'results'` | nothing at all |
+
+**No `SAVE_VERSION` bump.** 4d adds no pending and no decision; the only new randomness is behind
+`sai: 'full'`, which no version-6 record can reach. (Saving is switched off besides.)
+
+#### Verification
+
+- 240 `RandomAI` games under `DUA_RULES` and `SAI_RULES` (starter, bestiary and rolled forces):
+  12,605 exchanges, 0 stuck, `validateState` clean, and **`sai_sub_roll` never logged** — the check
+  that 4d changed nothing for the rules the app plays.
+- **A fuzz under `sai: 'full'`, which the Risks section said was impossible until 4e.** It is a real
+  test now, not a hand-run: 120 games over the four fixtures that carry no refused SAI — Darktree,
+  Redwood, Gorgon, Phoenix, all 24 health, so any pair is legal. 125,338 decisions, 4,441 exchanges,
+  0 stuck, `validateState` clean, and the trigger counters that make a clean run mean something:
+  **Smother 114, Seize 128** (18 dice actually seized into Reserves), **Flame 11**.
+- One Seize driven through the browser at Phoenix vs Darktree, seed 3, against a **one-line** ruleset
+  flip reverted before the commit: only the two enemy dice at the targeted terrain were selectable,
+  Confirm was disabled at 0/4 and enabled at 4, and the log read *Seize targets Darktree at Frontier*
+  → *Seize · an ID icon or die · Frontier — none get away* → *The enemy loses Darktree*, with the
+  target's rolled face drawn in a `RollStrip` above it.
+
+> **A 4e chore this turned up.** `faceLabel` in `Glyph.tsx` annotates any SAI outside `LIVE_SAIS` as
+> "not yet implemented", which is true of what the app *plays* (`sai: 'results'`) and becomes a lie
+> the moment 4e flips it to `FULL_RULES` — every targeting SAI would read "not yet implemented" on
+> hover. It needs both tables, or the rung threaded down. Left alone here deliberately: today it is
+> correct.
+
+### 4e — what is still owed
+
+Three SAIs and two free moves: `Wild Growth`, `Choke`, `Confuse`, and the free-move halves of
+`Firewalking` and `Teleport`.
+
+**What the first four slices already supply**, so this is not the plan's original list of three
 new mechanisms any more:
 
 - The pause inside an exchange **exists**: `beginExchange` → `sai_target_*` → `finishExchange`, with
@@ -1056,25 +1155,11 @@ new mechanisms any more:
 - `resolveFaces` is pure, so any mid-roll decision is *stash the faces, ask, recompute* with no
   extra draw. `RollSpec.saiResults` is already the channel for a player-supplied step-8 number,
   which is what Wild Growth's save share needs and the only thing currently using it is a test.
+- **A unit roll is a solved problem**: `unitRoll` gathers a single die's modifiers and `rollUnits`
+  rolls it, both with the p. 28 rule tested. Nothing in 4e needs a sub-roll, but Choke's "units that
+  rolled an ID icon" reads faces the way Seize does.
 
-**4d — the sub-rolls.** Smother and Firecloud make their targets take a *maneuver* roll; Bullseye
-and Double Strike a *save* roll; Seize an *ID* roll. These are rolls of a chosen subset of units,
-outside the attack/save exchange.
-
-- `rollUnits` belongs in `roll.ts` and `unitRoll(state, unitId, resultType)` in `effects.ts` — the
-  gatherer being there is what makes *"modifiers that affect an army do not affect the roll of an
-  individual unit"* (p. 28) a testable rule rather than a comment. **No eighth-face ID doubling**:
-  that is an army bonus.
-- The kill test is **per die**, and `DieRoll.results` is the step-5 contribution only. A die showing
-  Fly, Hoof, Counter or Rise from the Ashes *did* generate a save result, at step 8 — so
-  `resolveFaces` has to stamp each die's SAI share onto `DieRoll` (display-only, like `effects`),
-  or every SAI-faced target dies to a Bullseye it should have survived.
-- Bullseye's and Double Strike's "roll this unit again" is free: `SaiOutcome.reroll = true`, which
-  `rerollSweep` already handles. Seize reads `die.face.icon === 'ID'`, not a total.
-- `target_enemy` already carries `escape` and `fate`; `applySaiTarget` throws a named "Phase 4d"
-  error for any `escape` other than `'none'`, which is the seam to fill.
-
-**4e — the second pause, and the friendly selection rule.**
+**The second pause, and the friendly selection rule.**
 
 - **Wild Growth** splits X between save results and promotions, decided *after* the save roll lands
   and before its total is final. Its X is a **health budget one unit may spend twice** — an Oakling
@@ -1091,30 +1176,26 @@ outside the attack/save exchange.
   `sai_move` is the pending that carries a destination as well as units.
 
 **Then the flip.** `FULL_RULES` exported, `useGame` and the CLI moved to it, the throwing set down
-to `{ Cantrip, Dispel Magic }` — which is also the first moment any of Phase 4 can be played or
-fuzzed. See Risks.
+to `{ Cantrip, Dispel Magic }` — which is the first moment any force can play Phase 4, the four
+monster fixtures having been able to since 4b. It is also when `faceLabel` in `Glyph.tsx` starts
+lying about every targeting SAI; see the note at the end of §4d.
 
 **Exit criterion.** All 25 SAIs resolve except Cantrip and Dispel Magic, which throw a named
 "needs spells" error under `magic: 'simplified'`. 1000 fuzz games clean with `sai: 'full'`.
 
-**Tests still owed** (the ones 4a–4c delivered are listed under their own headings):
+**Tests still owed** (the ones 4a–4d delivered are listed under their own headings):
 
 - Choke kills only units that rolled an ID, *and* removes their save contribution from the total.
 - Confuse rerolls its targets and discards the previous results entirely; the draw order is step 1,
   then Confuse, then step 3.
-- Seize: an ID goes to Reserve, anything else dies.
-- A sub-roll does **not** call `armyRoll` — a Galeforced army's −4 must not reach a Smother maneuver
-  roll (p. 28). This is the first test that rule can have, and 4c's Galeforce is what makes it
-  possible to write.
-- A target whose SAI face generates the escape result survives — the step-8 stamp, above.
 - Wild Growth: the save share joins undivided; an Oakling promoted twice costs 2 and
   `exchangeWithDua` never sees it twice.
 - Firewalking on a save roll offers the move; on a maneuver roll it does not; declining moves
   nothing and logs nothing.
 
-**`SAVE_VERSION` is already at 6**, bumped in 4b for the decision-order change. 4d and 4e add more
-pendings to the same seam and need no further bump unless one of them changes dice consumption on a
-path a version-6 record could have taken — and no version-6 record can reach `sai: 'full'` at all.
+**`SAVE_VERSION` is already at 6**, bumped in 4b for the decision-order change. 4d did not move it
+and 4e adds more pendings to the same seam; neither needs a bump unless it changes dice consumption
+on a path a version-6 record could have taken — and no version-6 record can reach `sai: 'full'`.
 
 ### Where each of the 25 SAIs lands
 
@@ -1122,9 +1203,10 @@ A ✅ means **built**; `n / m` means the SAI lands in two pieces. `sai.test.ts` 
 partition — twelve on `'results'`, three on `'full'`, eight unbuilt, two waiting on spells — **and
 checks it against the engine**, so this table cannot quietly disagree with the code.
 
-Fifteen of the twenty-five are built. Note what "built" does *not* mean: the `'full'` rung refuses
-the eight unbuilt names, so Flame, Sleep and Galeforce cannot be reached in a playable game until
-4e, however finished they are.
+Twenty of the twenty-five are built, and three of the five that are not are Phase 4e's. Note what
+"built" does *not* mean for the app: it plays `DUA_RULES`, so every targeting SAI is inert in a real
+game until 4e flips it. It **can** be played, though — four monster fixtures carry no refused SAI,
+which is what 4d's fuzz runs on.
 
 | SAI | What it needs | Where |
 |---|---|---|
@@ -1141,11 +1223,11 @@ the eight unbuilt names, so Flame, Sleep and Galeforce cannot be reached in a pl
 | Flame | targeting + burial | 2 ✅ / **4b ✅** |
 | Sleep | unit status (3 ✅) + targeting + a pause before the save roll | 3 ✅ / **4c ✅** |
 | Galeforce | army effect (3 ✅) + targeting an army at any terrain | 3 ✅ / **4c ✅** |
-| Bullseye | targeting + save sub-roll + reroll | 4d |
-| Double Strike | targeting + save sub-roll + reroll | 4d |
-| Smother | targeting + maneuver sub-roll | 4d |
-| Firecloud | targeting + maneuver sub-roll | 4d |
-| Seize | targeting + ID sub-roll + move to Reserves | 4d |
+| Bullseye | targeting + save sub-roll + reroll | **4d ✅** |
+| Double Strike | targeting + save sub-roll + reroll | **4d ✅** |
+| Smother | targeting + maneuver sub-roll | **4d ✅** |
+| Firecloud | targeting + maneuver sub-roll | **4d ✅** |
+| Seize | targeting + ID sub-roll + move to Reserves | **4d ✅** |
 | Wild Growth | promotion (2 ✅) **plus a pause mid-roll to split X** | 4e |
 | Choke | delayed until after saves; ID detection; save suppression | 4e |
 | Confuse | delayed until after saves; reroll of targets | 4e |
@@ -1510,25 +1592,22 @@ is the unit tests, while `V0_RULES` keeps the 1000 games *and* the 25 goldens �
 least needs them. Every phase from here widens it further. Closing it is one `it.each` over two
 rulesets — and per-rule trigger counters, or a clean run proves nothing about the rare faces.
 
-**Phase 4 widened it a fourth way, and made it worse in a new direction.** 4a, 4b and 4c were each
-verified by a hand-run of 240 `RandomAI` games under `DUA_RULES` and `SAI_RULES` — but `sai: 'full'`
-**cannot be fuzzed at all** until 4e, because it refuses the unbuilt SAIs and every force in the
-project carries at least one. So the rung where the new code lives has no fuzz, not even a hand-run
-one, and will not have until the last slice. That is a direct consequence of the "`'full'` refuses
-a half-built ruleset" discipline, and it is the strongest argument for the question 4c ends on.
+**Phase 4 widened it a fourth way, and 4d closed that one.** 4a, 4b and 4c were each verified by a
+hand-run of 240 `RandomAI` games under `DUA_RULES` and `SAI_RULES`, and `sai: 'full'` was written up
+here as impossible to fuzz until 4e — because it refuses the unbuilt SAIs and "every force in the
+project carries at least one". **That was false**, and on a detail this plan had already implemented:
+the Gorgon mirror's only SAI is Flame, and two Flames combine into a budget that kills (§4b). Four
+fixtures qualify once 4d lands, so `sai: 'full'` now has a **standing fuzz** — 120 games with
+per-SAI trigger counters, in `ai.test.ts` beside the 1000-game one. The gap it closes is the newest
+one; the three older widenings below are untouched, and `SAI_RULES` and `DUA_RULES` still have no
+fuzz of their own.
 
-**The verification scaffold is the other new risk, and it compounds.** With no playable `'full'`
-force, each slice's client surface has been checked in the browser against a temporary scaffold —
-4b needed a preset and a ruleset flip; 4c needed both refusal branches stubbed as well. Every one
-was reverted before its commit and the reverts are checked, but the trend is the wrong way: the
-scaffold is now larger than the thing it verifies, and a scaffold that big is itself a source of
-false confidence. Two ways out, and 4d should pick one deliberately:
-
-- **Flip the app to `FULL_RULES` at 4d** and let the remaining unbuilt SAIs be *inert* rather than
-  refusing. Costs the discipline for one slice; buys a playable client surface, a fuzzable rung and
-  no scaffold. 4e restores the refusal when the set is complete.
-- **Keep refusing** and accept that 4d and 4e are verified by unit tests plus a scaffold, with the
-  first real play-through happening only after 4e lands.
+**The verification scaffold was the other new risk, and it shrank rather than compounding.** 4b
+needed a preset and a ruleset flip; 4c needed both refusal branches stubbed as well; **4d needed one
+line**, because by then two of the shipped fixtures could play the rung outright. Every scaffold was
+reverted before its commit and the reverts are checked. The lesson is not about scaffolds: it is
+that "no force can reach this" was asserted twice, in two documents, and never checked against the
+data — where it is a four-line query.
 
 
 **Spells are where the balance stops being ours.** v0's magic house rule was explicitly a guess to

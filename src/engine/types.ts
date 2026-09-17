@@ -424,6 +424,34 @@ export type LogEntry =
       readonly unitIds: readonly UnitId[]
     }
   /**
+   * A sub-roll: the targets of a Bullseye, Double Strike, Smother, Firecloud or Seize
+   * rolling for their lives (Phase 4d).
+   *
+   * Written between `sai_resolved` and the `units_killed` it causes, so the log reads
+   * *targeted -> rolled -> died* rather than dice dying from a number nobody saw. It
+   * carries the dice for the same reason `combat_resolved` does -- a saved game is
+   * `{ setup, actions }`, so log-only dice cost nothing on disk -- and because a
+   * Smother whose dice are invisible is the Fireshadow-that-Smote-for-4 problem in a
+   * fourth disguise.
+   */
+  | {
+      readonly kind: 'sai_sub_roll'
+      /** The owner of the dice that rolled. *Not* the roller who targeted them. */
+      readonly player: PlayerId
+      readonly sai: string
+      readonly slot: TerrainSlot
+      /** What the targets had to produce. `'id'` is a face, the other two a total. */
+      readonly test: 'save' | 'maneuver' | 'id'
+      /** Empty for a target that could not be rolled at all -- a sleeping die, which
+       *  generates nothing and so fails. */
+      readonly dice: readonly DieRoll[]
+      /** The ones that made it. The rest are the `units_killed` entry that follows. */
+      readonly escaped: readonly UnitId[]
+      /** Seize: the escapees went to their Reserve Area rather than staying put.
+       *  Omitted otherwise, like every other optional field in the log. */
+      readonly toReserve?: true
+    }
+  /**
    * Units moved from the DUA to the BUA, one way and for good.
    *
    * **No slot, deliberately.** A burial happens out of the DUA, which is not at a
