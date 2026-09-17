@@ -263,6 +263,33 @@ function Line({
 
         </p>
       )
+    // Logged before the kill it causes: without it a Flame reads as dice dying from
+    // nowhere, which is the Fireshadow-that-Smote-for-4 problem from Phase 1.
+    case 'sai_resolved':
+      return (
+        <p className="log-line">
+          <strong>{entry.sai}</strong> targets{' '}
+          {entry.unitIds
+            .map((id) => {
+              const unit = state.units[id]
+              return unit ? unitType(unit.typeId).name : id
+            })
+            .join(', ')}{' '}
+          at {slotLabel(entry.slot, human)}
+        </p>
+      )
+    case 'units_buried':
+      return (
+        <p className="log-line kill">
+          {entry.unitIds
+            .map((id) => {
+              const unit = state.units[id]
+              return unit ? unitType(unit.typeId).name : id
+            })
+            .join(', ')}{' '}
+          {entry.unitIds.length === 1 ? 'is' : 'are'} buried — no resurrection
+        </p>
+      )
     case 'effects_expired':
       return (
         <p className="log-line muted">

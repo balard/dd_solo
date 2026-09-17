@@ -88,7 +88,7 @@ export interface Prompt {
   readonly question: string
   readonly choices: readonly Choice[]
   /** Handled by a dedicated surface rather than plain buttons. */
-  readonly custom?: 'assign_damage' | 'reinforce' | 'retreat'
+  readonly custom?: 'assign_damage' | 'sai_target' | 'reinforce' | 'retreat'
 }
 
 const stepFace = (face: TerrainFace, direction: Direction): TerrainFace =>
@@ -220,6 +220,15 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         custom: 'assign_damage',
       }
 
+    // The one prompt that asks you to pick somebody else's dice, so it says whose and
+    // where rather than leaving the sentence to imply it.
+    case 'sai_target':
+      return {
+        question: `${pending.sai}: target ${pending.budget} health-worth at ${label(pending.slot)}`,
+        choices: [],
+        custom: 'sai_target',
+      }
+
     case 'reinforce':
       return { question: 'Send units from reserve?', choices: [], custom: 'reinforce' }
 
@@ -251,8 +260,39 @@ export function damageSelection(
   pending: Extract<Pending, { kind: 'assign_damage' }>,
   selection: ReadonlySet<UnitId>,
 ): DamageSelection {
-  const army = armyAt(state, pending.player, pending.slot)
-  const { required, suggestion } = damageOptions(army, pending.damage)
+  return budgetSelection(state, pending.player, pending.slot, pending.damage, selection)
+}
+
+/**
+ * The same arithmetic for a targeting SAI, over the army being *targeted*.
+ *
+ * The rule is identical -- "you must apply the SAI's effect to the fullest extent
+ * possible by selecting the maximum number of targets allowed" (full rules p. 32) is
+ * the damage rule word for word -- so this shares the sheet, the tally and the confirm
+ * gate rather than growing a second set of them. The only difference is whose army is
+ * counted, which is why the two are one function underneath.
+ *
+ * The *friendly* targeting rule is not this one: "any number ... including none"
+ * (p. 29) arrives with Wild Growth and the free moves, and it will need `ready` to
+ * relax from `===` to `<=`.
+ */
+export function saiTargetSelection(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'sai_target' }>,
+  selection: ReadonlySet<UnitId>,
+): DamageSelection {
+  return budgetSelection(state, pending.target, pending.slot, pending.budget, selection)
+}
+
+function budgetSelection(
+  state: GameState,
+  owner: 'p1' | 'p2',
+  slot: TerrainSlot,
+  budget: number,
+  selection: ReadonlySet<UnitId>,
+): DamageSelection {
+  const army = armyAt(state, owner, slot)
+  const { required, suggestion } = damageOptions(army, budget)
 
   const absorbed = [...selection].reduce((sum, id) => {
     const unit = state.units[id]
@@ -342,7 +382,12 @@ export function focusedSlot(state: GameState): TerrainSlot {
  * same question.
  */
 export interface SelectMode {
-  readonly side: 'mine' | 'reserve'
+  /**
+   * `'theirs'` is new with the targeting SAIs, and it is the first time the board has
+   * had to offer the *enemy's* dice: every decision before it picked from your own
+   * army, so `Board` hard-coded the opposing side unselectable.
+   */
+  readonly side: 'mine' | 'theirs' | 'reserve'
   readonly slot: TerrainSlot | null
 }
 
@@ -351,6 +396,10 @@ export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): Sele
   switch (pending.kind) {
     case 'assign_damage':
       return { side: 'mine', slot: pending.slot }
+    // Answered by the roller, about the army they are rolling against -- so the side
+    // that is selectable is not the side the question was addressed to.
+    case 'sai_target':
+      return { side: 'theirs', slot: pending.slot }
     case 'retreat':
       return { side: 'mine', slot: null }
     case 'reinforce':
@@ -360,9 +409,18 @@ export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): Sele
   }
 }
 
-/** Whether my army at `slot` is selectable under the current decision. */
-export function selectableAt(mode: SelectMode | null, slot: TerrainSlot): boolean {
-  return mode?.side === 'mine' && (mode.slot === null || mode.slot === slot)
+/**
+ * Whether an army at `slot` is selectable under the current decision.
+ *
+ * `side` says which army is being asked about -- the caller's own or the opponent's --
+ * because the board draws both and only one of them is ever pickable at a time.
+ */
+export function selectableAt(
+  mode: SelectMode | null,
+  slot: TerrainSlot,
+  side: 'mine' | 'theirs' = 'mine',
+): boolean {
+  return mode?.side === side && (mode.slot === null || mode.slot === slot)
 }
 
 /**

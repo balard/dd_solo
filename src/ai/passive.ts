@@ -55,6 +55,17 @@ function decideAction(state: GameState, pending: Pending): GameAction {
           .suggestion,
       }
 
+    // There is no passive answer here: an SAI aimed at an opponent must take the
+    // maximum it can (full rules p. 32), so the only choice is *which* maximal set,
+    // and declining is not on offer. Taking the engine's own suggestion is the same
+    // move `assign_damage` makes, pointed at the other army.
+    case 'sai_target':
+      return {
+        kind: 'sai_target',
+        unitIds: damageOptions(armyAt(state, pending.target, pending.slot), pending.budget)
+          .suggestion,
+      }
+
     case 'reinforce':
       return { kind: 'reinforce', moves: [] }
 

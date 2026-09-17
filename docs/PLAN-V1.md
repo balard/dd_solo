@@ -791,7 +791,7 @@ honest alternative to regenerating 25 games for a field empty in all of them.
 > | Slice | Scope | State |
 > |---|---|---|
 > | **4a** | The seam: the roll split four ways, the exchange split in two, `'full'` refusing per name | ✅ landed |
-> | 4b | `sai_target`, `targeting.ts`, **Flame**, and the whole client surface (enemy-selectable board, prompts, CLI, both AIs) | |
+> | **4b** | `sai_target`, `targeting.ts`, **Flame**, and the whole client surface (enemy-selectable board, prompts, CLI, both AIs) | ✅ landed |
 > | 4c | **Sleep** and **Galeforce** — the first `state.effects` producers, and `sai_target_army` | |
 > | 4d | The sub-rolls: **Bullseye, Double Strike, Smother, Firecloud, Seize**, via `rollUnits` / `unitRoll` | |
 > | 4e | **Wild Growth**, the free moves, **Choke** and **Confuse**, then the flip to `FULL_RULES` | |
@@ -867,6 +867,93 @@ And one missile attack driven through the browser at `?forces=bestiary&seed=7`, 
 
 **No `SAVE_VERSION` bump.** 4a changes no decision, no dice consumption and no phase. The bump
 belongs to 4b, where `Pending` gains members an old action log cannot match.
+
+### 4b — `sai_target` and Flame — **landed**
+
+**Delivered.** `RollEffectBody` gained `target_enemy`; `src/engine/targeting.ts` holds `TargetTask`
+and `targetTasks`; `MarchStep` gained `sai_target_attack` / `sai_target_counter`; `Pending` and
+`GameAction` gained `sai_target`; `LogEntry` gained `sai_resolved` and `units_buried`. **Flame** is
+the first targeting SAI and the first caller of `killAndBury`. The whole client surface came with
+it: `SelectMode.side: 'theirs'`, an enemy-selectable board, the `ActionBar` sheet, the CLI sheet,
+and a branch in both AIs. The 25 goldens replay byte-identical and unregenerated.
+
+**The app still plays `DUA_RULES`**, so Flame is inert in a real game until 4e flips it. That is the
+cost of the slicing, and it is stated plainly under *Verification* below.
+
+#### Where this section was wrong
+
+- **"One table with a rung argument" does not work, and 4a's deferral of it was right for the wrong
+  reason.** The two rungs do not differ in *what an SAI does*; they differ in **which SAIs exist**.
+  Flame must resolve under `'full'` and be **completely inert** under `'results'` — the rung Phase 1
+  shipped and the one `SAI_RULES` still names. Put Flame in the shared table and `SAI_RULES` quietly
+  starts burying dice. So `sai.ts` has two tables, `FULL_HANDLERS` beside `HANDLERS`, and
+  `handlerFor` decides which are in scope. The rung *argument* is still coming, in 4e, for the case
+  it is actually for: Firewalking and Teleport, whose maneuver half works on both rungs and whose
+  free move works on one.
+  - This was caught by the tests rather than by reading: five went red the moment Flame moved into
+    `HANDLERS`, four of them saying "this SAI is no longer inert on the results rung".
+- **`Pending.sai_target` did not need `remaining`, `limit` or `eligible`.** The plan gave it all
+  three. Flame is combinable, so a roll produces at most one Flame task and `remaining` is always 1;
+  `limit` has one reachable arm until Sleep; `eligible` has none until Choke. Each arrives with its
+  first reader — including the `App.tsx` draft-key bug `remaining` exists to fix, which **needs two
+  consecutive same-kind pendings and is therefore not reachable in 4b**. It is Sleep's to fix, with
+  Sleep's test.
+- **The `targets` queue *is* justified even at one task**, unlike those three. `targetTasks` returns
+  a list because the combination rule is about a list, and a single optional task would be a claim
+  about the domain that 4c breaks immediately.
+
+#### Two things that would have shipped silently
+
+1. **`expectOnly` would have thrown on the attack roll.** `combat.ts` whitelists the effect kinds a
+   roll is allowed to produce, and `target_enemy` was not on it — so the very first Flame would have
+   been computed and then refused by the guard that exists to stop it being *dropped*. It fails
+   loudly, which is the guard working, but it is one line and easy to miss when the new effect kind
+   is consumed a step earlier than the whitelist that names it.
+2. **The targeting step reads the faces a second time.** `beginExchange` resolves the attack's faces
+   purely to discover the tasks, and `resolveSaves` resolves the same faces again for the totals.
+   That is only free because `resolveFaces` draws nothing — which is exactly what 4a was for, and
+   the first place it pays.
+
+**Exit criterion.** A Flame picks two health-worth out of the defending army, kills and buries them,
+and the log says which SAI did it before the dice die. ✅
+
+**Tests, as delivered.** `src/engine/targeting.test.ts` (11 cases) plus four in `prompts.test.ts`.
+
+| Case | Expected |
+|---|---|
+| `2 SAI:Flame` against monsters | **no decision raised at all** — the X-is-a-budget test |
+| The pending | `player` is the attacker, `target`/`slot` the defenders — the first pending answered by the other side |
+| A Flamed Oak | in the **BUA**; `sai_resolved`, `units_killed`, `units_buried`, in that order |
+| A non-maximal answer | `IllegalActionError` |
+| Two Flame dice | one task of budget 4, which reaches a die neither 2 could |
+| Different SAIs in one roll | kept apart, in roll order |
+| A Flamed Phoenix | buried ⇒ **2** draws; risen ⇒ 1 draw and no `units_buried`. The `killAndBury` test. |
+| Flame taking the last defender | victory, and the save roll never happens |
+| Flame under `sai: 'results'` | nothing at all |
+| `selectableAt(mode, slot, 'theirs')` | true at the targeted terrain only, and no army of mine is selectable |
+| `saiTargetSelection` | tallies the *targeted* army; one of my own dice counts 0 |
+
+**Bumped `SAVE_VERSION` to 6**, and this one is the plainest kind: a `sai_target` decision sits
+between the attack roll and the save roll, so a version-5 action log hands its next answer to a
+question that did not exist when it was recorded. `reduce` refuses on the kind mismatch — the guard
+working — but only after the log has already diverged.
+
+#### Verification, and the gap this slice leaves
+
+The engine path is covered by tests and by 240 `RandomAI` games (starter, bestiary and rolled
+forces under `DUA_RULES` and `SAI_RULES`; 12,250 exchanges, 0 stuck, `validateState` clean, and
+`units_buried` never logged — which is the check that 4b changed nothing for the rules the app
+plays).
+
+**The client surface cannot be reached by playing until 4e.** `'full'` refuses the ten unbuilt
+targeting SAIs, so no force in the project can play it: the starters carry Bullseye and Smother, the
+bestiary carries everything, and the Gorgon mirror — the one fixture whose only SAI is Flame — is
+six 4-health dice, which a 2-health budget can never take. So 4b was verified in the browser against
+a **temporary** scaffold (a 24-health preset of Oaks and Oaklings, `FULL_RULES`, both reverted
+before commit): the attack stopped at the seam, only the targeted enemy army lit up, Confirm stayed
+disabled at 2 of 4 and enabled at 4, and the log read *Flame targets Oak, Oak* → *the enemy loses
+Oak, Oak* → *Oak, Oak are buried — no resurrection*. Worth knowing when reading 4c and 4d: their
+client surfaces have the same problem, and the same answer.
 
 ### The rest of the phase
 

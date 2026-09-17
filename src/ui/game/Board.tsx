@@ -245,7 +245,10 @@ export function Board({
         const type = terrainType(terrainDie(terrain.dieId).type)
         const facesOpen = openTerrain === slot
 
-        const selectableHere = selectableAt(selectMode, slot)
+        const selectableHere = selectableAt(selectMode, slot, 'mine')
+        // New with the targeting SAIs, and the first decision that picks from the
+        // army opposite: a Flame is chosen by the attacker, out of the defenders.
+        const enemySelectableHere = selectableAt(selectMode, slot, 'theirs')
 
         return (
           <section
@@ -300,7 +303,7 @@ export function Board({
               title="Enemy"
               species={theirSpecies}
               units={armyAt(state, enemy, slot)}
-              selectable={false}
+              selectable={enemySelectableHere}
               asleep={asleep}
               selected={selected}
               onToggle={onToggle}

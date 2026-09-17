@@ -53,8 +53,16 @@ const KEY = 'dd_solo.save'
  *    as in 4 above; and it carries a serialised `ruleSet` object with no `dua` key
  *    at all, so replaying it would run the engine against a `RuleSet` the type says
  *    cannot exist -- behaving as `'inert'` by accident rather than by decision.
+ *
+ * 6: targeting SAIs ask a question mid-exchange. A `sai_target` decision sits between
+ *    the attack roll and the save roll, so a version-5 action log replayed against
+ *    this engine hands its *next* answer to a question that did not exist when it was
+ *    recorded -- `reduce` refuses on the kind mismatch, which is the guard working,
+ *    but only after the log has already diverged. This is a decision-order bump, the
+ *    plainest kind there is, and the first one since version 3 that is not mostly
+ *    about which ruleset the app plays.
  */
-export const SAVE_VERSION = 5
+export const SAVE_VERSION = 6
 
 
 export interface SavedGame {

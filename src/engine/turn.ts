@@ -14,6 +14,7 @@
  * rather than only at end of turn.
  */
 import {
+  attackEffects,
   legalActions,
   missileTargets,
   resolveSaves,
@@ -22,11 +23,12 @@ import {
   type AttackSpec,
 } from './combat'
 import { damageAssignmentProblem, damageOptions } from './damage'
-import { killUnits } from './death'
+import { killAndBury, killUnits } from './death'
 import { armyRoll, expireEffects, isAsleep, pruneEffects } from './effects'
 
 import { expectNoEffects, rollArmy } from './roll'
 import type { RollContext } from './sai'
+import { targetTasks, type TargetTask } from './targeting'
 import {
   IllegalActionError,
   TERRAIN_SLOTS,
@@ -42,6 +44,7 @@ import {
   type GameState,
   type LogEntry,
   type MarchStep,
+  type PendingAttack,
   type PlayerId,
   type TerrainFace,
   type TerrainSlot,
@@ -221,10 +224,14 @@ function stepMarch(state: GameState): GameState {
     // and the damage being assigned.
     case 'resolve_attack':
       return beginExchange(state, false)
+    case 'sai_target_attack':
+      return stepTargeting(state, false)
     case 'resolve_attack_saves':
       return finishExchange(state, false)
     case 'resolve_counter':
       return beginExchange(state, true)
+    case 'sai_target_counter':
+      return stepTargeting(state, true)
     case 'resolve_counter_saves':
       return finishExchange(state, true)
 
@@ -279,11 +286,13 @@ function stepMarch(state: GameState): GameState {
 
 const COMBAT_SEQUENCE = [
   'resolve_attack',
+  'sai_target_attack',
   'resolve_attack_saves',
   'assign_attack_damage',
   'assign_attack_riposte',
   'offer_counter',
   'resolve_counter',
+  'sai_target_counter',
   'resolve_counter_saves',
   'assign_counter_damage',
   'assign_counter_riposte',
@@ -295,8 +304,10 @@ type CombatStep = (typeof COMBAT_SEQUENCE)[number]
  *  deals. `CombatState.attack` may exist at these and nowhere else. */
 export const MID_EXCHANGE_STEPS: readonly MarchStep[] = [
   'resolve_attack',
+  'sai_target_attack',
   'resolve_attack_saves',
   'resolve_counter',
+  'sai_target_counter',
   'resolve_counter_saves',
 ]
 
@@ -421,7 +432,13 @@ function exchangeSpec(state: GameState, isCounter: boolean): AttackSpec {
  */
 function beginExchange(state: GameState, isCounter: boolean): GameState {
   const combat = requireCombat(state)
-  const [attack, rng] = rollAttack(state, exchangeSpec(state, isCounter))
+  const spec = exchangeSpec(state, isCounter)
+  const [attack, rng] = rollAttack(state, spec)
+
+  // Reading the faces costs nothing and draws nothing -- `resolveFaces` is pure -- so
+  // the targeting queue is worked out here and the same faces are resolved again for
+  // real once the queue has drained. That is the whole point of the 4a seam.
+  const targets = targetTasks(attackEffects(state, spec, attack))
 
   // A spread, unlike the rebuild below, and safe for the opposite reason: this is
   // the *same* exchange one step later, not the next one. Nothing between here and
@@ -430,10 +447,136 @@ function beginExchange(state: GameState, isCounter: boolean): GameState {
   return withTurn(
     { ...state, rng },
     {
-      marchStep: isCounter ? 'resolve_counter_saves' : 'resolve_attack_saves',
-      combat: { ...combat, attack },
+      marchStep: isCounter ? 'sai_target_counter' : 'sai_target_attack',
+      combat: {
+        ...combat,
+        attack: { ...attack, ...(targets.length > 0 ? { targets } : {}) },
+      },
     },
   )
+}
+
+/** The attack roll, with the tasks it still owes stripped back to what is left. */
+function withTargets(
+  combat: CombatState,
+  attack: PendingAttack,
+  targets: readonly TargetTask[],
+): CombatState {
+  return {
+    ...combat,
+    attack: { dice: attack.dice, ...(targets.length > 0 ? { targets } : {}) },
+  }
+}
+
+function requireAttack(state: GameState, combat: CombatState): PendingAttack {
+  const attack = combat.attack
+  if (attack === undefined) {
+    throw new Error(`reached ${state.turn.marchStep} with no attack roll waiting to be resolved`)
+  }
+  return attack
+}
+
+/**
+ * Asks the roller about the next targeting SAI, or moves on to the save roll.
+ *
+ * Between the two rolls on purpose: a Sleep takes a die out of the save roll that
+ * follows and a Galeforce subtracts from it, so the decision has to be made while the
+ * save roll is still ahead. Flame is the one that lands first, and it is the one that
+ * needs the *least* of that -- which is why it goes first.
+ *
+ * A task with nothing it could take is dropped rather than asked about: "up to X
+ * health-worth" against an army whose smallest die is bigger than X can absorb
+ * nothing at all. That is the same rule as damage too small to kill (`RULES-V0.md`
+ * section 6), and it is the case a `2 SAI:Flame` meets against an army of monsters.
+ */
+function stepTargeting(state: GameState, isCounter: boolean): GameState {
+  const combat = requireCombat(state)
+  const attack = requireAttack(state, combat)
+  const spec = exchangeSpec(state, isCounter)
+  const army = armyAt(state, spec.defender, spec.defenderSlot)
+
+  const queue = (attack.targets ?? []).filter(
+    (task) => damageOptions(army, task.health).required > 0,
+  )
+
+  const head = queue[0]
+  if (head === undefined) {
+    return withTurn(state, {
+      marchStep: isCounter ? 'resolve_counter_saves' : 'resolve_attack_saves',
+      combat: withTargets(combat, attack, []),
+    })
+  }
+
+  return {
+    ...withTurn(state, { combat: withTargets(combat, attack, queue) }),
+    pending: {
+      kind: 'sai_target',
+      player: spec.attacker,
+      sai: head.sai,
+      target: spec.defender,
+      slot: spec.defenderSlot,
+      budget: head.health,
+    },
+  }
+}
+
+/**
+ * Applies one targeting SAI to the units the roller picked.
+ *
+ * The selection rule is the opponent-targeting one: the maximum must be taken (full
+ * rules p. 32), which is `damageAssignmentProblem` unchanged -- the same maximal
+ * subset arithmetic as a damage assignment, with a different player answering.
+ */
+function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState {
+  const step = state.turn.marchStep
+  if (step !== 'sai_target_attack' && step !== 'sai_target_counter') {
+    throw new IllegalActionError(`no SAI is waiting for a target (march step ${step})`)
+  }
+
+  const combat = requireCombat(state)
+  const attack = requireAttack(state, combat)
+  const [task, ...rest] = attack.targets ?? []
+  if (task === undefined) throw new IllegalActionError('no SAI is waiting for a target')
+
+  const spec = exchangeSpec(state, step === 'sai_target_counter')
+  const army = armyAt(state, spec.defender, spec.defenderSlot)
+  const problem = damageAssignmentProblem(army, task.health, unitIds)
+  if (problem !== null) throw new IllegalActionError(problem)
+
+  if (task.escape !== 'none') {
+    throw new Error(
+      `${task.sai}: letting a target roll to escape ('${task.escape}') is Phase 4d, not 4b`,
+    )
+  }
+
+  // Named before the deaths it causes, so the log reads as cause then effect rather
+  // than as dice dying from nowhere.
+  const named = withLog(state, {
+    kind: 'sai_resolved',
+    player: spec.attacker,
+    sai: task.sai,
+    slot: spec.defenderSlot,
+    unitIds,
+  })
+
+  // "The targets are killed and buried" is two steps because the rules are two, and a
+  // Phoenix rolls Rise from the Ashes at each of them.
+  const { state: dead, risen } =
+    task.fate === 'bury' ? killAndBury(named, unitIds) : killUnits(named, unitIds)
+  const buried = unitIds.filter((id) => dead.units[id]?.location.kind === 'bua')
+
+  const logged = withLog(
+    dead,
+    { kind: 'units_killed', player: spec.defender, slot: spec.defenderSlot, unitIds },
+    ...(risen.length > 0
+      ? [{ kind: 'units_risen', player: spec.defender, unitIds: risen } as const]
+      : []),
+    ...(buried.length > 0
+      ? [{ kind: 'units_buried', player: spec.defender, unitIds: buried } as const]
+      : []),
+  )
+
+  return withTurn(logged, { combat: withTargets(combat, attack, rest) })
 }
 
 /**
@@ -446,11 +589,7 @@ function beginExchange(state: GameState, isCounter: boolean): GameState {
  */
 function finishExchange(state: GameState, isCounter: boolean): GameState {
   const combat = requireCombat(state)
-  const pending = combat.attack
-  if (pending === undefined) {
-    throw new Error(`reached ${state.turn.marchStep} with no attack roll waiting to be resolved`)
-  }
-
+  const pending = requireAttack(state, combat)
   const spec = exchangeSpec(state, isCounter)
   const { attacker, defender, attackerSlot, defenderSlot } = spec
   const outcome = resolveSaves(state, spec, pending, state.rng)
@@ -876,6 +1015,8 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyCounterAttack(cleared, action.counter)
     case 'assign_damage':
       return applyAssignDamage(cleared, action.unitIds)
+    case 'sai_target':
+      return applySaiTarget(cleared, action.unitIds)
     case 'reinforce':
       return applyReinforce(cleared, action.moves)
     case 'retreat':

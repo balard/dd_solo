@@ -96,6 +96,17 @@ export const randomAi: AiPlayer = {
         return [{ kind: 'assign_damage', unitIds: suggestion } as GameAction, next] as const
       }
 
+      // The same shuffle-then-solve, aimed at the *enemy* army. There is no "target
+      // nothing" to explore -- an SAI against an opponent must take its maximum -- so
+      // the whole space of this decision is which maximal set, and that is what the
+      // shuffle walks.
+      case 'sai_target': {
+        const army = armyAt(state, pending.target, pending.slot)
+        const [shuffled, next] = shuffle(rng, army)
+        const { suggestion } = damageOptions(shuffled as readonly UnitInstance[], pending.budget)
+        return [{ kind: 'sai_target', unitIds: suggestion } as GameAction, next] as const
+      }
+
       case 'reinforce': {
         // A destination *per unit*, not one for the batch: "you may split the reserve
         // units up, sending some to one terrain and some to another". One slot for

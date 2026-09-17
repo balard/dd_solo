@@ -235,6 +235,23 @@ export function rollAttack(state: GameState, spec: AttackSpec): readonly [Attack
 }
 
 /**
+ * What the attack roll produced that is not a number, without resolving anything else.
+ *
+ * Pure and free of randomness, because `resolveFaces` is -- which is what lets the
+ * targeting step read the roll's SAIs before the save roll happens, and lets
+ * `resolveSaves` read the very same faces again afterwards for the totals.
+ */
+export function attackEffects(
+  state: GameState,
+  spec: AttackSpec,
+  attack: AttackRollState,
+): readonly RollEffect[] {
+  const attackers = armyRoll(state, spec.attacker, spec.attackerSlot, spec.action)
+  const rollSpec = attackRollSpec(spec, attackers.modifiers)
+  return resolveFaces(attack.dice, rollSpec, state.ruleSet).effects
+}
+
+/**
  * The defender's half: what the attack's faces are worth, the save roll, the damage.
  *
  * Two details worth not losing:
@@ -262,7 +279,14 @@ export function resolveSaves(
   const attackRoll = asResult(resolveFaces(attack.dice, rollSpec, state.ruleSet), spec.action)
   const afterAttack = rng
 
-  expectOnly(attackRoll.effects, ['unsavable', 'suppress_counter'], `a ${spec.action} attack`)
+  // `target_enemy` is consumed by the targeting step *before* this one, so by the time
+  // the faces are resolved for their totals it has already done its work -- but it is
+  // still on the list, so it is still allowed here.
+  expectOnly(
+    attackRoll.effects,
+    ['unsavable', 'suppress_counter', 'target_enemy'],
+    `a ${spec.action} attack`,
+  )
   const unsavable = damageFrom(attackRoll.effects, 'unsavable')
   const counterSuppressed = attackRoll.effects.some((e) => e.kind === 'suppress_counter')
 

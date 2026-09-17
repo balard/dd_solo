@@ -21,6 +21,7 @@ import {
   plainLabel,
   promptFor,
   reinforcePlan,
+  saiTargetSelection,
   selectModeFor,
   selectableAt,
   sleepingIds,
@@ -422,6 +423,93 @@ describe('selection targeting', () => {
 
   it('never offers the opponent’s decision to the human', () => {
     expect(selectModeFor(damagePending(3), 'p2')).toBeNull()
+  })
+
+  /**
+   * A targeting SAI is the first decision that picks from the army *opposite*, so it
+   * is the first time `side` has had to mean anything: before it, "selectable" always
+   * meant "mine", and `Board` hard-coded the enemy half unselectable.
+   */
+  it('offers the enemy army, and only at the terrain the SAI is aimed at', () => {
+    const pending = {
+      kind: 'sai_target',
+      player: 'p1',
+      sai: 'Flame',
+      target: 'p2',
+      slot: 'frontier',
+      budget: 2,
+    } as const
+
+    const mode = selectModeFor(pending, 'p1')
+    expect(mode).toEqual({ side: 'theirs', slot: 'frontier' })
+
+    expect(selectableAt(mode, 'frontier', 'theirs')).toBe(true)
+    expect(selectableAt(mode, 'p1_home', 'theirs')).toBe(false)
+    // And my own dice stay out of it: this decision is about somebody else's army.
+    for (const slot of TERRAIN_SLOTS) expect(selectableAt(mode, slot, 'mine')).toBe(false)
+  })
+
+  it('asks the roller, not the army’s owner', () => {
+    const pending = {
+      kind: 'sai_target',
+      player: 'p1',
+      sai: 'Flame',
+      target: 'p2',
+      slot: 'frontier',
+      budget: 2,
+    } as const
+
+    // p2 owns the dice being picked from and is not the one choosing.
+    expect(selectModeFor(pending, 'p2')).toBeNull()
+  })
+
+  /**
+   * The rest of the targeting sheet, without a DOM.
+   *
+   * The engine tests prove Flame resolves; these prove the surface that answers it
+   * counts the right army. Getting that wrong is invisible to every engine test --
+   * the tally would sit at zero however many enemy dice were lit up, and the confirm
+   * button would never enable.
+   */
+  it('tallies the targeted army, not your own', () => {
+    const state = fresh()
+    const enemy = armyAt(state, 'p2', 'p2_home')
+    const pending = {
+      kind: 'sai_target',
+      player: 'p1',
+      sai: 'Flame',
+      target: 'p2',
+      slot: 'p2_home',
+      budget: 2,
+    } as const
+
+    const empty = saiTargetSelection(state, pending, new Set())
+    expect(empty.absorbed).toBe(0)
+    expect(empty.required).toBeGreaterThan(0)
+    expect(empty.ready).toBe(false)
+
+    // The engine's own suggestion is always a legal answer, so it must read as ready.
+    const auto = saiTargetSelection(state, pending, new Set(empty.suggestion))
+    expect(auto.absorbed).toBe(auto.required)
+    expect(auto.ready).toBe(true)
+
+    // One of my own dice counts for nothing here, whatever its health.
+    const mine = armyAt(state, 'p1', 'p1_home')[0]!
+    expect(saiTargetSelection(state, pending, new Set([mine.id])).absorbed).toBe(0)
+    expect(enemy.length).toBeGreaterThan(0)
+  })
+
+  it('names the SAI and the terrain in the question', () => {
+    const state = fresh()
+    const prompt = promptFor(
+      { kind: 'sai_target', player: 'p1', sai: 'Flame', target: 'p2', slot: 'frontier', budget: 2 },
+      'p1',
+      state,
+    )
+    expect(prompt.custom).toBe('sai_target')
+    expect(prompt.question).toContain('Flame')
+    expect(prompt.question).toContain('Frontier')
+    expect(prompt.choices).toEqual([])
   })
 
   it('selects nothing when no decision is pending', () => {

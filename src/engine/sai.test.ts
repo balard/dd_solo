@@ -12,6 +12,7 @@ import { maxResults, resolveRoll, rollArmy, saiPhrase, saisBehind, type DieRoll 
 
 import {
   LIVE_SAIS,
+  TARGETING_SAIS,
   saiEffects,
   saiMaxResults,
   type RollPurpose,
@@ -151,7 +152,7 @@ describe('the rungs of ruleSet.sai', () => {
   it('is silently inert for an SAI this rung does not implement', () => {
     // Deliberate: `'results'` has to be playable, and the other thirteen land in
     // Phases 2, 3, 4 and 7.
-    for (const name of ['Choke', 'Flame', 'Wild Growth', 'Cantrip', 'Bullseye']) {
+    for (const name of ['Choke', 'Smother', 'Wild Growth', 'Cantrip', 'Bullseye']) {
       expect(fires(name, melee), name).toEqual({ results: {}, effects: [], reroll: false })
     }
   })
@@ -177,9 +178,36 @@ describe('the rungs of ruleSet.sai', () => {
   })
 
   it('refuses an unimplemented targeting SAI under sai: full', () => {
-    expect(() => saiEffects(sai('Flame'), { purpose: melee, isCounter: false }, FULL_RULES)).toThrow(
-      /targeting SAIs are not implemented/,
-    )
+    expect(() =>
+      saiEffects(sai('Smother'), { purpose: melee, isCounter: false }, FULL_RULES),
+    ).toThrow(/targeting SAIs are not implemented/)
+  })
+
+  /**
+   * A targeting SAI exists on `'full'` and **does not exist at all** on `'results'` --
+   * which is why the two rungs are two tables rather than one table and a flag. Get
+   * this wrong and `SAI_RULES`, the configuration Phase 1 shipped, quietly starts
+   * burying dice.
+   */
+  it('resolves Flame under full and leaves it inert under results', () => {
+    expect(saiEffects(sai('Flame', 2), { purpose: melee, isCounter: false }, FULL_RULES)).toEqual({
+      results: {},
+      effects: [{ kind: 'target_enemy', health: 2, escape: 'none', fate: 'bury' }],
+      reroll: false,
+    })
+    expect(saiEffects(sai('Flame', 2), { purpose: melee, isCounter: false }, SAI_RULES)).toEqual({
+      results: {},
+      effects: [],
+      reroll: false,
+    })
+  })
+
+  it('fires Flame only on a melee attack, per its Applies column', () => {
+    for (const purpose of [missile, magic, maneuver, saveVs('melee')]) {
+      expect(
+        saiEffects(sai('Flame', 2), { purpose, isCounter: false }, FULL_RULES).effects,
+      ).toEqual([])
+    }
   })
 
   it('says spells, not Phase 4, for the two SAIs that cast one', () => {
@@ -190,8 +218,8 @@ describe('the rungs of ruleSet.sai', () => {
     }
   })
 
-  it('is silently inert for the same SAI under sai: results', () => {
-    expect(saiEffects(sai('Flame'), { purpose: melee, isCounter: false }, SAI_RULES)).toEqual({
+  it('is silently inert for an unbuilt SAI under sai: results', () => {
+    expect(saiEffects(sai('Smother'), { purpose: melee, isCounter: false }, SAI_RULES)).toEqual({
       results: {},
       effects: [],
       reroll: false,
@@ -210,7 +238,6 @@ describe('the rungs of ruleSet.sai', () => {
       'Confuse',
       'Double Strike',
       'Firecloud',
-      'Flame',
       'Galeforce',
       'Seize',
       'Sleep',
@@ -218,6 +245,7 @@ describe('the rungs of ruleSet.sai', () => {
       'Wild Growth',
     ])
     const live = new Set(LIVE_SAIS)
+    const targeting = new Set(TARGETING_SAIS)
 
     const names = new Set<string>()
     for (const type of UNIT_TYPES) {
@@ -226,30 +254,44 @@ describe('the rungs of ruleSet.sai', () => {
 
     expect(names.size).toBe(25)
     // The split is pinned because the prose in CLAUDE.md, RULES-V0.md and PLAN-V1.md
-    // all quote it, and nothing else would notice it going stale.
+    // all quote it, and nothing else would notice it going stale. Each Phase 4 slice
+    // moves names from `deferred` into `TARGETING_SAIS` and edits these two numbers.
     expect(live.size, 'SAIs live under sai: results').toBe(12)
-    expect(deferred.size, 'targeting SAIs still unbuilt at Phase 4a').toBe(11)
+    expect(targeting.size, 'targeting SAIs built so far').toBe(1)
+    expect(deferred.size, 'targeting SAIs still unbuilt').toBe(10)
     expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(2)
+
     for (const name of names) {
-      const claimed = live.has(name) || deferred.has(name) || needsSpells.has(name)
+      const claimed =
+        live.has(name) || targeting.has(name) || deferred.has(name) || needsSpells.has(name)
       expect(claimed, `${name} is resolved by no rung`).toBe(true)
     }
     // And nothing is claimed twice, which is how a Phase 4 SAI would quietly ship.
     for (const name of live) {
+      expect(targeting.has(name) || deferred.has(name) || needsSpells.has(name), name).toBe(false)
+    }
+    for (const name of targeting) {
       expect(deferred.has(name) || needsSpells.has(name), name).toBe(false)
     }
 
     // The partition is not a list here and a different list in the engine: every
-    // deferred name must actually refuse, and every live name must actually resolve.
+    // deferred name must actually refuse under 'full', every built one must resolve,
+    // and every targeting one must stay inert under 'results'.
     for (const name of deferred) {
       expect(() =>
         saiEffects(sai(name), { purpose: melee, isCounter: false }, FULL_RULES),
       ).toThrow(/targeting SAIs are not implemented/)
     }
-    for (const name of live) {
+    for (const name of [...live, ...targeting]) {
       expect(() =>
         saiEffects(sai(name), { purpose: melee, isCounter: false }, FULL_RULES),
       ).not.toThrow()
+    }
+    for (const name of targeting) {
+      expect(
+        saiEffects(sai(name), { purpose: melee, isCounter: false }, SAI_RULES).effects,
+        `${name} must stay inert on the results rung`,
+      ).toEqual([])
     }
   })
 })
@@ -846,7 +888,7 @@ describe('the two halves of an exchange', () => {
   it('stops between the two rolls, holding the attack dice', () => {
     const mid = stepGame(atResolveAttack(twoOaklings()))
 
-    expect(mid.turn.marchStep).toBe('resolve_attack_saves')
+    expect(mid.turn.marchStep).toBe('sai_target_attack')
     expect(mid.turn.combat?.attack?.dice).toHaveLength(1)
     // The attack roll has happened; the save roll has not.
     expect(mid.log.some((e) => e.kind === 'combat_resolved')).toBe(false)

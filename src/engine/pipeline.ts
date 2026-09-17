@@ -68,6 +68,28 @@ export type RollEffectBody =
   | { readonly kind: 'unsavable'; readonly damage: number }
   /** Surprise: the defending army may not counter-attack. */
   | { readonly kind: 'suppress_counter' }
+  /**
+   * Bullseye, Double Strike, Smother, Firecloud, Seize, Flame: pick health-worth of
+   * units out of the army this roll is aimed at, and do something to them.
+   *
+   * One member for six SAIs, because what separates them is three orthogonal axes and
+   * not a name. The name rides on `RollEffect.sai` for the log; nothing in the engine
+   * branches on it, which is what stops this becoming a second dispatch table beside
+   * `sai.ts`'s.
+   */
+  | {
+      readonly kind: 'target_enemy'
+      /**
+       * Health-worth to pick. A *budget*, not a result count -- `2 SAI:Flame` targets
+       * two health-worth -- which is the same rule as everywhere else in `sai.ts`:
+       * the number printed on the face is the answer, and each SAI says what its own
+       * number means.
+       */
+      readonly health: number
+      /** How a target gets out of it: by its own roll, or not at all. */
+      readonly escape: 'none' | 'save' | 'maneuver' | 'id'
+      readonly fate: 'kill' | 'bury'
+    }
 
 /** A `RollEffectBody` once `resolveRoll` has stamped it with the die that made it,
  *  so the log can say *which* Fireshadow smote you. */

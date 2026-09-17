@@ -191,6 +191,19 @@ function describe(entry: LogEntry, state: GameState): string | null {
           .map((id) => (state.units[id] ? name(state.units[id]!) : id))
           .join(', ')} rises from the ashes into ${entry.player}'s reserves`,
       )
+    // Before the kill it causes, so the line reads as cause and then effect.
+    case 'sai_resolved':
+      return yellow(
+        `  ${bold(entry.sai)} targets ${entry.unitIds
+          .map((id) => (state.units[id] ? name(state.units[id]!) : id))
+          .join(', ')} at ${SLOT_LABEL[entry.slot]}`,
+      )
+    case 'units_buried':
+      return red(
+        `  ${entry.unitIds
+          .map((id) => (state.units[id] ? name(state.units[id]!) : id))
+          .join(', ')} ${entry.unitIds.length === 1 ? 'is' : 'are'} buried — no resurrection`,
+      )
     case 'effects_expired':
       return dim(`${entry.sources.join(', ')} wears off at the start of ${entry.player}'s turn`)
 
@@ -291,6 +304,7 @@ function choicesFor(pending: Pending): Choice[] {
     case 'reinforce':
     case 'retreat':
     case 'assign_damage':
+    case 'sai_target':
       return [] // handled separately
   }
 }
@@ -330,21 +344,34 @@ function ask(prompt: string): Promise<string> {
 }
 
 /** The damage sheet: toggle units until the selection absorbs everything it can. */
-async function askDamage(state: GameState, pending: Pending): Promise<GameAction> {
-  if (pending.kind !== 'assign_damage') throw new Error('not damage')
-  const army = armyAt(state, pending.player, pending.slot)
-  const { required, suggestion } = damageOptions(army, pending.damage)
+/**
+ * Pick a maximal subset of an army by health: the damage sheet, and the targeting
+ * sheet, which are the same question asked by two rules.
+ *
+ * Shared rather than copied because the confirm gate is the fiddly part -- "as much as
+ * possible, no more than needed" -- and two copies of it would drift into a terminal
+ * that accepts an assignment the engine then refuses.
+ */
+async function askBudget(
+  state: GameState,
+  kind: 'assign_damage' | 'sai_target',
+  army: readonly UnitInstance[],
+  budget: number,
+  title: string,
+  nothingToTake: string,
+): Promise<GameAction> {
+  const { required, suggestion } = damageOptions(army, budget)
 
   if (required === 0) {
-    console.log(dim(`  ${pending.damage} damage cannot kill anything — no die has few enough health`))
-    return { kind: 'assign_damage', unitIds: [] }
+    console.log(dim(`  ${nothingToTake}`))
+    return { kind, unitIds: [] }
   }
 
   const chosen = new Set<string>()
   for (;;) {
     const absorbed = [...chosen].reduce((sum, id) => sum + unitType(state.units[id]!.typeId).health, 0)
     console.log(
-      `\n${bold(`Assign ${pending.damage} damage`)} — you must lose ${bold(String(required))} health ` +
+      `\n${bold(title)} — ${bold(String(required))} health ` +
         dim('(as much as possible, no more than needed)'),
     )
     army.forEach((unit, i) => {
@@ -358,13 +385,13 @@ async function askDamage(state: GameState, pending: Pending): Promise<GameAction
     )
 
     const reply = (await ask('> ')).trim().toLowerCase()
-    if (reply === 'a') return { kind: 'assign_damage', unitIds: suggestion }
+    if (reply === 'a') return { kind, unitIds: suggestion }
     if (reply === 'c') {
       chosen.clear()
       continue
     }
     if (reply === '' && absorbed === required) {
-      return { kind: 'assign_damage', unitIds: [...chosen] }
+      return { kind, unitIds: [...chosen] }
     }
     for (const token of reply.split(/\s+/).filter(Boolean)) {
       const unit = army[Number(token) - 1]
@@ -376,6 +403,30 @@ async function askDamage(state: GameState, pending: Pending): Promise<GameAction
       else chosen.add(unit.id)
     }
   }
+}
+
+async function askDamage(state: GameState, pending: Pending): Promise<GameAction> {
+  if (pending.kind !== 'assign_damage') throw new Error('not damage')
+  return askBudget(
+    state,
+    'assign_damage',
+    armyAt(state, pending.player, pending.slot),
+    pending.damage,
+    `Assign ${pending.damage} damage — you must lose`,
+    `${pending.damage} damage cannot kill anything — no die has few enough health`,
+  )
+}
+
+async function askSaiTarget(state: GameState, pending: Pending): Promise<GameAction> {
+  if (pending.kind !== 'sai_target') throw new Error('not an SAI target')
+  return askBudget(
+    state,
+    'sai_target',
+    armyAt(state, pending.target, pending.slot),
+    pending.budget,
+    `${pending.sai} — target`,
+    `${pending.sai} can take ${pending.budget} health-worth, and no die there is that small`,
+  )
 }
 
 async function askUnits(state: GameState, pending: Pending): Promise<GameAction> {
@@ -444,6 +495,7 @@ async function askReinforce(state: GameState, player: PlayerId): Promise<GameAct
 
 async function askHuman(state: GameState, pending: Pending): Promise<GameAction> {
   if (pending.kind === 'assign_damage') return askDamage(state, pending)
+  if (pending.kind === 'sai_target') return askSaiTarget(state, pending)
   if (pending.kind === 'reinforce' || pending.kind === 'retreat') return askUnits(state, pending)
 
   const choices = choicesFor(pending)

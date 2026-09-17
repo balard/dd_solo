@@ -8,6 +8,7 @@ import { unitType } from '../data/load'
 
 import type { Effect } from './effects'
 import type { DieRoll, RawDie } from './roll'
+import type { TargetTask } from './targeting'
 import type { RngState } from './rng'
 
 export type PlayerId = 'p1' | 'p2'
@@ -98,11 +99,13 @@ export type MarchStep =
   // the save roll that follows and Galeforce subtracts from it -- so the seam has to
   // be a real state the machine can rest on, not a local variable.
   | 'resolve_attack'
+  | 'sai_target_attack'
   | 'resolve_attack_saves'
   | 'assign_attack_damage'
   | 'assign_attack_riposte'
   | 'offer_counter'
   | 'resolve_counter'
+  | 'sai_target_counter'
   | 'resolve_counter_saves'
   | 'assign_counter_damage'
   | 'assign_counter_riposte'
@@ -117,6 +120,14 @@ export type MarchStep =
  */
 export interface PendingAttack {
   readonly dice: readonly RawDie[]
+  /**
+   * Targeting decisions this roll owes, in resolution order, drained one per action.
+   *
+   * Omitted when the roll owes none, which is every roll in a `V0_RULES` game -- the
+   * optional-and-omitted rule again, for the same digest reason as the rest of
+   * `CombatState`.
+   */
+  readonly targets?: readonly TargetTask[]
 }
 
 /**
@@ -205,6 +216,30 @@ export type Pending =
       readonly slot: TerrainSlot
       readonly damage: number
     }
+  /**
+   * A targeting SAI picking health-worth of units out of an opposing army.
+   *
+   * **The first pending answered by someone other than the army's owner.** `player`
+   * is the roller, who chooses; `target` and `slot` say whose army is being picked
+   * from. Every combat decision before this one was addressed to the player whose
+   * dice were at stake, and both clients assumed it.
+   *
+   * The selection rule is the opponent-targeting one (full rules p. 32): "you must
+   * apply the SAI's effect to the fullest extent possible by selecting the maximum
+   * number of targets allowed". That is `damageAssignmentProblem` exactly -- same
+   * maximal-subset arithmetic as an `assign_damage`, a different player choosing. The
+   * friendly "up to, including none" rule (p. 29) has no case until Phase 4e.
+   */
+  | {
+      readonly kind: 'sai_target'
+      readonly player: PlayerId
+      /** For the prompt and the log. */
+      readonly sai: string
+      readonly target: PlayerId
+      readonly slot: TerrainSlot
+      /** Health-worth that may be picked. */
+      readonly budget: number
+    }
   | { readonly kind: 'reinforce'; readonly player: PlayerId }
   | { readonly kind: 'retreat'; readonly player: PlayerId }
 
@@ -218,6 +253,7 @@ export type GameAction =
   | { readonly kind: 'choose_missile_target'; readonly slot: TerrainSlot }
   | { readonly kind: 'choose_counter_attack'; readonly counter: boolean }
   | { readonly kind: 'assign_damage'; readonly unitIds: readonly UnitId[] }
+  | { readonly kind: 'sai_target'; readonly unitIds: readonly UnitId[] }
   | { readonly kind: 'reinforce'; readonly moves: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[] }
   | { readonly kind: 'retreat'; readonly unitIds: readonly UnitId[] }
 
@@ -337,6 +373,36 @@ export type LogEntry =
       readonly kind: 'units_killed'
       readonly player: PlayerId
       readonly slot: TerrainSlot
+      readonly unitIds: readonly UnitId[]
+    }
+  /**
+   * A targeting SAI chose its victims.
+   *
+   * Written *before* the kills it causes, so the log reads "Flame targets the Oak
+   * Lord" and then "the Oak Lord is killed" rather than a die dying from nowhere.
+   * That was the Fireshadow-that-Smote-for-4 problem in Phase 1, and it is cheaper to
+   * pay for here than to come back for.
+   */
+  | {
+      readonly kind: 'sai_resolved'
+      /** The roller, who chose. Not the owner of `unitIds`. */
+      readonly player: PlayerId
+      readonly sai: string
+      readonly slot: TerrainSlot
+      readonly unitIds: readonly UnitId[]
+    }
+  /**
+   * Units moved from the DUA to the BUA, one way and for good.
+   *
+   * **No slot, deliberately.** A burial happens out of the DUA, which is not at a
+   * terrain -- so widening `units_killed`'s required `slot` was the alternative, and
+   * it would have made every one of the 25 recorded games carry a nullable field for
+   * a rule none of them can reach. Like `units_risen`, this is always a subset of the
+   * `units_killed` entry immediately before it.
+   */
+  | {
+      readonly kind: 'units_buried'
+      readonly player: PlayerId
       readonly unitIds: readonly UnitId[]
     }
   /**

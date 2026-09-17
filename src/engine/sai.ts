@@ -212,8 +212,53 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
   'Rise from the Ashes': (x, ctx) => (ctx.purpose.kind === 'save' ? gives('save', x) : NOTHING),
 }
 
+/**
+ * The SAIs that only `sai: 'full'` resolves: the ones that pick targets.
+ *
+ * A second table rather than a flag on the first, because the two rungs differ in
+ * *which SAIs exist*, not in what any one of them does. `'results'` never looks in
+ * here, so a targeting SAI stays silently inert on that rung exactly as it did before
+ * it was built -- which is what keeps `'results'` a playable rung and keeps
+ * `SAI_RULES` the thing Phase 1 shipped.
+ *
+ * (Firewalking and Teleport will eventually differ *by rung* rather than by existence
+ * -- their maneuver half works on both, their free move only on `'full'`. That is the
+ * case a rung argument is actually for, and it arrives in Phase 4e with them.)
+ */
+const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
+  /**
+   * "During a melee attack, target up to two health-worth of units in the defending
+   * army. The targets are killed and buried."
+   *
+   * The reference says *two*, not X -- and both Flame faces in the data are
+   * `2 SAI:Flame`, so reading the count off the face agrees with it exactly. The count
+   * is read anyway rather than hardcoded, because "the number printed on the face is
+   * the answer" is invariant 7, and hardcoding would quietly disagree with the data
+   * the day a third Flame face is transcribed.
+   *
+   * `fate: 'bury'` is what routes this and nothing else to `killAndBury`. Burial is
+   * two steps because the rules are two steps, and a Phoenix gets a Rise roll at each.
+   */
+  Flame: (x, ctx) =>
+    isAttack(ctx, 'melee')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: x, escape: 'none', fate: 'bury' }],
+          reroll: false,
+        }
+      : NOTHING,
+}
+
 /** The SAI names `sai: 'results'` resolves. Anything else on a face is inert. */
 export const LIVE_SAIS: readonly string[] = Object.keys(HANDLERS)
+
+/** The SAI names `sai: 'full'` adds on top of those. */
+export const TARGETING_SAIS: readonly string[] = Object.keys(FULL_HANDLERS)
+
+/** The handler this ruleset uses for this name, if it has one at all. */
+function handlerFor(sai: string, ruleSet: RuleSet): SaiHandler | undefined {
+  return HANDLERS[sai] ?? (ruleSet.sai === 'full' ? FULL_HANDLERS[sai] : undefined)
+}
 
 /**
  * The two SAIs that cast a spell, and so wait on `magic: 'spells'` (Phase 7) rather
@@ -241,7 +286,7 @@ const NEEDS_SPELLS: readonly string[] = ['Cantrip', 'Dispel Magic']
 export function saiEffects(face: SaiFace, context: RollContext, ruleSet: RuleSet): SaiOutcome {
   if (ruleSet.sai === 'inert') return NOTHING
 
-  const handler = HANDLERS[face.sai]
+  const handler = handlerFor(face.sai, ruleSet)
   if (handler !== undefined) return handler(face.count, context)
 
   if (ruleSet.sai === 'full') {
@@ -288,7 +333,7 @@ const ALL_PURPOSES: readonly RollPurpose[] = [
  */
 export function saiMaxResults(face: SaiFace, resultType: ResultType, ruleSet: RuleSet): number {
   if (ruleSet.sai === 'inert') return 0
-  if (HANDLERS[face.sai] === undefined) return 0
+  if (handlerFor(face.sai, ruleSet) === undefined) return 0
 
   let best = 0
   for (const purpose of ALL_PURPOSES) {

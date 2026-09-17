@@ -28,14 +28,21 @@ the dice and the opponent.
 > says why Sleep and Galeforce followed — **Phase 4 now owns five SAIs that all need one pause or
 > another in the middle of a roll**, which makes that seam the whole of its first half.
 >
-> **Phase 4 is landing in five slices, and 4a is done.** 4a is that seam and nothing else: the roll
-> split four ways with `resolveFaces` pure, an exchange split into an attack step and a save step
-> with the raw dice stashed in `CombatState.attack`, and `sai: 'full'` refusing per *name* rather
-> than blanket. No SAI moved rungs and the 25 goldens replay byte-identical, unregenerated — which
-> is the whole point of landing it alone. The four still to come are 4b (`sai_target`, Flame, and
-> the client surface), 4c (Sleep and Galeforce, the first `state.effects` producers), 4d (the five
+> **Phase 4 is landing in five slices; 4a and 4b are done.** 4a was the seam and nothing else: the
+> roll split four ways with `resolveFaces` pure, an exchange split into an attack step and a save
+> step with the raw dice stashed in `CombatState.attack`, and `sai: 'full'` refusing per *name*
+> rather than blanket. **4b added `sai_target` and `Flame`** — the first targeting SAI, the first
+> caller of `killAndBury`, and the first decision in the game addressed to somebody other than the
+> owner of the dice at stake. The 25 goldens replay byte-identical and unregenerated through both.
+> Still to come: 4c (Sleep and Galeforce, the first `state.effects` producers), 4d (the five
 > sub-roll SAIs), 4e (Wild Growth, the free moves, Choke and Confuse, then the flip to
 > `FULL_RULES`).
+>
+> **The app still plays `DUA_RULES`, so nothing built in 4b happens in a real game yet.** `'full'`
+> refuses the ten unbuilt targeting SAIs, so no force can play it until 4e — not even the Gorgon
+> mirror, whose only SAI is Flame but whose dice are all too big for a 2-health budget to take. Read
+> `PLAN-V1.md` §4b *Verification* before assuming the client surface is unexercised: it was checked
+> against a temporary scaffold, and 4c and 4d will need the same.
 >
 > Worth knowing before picking one up: **both home terrains are Towers and the Frontier is a City**
 > (Phase 0a gave each species a second die of its own type). So Tower's "may attack any terrain in
@@ -147,6 +154,10 @@ These are the things that break the project if violated:
   `<count> SAI:<Name>`. That count is a result count for some SAIs and an X parameter for others
   (`2 SAI:Flame` targets two health-worth of units), so let each SAI interpret its own number.
   Twelve of the 25 are live under `sai: 'results'`; see `RULES-V0.md` §8 and `src/engine/sai.ts`.
+- **`sai: 'full'` adds the SAIs that pick targets**, and on that rung an unbuilt one **throws**
+  rather than going quiet -- the opposite of `'results'`. Flame is the only one built so far.
+  Resolution order is roll order and multiples of one SAI always combine; both are house rules,
+  `RULES-V0.md` section 11. Nothing reaches this rung in a real game until Phase 4e.
 - **The DUA is a graveyard under `dua: 'inert'` and a resource under `'active'`** -- promotion,
   recruitment, burial and Rise from the Ashes' death trigger. See `RULES-V0.md` §9. Still true of
   both rungs: **nothing in a game calls promotion or recruitment yet** (Phase 5's City is the first
@@ -278,6 +289,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     unmissable icons worth exactly nothing in a melee attack. That is the rule, not a bug.
   - **An SAI this rung does not implement is silently inert, and that is deliberate.** It is what
     makes `'results'` playable rather than a half-built `'full'`; `'full'` is the rung that refuses.
+    **Two tables, not one**: `HANDLERS` is the `'results'` rung and `FULL_HANDLERS` is what
+    `'full'` adds, because the rungs differ in *which SAIs exist* rather than in what any one of
+    them does. Flame in the shared table means `SAI_RULES` — the configuration Phase 1 shipped —
+    quietly starts burying dice.
     **The refusal is per *name*, not blanket**: `saiEffects` resolves any SAI that has a handler and
     throws only for one that has none, so a Phase 4 slice moves a name into `HANDLERS` and both
     rungs change together, with no second table to keep in step. Cantrip and Dispel Magic get their
@@ -317,6 +332,21 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
       function; the four recorded games that end mid-combat are what would pay for it being wrong.
     - `beginExchange` *does* spread the old combat, and that is safe for the opposite reason to the
       rule below: it is the same exchange one step later, not the next one.
+  - **A targeting SAI is chosen in the gap, at `sai_target_*`.** `beginExchange` resolves the attack
+    faces *purely* to find the tasks, parks them on `combat.attack.targets`, and `stepTargeting`
+    drains them one decision at a time; `resolveSaves` then resolves the same faces again for the
+    totals. The second read is free only because `resolveFaces` draws nothing, which is what the 4a
+    split was for.
+    - **A task that can take nothing is dropped, not asked about** — "up to X health-worth" against
+      an army whose smallest die is bigger than X. Same rule as damage too small to kill, and the
+      normal case for `2 SAI:Flame` against monsters.
+    - **`Pending.sai_target` is answered by the roller, about somebody else's army.** `player` is
+      who chooses, `target`/`slot` is whose dice are at stake. Every combat decision before it was
+      addressed to the owner of the dice, and both clients assumed so — hence `SelectMode.side`
+      gaining `'theirs'` and `Board` stopping hard-coding the enemy half unselectable.
+    - The selection rule is `damageAssignmentProblem` unchanged: p. 32's "select the maximum number
+      of targets" is §6's damage rule word for word. The *friendly* rule ("any number, including
+      none") arrives with Wild Growth and has no case before it.
   - **`resolve_counter` is a gate, not a step to skip past.** Everything after it belongs to an
     exchange that happens only if the defender accepts, and its assignments read a `combat.damage`
     the counter has not written yet.
@@ -670,7 +700,7 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   engine passes a lot of small integers around and mixing them up is silent.
 - Rules tests read as scenarios: build a state, apply an action list, assert. Combat and damage
   assignment get tests before implementation.
-- Keep `docs/RULES-V0.md` §11 and `docs/OVERVIEW.md` §8 current. When a rules question gets
+- Keep `docs/RULES-V0.md` §12 and `docs/OVERVIEW.md` §8 current. When a rules question gets
   answered, move it out of Open Questions and into the body.
 
 ## Git

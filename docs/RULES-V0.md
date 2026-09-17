@@ -302,7 +302,59 @@ present" and for holding a captured terrain, still a legal target for damage, an
 anything else. Retreat is the only mover that has to refuse it — the Reinforce Step brings units
 *out* of Reserves, and a march turns the terrain die rather than moving anybody.
 
-## 11. Open questions
+## 11. Targeting SAIs under `sai: 'full'` (v1 Phase 4)
+
+`sai: 'full'` adds the SAIs that pick targets. It is being built a slice at a time, and on this
+rung an SAI that is not yet built **throws** rather than going quiet — the opposite of `'results'`,
+where an unbuilt SAI is silently inert. That is the difference between a playable rung and a
+half-built one: `'results'` is a game, `'full'` is a promise, and a promise that quietly does
+nothing is worse than one that refuses.
+
+**Built so far: Flame.** Cantrip and Dispel Magic are not on this rung at all — they cast a spell,
+so they wait on `magic: 'spells'` (Phase 7) and say so in their own words when refused.
+
+| SAI | What it does |
+|---|---|
+| Flame | During a melee attack, target up to two health-worth of units in the defending army. The targets are killed **and buried** — they go to the BUA, not the DUA, and nothing brings them back. |
+
+### House rules this rung adds
+
+Three, and the first two are about what the rulebook leaves to the roller.
+
+- **Resolution order is roll order.** The rules let the roller choose which SAI to apply first
+  ("apply their effects one by one in whatever order you choose", p. 27 step 4). v1 fixes it to the
+  order the dice came up in — unit order, then step-3 rerolls, which is the order every other
+  roll-derived list in the engine uses. The choice is only ever real when one SAI shrinks an army
+  that a later one must then pick maximally from, and a "choose the order" decision would be a
+  question `PassiveAI` could hold no opinion about.
+- **Multiples of the same SAI always combine.** "Multiples of the same SAI may be combined to
+  create a single larger effect" (p. 27) — *may*, and v1 always does. Combining is never worse for
+  the roller: two Flames of two health-worth take nothing from a 3-health die where one Flame of
+  four takes it, and the roller is forced to a maximum anyway, so the option is not a decision.
+  The rulebook's exceptions (p. 32) are SAIs that target an individual unit or move units out of
+  the army — Sleep, Galeforce and the two free moves — and those are never combined.
+- **An SAI that can take nothing raises no decision.** "Up to X health-worth" against an army whose
+  smallest die is larger than X can absorb nothing at all, so nothing is asked. That is §6's rule
+  about damage too small to kill, applied to the same arithmetic. It is the normal case for
+  `2 SAI:Flame` against monsters, which is worth knowing before reading a Gorgon mirror as a bug.
+
+### What is not a house rule, and is easy to misread as one
+
+- **The maximum must be taken.** "When an SAI targets an opponent's army or units you must apply
+  the SAI's effect to the fullest extent possible by selecting the maximum number of targets"
+  (p. 32) — which is §6's damage rule word for word, so it shares `damageAssignmentProblem` and
+  the same maximal-subset arithmetic. The *friendly* rule is the opposite ("any number ...
+  including none", p. 29) and has no case on this rung; Wild Growth and the free moves bring it.
+- **X is the number printed on the face.** Flame's reference text says "two", and both Flame faces
+  in the data are `2 SAI:Flame` — so reading the count off the face agrees with the rulebook
+  exactly. It is read rather than hardcoded because invariant 7 says the face already carries the
+  answer. Here that number is a *budget*, not a result count.
+- **The roller chooses, not the owner of the dice.** A targeting SAI is the first decision in the
+  game addressed to somebody other than the player whose units are at stake.
+
+
+
+## 12. Open questions
 
 
 - **Army builder** in the alpha, or only the two 30-health presets? (Currently: presets only.)

@@ -25,6 +25,7 @@ import {
 import { Glyph, type GlyphName } from './Glyph'
 import {
   damageSelection,
+  saiTargetSelection,
   describeFace,
   plainLabel,
   promptFor,
@@ -142,6 +143,61 @@ export function ActionBar({
               </button>
             </>
           )}
+        </div>
+      </div>
+    )
+  }
+
+  /**
+   * The same sheet as a damage assignment, pointed at the army opposite.
+   *
+   * It shares `damageSelection`'s arithmetic through `saiTargetSelection`, because the
+   * rule really is the same one: "you must apply the SAI's effect to the fullest
+   * extent possible by selecting the maximum number of targets allowed" (p. 32). What
+   * changes is the wording -- you are choosing what to destroy rather than what to
+   * lose -- and whose dice light up, which `SelectMode.side` decides.
+   */
+  if (prompt.custom === 'sai_target' && pending.kind === 'sai_target') {
+    const { absorbed, required, ready, suggestion } = saiTargetSelection(state, pending, selection)
+
+    return (
+      <div className="action-bar">
+        <p className="question">
+          <b>{pending.sai}</b> — target {pending.budget} health-worth at{' '}
+          {slotLabel(pending.slot, human)}
+          <span className="muted"> — choose enemy units</span>
+        </p>
+
+        <p className={`tally ${ready ? 'is-ready' : ''}`}>
+          targeted <b>{absorbed}</b> / must reach <b>{required}</b>
+          {!ready && absorbed > 0 && <span className="muted"> — take as much as you can</span>}
+        </p>
+
+        <div className="choices">
+          <button
+            type="button"
+            className="choice"
+            disabled={!ready}
+            onClick={() => {
+              dispatch({ kind: 'sai_target', unitIds: [...selection] })
+              onClearSelection()
+            }}
+          >
+            Confirm targets
+          </button>
+          <button
+            type="button"
+            className="choice secondary"
+            onClick={() => {
+              dispatch({ kind: 'sai_target', unitIds: suggestion })
+              onClearSelection()
+            }}
+          >
+            Auto
+          </button>
+          <button type="button" className="choice secondary" onClick={onClearSelection}>
+            Clear
+          </button>
         </div>
       </div>
     )
