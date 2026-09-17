@@ -3,9 +3,21 @@ import { describe, expect, it } from 'vitest'
 import { UNIT_TYPES, unitType } from '../data/load'
 import type { ResultType } from '../data/types'
 
+import type { Modifier } from './pipeline'
 import { rngFrom } from './rng'
-import { RESULT_TYPES, faceResults, maxArmyResults, maxResults, rollArmy } from './roll'
-import { V0_RULES, type RuleSet, type UnitInstance } from './types'
+import {
+  RESULT_TYPES,
+  faceResults,
+  maxArmyResults,
+  maxResults,
+  rerollSweep,
+  resolveFaces,
+  resolveRoll,
+  rollArmy,
+  rollFaces,
+  type RollSpec,
+} from './roll'
+import { SAI_RULES, V0_RULES, type RuleSet, type UnitInstance } from './types'
 
 /** A throwaway army from unit type ids, for rolling in isolation. */
 const armyOf = (...typeIds: string[]): UnitInstance[] =>
@@ -30,15 +42,16 @@ describe('faceResults', () => {
     expect(faceResults({ count: 3, icon: 'ID' }, resultType, V0_RULES)).toBe(3)
   })
 
-  it('counts nothing for an SAI while they are inert', () => {
-    expect(faceResults({ count: 4, icon: 'SAI', sai: 'Smite' }, 'melee', V0_RULES)).toBe(0)
-  })
-
-  it('refuses to guess once SAIs are switched on', () => {
-    const full: RuleSet = { ...V0_RULES, sai: 'full' }
-    expect(() => faceResults({ count: 4, icon: 'SAI', sai: 'Smite' }, 'melee', full)).toThrow(
-      /targeting SAIs are not implemented/,
-    )
+  /**
+   * An SAI face is worth 0 *here* at every rung, because SAI results are step 8 and
+   * this is step 5. It used to throw under `'full'`, a second copy of `saiEffects`'s
+   * refusal -- and one that could not tell an implemented SAI from an unimplemented
+   * one, so it would have refused a Counter the moment Phase 4 built its first
+   * targeting SAI. One place refuses, and it is the place that knows the names.
+   */
+  it.each(['inert', 'results', 'full'] as const)('counts nothing for an SAI under %s', (sai) => {
+    const ruleSet: RuleSet = { ...V0_RULES, sai }
+    expect(faceResults({ count: 4, icon: 'SAI', sai: 'Smite' }, 'melee', ruleSet)).toBe(0)
   })
 
   // The property the whole roller rests on: the number printed on the face is
@@ -168,5 +181,96 @@ describe('maxResults', () => {
         )
       }
     }
+  })
+})
+
+/**
+ * The seam Phase 4 opens: step 1, step 3 and steps 4-10 as three functions, with the
+ * last of them pure.
+ *
+ * Every mid-roll pause in the phase sits at the same joint -- between a step that
+ * consumes randomness and a step that is pure arithmetic over faces already on the
+ * table. These tests are what make that joint real rather than a claim in a comment.
+ */
+describe('the roll pipeline, split', () => {
+  const spec = (kind: ResultType = 'melee', modifiers: Modifier[] = []): RollSpec => ({
+    kinds: [kind],
+    modifiers,
+    context: { purpose: { kind: 'attack', action: 'melee' }, isCounter: false },
+  })
+
+  const army = armyOf(
+    'treefolk.oak_lord',
+    'treefolk.oak',
+    'firewalkers.guardian',
+    'firewalkers.sentinel',
+  )
+
+  it('composes back into resolveRoll, die for die and draw for draw', () => {
+    const [whole, wholeRng] = resolveRoll(army, spec(), rngFrom(99), SAI_RULES)
+
+    const [rolled, afterRoll] = rollFaces(army, rngFrom(99))
+    const [swept, afterSweep] = rerollSweep(rolled, spec(), SAI_RULES, afterRoll)
+    const parts = resolveFaces(swept, spec(), SAI_RULES)
+
+    expect(parts.dice).toEqual(whole.dice)
+    expect(parts.totals).toEqual(whole.totals)
+    expect(parts.effects).toEqual(whole.effects)
+    expect(afterSweep.counter).toBe(wholeRng.counter)
+  })
+
+  it('rolls every die once, in unit order, before any reroll', () => {
+    const [dice, after] = rollFaces(army, rngFrom(7))
+
+    expect(dice.map((die) => die.unitId)).toEqual(army.map((unit) => unit.id))
+    expect(dice.every((die) => die.reroll === undefined)).toBe(true)
+    expect(after.counter).toBe(rngFrom(7).counter + army.length)
+  })
+
+  /** The property the whole phase rests on: ask the same dice twice, get the same
+   *  answer, and consume nothing. It is what lets a later slice resolve a roll once
+   *  to discover a decision and again with the answer. */
+  it('resolves faces purely: same in, same out, no randomness', () => {
+    const [dice] = rollFaces(army, rngFrom(3))
+    const once = resolveFaces(dice, spec(), SAI_RULES)
+    const twice = resolveFaces(dice, spec(), SAI_RULES)
+
+    expect(twice).toEqual(once)
+    // Nothing about the dice list is mutated on the way through, either.
+    expect(dice.every((die) => die.reroll === undefined)).toBe(true)
+  })
+
+  /**
+   * `saiResults` joins at step 8: after step 7's divide, before step 9's multiply.
+   *
+   * The test that matters is the divide. Adding a player-supplied number to the final
+   * total instead would agree with this everywhere except here -- which is exactly the
+   * kind of agreement that holds until the first spell halves a save roll.
+   */
+  it('adds player-supplied results at step 8, undivided', () => {
+    // Seed 6 rolls these four dice to 6 raw save results, chosen so that the right
+    // answer and the wrong one are different numbers rather than coincidentally equal.
+    const [dice] = rollFaces(army, rngFrom(6))
+    const halve: Modifier = { kind: 'divide', resultType: 'save', by: 2 }
+
+    expect(resolveFaces(dice, spec('save'), SAI_RULES).totals['save'], 'raw subtotal').toBe(6)
+    expect(resolveFaces(dice, spec('save', [halve]), SAI_RULES).totals['save']).toBe(3)
+
+    const split = resolveFaces(
+      dice,
+      { ...spec('save', [halve]), saiResults: { save: 3 } },
+      SAI_RULES,
+    )
+
+    // 3 halved is 3 + 3 = 6. Folded in before the divide it would be floor(9 / 2) = 4,
+    // which is the bug this test exists to catch.
+    expect(split.totals['save']).toBe(6)
+  })
+
+  it('leaves the totals alone when nothing supplies step-8 results', () => {
+    const [dice] = rollFaces(army, rngFrom(11))
+    expect(resolveFaces(dice, { ...spec(), saiResults: {} }, SAI_RULES)).toEqual(
+      resolveFaces(dice, spec(), SAI_RULES),
+    )
   })
 })

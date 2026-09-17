@@ -7,7 +7,7 @@
 import { unitType } from '../data/load'
 
 import type { Effect } from './effects'
-import type { DieRoll } from './roll'
+import type { DieRoll, RawDie } from './roll'
 import type { RngState } from './rng'
 
 export type PlayerId = 'p1' | 'p2'
@@ -93,23 +93,47 @@ export type MarchStep =
   // they roll and compute -- but are still explicit states so the advance loop has
   // somewhere to stand, and so a v1 SAI with a delayed effect has a seam to occupy.
   | 'choose_target'
+  // An exchange is two steps, not one: the attacker rolls, and only then does the
+  // defender. A targeting SAI is chosen *between* them -- Sleep takes a die out of
+  // the save roll that follows and Galeforce subtracts from it -- so the seam has to
+  // be a real state the machine can rest on, not a local variable.
   | 'resolve_attack'
+  | 'resolve_attack_saves'
   | 'assign_attack_damage'
   | 'assign_attack_riposte'
   | 'offer_counter'
   | 'resolve_counter'
+  | 'resolve_counter_saves'
   | 'assign_counter_damage'
   | 'assign_counter_riposte'
 
 /**
+ * An attack roll that has landed, held while the exchange is paused between the
+ * attack roll and the save roll.
+ *
+ * Raw dice, so nothing derived is stored twice and no `Face` object reaches the
+ * golden digest. `resolveFaces` is pure, so the same dice resolve to the same numbers
+ * whenever the pause ends.
+ */
+export interface PendingAttack {
+  readonly dice: readonly RawDie[]
+}
+
+/**
  * The exchange currently being resolved.
  *
- * **The two Phase 1 fields are optional and must be omitted, never written as `0` or
- * `false`.** `digestState` puts `stableJson(state.turn)` in the golden digest and
- * four of the twenty-five recorded games end with a non-null combat, so a field that
- * is always present rewrites those digests for nothing. `counterSuppressed` is typed
- * `?: true` rather than `?: boolean` so that under `exactOptionalPropertyTypes` the
+ * **Every optional field is omitted, never written as `0` or `false`.**
+ * `digestState` puts `stableJson(state.turn)` in the golden digest and four of the
+ * twenty-five recorded games end with a non-null combat, so a field that is always
+ * present rewrites those digests for nothing. `counterSuppressed` is typed `?: true`
+ * rather than `?: boolean` so that under `exactOptionalPropertyTypes` the
  * falsy-but-present value cannot even be written.
+ *
+ * `attack` is the one field with a *lifetime* as well as a presence rule: it exists
+ * only between the two halves of an exchange and is dropped when the second half
+ * rebuilds this object field by field. `validateState` enforces that, because
+ * "cleared in `finishExchange`" is a claim about one function and the four recorded
+ * games that end mid-combat are what would pay for it being wrong.
  */
 export interface CombatState {
   readonly action: ActionKind
@@ -121,6 +145,9 @@ export interface CombatState {
   readonly riposte?: number
   /** Surprise, rolled by the attacker: the defender may not counter-attack. */
   readonly counterSuppressed?: true
+  /** Set at `resolve_*`, read and dropped at `resolve_*_saves`. Never present at a
+   *  step the machine rests on. */
+  readonly attack?: PendingAttack
 }
 
 export interface TurnState {

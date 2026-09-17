@@ -28,6 +28,15 @@ the dice and the opponent.
 > says why Sleep and Galeforce followed — **Phase 4 now owns five SAIs that all need one pause or
 > another in the middle of a roll**, which makes that seam the whole of its first half.
 >
+> **Phase 4 is landing in five slices, and 4a is done.** 4a is that seam and nothing else: the roll
+> split four ways with `resolveFaces` pure, an exchange split into an attack step and a save step
+> with the raw dice stashed in `CombatState.attack`, and `sai: 'full'` refusing per *name* rather
+> than blanket. No SAI moved rungs and the 25 goldens replay byte-identical, unregenerated — which
+> is the whole point of landing it alone. The four still to come are 4b (`sai_target`, Flame, and
+> the client surface), 4c (Sleep and Galeforce, the first `state.effects` producers), 4d (the five
+> sub-roll SAIs), 4e (Wild Growth, the free moves, Choke and Confuse, then the flip to
+> `FULL_RULES`).
+>
 > Worth knowing before picking one up: **both home terrains are Towers and the Frontier is a City**
 > (Phase 0a gave each species a second die of its own type). So Tower's "may attack any terrain in
 > play during a missile action" is the icon power that covers two of the three terrains here, and
@@ -241,6 +250,18 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **Species is derived, like armies are.** `speciesOf(state, player)` reads it off any of that
   player's dice, dead ones included; a rolled force has no preset id to look up, and a second copy
   of the fact could drift.
+- **A roll is four functions, and the last of them is pure.** `rollFaces` is step 1, `rerollSweep`
+  is step 3, `resolveFaces` is steps 4-10, and `resolveRoll` is their composition. Every mid-roll
+  pause in v1 Phase 4 sits at the same joint -- between a step that consumes randomness and a step
+  that is pure arithmetic over faces already on the table -- so a pause is *stash the faces, ask,
+  recompute*, and the recompute draws nothing. Hence `RawDie` (unit, type, face index, and nothing
+  derived): it is what gets stashed, and it keeps a `Face` object out of the golden digest.
+  `RollSpec.saiResults` is the other half of that seam -- step-8 results a player supplied rather
+  than a face, joining after step 7's divide, which is why it is a spec field and not a number
+  added to the final total.
+  - Note the name: `rollFaces`, not `rollDice`, because `rng.ts` already has a `rollDice` that
+    turns face counts into indices. Two functions of that name in one directory, both imported
+    into `sai.test.ts`, is a collision worth avoiding rather than aliasing around.
 - **A roll is a ten-step pipeline, not a sum** (`pipeline.ts`, full rules p. 27). `resolveRoll`
   rolls the dice and runs steps 5–10; `rollArmy` is the one-type, one-number door onto it that the
   rest of the engine uses. **The running value is a triple per result type — `{ id, normal, sai }`
@@ -257,14 +278,18 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     unmissable icons worth exactly nothing in a melee attack. That is the rule, not a bug.
   - **An SAI this rung does not implement is silently inert, and that is deliberate.** It is what
     makes `'results'` playable rather than a half-built `'full'`; `'full'` is the rung that refuses.
-    `sai.test.ts` asserts every name in the data is claimed by exactly one rung, so `npm run data`
-    cannot add one that falls through unnoticed.
+    **The refusal is per *name*, not blanket**: `saiEffects` resolves any SAI that has a handler and
+    throws only for one that has none, so a Phase 4 slice moves a name into `HANDLERS` and both
+    rungs change together, with no second table to keep in step. Cantrip and Dispel Magic get their
+    own message -- they wait on `magic: 'spells'`, not on this flag. `sai.test.ts` pins the exact
+    three-way partition *and* checks it against the engine, so `npm run data` cannot add a name that
+    falls through unnoticed and the list cannot drift from what actually throws.
 - **What a roll *counts* and what it is *for* are two questions.** `RollSpec.kinds` is the first;
   `RollSpec.context` (a `RollPurpose` plus `isCounter`) is the second, and it is what decides
   whether an SAI face does anything at all — "if a type of roll is not listed ... that SAI has no
   effect in that type of roll". They agree for every roll in Phase 1 and stop agreeing at Phase 6's
   dragon combination roll, so neither is derived from the other.
-- **`resolveRoll` rolls every die once, and only then rerolls** (steps 1 and 3, in that order). So
+- **`rollFaces` rolls every die once, and only then `rerollSweep` rerolls** (steps 1 and 3, in that order). So
   `dice` always begins with one entry per unit in unit order and every entry after it is a reroll,
   marked `reroll: true`. The queue is drained **FIFO**: with Rend on one face of one unit type no
   other order is distinguishable today and a recorded game depends on it forever.
@@ -273,11 +298,25 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   otherwise be dropped on the floor with every test still green. Rolls with nowhere to put an
   effect say so: `expectNoEffects` at the maneuver and roll-off sites, `expectOnly` in
   `resolveAttack`.
-- **One combat exchange is up to seven steps, and `COMBAT_SEQUENCE` is the only thing that knows
+- **One combat exchange is up to nine steps, and `COMBAT_SEQUENCE` is the only thing that knows
   the order.** Four of them assign damage — the attack's, the riposte back at the attacker, the
-  counter-attack's, and the riposte back at *that*. `resolveExchange` and `applyAssignDamage` both
+  counter-attack's, and the riposte back at *that*. `finishExchange` and `applyAssignDamage` both
   route through `afterCombatStep`; they used to decide independently, which was survivable with one
   assignment per exchange and is not with two.
+  - **An attack and its save roll are two steps, not one.** `beginExchange` rolls the attack and
+    stashes the raw dice in `CombatState.attack`; `finishExchange` resolves those faces, rolls the
+    saves and computes the damage. The seam exists so a targeting SAI can be chosen between them —
+    Sleep takes a die out of the very save roll that follows, Galeforce subtracts four from it —
+    and invariant 3 means such a decision *must* be a step the machine rests on.
+    - **`rollAttack` rolls for magic too**, and the zero-total early return moved to the far side
+      of the seam. Both used to return before the save roll was reached; leaving them there would
+      make a Galeforce on a magic action, or a Flame on a zero-result roll, compute correctly and
+      then get dropped — Phase 1's bug #3 a third time.
+    - **`combat.attack` is dropped by omission** when `finishExchange` rebuilds the state field by
+      field, and `validateState` checks it is gone. "Cleared in one function" is a claim about one
+      function; the four recorded games that end mid-combat are what would pay for it being wrong.
+    - `beginExchange` *does* spread the old combat, and that is safe for the opposite reason to the
+      rule below: it is the same exchange one step later, not the next one.
   - **`resolve_counter` is a gate, not a step to skip past.** Everything after it belongs to an
     exchange that happens only if the defender accepts, and its assignments read a `combat.damage`
     the counter has not written yet.

@@ -19,6 +19,7 @@
 import { UNIT_TYPES, terrainDie, unitType } from '../data/load'
 
 import { pruneEffects } from './effects'
+import { MID_EXCHANGE_STEPS } from './turn'
 import {
   TERRAIN_SLOTS,
   capturedCount,
@@ -113,6 +114,19 @@ export function validateState(state: GameState): string[] {
 
   if (state.rng.counter < 0 || !Number.isInteger(state.rng.counter)) {
     problems.push(`rng counter ${state.rng.counter} is not a non-negative integer`)
+  }
+
+  // A stashed attack roll exists only between the two halves of an exchange. It is
+  // dropped by omission when the second half rebuilds `combat`, which is a claim
+  // about one function -- so it is checked here rather than trusted. If it ever
+  // survived, `digestState` would carry a list of raw dice into the four recorded
+  // games that end mid-combat, and a golden would go red for the right reason but
+  // with a useless message.
+  if (state.turn.combat?.attack !== undefined && !MID_EXCHANGE_STEPS.includes(state.turn.marchStep)) {
+    problems.push(
+      `combat: an attack roll is still stashed at march step ${state.turn.marchStep}, ` +
+        `which is not inside an exchange`,
+    )
   }
 
   // An effect whose army has emptied or whose unit has left play should have been

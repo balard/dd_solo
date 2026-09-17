@@ -18,6 +18,7 @@ import {
   type SaiFace,
 } from './sai'
 import { stepGame } from './turn'
+import { validateState } from './validate'
 import {
   SAI_RULES,
   V0_RULES,
@@ -163,21 +164,50 @@ describe('the rungs of ruleSet.sai', () => {
     }
   })
 
-  it('refuses to play under sai: full, which is Phase 4', () => {
-    expect(() => saiEffects(sai('Smite'), { purpose: melee, isCounter: false }, FULL_RULES)).toThrow(
+  /**
+   * The refusal is per *name*, not blanket.
+   *
+   * It used to throw for every SAI face alike, which was right while none of the
+   * targeting SAIs existed and becomes wrong with the first one: `'full'` is meant to
+   * refuse a half-built ruleset, not to refuse the twelve SAIs that already work.
+   */
+  it('resolves an implemented SAI under sai: full', () => {
+    expect(saiEffects(sai('Counter'), { purpose: melee, isCounter: false }, FULL_RULES).results)
+      .toEqual({ melee: 4 })
+  })
+
+  it('refuses an unimplemented targeting SAI under sai: full', () => {
+    expect(() => saiEffects(sai('Flame'), { purpose: melee, isCounter: false }, FULL_RULES)).toThrow(
       /targeting SAIs are not implemented/,
     )
   })
 
+  it('says spells, not Phase 4, for the two SAIs that cast one', () => {
+    for (const name of ['Cantrip', 'Dispel Magic']) {
+      expect(() =>
+        saiEffects(sai(name), { purpose: melee, isCounter: false }, FULL_RULES),
+      ).toThrow(/casts a spell, which needs magic: 'spells'/)
+    }
+  })
+
+  it('is silently inert for the same SAI under sai: results', () => {
+    expect(saiEffects(sai('Flame'), { purpose: melee, isCounter: false }, SAI_RULES)).toEqual({
+      results: {},
+      effects: [],
+      reroll: false,
+    })
+  })
+
   it('names every SAI in the data, so none can fall through to inert unnoticed', () => {
-    // Phase 4's thirteen, listed rather than derived: a name appearing in neither
-    // list means `npm run data` added an SAI and nothing resolves it.
+    // The three-way partition Phase 4 walks across: a slice moves a name out of
+    // `deferred` and into `LIVE_SAIS`, and this test is what makes that a deliberate
+    // edit rather than something that happens quietly. `needsSpells` never moves --
+    // Cantrip and Dispel Magic wait on Phase 7, not on any rung of this flag.
+    const needsSpells = new Set(['Cantrip', 'Dispel Magic'])
     const deferred = new Set([
       'Bullseye',
-      'Cantrip',
       'Choke',
       'Confuse',
-      'Dispel Magic',
       'Double Strike',
       'Firecloud',
       'Flame',
@@ -198,12 +228,29 @@ describe('the rungs of ruleSet.sai', () => {
     // The split is pinned because the prose in CLAUDE.md, RULES-V0.md and PLAN-V1.md
     // all quote it, and nothing else would notice it going stale.
     expect(live.size, 'SAIs live under sai: results').toBe(12)
-    expect(deferred.size, 'SAIs still inert under sai: results').toBe(13)
+    expect(deferred.size, 'targeting SAIs still unbuilt at Phase 4a').toBe(11)
+    expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(2)
     for (const name of names) {
-      expect(live.has(name) || deferred.has(name), `${name} is resolved by neither rung`).toBe(true)
+      const claimed = live.has(name) || deferred.has(name) || needsSpells.has(name)
+      expect(claimed, `${name} is resolved by no rung`).toBe(true)
     }
     // And nothing is claimed twice, which is how a Phase 4 SAI would quietly ship.
-    for (const name of live) expect(deferred.has(name), name).toBe(false)
+    for (const name of live) {
+      expect(deferred.has(name) || needsSpells.has(name), name).toBe(false)
+    }
+
+    // The partition is not a list here and a different list in the engine: every
+    // deferred name must actually refuse, and every live name must actually resolve.
+    for (const name of deferred) {
+      expect(() =>
+        saiEffects(sai(name), { purpose: melee, isCounter: false }, FULL_RULES),
+      ).toThrow(/targeting SAIs are not implemented/)
+    }
+    for (const name of live) {
+      expect(() =>
+        saiEffects(sai(name), { purpose: melee, isCounter: false }, FULL_RULES),
+      ).not.toThrow()
+    }
   })
 })
 
@@ -220,6 +267,26 @@ describe('saiMaxResults', () => {
 
   it('is zero for every face under V0_RULES', () => {
     for (const name of LIVE_SAIS) expect(saiMaxResults(sai(name), 'melee', V0_RULES)).toBe(0)
+  })
+
+  /**
+   * The guard read `sai !== 'results'`, which answered 0 for `'full'` as well as for
+   * `'inert'` -- so `maxArmyResults` would have under-bounded every roll the moment a
+   * targeting SAI generated a result, and the symptom would have been a roll ceiling
+   * quietly below what the dice can do.
+   */
+  it('bounds a face under sai: full, not only under results', () => {
+    expect(saiMaxResults(sai('Counter'), 'save', FULL_RULES)).toBe(4)
+    expect(saiMaxResults(sai('Smite'), 'melee', FULL_RULES)).toBe(0)
+  })
+
+  /** An unclaimed name is asked about here before `saiEffects` gets to refuse it, so
+   *  the bound has to answer rather than throw. */
+  it('answers zero for an unimplemented SAI instead of throwing', () => {
+    for (const name of ['Flame', 'Cantrip', 'Wild Growth']) {
+      expect(() => saiMaxResults(sai(name), 'save', FULL_RULES), name).not.toThrow()
+      expect(saiMaxResults(sai(name), 'save', FULL_RULES), name).toBe(0)
+    }
   })
 })
 
@@ -735,6 +802,7 @@ describe('state shape under V0_RULES', () => {
         combat: { action: 'melee', targetSlot: 'frontier', damage: 0 },
       },
     })
+    expect(resolved.turn.combat).not.toBeNull()
     if (resolved.turn.combat !== null) {
       expect(Object.keys(resolved.turn.combat).sort()).toEqual(['action', 'damage', 'targetSlot'])
     }
@@ -745,6 +813,100 @@ describe('state shape under V0_RULES', () => {
       }
       expect(entry.kind).not.toBe('counter_suppressed')
     }
+  })
+})
+
+/**
+ * An exchange is two march steps, so that a targeting SAI can be chosen between the
+ * attack roll and the save roll.
+ *
+ * Nothing chooses anything yet -- these are the guards that the seam exists, that it
+ * carries the attack across, and above all that it *drops* it again. A stashed roll
+ * that survived into a resting step would put a list of raw dice into
+ * `stableJson(state.turn)`, which is in all 25 golden digests.
+ */
+describe('the two halves of an exchange', () => {
+  const twoOaklings = () =>
+    stage({
+      p1: { frontier: ['treefolk.oakling'] },
+      p2: { frontier: ['treefolk.oakling'] },
+      rng: rngShowing(['treefolk.oakling', 'treefolk.oakling'], [OAKLING_MELEE, 0]),
+      ruleSet: SAI_RULES,
+    })
+
+  const atResolveAttack = (state: GameState): GameState => ({
+    ...state,
+    turn: {
+      ...state.turn,
+      marchStep: 'resolve_attack',
+      combat: { action: 'melee', targetSlot: 'frontier', damage: 0 },
+    },
+  })
+
+  it('stops between the two rolls, holding the attack dice', () => {
+    const mid = stepGame(atResolveAttack(twoOaklings()))
+
+    expect(mid.turn.marchStep).toBe('resolve_attack_saves')
+    expect(mid.turn.combat?.attack?.dice).toHaveLength(1)
+    // The attack roll has happened; the save roll has not.
+    expect(mid.log.some((e) => e.kind === 'combat_resolved')).toBe(false)
+  })
+
+  it('drops the stashed roll again once the saves are rolled', () => {
+    const done = advance(atResolveAttack(twoOaklings()))
+
+    expect(done.turn.combat?.attack).toBeUndefined()
+    expect(done.log.filter((e) => e.kind === 'combat_resolved')).toHaveLength(1)
+    expect(validateState(done)).toEqual([])
+  })
+
+  /** The guard that stops the previous test being the only thing standing between a
+   *  stashed roll and 25 rewritten digests. */
+  it('is a validateState complaint if a stashed roll outlives its exchange', () => {
+    const state = twoOaklings()
+    const stranded: GameState = {
+      ...state,
+      turn: {
+        ...state.turn,
+        marchStep: 'offer_counter',
+        combat: {
+          action: 'melee',
+          targetSlot: 'frontier',
+          damage: 0,
+          attack: { dice: [{ unitId: 'x', typeId: 'treefolk.oakling', faceIndex: 0 }] },
+        },
+      },
+    }
+
+    expect(validateState(stranded)).toEqual([
+      expect.stringContaining('an attack roll is still stashed at march step offer_counter'),
+    ])
+  })
+
+  /**
+   * Magic takes no save roll, and used to return before the save roll was reached at
+   * all. It now goes through both halves like everything else, because Galeforce
+   * applies to "a magic action at a terrain" and an action that short-circuits past
+   * the seam is an SAI computed and then dropped.
+   */
+  it('routes a magic attack through both steps even though it takes no saves', () => {
+    const state = twoOaklings()
+    const magicAttack = advance({
+      ...state,
+      turn: {
+        ...state.turn,
+        marchStep: 'resolve_attack',
+        combat: { action: 'magic', targetSlot: 'frontier', damage: 0 },
+      },
+    })
+
+    const resolved = magicAttack.log.find((e) => e.kind === 'combat_resolved')
+    expect(resolved).toBeDefined()
+    if (resolved?.kind === 'combat_resolved') {
+      expect(resolved.saveTotal, 'magic allows no save roll').toBeNull()
+      expect(resolved.action).toBe('magic')
+    }
+    expect(magicAttack.turn.combat?.attack).toBeUndefined()
   })
 })
 

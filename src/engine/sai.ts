@@ -216,22 +216,47 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
 export const LIVE_SAIS: readonly string[] = Object.keys(HANDLERS)
 
 /**
+ * The two SAIs that cast a spell, and so wait on `magic: 'spells'` (Phase 7) rather
+ * than on any rung of this flag.
+ *
+ * Named rather than left to the general refusal below so that `'full'` can say *why*
+ * it will not play them. They are the two names still unclaimed when Phase 4 is done.
+ */
+const NEEDS_SPELLS: readonly string[] = ['Cantrip', 'Dispel Magic']
+
+/**
  * What one SAI face contributes to this roll.
  *
- * Returns nothing for an SAI this rung does not implement, rather than throwing:
- * that is what makes `'results'` a playable rung rather than a half-built `'full'`.
- * `'full'` is the one that refuses.
+ * **The rungs differ in what they do with a name no handler claims.** `'results'`
+ * returns nothing, which is what makes it a playable rung rather than a half-built
+ * `'full'`; `'full'` refuses, which is what stops a half-built `'full'` quietly
+ * playing a wrong game. So a Phase 4 slice moves a name into `HANDLERS` and the
+ * partition changes underneath both rungs at once -- there is no second table to keep
+ * in step, and `sai.test.ts` pins the exact three-way split.
+ *
+ * The refusal is per *name*, not blanket: under `'full'` a Counter resolves normally
+ * and only the unimplemented targeting SAIs throw. A blanket throw was right while
+ * none of them were built and is wrong the moment one is.
  */
 export function saiEffects(face: SaiFace, context: RollContext, ruleSet: RuleSet): SaiOutcome {
   if (ruleSet.sai === 'inert') return NOTHING
+
+  const handler = HANDLERS[face.sai]
+  if (handler !== undefined) return handler(face.count, context)
+
   if (ruleSet.sai === 'full') {
+    if (NEEDS_SPELLS.includes(face.sai)) {
+      throw new Error(
+        `${face.sai} casts a spell, which needs magic: 'spells' (Phase 7); ` +
+          `ruleSet.magic is '${ruleSet.magic}'`,
+      )
+    }
     throw new Error(
       `targeting SAIs are not implemented (ruleSet.sai === 'full', face ${face.count} ${face.sai})`,
     )
   }
 
-  const handler = HANDLERS[face.sai]
-  return handler === undefined ? NOTHING : handler(face.count, context)
+  return NOTHING
 }
 
 /** Every roll an SAI could be asked about, for the static bound below. */
@@ -253,9 +278,17 @@ const ALL_PURPOSES: readonly RollPurpose[] = [
  * Derived by asking the handlers rather than kept as a second table, so it cannot
  * drift away from what they actually do. Smite comes out 0 here, which is the check
  * that its damage was not written as melee results.
+ *
+ * The two guards are both load-bearing. `'inert'` generates nothing, so the bound is
+ * 0 -- but `'full'` generates *more* than `'results'` does, and the old test here was
+ * `sai !== 'results'`, which would have silently under-bounded every roll the moment
+ * a targeting SAI generated a result. And an unclaimed name is asked about rather
+ * than resolved, so it has to be answered before `saiEffects` gets the chance to
+ * refuse it.
  */
 export function saiMaxResults(face: SaiFace, resultType: ResultType, ruleSet: RuleSet): number {
-  if (ruleSet.sai !== 'results') return 0
+  if (ruleSet.sai === 'inert') return 0
+  if (HANDLERS[face.sai] === undefined) return 0
 
   let best = 0
   for (const purpose of ALL_PURPOSES) {

@@ -56,24 +56,52 @@ const MAX_REROLLS_PER_ROLL = 100
  *
  * The whole rule, in three lines -- and it stays that way. An SAI face contributes
  * nothing *here* whatever the ruleset says, because SAI results are step 8 and this
- * is step 5; `saiEffects` in `sai.ts` is where they come from. The `'full'` throw
- * stays as the guard that a half-built ruleset cannot quietly play a wrong game.
+ * is step 5; `saiEffects` in `sai.ts` is where they come from, and it is the one
+ * place that refuses an SAI the ruleset cannot play.
+ *
+ * It used to carry a copy of that refusal, which was right while `'full'` threw for
+ * every SAI alike and wrong the moment one of them was implemented: this function
+ * cannot tell a Counter from a Choke, so its throw would have refused the ones that
+ * work. `ruleSet` stays in the signature because the caller has it and a future rung
+ * may yet change what a *normal* face is worth.
  */
-export function faceResults(face: Face, resultType: ResultType, ruleSet: RuleSet): number {
+export function faceResults(face: Face, resultType: ResultType, _ruleSet: RuleSet): number {
   // An ID icon generates whatever you are rolling for, health-worth of it -- and
   // `count` is already that health.
   if (face.icon === 'ID') return face.count
 
-  if (face.icon === 'SAI') {
-    if (ruleSet.sai === 'full') {
-      throw new Error(
-        `targeting SAIs are not implemented (ruleSet.sai === 'full', face ${face.count} ${face.sai})`,
-      )
-    }
-    return 0
-  }
+  // Step 8, not step 5. `saiEffects` owns both the results and the refusal.
+  if (face.icon === 'SAI') return 0
 
   return face.icon === ICON_FOR[resultType] ? face.count : 0
+}
+
+/**
+ * A die as it landed: everything randomness decided about it, and nothing else.
+ *
+ * The `Face` is not stored because it *follows* from `(typeId, faceIndex)` through
+ * the same data the roll read it from -- the argument `digest.ts` already makes for
+ * rendering a die as `unitId@faceIndex=results`. Keeping it out is what lets a raw
+ * die be stashed in `CombatState` across a decision without putting a face object in
+ * the golden digest.
+ */
+export interface RawDie {
+  readonly unitId: UnitId
+  readonly typeId: string
+  /** Index into the unit type's `faces`. */
+  readonly faceIndex: number
+  /** Step 3: this die was rolled again by an SAI, and both faces count. */
+  readonly reroll?: true
+}
+
+/** The face a raw die is showing. */
+export function faceOf(die: RawDie): Face {
+  const type = unitType(die.typeId)
+  const face = type.faces[die.faceIndex]
+  if (face === undefined) {
+    throw new Error(`${die.typeId}: rolled face ${die.faceIndex} but the die has ${type.faces.length}`)
+  }
+  return face
 }
 
 /** One die's contribution to a roll. Kept per-die so the UI can show the dice and
@@ -186,6 +214,20 @@ export interface RollSpec {
    * more than one.
    */
   readonly idAllocation?: IdAllocation
+  /**
+   * Step 8 results a *player* supplied rather than a face: Wild Growth's save share,
+   * from Phase 4e.
+   *
+   * It joins exactly where an SAI's own results join -- after step 7's divide, before
+   * step 9's multiply -- which is the whole reason it is a spec field and not a number
+   * added to the final total. The two agree only while no step-9 multiplier has
+   * `share: 'all'`, and the eighth face's does not *yet*.
+   *
+   * Nothing writes it in Phase 4a. `resolveFaces` being pure is what lets a later
+   * phase resolve the same faces twice -- once to discover the decision, once with
+   * the answer -- without a second draw.
+   */
+  readonly saiResults?: Readonly<Partial<Record<ResultType, number>>>
 }
 
 export interface RollOutcome {
@@ -280,47 +322,106 @@ function perDieResults(
 }
 
 /**
- * Rolls a set of dice and resolves the result: steps 1 and 3 to 10.
+ * Step 1: every die, once, in unit order.
  *
- * **Two passes, not one interleaved sweep.** Step 1 rolls *every* die; step 3 is a
- * separate sweep that rerolls the ones an SAI says to. So `dice` always begins with
- * one entry per unit, in unit order -- exactly the stream v0 consumed -- and every
- * entry after that is a step-3 reroll. Interleaving would collapse the two steps and
- * be wrong the moment Phase 4's Bullseye and Double Strike reroll at a different
- * point than Rend does.
- *
- * **The reroll queue is drained FIFO**, in the order the rerolls were generated.
- * With Rend on one face of one unit type FIFO and depth-first are indistinguishable
- * today, which is exactly why the choice would otherwise be made by accident -- and
- * once a game is recorded, the order is load-bearing forever.
+ * Deliberately says nothing about what the faces mean -- it takes no `RollSpec` and
+ * no `RuleSet`, so "what randomness decided" and "what the rules make of it" are two
+ * functions and a caller cannot accidentally do the second twice.
  */
-export function resolveRoll(
+export function rollFaces(
   units: readonly UnitInstance[],
-  spec: RollSpec,
   rng: RngState,
-  ruleSet: RuleSet,
-): readonly [RollOutcome, RngState] {
-  const primary = primaryKind(spec)
-
-  const dice: DieRoll[] = []
-  const normals = new Map<ResultType, number>(spec.kinds.map((kind) => [kind, 0]))
-  const saiResults = new Map<ResultType, number>(spec.kinds.map((kind) => [kind, 0]))
-  const effects: RollEffect[] = []
-  let idPool = 0
+): readonly [readonly RawDie[], RngState] {
+  const dice: RawDie[] = []
   let state = rng
 
-  /** Rolls one die, folds it into the running totals, and says whether step 3 owes
-   *  it another roll. */
-  function rollOne(unit: UnitInstance, isReroll: boolean): boolean {
-    const type = unitType(unit.typeId)
-    const [faceIndex, next] = rollDie(state, type.faces.length)
+  for (const unit of units) {
+    const [faceIndex, next] = rollDie(state, unitType(unit.typeId).faces.length)
     state = next
+    dice.push({ unitId: unit.id, typeId: unit.typeId, faceIndex })
+  }
 
-    const face = type.faces[faceIndex]
-    if (face === undefined) {
-      throw new Error(`${unit.typeId}: rolled face ${faceIndex} but the die has ${type.faces.length}`)
+  return [dice, state] as const
+}
+
+/**
+ * Step 3: reroll the dice an SAI says to, and append each new face to the list.
+ *
+ * **A separate sweep, not interleaved with step 1.** So `dice` always begins with one
+ * entry per unit, in unit order -- exactly the stream v0 consumed -- and every entry
+ * after that is a step-3 reroll. Interleaving would collapse the two steps and be
+ * wrong the moment Bullseye and Double Strike reroll at a different point than Rend
+ * does.
+ *
+ * **The queue is drained FIFO**, in the order the rerolls were generated. With Rend
+ * on one face of one unit type FIFO and depth-first are indistinguishable today,
+ * which is exactly why the choice would otherwise be made by accident -- and once a
+ * game is recorded, the order is load-bearing forever.
+ */
+export function rerollSweep(
+  dice: readonly RawDie[],
+  spec: RollSpec,
+  ruleSet: RuleSet,
+  rng: RngState,
+): readonly [readonly RawDie[], RngState] {
+  const out: RawDie[] = [...dice]
+  const queue: RawDie[] = dice.filter((die) => classify(faceOf(die), spec, ruleSet).reroll)
+
+  let state = rng
+  let rerolled = 0
+
+  while (queue.length > 0) {
+    const die = queue.shift()
+    if (die === undefined) break
+    if (++rerolled > MAX_REROLLS_PER_ROLL) {
+      throw new Error(
+        `${die.typeId} (${die.unitId}) rerolled ${MAX_REROLLS_PER_ROLL} times in one roll; ` +
+          `an SAI handler is asking for a reroll unconditionally`,
+      )
     }
 
+    const [faceIndex, next] = rollDie(state, unitType(die.typeId).faces.length)
+    state = next
+
+    const again: RawDie = {
+      unitId: die.unitId,
+      typeId: die.typeId,
+      faceIndex,
+      reroll: true as const,
+    }
+    out.push(again)
+    if (classify(faceOf(again), spec, ruleSet).reroll) queue.push(again)
+  }
+
+  return [out, state] as const
+}
+
+/**
+ * Steps 4 to 10: what the rules make of faces already on the table.
+ *
+ * **Pure.** No RNG, no `GameState`, and no dependence on anything but the dice, the
+ * spec and the ruleset -- which is what lets a phase with a mid-roll decision resolve
+ * the same dice twice, once to discover the question and once with the answer, and
+ * consume no extra randomness doing it.
+ */
+export function resolveFaces(
+  dice: readonly RawDie[],
+  spec: RollSpec,
+  ruleSet: RuleSet,
+): RollOutcome {
+  const primary = primaryKind(spec)
+
+  const shown: DieRoll[] = []
+  const normals = new Map<ResultType, number>(spec.kinds.map((kind) => [kind, 0]))
+  // Seeded with the player's own step-8 results, which join exactly where a face's do.
+  const saiResults = new Map<ResultType, number>(
+    spec.kinds.map((kind) => [kind, spec.saiResults?.[kind] ?? 0]),
+  )
+  const effects: RollEffect[] = []
+  let idPool = 0
+
+  for (const die of dice) {
+    const face = faceOf(die)
     const contribution = classify(face, spec, ruleSet)
 
     idPool += contribution.idPool
@@ -329,41 +430,18 @@ export function resolveRoll(
       saiResults.set(kind, (saiResults.get(kind) ?? 0) + (contribution.saiResults[kind] ?? 0))
     }
     for (const effect of contribution.effects) {
-      effects.push({ ...effect, unitId: unit.id, sai: contribution.saiName ?? '' })
+      effects.push({ ...effect, unitId: die.unitId, sai: contribution.saiName ?? '' })
     }
 
-    dice.push({
-      unitId: unit.id,
-      typeId: unit.typeId,
-      faceIndex,
+    shown.push({
+      unitId: die.unitId,
+      typeId: die.typeId,
+      faceIndex: die.faceIndex,
       face,
       results: perDieResults(face, contribution, primary, spec.modifiers),
-      ...(isReroll ? { reroll: true as const } : {}),
+      ...(die.reroll === true ? { reroll: true as const } : {}),
       ...(contribution.effects.length > 0 ? { effects: contribution.effects } : {}),
     })
-
-
-    return contribution.reroll
-  }
-
-  // Step 1.
-  const queue: UnitInstance[] = []
-  for (const unit of units) {
-    if (rollOne(unit, false)) queue.push(unit)
-  }
-
-  // Step 3.
-  let rerolled = 0
-  while (queue.length > 0) {
-    const unit = queue.shift()
-    if (unit === undefined) break
-    if (++rerolled > MAX_REROLLS_PER_ROLL) {
-      throw new Error(
-        `${unit.typeId} (${unit.id}) rerolled ${MAX_REROLLS_PER_ROLL} times in one roll; ` +
-          `an SAI handler is asking for a reroll unconditionally`,
-      )
-    }
-    if (rollOne(unit, true)) queue.push(unit)
   }
 
   const allocation = allocateIds(idPool, spec.kinds, spec.idAllocation)
@@ -381,7 +459,25 @@ export function resolveRoll(
     )
   }
 
-  return [{ dice, totals, effects }, state] as const
+  return { dice: shown, totals, effects }
+}
+
+/**
+ * Rolls a set of dice and resolves the result: steps 1 and 3 to 10.
+ *
+ * The composition of the three above, and the door every roll that needs no pause
+ * goes through. A phase that *does* need one calls the three in turn and stops in
+ * between; see `combat.ts`, which splits an exchange across two march steps.
+ */
+export function resolveRoll(
+  units: readonly UnitInstance[],
+  spec: RollSpec,
+  rng: RngState,
+  ruleSet: RuleSet,
+): readonly [RollOutcome, RngState] {
+  const [rolled, afterRoll] = rollFaces(units, rng)
+  const [swept, afterSweep] = rerollSweep(rolled, spec, ruleSet, afterRoll)
+  return [resolveFaces(swept, spec, ruleSet), afterSweep] as const
 }
 
 /**
@@ -454,15 +550,25 @@ export function rollArmy(
     ruleSet,
   )
 
-  return [
-    {
-      resultType,
-      dice: outcome.dice,
-      total: outcome.totals[resultType] ?? 0,
-      effects: outcome.effects,
-    },
-    next,
-  ] as const
+  return [asResult(outcome, resultType), next] as const
+}
+
+/**
+ * A one-type outcome read as a `RollResult`.
+ *
+ * `RollOutcome.totals` is the authoritative shape -- a combination roll has no single
+ * total -- but every roll in the game today counts exactly one type, and the rest of
+ * the engine is written against `RollResult`. Shared so that a caller which resolves
+ * the faces itself, because it had to stop in the middle, reads them the same way
+ * `rollArmy` does.
+ */
+export function asResult(outcome: RollOutcome, resultType: ResultType): RollResult {
+  return {
+    resultType,
+    dice: outcome.dice,
+    total: outcome.totals[resultType] ?? 0,
+    effects: outcome.effects,
+  }
 }
 
 /** The most one die can generate for a result type. Used by the property tests and,

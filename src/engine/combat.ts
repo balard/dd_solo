@@ -8,8 +8,17 @@ import { terrainFaceAction } from '../data/load'
 import type { TerrainFaceNumber } from '../data/types'
 
 import { armyRoll } from './effects'
-import type { RollEffect } from './pipeline'
-import { rollArmy, type RollResult } from './roll'
+import type { Modifier, RollEffect } from './pipeline'
+import {
+  asResult,
+  resolveFaces,
+  rerollSweep,
+  rollArmy,
+  rollFaces,
+  type RawDie,
+  type RollResult,
+  type RollSpec,
+} from './roll'
 import type { RngState } from './rng'
 import type { RollContext } from './sai'
 import {
@@ -179,34 +188,79 @@ function expectOnly(
 }
 
 /**
- * One attack: the attacker rolls, the defender saves if there is anything to save
- * against, and the difference is the damage.
+ * An attack roll that has landed, with its save roll not yet made.
+ *
+ * Raw dice and nothing computed. Two reasons, and the second is the one that shaped
+ * this whole phase: it can be stashed in `CombatState` across a decision without a
+ * face object reaching the golden digest, and `resolveFaces` is pure, so the same
+ * dice can be resolved again once a mid-roll decision has been answered -- with no
+ * second draw.
+ */
+export interface AttackRollState {
+  readonly dice: readonly RawDie[]
+}
+
+/** The spec the attack roll is resolved under. Built in one place because
+ *  `rollAttack` and `resolveSaves` must agree on it exactly. */
+function attackRollSpec(spec: AttackSpec, modifiers: readonly Modifier[]): RollSpec {
+  return {
+    kinds: [spec.action],
+    modifiers,
+    context: { purpose: { kind: 'attack', action: spec.action }, isCounter: spec.isCounter },
+  }
+}
+
+/**
+ * The attacker's half: steps 1 and 3, and then stop.
+ *
+ * Split from the save roll because a targeting SAI is chosen *between* them -- a
+ * Sleep takes a die out of the very save roll that follows, and a Galeforce subtracts
+ * from it. Neither can be expressed while one function does both.
+ *
+ * It rolls for melee, missile **and magic** alike. Magic takes no save roll, but it
+ * can still carry a Galeforce ("or a magic action at a terrain"), and an action that
+ * short-circuits before the targeting step is an SAI computed correctly and then
+ * dropped on the floor with every test green.
+ */
+export function rollAttack(state: GameState, spec: AttackSpec): readonly [AttackRollState, RngState] {
+  // Both halves from one call: which dice may be rolled, and what modifies the
+  // result. A sleeping die is not in `units` and the eighth face is in `modifiers`.
+  const attackers = armyRoll(state, spec.attacker, spec.attackerSlot, spec.action)
+  const rollSpec = attackRollSpec(spec, attackers.modifiers)
+
+  const [rolled, afterRoll] = rollFaces(attackers.units, state.rng)
+  const [swept, afterSweep] = rerollSweep(rolled, rollSpec, state.ruleSet, afterRoll)
+
+  return [{ dice: swept }, afterSweep] as const
+}
+
+/**
+ * The defender's half: what the attack's faces are worth, the save roll, the damage.
  *
  * Two details worth not losing:
  *
  *  - A save roll only happens if the attack generated at least one result. A zero
  *    attack does not merely deal no damage, it produces no save roll at all -- and
- *    so does not consume any randomness.
+ *    so does not consume any randomness. The condition is the attack *total*, not
+ *    the damage: a Smite-only attack rolls zero melee and still kills.
  *  - Magic in v0 allows no save whatsoever, so `saveTotal` stays null however large
  *    the roll.
+ *
+ * The attacker's modifiers are gathered again rather than carried across. They are a
+ * pure query of the board, and the board is what may have changed in between -- a
+ * later phase's Flame kills defenders between the two halves, which must change the
+ * save roll and must not change the attack.
  */
-export function resolveAttack(state: GameState, spec: AttackSpec): AttackOutcome {
-  // Both halves from one call: which dice may be rolled, and what modifies the
-  // result. A sleeping die is not in `units` and the eighth face is in `modifiers`.
+export function resolveSaves(
+  state: GameState,
+  spec: AttackSpec,
+  attack: AttackRollState,
+  rng: RngState,
+): AttackOutcome {
   const attackers = armyRoll(state, spec.attacker, spec.attackerSlot, spec.action)
-
-  const attackContext: RollContext = {
-    purpose: { kind: 'attack', action: spec.action },
-    isCounter: spec.isCounter,
-  }
-  const [attackRoll, afterAttack] = rollArmy(
-    attackers.units,
-    spec.action,
-    state.rng,
-    state.ruleSet,
-    attackers.modifiers,
-    attackContext,
-  )
+  const rollSpec = attackRollSpec(spec, attackers.modifiers)
+  const attackRoll = asResult(resolveFaces(attack.dice, rollSpec, state.ruleSet), spec.action)
+  const afterAttack = rng
 
   expectOnly(attackRoll.effects, ['unsavable', 'suppress_counter'], `a ${spec.action} attack`)
   const unsavable = damageFrom(attackRoll.effects, 'unsavable')
@@ -273,4 +327,17 @@ export function resolveAttack(state: GameState, spec: AttackSpec): AttackOutcome
     saveRoll,
     rng: afterSave,
   }
+}
+
+/**
+ * One whole attack, both halves back to back.
+ *
+ * The door for a caller with no decision to take in the middle -- which in the engine
+ * is nobody, since `turn.ts` stops between the two on purpose. It is kept because it
+ * is how every combat test states a scenario, and because "the two halves compose
+ * back into the old single pass" is exactly the property this refactor claims.
+ */
+export function resolveAttack(state: GameState, spec: AttackSpec): AttackOutcome {
+  const [attack, afterAttack] = rollAttack(state, spec)
+  return resolveSaves(state, spec, attack, afterAttack)
 }

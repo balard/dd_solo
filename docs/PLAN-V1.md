@@ -786,6 +786,90 @@ honest alternative to regenerating 25 games for a field empty in all of them.
 
 **Deliverable.** `sai: 'full'`. The SAIs that pick targets, plus the two that move units.
 
+> **Landing in five slices, one commit each. 4a is done.**
+>
+> | Slice | Scope | State |
+> |---|---|---|
+> | **4a** | The seam: the roll split four ways, the exchange split in two, `'full'` refusing per name | ✅ landed |
+> | 4b | `sai_target`, `targeting.ts`, **Flame**, and the whole client surface (enemy-selectable board, prompts, CLI, both AIs) | |
+> | 4c | **Sleep** and **Galeforce** — the first `state.effects` producers, and `sai_target_army` | |
+> | 4d | The sub-rolls: **Bullseye, Double Strike, Smother, Firecloud, Seize**, via `rollUnits` / `unitRoll` | |
+> | 4e | **Wild Growth**, the free moves, **Choke** and **Confuse**, then the flip to `FULL_RULES` | |
+>
+> One commit per slice rather than one for the phase, against `CLAUDE.md`'s usual rule, for the
+> Phase 0b reason: 4a delivers nothing a player can see and its entire value is the 25 goldens
+> proving it changed no outcome. That proof is only worth something against a commit where nothing
+> else is moving. Every later slice changes outcomes by construction.
+
+### 4a — the seam — **landed**
+
+**Delivered.** `resolveRoll` became the composition of `rollFaces` (step 1), `rerollSweep` (step 3)
+and **`resolveFaces` (steps 4-10, pure)**, over a new `RawDie`. An exchange became two march steps
+— `resolve_attack` / `resolve_attack_saves`, and the same for the counter — with the attack's raw
+dice stashed in `CombatState.attack` between them. `sai: 'full'` stopped throwing for every SAI and
+started throwing only for one no handler claims. No SAI changed rung, the app still plays
+`DUA_RULES`, and the 25 goldens replay byte-identical and **unregenerated**.
+
+#### Where this section was wrong
+
+- **"Split `resolveRoll` at the step-1 / step-2 seam" was the wrong split.** It gives a delayed
+  effect somewhere to stand and nothing else. What every pause in this phase actually needs is a
+  **pure recompute** — resolve the same faces once to discover the question and again with the
+  answer, drawing nothing in between. Without that, `CombatState` has to carry `DieRoll[]` (fat,
+  with a `Face` object, and inside `stableJson(state.turn)`) and Wild Growth's answer has nowhere
+  to go but bolted onto the final total, which is step 10 pretending to be step 8. Hence four
+  functions rather than two, `RawDie` rather than `DieRoll`, and `RollSpec.saiResults`.
+- **The plan did not mention the two early returns, and both would have shipped silently.**
+  `resolveAttack` returned before the save roll for magic and for a zero-total attack. Leaving
+  either in front of the targeting step means a Galeforce on a magic action ("or a magic action at
+  a terrain") or a Flame on a zero-result roll is computed correctly and dropped on the floor with
+  every test green. That is Phase 1's bug #3 for the third time, and the third different disguise.
+- **Threading a `rung` argument through `SaiHandler` was premature and is not done.** The plan's
+  argument for it was Firewalking and Teleport, which are live on both rungs — but their free-move
+  half is 4e, so in 4a the parameter would have had no reader. `PLAN-V1.md` Phase 0b refused to
+  declare `RollContext` early for exactly this reason; the same answer applies here. What 4a
+  actually needed was the *partition* — handler present, `NEEDS_SPELLS`, or refused — which works
+  without it. Add the argument in 4e, with its first reader.
+- **`rollDice` was already taken.** `rng.ts` exports a `rollDice(rng, faceCounts)` that turns face
+  counts into indices, and `sai.test.ts` imports it. The step-1 function is `rollFaces`, which
+  pairs with `resolveFaces` and collides with nothing.
+
+#### Two things that would have shipped silently
+
+1. **`saiMaxResults` read `if (ruleSet.sai !== 'results') return 0`.** Correct for `'inert'` and
+   wrong for `'full'`, which generates *more* than `'results'` does — so `maxArmyResults` would
+   have under-bounded every roll the moment a targeting SAI generated a result, and the symptom
+   would have been a ceiling quietly below what the dice can do. It is now `=== 'inert'`, plus an
+   unclaimed-name guard so the bound answers instead of tripping the new refusal.
+2. **`faceResults` carried a second copy of the `'full'` refusal.** Right while `'full'` threw for
+   every SAI alike; wrong the moment one is implemented, because that function cannot tell a
+   Counter from a Choke and would have refused the twelve that work. One place refuses now, and it
+   is the one that knows the names.
+
+**Exit criterion.** Every existing test passes, the 25 goldens replay byte-identical and
+unregenerated, and `resolveRoll` is provably the composition of its three parts. ✅
+
+**Tests, as delivered.** `roll.test.ts` gained a *the roll pipeline, split* block (composition,
+step-1 ordering, purity, and step-8 placement); `sai.test.ts` gained *the two halves of an
+exchange* (the stash exists mid-exchange, is gone after, is a `validateState` complaint if it
+survives, and magic routes through both steps) plus the three-way rung partition, which now checks
+its own list against what the engine actually throws.
+
+> The step-8 test was **mutation-checked**: folding `saiResults` in before step 7's divide makes it
+> report 4 where the right answer is 6. Worth doing, because the first draft of that test used a
+> seed whose raw save total was 0 and would have passed against either implementation.
+
+**Verified by hand, beyond the suite.** 180 `RandomAI` games — 60 each of starter/`DUA_RULES`,
+bestiary/`DUA_RULES` and rolled/`SAI_RULES` — 9,200 exchanges through the new two-step path, 0
+stuck, `validateState` clean on every final state including the new `combat.attack` lifetime check.
+And one missile attack driven through the browser at `?forces=bestiary&seed=7`, which logged
+"4 missile − 4 saves = 0 damage" with both terrains named and no console errors.
+
+**No `SAVE_VERSION` bump.** 4a changes no decision, no dice consumption and no phase. The bump
+belongs to 4b, where `Pending` gains members an old action log cannot match.
+
+### The rest of the phase
+
 `Bullseye`, `Double Strike`, `Smother`, `Firecloud`, `Seize`, `Choke`, `Confuse`, `Flame`,
 `Wild Growth`, `Sleep`, `Galeforce`, and the free-move halves of `Firewalking` and `Teleport`.
 

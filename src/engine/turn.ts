@@ -13,7 +13,14 @@
  * action, which is what guarantees the victory check runs after every state change
  * rather than only at end of turn.
  */
-import { legalActions, missileTargets, resolveAttack, terrainAction } from './combat'
+import {
+  legalActions,
+  missileTargets,
+  resolveSaves,
+  rollAttack,
+  terrainAction,
+  type AttackSpec,
+} from './combat'
 import { damageAssignmentProblem, damageOptions } from './damage'
 import { killUnits } from './death'
 import { armyRoll, expireEffects, isAsleep, pruneEffects } from './effects'
@@ -213,9 +220,13 @@ function stepMarch(state: GameState): GameState {
     // states so the advance loop has somewhere to stand between the dice landing
     // and the damage being assigned.
     case 'resolve_attack':
-      return resolveExchange(state, false)
+      return beginExchange(state, false)
+    case 'resolve_attack_saves':
+      return finishExchange(state, false)
     case 'resolve_counter':
-      return resolveExchange(state, true)
+      return beginExchange(state, true)
+    case 'resolve_counter_saves':
+      return finishExchange(state, true)
 
     case 'assign_attack_damage':
     case 'assign_attack_riposte':
@@ -268,15 +279,26 @@ function stepMarch(state: GameState): GameState {
 
 const COMBAT_SEQUENCE = [
   'resolve_attack',
+  'resolve_attack_saves',
   'assign_attack_damage',
   'assign_attack_riposte',
   'offer_counter',
   'resolve_counter',
+  'resolve_counter_saves',
   'assign_counter_damage',
   'assign_counter_riposte',
 ] as const satisfies readonly MarchStep[]
 
 type CombatStep = (typeof COMBAT_SEQUENCE)[number]
+
+/** The steps an exchange is *inside*: between the attack roll and the damage it
+ *  deals. `CombatState.attack` may exist at these and nowhere else. */
+export const MID_EXCHANGE_STEPS: readonly MarchStep[] = [
+  'resolve_attack',
+  'resolve_attack_saves',
+  'resolve_counter',
+  'resolve_counter_saves',
+]
 
 type AssignStep = Extract<CombatStep, `assign_${string}`>
 
@@ -322,9 +344,11 @@ function damageAt(state: GameState, step: AssignStep): number {
 /**
  * Whether a step has anything to do, and so whether the walk below should stop on it.
  *
- * The two `resolve_*` steps answer false: both are entered deliberately -- by
- * choosing an action, and by accepting the counter-attack offer -- and never by the
- * walk.
+ * The four mid-exchange steps answer false. `resolve_attack` and `resolve_counter`
+ * are entered deliberately -- by choosing an action, and by accepting the
+ * counter-attack offer. The two `_saves` steps are entered by the half of the
+ * exchange before them, which sets the step directly rather than walking, because an
+ * exchange that has rolled its attack always owes a save roll.
  */
 function stepHasWork(state: GameState, step: CombatStep): boolean {
   if (isAssignStep(step)) {
@@ -365,32 +389,71 @@ function requireCombat(state: GameState) {
 }
 
 /**
- * Rolls one exchange and routes to damage assignment, the counter-attack, or the
- * end of the march.
+ * Who is attacking whom, and from where.
  *
- * Only melee offers a counter-attack, and only on the first exchange -- "Surprise
- * has no effect during a counter-attack" is the rulebook's way of saying counters
- * do not themselves get countered.
+ * The counter-attack swaps both ends, which is why it is derived in one place rather
+ * than at each half of the exchange: the two halves must agree exactly, and the way
+ * they would disagree is a save roll made by the wrong army.
  */
-function resolveExchange(state: GameState, isCounter: boolean): GameState {
+function exchangeSpec(state: GameState, isCounter: boolean): AttackSpec {
   const combat = requireCombat(state)
   const marcher = state.turn.marching
   const enemy = opponentOf(marcher)
   const marchSlot = marchingSlot(state)
 
-  const attacker = isCounter ? enemy : marcher
-  const defender = isCounter ? marcher : enemy
-  const attackerSlot = isCounter ? combat.targetSlot : marchSlot
-  const defenderSlot = isCounter ? marchSlot : combat.targetSlot
-
-  const outcome = resolveAttack(state, {
+  return {
     action: combat.action,
-    attacker,
-    attackerSlot,
-    defender,
-    defenderSlot,
+    attacker: isCounter ? enemy : marcher,
+    attackerSlot: isCounter ? combat.targetSlot : marchSlot,
+    defender: isCounter ? marcher : enemy,
+    defenderSlot: isCounter ? marchSlot : combat.targetSlot,
     isCounter,
-  })
+  }
+}
+
+/**
+ * The first half of an exchange: the attacker rolls, and the dice are stashed.
+ *
+ * Nothing is computed from them here. A targeting SAI chosen between the two halves
+ * can change what the save roll is -- which dice are in it, what modifies it, even
+ * which units are still alive to make it -- so the arithmetic belongs on the far
+ * side of the pause, not this one.
+ */
+function beginExchange(state: GameState, isCounter: boolean): GameState {
+  const combat = requireCombat(state)
+  const [attack, rng] = rollAttack(state, exchangeSpec(state, isCounter))
+
+  // A spread, unlike the rebuild below, and safe for the opposite reason: this is
+  // the *same* exchange one step later, not the next one. Nothing between here and
+  // `finishExchange` reads `damage` or `riposte`, and `finishExchange` rebuilds the
+  // object from the outcome rather than from this.
+  return withTurn(
+    { ...state, rng },
+    {
+      marchStep: isCounter ? 'resolve_counter_saves' : 'resolve_attack_saves',
+      combat: { ...combat, attack },
+    },
+  )
+}
+
+/**
+ * The second half: what the attack's faces were worth, the save roll, and the damage.
+ *
+ * Routes to damage assignment, the counter-attack, or the end of the march. Only
+ * melee offers a counter-attack, and only on the first exchange -- "Surprise has no
+ * effect during a counter-attack" is the rulebook's way of saying counters do not
+ * themselves get countered.
+ */
+function finishExchange(state: GameState, isCounter: boolean): GameState {
+  const combat = requireCombat(state)
+  const pending = combat.attack
+  if (pending === undefined) {
+    throw new Error(`reached ${state.turn.marchStep} with no attack roll waiting to be resolved`)
+  }
+
+  const spec = exchangeSpec(state, isCounter)
+  const { attacker, defender, attackerSlot, defenderSlot } = spec
+  const outcome = resolveSaves(state, spec, pending, state.rng)
 
   const entries: LogEntry[] = [
     {
@@ -419,6 +482,10 @@ function resolveExchange(state: GameState, isCounter: boolean): GameState {
   // Built field by field rather than spread over the old one: a stale `riposte` or
   // `counterSuppressed` carried from the opening attack into the counter-attack
   // would assign the same damage twice, and no total-checking test would see it.
+  //
+  // This is also the one place `attack` is dropped. It is dropped by *omission*, so
+  // a field added here later has to be written deliberately -- and the four recorded
+  // games that end mid-combat would catch it in the digest if one were not.
   const next: CombatState = {
     action: combat.action,
     targetSlot: combat.targetSlot,
@@ -431,7 +498,7 @@ function resolveExchange(state: GameState, isCounter: boolean): GameState {
 
   return afterCombatStep(
     withTurn(withLog({ ...state, rng: outcome.rng }, ...entries), { combat: next }),
-    isCounter ? 'resolve_counter' : 'resolve_attack',
+    isCounter ? 'resolve_counter_saves' : 'resolve_attack_saves',
   )
 }
 
