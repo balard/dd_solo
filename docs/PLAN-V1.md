@@ -62,7 +62,7 @@ G  Golden files: 25 recorded v0 games          DONE  cut before anything moves
 |                                  |
 +--> 3 Effects and durations ------+  DONE
                                    |
-                        4 SAIs B: targeting     4a 4b 4c 4d DONE; 4e to go
+                        4 SAIs B: targeting     DONE (4a-4e)
                                    |
                         5 Terrains and eighth faces
                                    |
@@ -786,7 +786,7 @@ honest alternative to regenerating 25 games for a field empty in all of them.
 
 **Deliverable.** `sai: 'full'`. The SAIs that pick targets, plus the two that move units.
 
-> **Landing in five slices, one commit each. 4a to 4d are done.**
+> **Landed in five slices, one commit each.**
 >
 > | Slice | Scope | State |
 > |---|---|---|
@@ -794,7 +794,7 @@ honest alternative to regenerating 25 games for a field empty in all of them.
 > | **4b** | `sai_target`, `targeting.ts`, **Flame**, and the whole client surface (enemy-selectable board, prompts, CLI, both AIs) | ✅ landed |
 > | **4c** | **Sleep** and **Galeforce** — the first `state.effects` producers, and `sai_target_army` | ✅ landed |
 > | **4d** | The sub-rolls: **Bullseye, Double Strike, Smother, Firecloud, Seize**, via `rollUnits` / `unitRoll` | ✅ landed |
-> | 4e | **Wild Growth**, the free moves, **Choke** and **Confuse**, then the flip to `FULL_RULES` | |
+> | **4e** | **Wild Growth**, the free moves, **Choke** and **Confuse**, then the flip to `FULL_RULES` | ✅ landed |
 >
 > One commit per slice rather than one for the phase, against `CLAUDE.md`'s usual rule, for the
 > Phase 0b reason: 4a delivers nothing a player can see and its entire value is the 25 goldens
@@ -1142,63 +1142,97 @@ a Seize sends an ID to Reserves and kills the rest; neither sees an army modifie
 > tooltip inside a die tile and another inside a roll strip, and threading a prop to them means
 > fourteen call sites that a fifteenth can silently forget.
 
-### 4e — what is still owed
+### 4e — the delayed effects, the friendly SAIs, and the flip — **landed**
 
-Three SAIs and two free moves: `Wild Growth`, `Choke`, `Confuse`, and the free-move halves of
-`Firewalking` and `Teleport`.
+**Delivered.** **Choke**, **Confuse**, **Wild Growth** and the free-move halves of **Firewalking**
+and **Teleport**. The save roll split in two the way the attack roll did in 4a, so the rulebook's
+step 2 — "when rolling for saves against an attack, Delayed Effects are applied now" — is a step the
+machine rests on. `FULL_RULES` is exported and is what `useGame`, `newGame` and the CLI play. The 25
+goldens replay byte-identical and **unregenerated**.
 
-**What the first four slices already supply**, so this is not the plan's original list of three
-new mechanisms any more:
+#### Where this section was wrong
 
-- The pause inside an exchange **exists**: `beginExchange` → `sai_target_*` → `finishExchange`, with
-  the raw dice parked in `CombatState.attack`. What 4e needs is a *second* pause, on the far side of
-  the save roll rather than before it.
-- `targeting.ts`, `Pending.sai_target`, `sai_target_army`, the enemy-selectable board, both CLI
-  sheets and both AI branches are built and tested.
-- `resolveFaces` is pure, so any mid-roll decision is *stash the faces, ask, recompute* with no
-  extra draw. `RollSpec.saiResults` is already the channel for a player-supplied step-8 number,
-  which is what Wild Growth's save share needs and the only thing currently using it is a test.
-- **A unit roll is a solved problem**: `unitRoll` gathers a single die's modifiers and `rollUnits`
-  rolls it, both with the p. 28 rule tested. Nothing in 4e needs a sub-roll, but Choke's "units that
-  rolled an ID icon" reads faces the way Seize does.
+- **"The throwing set down to `{ Cantrip, Dispel Magic }`" would have shipped a crashing app.**
+  Every force but four carries one of those two, so the flip as planned would have thrown into the
+  error boundary the first time a Genie rolled a Cantrip. The fix was not a gate: **both were
+  misfiled.** Cantrip's first sentence is "during a magic action, Cantrip generates X magic
+  results" — a plain result generator that works under the §4 magic house rule, and that belonged
+  in Phase 1; only its second sentence needs spells, and magic results with nothing to buy are worth
+  zero rather than unimplemented. Dispel Magic's `Applies` column is **Special**: it answers a spell
+  being announced, takes no part in any roll in the sequence, and can never fire while no spell is
+  ever announced. So **no SAI in `data/` throws any more**, and every force is playable.
+- **Wild Growth's promotion rule is not "one step at a time".** The plan recorded "an Oakling to an
+  Oak and on to an Oak Lord costs 2", i.e. a budget spent on steps. The rule adopted is that a
+  promotion costs **the health it gains** and may jump as far as the budget allows: three buys three
+  1-health units their 2-health partners, *or* takes a single 1-health unit straight to a monster.
+  `promotionMatching`'s exactly-one-step rule is untouched and still what the City will use.
+- **The plan assumed one new pause. There are two askers at it.** Choke and Confuse are the
+  attacker's, chosen about the defender's dice; Wild Growth and the free moves belong to whoever
+  made the roll, which on a save roll is the defender. They share one pause because nothing between
+  them is observable — no save roll in the game has a step-3 reroll to come between them.
+- **`DamageSelection.ready` relaxing from `===` to `<=` was the wrong shape.** The friendly rule is
+  not a looser damage assignment: a promotion is a *pair* and a free move has a *destination*, so
+  both got their own drafts (`promoteDraft`, `moveDraft`) and the opponent-targeting arithmetic was
+  left alone.
+- **`sai_move` did not need a units list that can be empty; it needed a nullable slot.** "This unit
+  **may** move itself" means declining and moving the mover alone are two different answers, and a
+  list cannot say which is which.
 
-**The second pause, and the friendly selection rule.**
+#### Three things that would have shipped silently
 
-- **Wild Growth** splits X between save results and promotions, decided *after* the save roll lands
-  and before its total is final. Its X is a **health budget one unit may spend twice** — an Oakling
-  to an Oak and on to an Oak Lord costs 2 — which `promotionMatching` deliberately does not model,
-  so it needs `promotionPasses` / `promoteWithin` beside it rather than inside it.
-- **Choke and Confuse** are true step-2 delayed effects: roll the saves, *then* apply them, then
-  rerolls, then the totals. Choke needs the faces to exist before its targets can be chosen ("units
-  that rolled an ID icon"), so the save roll has to split the way the attack roll did in 4a — and
-  **the attacker chooses, during the defender's roll**, which is what 4b's `'theirs'` selection mode
-  was built for.
-- **The free moves** are the first *friendly* targets, and the `UP TO` rule (p. 29) is the opposite
-  of the one every slice so far has used: any number **including none**, where p. 32 forces the
-  maximum against an opponent. `DamageSelection.ready` relaxes from `===` to `<=` for these, and
-  `sai_move` is the pending that carries a destination as well as units.
+1. **`stepGame` pruned effects *after* the victory check**, so a game won by wiping out an army that
+   was carrying a Galeforce left the effect behind forever — a `validateState` breach in the final
+   state of a finished game. It was reachable from Phase 3 onward and nothing had ever reached it:
+   4d's fuzz ran on four fixtures, and the Satyr — the first force that can both cast an effect and
+   be wiped out while it is live — was not one of them. Found by widening the fuzz.
+2. **`RandomAI` did not know about Choke's eligible set**, so it answered with dice that had not
+   rolled an ID and the engine refused them. `PassiveAI` had been taught; the fuzz opponent had not,
+   which is `CLAUDE.md`'s own rule — a decision that gains a dimension has to reach the fuzz
+   opponent or the fuzz quietly narrows. Here it did not narrow, it failed, which is the better
+   failure.
+3. **Wild Growth on an *attack* roll advertised save results it could not deliver.** The sheet read
+   "or 4 save results if you stop" and the log read "and 3 save results", while an attack roll counts
+   melee, missile or magic and never save. The split is still legal — the rules permit the bad
+   choice — so `Pending.sai_promote.saveResultsCount` says whether the leftover will be counted, and
+   both clients say plainly when it will not. Caught by reading the log of a browser game, not by a
+   test.
 
-**Then the flip.** `FULL_RULES` exported, `useGame` and the CLI moved to it, the throwing set down
-to `{ Cantrip, Dispel Magic }` — which is the first moment any force can play Phase 4, the four
-monster fixtures having been able to since 4b. `faceLabel` already follows the ruleset rather than a
-table, so the flip changes every face's hover text correctly and needs no edit there.
+**Exit criterion.** All 25 SAIs resolve; `sai: 'full'` refuses only a name that is not in the box.
+✅
 
-**Exit criterion.** All 25 SAIs resolve except Cantrip and Dispel Magic, which throw a named
-"needs spells" error under `magic: 'simplified'`. 1000 fuzz games clean with `sai: 'full'`.
+**Tests, as delivered.** `targeting.test.ts` grew to 44 cases; `sai.test.ts` to 61.
 
-**Tests still owed** (the ones 4a–4d delivered are listed under their own headings):
+| Case | Expected |
+|---|---|
+| Choke | kills only the dice that rolled an ID **and** removes their saves from the total (mutation-checked: leaving the dice in makes it 6 instead of 4) |
+| Choke with no ID rolled | no decision raised at all |
+| Confuse | rerolls in place; the discarded face is gone from the total, and the draw lands between step 1 and step 3 |
+| Wild Growth | an Oakling jumps two steps to an Oak Lord for 2, and the other 2 arrive as save results |
+| Wild Growth on an attack roll | `saveResultsCount: false`, and the log claims nothing |
+| A die named twice | `IllegalActionError` |
+| A free move | walks the mover and its passengers, logs both ends; declining moves nothing and logs nothing |
+| Too many passengers | refused — "up to three health-worth" is a cap, not a target |
+| The parked save dice | gone once the exchange ends, `validateState` clean |
+| The rung partition | twelve → **fourteen** on `'results'`, eleven on `'full'`, **none** unbuilt, **none** waiting on spells |
 
-- Choke kills only units that rolled an ID, *and* removes their save contribution from the total.
-- Confuse rerolls its targets and discards the previous results entirely; the draw order is step 1,
-  then Confuse, then step 3.
-- Wild Growth: the save share joins undivided; an Oakling promoted twice costs 2 and
-  `exchangeWithDua` never sees it twice.
-- Firewalking on a save roll offers the move; on a maneuver roll it does not; declining moves
-  nothing and logs nothing.
+**No `SAVE_VERSION` bump.** Saving is off, so nothing replays; and a record carries its own
+`ruleSet`, so one written under `DUA_RULES` would go on replaying under it.
 
-**`SAVE_VERSION` is already at 6**, bumped in 4b for the decision-order change. 4d did not move it
-and 4e adds more pendings to the same seam; neither needs a bump unless it changes dice consumption
-on a path a version-6 record could have taken — and no version-6 record can reach `sai: 'full'`.
+#### Verification
+
+- **The standing fuzz now runs every force.** `ai.test.ts` builds its pairs from the health groups
+  rather than a list, so a force that cannot be fuzzed is a bug rather than a fact of life: 66
+  games, 0 stuck, `validateState` clean, with Flame, Smother, Seize, Confuse, promotions and moves
+  all asserted to have fired. A wider hand-run over every pairing and 3 seeds each — 324 games,
+  385,534 decisions — is what found the two silent bugs above.
+- **The browser, with no scaffold for the first time in Phase 4.** A 23-turn starter-vs-starter game
+  under `FULL_RULES` with Cantrip and Dispel Magic dice on the board and no crash; the free-move
+  sheet tallying 0/3, 3/3 and 7/3 with the destinations gated and "Stay put" never gated, logging
+  *Teleport walks Unicorn, Oak Lord from Your home to Frontier*; and the promotion sheet offering
+  *→ Satyr (1)* for a 3-health Noble Willow, staging the pair, and logging
+  *Wild Growth Noble Willow → Satyr and 3 save results*.
+- Choke's eligible-set narrowing and Confuse are covered by unit tests only: both need the defender
+  to roll particular faces during an attack of mine, which no amount of clicking makes likely.
 
 ### Where each of the 25 SAIs lands
 
@@ -1206,10 +1240,9 @@ A ✅ means **built**; `n / m` means the SAI lands in two pieces. `sai.test.ts` 
 partition — twelve on `'results'`, three on `'full'`, eight unbuilt, two waiting on spells — **and
 checks it against the engine**, so this table cannot quietly disagree with the code.
 
-Twenty of the twenty-five are built, and three of the five that are not are Phase 4e's. Note what
-"built" does *not* mean for the app: it plays `DUA_RULES`, so every targeting SAI is inert in a real
-game until 4e flips it. It **can** be played, though — four monster fixtures carry no refused SAI,
-which is what 4d's fuzz runs on.
+**All twenty-five are built**, and the app plays them: Phase 4e exported `FULL_RULES` and moved
+`useGame`, `newGame` and the CLI onto it. What is left of Phase 7 in this table is what Cantrip's
+magic results may *buy* and the window Dispel Magic answers in — not the faces, which resolve now.
 
 | SAI | What it needs | Where |
 |---|---|---|
@@ -1231,13 +1264,13 @@ which is what 4d's fuzz runs on.
 | Smother | targeting + maneuver sub-roll | **4d ✅** |
 | Firecloud | targeting + maneuver sub-roll | **4d ✅** |
 | Seize | targeting + ID sub-roll + move to Reserves | **4d ✅** |
-| Wild Growth | promotion (2 ✅) **plus a pause mid-roll to split X** | 4e |
-| Choke | delayed until after saves; ID detection; save suppression | 4e |
-| Confuse | delayed until after saves; reroll of targets | 4e |
-| Firewalking | maneuver results / free move on non-maneuver rolls | 1 ✅ / 4e |
-| Teleport | maneuver results / free move on non-maneuver rolls | 1 ✅ / 4e |
-| Cantrip | spells | 7 |
-| Dispel Magic | spells + an announce-before-resolve window | 7 |
+| Wild Growth | promotion (2 ✅) **plus a pause mid-roll to split X** | **4e ✅** |
+| Choke | delayed until after saves; ID detection; save suppression | **4e ✅** |
+| Confuse | delayed until after saves; reroll of targets | **4e ✅** |
+| Firewalking | maneuver results / free move on non-maneuver rolls | 1 ✅ / **4e ✅** |
+| Teleport | maneuver results / free move on non-maneuver rolls | 1 ✅ / **4e ✅** |
+| Cantrip | magic results on a magic action / spells to buy with the rest | **4e ✅** / 7 |
+| Dispel Magic | nothing in any ordinary roll (**4e ✅**) / its special roll needs spells | 7 |
 
 ---
 
@@ -1595,15 +1628,19 @@ is the unit tests, while `V0_RULES` keeps the 1000 games *and* the 25 goldens �
 least needs them. Every phase from here widens it further. Closing it is one `it.each` over two
 rulesets — and per-rule trigger counters, or a clean run proves nothing about the rare faces.
 
-**Phase 4 widened it a fourth way, and 4d closed that one.** 4a, 4b and 4c were each verified by a
-hand-run of 240 `RandomAI` games under `DUA_RULES` and `SAI_RULES`, and `sai: 'full'` was written up
-here as impossible to fuzz until 4e — because it refuses the unbuilt SAIs and "every force in the
-project carries at least one". **That was false**, and on a detail this plan had already implemented:
-the Gorgon mirror's only SAI is Flame, and two Flames combine into a budget that kills (§4b). Four
-fixtures qualify once 4d lands, so `sai: 'full'` now has a **standing fuzz** — 120 games with
-per-SAI trigger counters, in `ai.test.ts` beside the 1000-game one. The gap it closes is the newest
-one; the three older widenings below are untouched, and `SAI_RULES` and `DUA_RULES` still have no
-fuzz of their own.
+**Phase 4 widened it a fourth way; 4d closed that one and 4e closed it properly.** 4a, 4b and 4c
+were each verified by a hand-run of 240 `RandomAI` games under `DUA_RULES` and `SAI_RULES`, and
+`sai: 'full'` was written up here as impossible to fuzz until 4e — because it refuses the unbuilt
+SAIs and "every force in the project carries at least one". **That was false**, and on a detail this
+plan had already implemented: the Gorgon mirror's only SAI is Flame, and two Flames combine into a
+budget that kills (§4b). 4d fuzzed the four fixtures that qualified; **4e finished the set, so the
+standing fuzz builds its pairs from the health groups and runs every force there is** — a force that
+cannot be fuzzed is now a bug rather than a fact of life. It earned its keep immediately, finding an
+effect that outlived a won game and a `RandomAI` that had never been taught Choke's eligible set.
+
+What is *still* open is the oldest gap, and it is now the only one: **`FULL_RULES` is what the app
+plays, and the 1000-game fuzz still runs `V0_RULES`.** The full-rules fuzz is 66 games, not 1000.
+Closing that is one `it.each` over two rulesets, and it is cheaper now than it has ever been.
 
 **The verification scaffold was the other new risk, and it shrank rather than compounding.** 4b
 needed a preset and a ruleset flip; 4c needed both refusal branches stubbed as well; **4d needed one

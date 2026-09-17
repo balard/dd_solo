@@ -125,6 +125,47 @@ export type RollEffectBody =
    * reading it would be wrong.
    */
   | { readonly kind: 'galeforce' }
+  /**
+   * Choke: kill up to X health-worth of the defenders **that rolled an ID icon**, and
+   * do not count their results.
+   *
+   * A *delayed* effect -- "this effect is applied when resolving Delayed Effects",
+   * which is step 2 of the pipeline, when the defender's save dice have landed and
+   * before anything has been counted. It cannot ride on `target_enemy`, which is
+   * chosen before the save roll exists: the whole question is which dice came up ID.
+   */
+  | { readonly kind: 'choke'; readonly health: number }
+  /**
+   * Confuse: reroll up to X health-worth of the defenders, "ignoring all previous
+   * results".
+   *
+   * Also step 2, and note what makes it different from every other reroll in the game:
+   * step 3's rerolls *add* a die to the roll and both faces count, while this one
+   * **replaces** the face. A die that is confused was never rolled, as far as the
+   * total is concerned.
+   */
+  | { readonly kind: 'confuse'; readonly health: number }
+  /**
+   * Wild Growth: X split between save results and promotions, however the roller
+   * likes.
+   *
+   * The first effect that is *friendly* -- it reaches into the roller's own army --
+   * and the first whose answer is a number the roll then has to use, which is what
+   * `RollSpec.saiResults` has been waiting for since Phase 4a.
+   */
+  | { readonly kind: 'wild_growth'; readonly budget: number }
+  /**
+   * Firewalking and Teleport: "this unit may move itself and up to three health-worth
+   * of units in its army to any terrain."
+   *
+   * `unitId` is not on the body -- `resolveRoll` stamps it, and it matters here rather
+   * than only for the log, because *this unit* is the one that has to move. `health`
+   * is the three the reference states, and unlike Flame's "two" it does **not** agree
+   * with the count on any of the three faces that carry these (all of them are 4). So
+   * it is a constant, for Galeforce's reason: the number on a monster face is a fact
+   * about monster faces.
+   */
+  | { readonly kind: 'free_move'; readonly health: number }
 
 /** A `RollEffectBody` once `resolveRoll` has stamped it with the die that made it,
  *  so the log can say *which* Fireshadow smote you. */

@@ -43,6 +43,23 @@ export type TargetTask =
   | { readonly kind: 'sleep'; readonly sai: string }
   /** Galeforce: one opposing army, at any terrain. */
   | { readonly kind: 'galeforce'; readonly sai: string }
+  /** Choke: kill health-worth of the defenders that rolled an ID, results and all. */
+  | { readonly kind: 'choke'; readonly sai: string; readonly health: number }
+  /** Confuse: reroll health-worth of the defenders, discarding what they had. */
+  | { readonly kind: 'confuse'; readonly sai: string; readonly health: number }
+  /** Wild Growth: split a budget between save results and promotions, at home. */
+  | { readonly kind: 'promote'; readonly sai: string; readonly budget: number }
+  /**
+   * Firewalking, Teleport: move `unitId` and up to `health` health-worth of its army
+   * anywhere.
+   *
+   * The only task that names the die that made it, because "this unit may move
+   * itself" is a rule about that die and not about the army it came from.
+   */
+  | { readonly kind: 'move'; readonly sai: string; readonly unitId: string; readonly health: number }
+
+/** The effect kinds that wait for the save dice: step 2, "Delayed Effects". */
+const DELAYED: readonly RollEffect['kind'][] = ['choke', 'confuse']
 
 /**
  * The tasks a roll owes, in roll order, with same-SAI budgets summed.
@@ -50,42 +67,93 @@ export type TargetTask =
  * Grouping is by SAI *name*, not by shape: two Flames combine, a Flame and a Smother
  * do not, even though both are `target_enemy`. Two effects of one name always agree
  * on `escape` and `fate`, because they came from the same handler.
+ *
+ * **Two doors, because a roll owes its tasks at two different moments.** Everything
+ * here is chosen before the defender rolls; `delayedTasks` below is chosen after,
+ * because Choke's legal targets are "units that rolled an ID icon" and Confuse throws
+ * a rolled face away. That is the rulebook's own split -- step 2 of the sequence is
+ * "when rolling for saves against an attack, Delayed Effects are applied now" -- and
+ * not a convenience.
  */
 export function targetTasks(effects: readonly RollEffect[]): readonly TargetTask[] {
+  return build(effects.filter((effect) => !DELAYED.includes(effect.kind)))
+}
+
+/** The tasks that wait until the save dice are on the table. */
+export function delayedTasks(effects: readonly RollEffect[]): readonly TargetTask[] {
+  return build(effects.filter((effect) => DELAYED.includes(effect.kind)))
+}
+
+function build(effects: readonly RollEffect[]): readonly TargetTask[] {
   const tasks: TargetTask[] = []
   const combinableAt = new Map<string, number>()
 
   for (const effect of effects) {
-    // The two that are never combined, each for its own reason from p. 32: Sleep
-    // targets an individual unit, and two Galeforces may legitimately name two
-    // different armies -- so merging them would silently throw one away.
+    // The ones that are never combined, each for its own reason from p. 32: Sleep
+    // targets an individual unit, two Galeforces may legitimately name two different
+    // armies -- so merging them would silently throw one away -- and a free move is
+    // named there outright, "SAIs that move units out of the army ... are always
+    // resolved one by one". A free move also *is* a particular die, so there is
+    // nothing to merge it into.
     if (effect.kind === 'sleep' || effect.kind === 'galeforce') {
       tasks.push({ kind: effect.kind, sai: effect.sai })
       continue
     }
-    if (effect.kind !== 'target_enemy') continue
+    if (effect.kind === 'free_move') {
+      tasks.push({ kind: 'move', sai: effect.sai, unitId: effect.unitId, health: effect.health })
+      continue
+    }
 
     const at = combinableAt.get(effect.sai)
     if (at !== undefined) {
       const existing = tasks[at]
-      if (existing !== undefined && existing.kind === 'enemy') {
-        tasks[at] = { ...existing, health: existing.health + effect.health }
-      }
+      if (existing !== undefined) tasks[at] = combined(existing, effect)
       continue
     }
 
+    const task = taskFor(effect)
+    if (task === null) continue
     combinableAt.set(effect.sai, tasks.length)
-    tasks.push({
-      kind: 'enemy',
-      sai: effect.sai,
-      health: effect.health,
-      escape: effect.escape,
-      fate: effect.fate,
-      // Omitted rather than defaulted: this object goes into `combat.attack.targets`,
-      // which `digestState` renders through `stableJson(state.turn)`.
-      ...(effect.escapeTo !== undefined ? { escapeTo: effect.escapeTo } : {}),
-    })
+    tasks.push(task)
   }
 
   return tasks
+}
+
+/** One effect as a fresh task, or null for an effect that owes no decision. */
+function taskFor(effect: RollEffect): TargetTask | null {
+  switch (effect.kind) {
+    case 'target_enemy':
+      return {
+        kind: 'enemy',
+        sai: effect.sai,
+        health: effect.health,
+        escape: effect.escape,
+        fate: effect.fate,
+        // Omitted rather than defaulted: this object goes into `combat.attack.targets`,
+        // which `digestState` renders through `stableJson(state.turn)`.
+        ...(effect.escapeTo !== undefined ? { escapeTo: effect.escapeTo } : {}),
+      }
+    case 'choke':
+    case 'confuse':
+      return { kind: effect.kind, sai: effect.sai, health: effect.health }
+    case 'wild_growth':
+      return { kind: 'promote', sai: effect.sai, budget: effect.budget }
+    default:
+      return null
+  }
+}
+
+/** Two dice of one SAI as a single larger effect (p. 27). */
+function combined(existing: TargetTask, effect: RollEffect): TargetTask {
+  if (existing.kind === 'enemy' && effect.kind === 'target_enemy') {
+    return { ...existing, health: existing.health + effect.health }
+  }
+  if ((existing.kind === 'choke' || existing.kind === 'confuse') && 'health' in effect) {
+    return { ...existing, health: existing.health + effect.health }
+  }
+  if (existing.kind === 'promote' && effect.kind === 'wild_growth') {
+    return { ...existing, budget: existing.budget + effect.budget }
+  }
+  return existing
 }

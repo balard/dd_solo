@@ -60,7 +60,11 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     // and declining is not on offer. Taking the engine's own suggestion is the same
     // move `assign_damage` makes, pointed at the other army.
     case 'sai_target': {
-      const army = armyAt(state, pending.target, pending.slot)
+      // Choke may pick only from the dice that rolled an ID, so the maximum it is held
+      // to is the maximum within that set.
+      const army = armyAt(state, pending.target, pending.slot).filter(
+        (unit) => pending.eligible === undefined || pending.eligible.includes(unit.id),
+      )
       // Sleep takes one die and there is nothing to maximise; everything else takes
       // the maximum it can, because p. 32 leaves no other legal answer.
       const unitIds =
@@ -69,6 +73,16 @@ function decideAction(state: GameState, pending: Pending): GameAction {
           : damageOptions(army, pending.limit.budget).suggestion
       return { kind: 'sai_target', unitIds }
     }
+
+    // **The first decisions passive can honestly decline**, and it declines both.
+    // Every SAI before Phase 4e was aimed at an opponent and forced to its maximum;
+    // these two are friendly and "up to", so doing nothing is a legal answer rather
+    // than a surrender -- and `PassiveAI` starting nothing is the whole point of it.
+    case 'sai_promote':
+      return { kind: 'sai_promote', pairs: [] }
+
+    case 'sai_move':
+      return { kind: 'sai_move', slot: null, unitIds: [] }
 
     // Likewise forced: the SAI fires, so an army must be named. The first is as good
     // an answer as passive can give -- wanting a *particular* terrain is GreedyAI's.

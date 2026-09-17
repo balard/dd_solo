@@ -54,6 +54,12 @@ const plural = (
  * is a compile error here. Without it the switch just falls off the end and returns
  * `undefined`, which React renders as a crash rather than as nothing.
  */
+/** A unit's name by id: the log carries ids, and a dead die still has a name. */
+function nameOf(state: GameState, id: UnitId): string {
+  const unit = state.units[id]
+  return unit === undefined ? id : unitType(unit.typeId).name
+}
+
 function Line({
   entry,
   state,
@@ -335,6 +341,42 @@ function Line({
         </p>
       )
     }
+    /**
+     * Wild Growth, both halves of it: what the budget bought and what it did not.
+     *
+     * A promotion is an exchange, so the line names both ends -- the die that went
+     * down to the DUA and the one that came up in its place.
+     */
+    case 'units_promoted': {
+      const grown = entry.pairs.map((pair) => (
+        <Fragment key={pair.unitId}>
+          {nameOf(state, pair.unitId)} &rarr; <b>{nameOf(state, pair.partnerId)}</b>{' '}
+        </Fragment>
+      ))
+      return (
+        <p className="log-line">
+          <strong>{entry.sai}</strong>{' '}
+          {entry.pairs.length > 0 ? grown : null}
+          {entry.saveResults !== undefined && (
+            <span className={entry.pairs.length > 0 ? 'muted' : ''}>
+              {entry.pairs.length > 0 ? 'and ' : ''}
+              {entry.saveResults} save results
+            </span>
+          )}
+        </p>
+      )
+    }
+
+    /** A free move: part of an army walking off mid-roll, results and all. */
+    case 'units_moved':
+      return (
+        <p className="log-line">
+          <strong>{entry.sai}</strong> walks{' '}
+          {entry.unitIds.map((id) => nameOf(state, id)).join(', ')} from{' '}
+          {where(entry.from)} to {where(entry.to)}
+        </p>
+      )
+
     case 'units_buried':
       return (
         <p className="log-line kill">

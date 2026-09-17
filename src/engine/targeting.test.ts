@@ -882,3 +882,325 @@ describe('the sub-rolls', () => {
     expect(state.log.some((e) => e.kind === 'sai_sub_roll')).toBe(false)
   })
 })
+
+// --- the delayed effects, and the first friendly decisions --------------------
+
+/**
+ * Phase 4e. Choke and Confuse are the rulebook's step 2 -- "when rolling for saves
+ * against an attack, Delayed Effects are applied now" -- and Wild Growth and the free
+ * moves are the first SAIs that reach into the roller's *own* army.
+ *
+ * The save roll splits the way the attack roll did in 4a, so these all live in the
+ * gap between the defender's dice landing and anything being counted.
+ */
+describe('the delayed effects', () => {
+  /** Strangle Vine face 4 is `4 SAI:Choke`, 2 is Double Strike, 7 is Wild Growth. */
+  const CHOKE_FACE = 4
+  const WILD_GROWTH_FACE = 7
+  /** Satyr face 6 is `4 SAI:Confuse`; face 0 is its ID, worth 4 melee in an attack. */
+  const CONFUSE_FACE = 6
+  const SATYR_ID = 0
+  /** Strangle Vine face 1 is `4 MELEE`. A Choke-only attack rolls **zero** melee, and
+   *  a zero attack earns no save roll at all -- so it needs a second die with results
+   *  on it or there is nothing for a delayed effect to be delayed until. */
+  const VINE_MELEE = 1
+  /** Gorgon face 0 is its ID: 4 melee, so the defender actually rolls for saves. */
+  const GORGON_ID = 0
+  /** Oak face 0 is its ID (2 saves), 5 is `4 SAVE`, 1 is `2 MELEE` -- no saves. */
+  const OAK_ID = 0
+  const OAK_SAVE = 5
+  const OAK_MELEE = 1
+  /** Oakling face 0 is its ID, 5 is `2 SAVE`. */
+  const OAKLING_ID = 0
+
+  const idsOf = (state: GameState, typeId: string) =>
+    Object.values(state.units)
+      .filter((u) => u.typeId === typeId)
+      .map((u) => u.id)
+
+  const combatOf = (state: GameState) => state.turn.combat
+
+  /**
+   * Choke kills only the dice that rolled an ID **and** takes their results out of the
+   * save total -- "none of their results are counted towards the army's save results".
+   *
+   * Both halves in one test on purpose: killing without removing the result is the
+   * mistake that survives every other check, because the die is dead either way and
+   * only the arithmetic remembers.
+   */
+  it('kills only the dice that rolled an ID, results and all', () => {
+    const start = advance(
+      stage({
+        attackers: ['treefolk.strangle_vine', 'treefolk.strangle_vine'],
+        defenders: ['treefolk.oak', 'treefolk.oak'],
+        rng: rngShowing(
+          ['treefolk.strangle_vine', 'treefolk.strangle_vine', 'treefolk.oak', 'treefolk.oak'],
+          [CHOKE_FACE, VINE_MELEE, OAK_ID, OAK_SAVE],
+        ),
+      }),
+    )
+
+    // The pending offers exactly the die that rolled an ID, and not the one that
+    // rolled four saves.
+    const [rolledId, rolledSaves] = idsOf(start, 'treefolk.oak') as [UnitId, UnitId]
+    expect(start.pending).toMatchObject({
+      kind: 'sai_target',
+      sai: 'Choke',
+      eligible: [rolledId],
+    })
+
+    const done = advance(applyAction(start, { kind: 'sai_target', unitIds: [rolledId] }))
+
+    expect(done.units[rolledId]?.location).toEqual({ kind: 'dua' })
+    expect(done.units[rolledSaves]?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+
+    // 4 saves from the die that lived, and **not** the 2 the ID would have added.
+    const resolved = done.log.find((e) => e.kind === 'combat_resolved')
+    expect(resolved).toMatchObject({ saveTotal: 4 })
+  })
+
+  it('offers no decision when nothing rolled an ID', () => {
+    const start = advance(
+      stage({
+        attackers: ['treefolk.strangle_vine', 'treefolk.strangle_vine'],
+        defenders: ['treefolk.oak', 'treefolk.oak'],
+        rng: rngShowing(
+          ['treefolk.strangle_vine', 'treefolk.strangle_vine', 'treefolk.oak', 'treefolk.oak'],
+          [CHOKE_FACE, VINE_MELEE, OAK_SAVE, OAK_MELEE],
+        ),
+      }),
+    )
+
+    expect(start.pending?.kind).not.toBe('sai_target')
+    expect(start.log.some((e) => e.kind === 'sai_resolved')).toBe(false)
+  })
+
+  /**
+   * Confuse **replaces** a face rather than adding one, which no other reroll in the
+   * game does: "re-roll the targeted units, ignoring all previous results".
+   *
+   * The draw order is the thing to pin -- step 1 rolls every die, then Confuse rerolls
+   * the ones it took, and only then would step 3 run. So the second Oak face in the
+   * sequence is the one the save total is computed from, and the first is gone.
+   */
+  it('rerolls its targets and throws the first face away', () => {
+    const start = advance(
+      stage({
+        attackers: ['treefolk.satyr', 'treefolk.satyr'],
+        defenders: ['treefolk.oak'],
+        rng: rngShowing(
+          ['treefolk.satyr', 'treefolk.satyr', 'treefolk.oak', 'treefolk.oak'],
+          [CONFUSE_FACE, SATYR_ID, OAK_SAVE, OAK_MELEE],
+        ),
+      }),
+    )
+
+    const [oak] = idsOf(start, 'treefolk.oak') as [UnitId]
+    expect(start.pending).toMatchObject({ kind: 'sai_target', sai: 'Confuse' })
+
+    const before = start.rng.counter
+    const done = advance(applyAction(start, { kind: 'sai_target', unitIds: [oak] }))
+
+    expect(done.rng.counter - before, 'one reroll, in place of the face it discarded')
+      .toBeGreaterThanOrEqual(1)
+    // The 4 saves it first rolled are gone; what counts is the melee face it landed
+    // on second, which saves nothing.
+    const resolved = done.log.find((e) => e.kind === 'combat_resolved')
+    expect(resolved).toMatchObject({ saveTotal: 0 })
+  })
+
+  /**
+   * Wild Growth: "X save results **or** ... promote X health-worth of units in this
+   * army. Results may be split between saves and promotions in any way you choose."
+   *
+   * The first decision in the game that may legally be answered with nothing, and the
+   * first that spends a budget on the health a promotion *gains* -- so an Oakling may
+   * jump straight to a monster for 3 rather than climbing one step at a time.
+   */
+  it('splits its budget between promotions and saves', () => {
+    const board = stage({
+      attackers: ['firewalkers.gorgon'],
+      defenders: ['treefolk.strangle_vine', 'treefolk.oakling'],
+      rng: rngShowing(
+        ['firewalkers.gorgon', 'treefolk.strangle_vine', 'treefolk.oakling'],
+        [GORGON_ID, WILD_GROWTH_FACE, OAKLING_ID],
+      ),
+    })
+    // A dead Oak for the Oakling to grow into, and a dead Oak Lord it could reach for
+    // two if it were richer.
+    const dead: Record<UnitId, UnitInstance> = {}
+    for (const [i, typeId] of ['treefolk.oak', 'treefolk.oak_lord'].entries()) {
+      const id = `p2:dua:${i}`
+      dead[id] = { id, typeId, owner: 'p2', location: { kind: 'dua' } }
+    }
+    const start = advance({ ...board, units: { ...board.units, ...dead } })
+
+    // A save roll is what counts save results, so the split is a real one here.
+    expect(start.pending).toMatchObject({
+      kind: 'sai_promote',
+      sai: 'Wild Growth',
+      budget: 4,
+      saveResultsCount: true,
+    })
+
+    const [oakling] = idsOf(start, 'treefolk.oakling') as [UnitId]
+    const done = advance(
+      applyAction(start, {
+        kind: 'sai_promote',
+        pairs: [{ unitId: oakling, partnerId: 'p2:dua:1' }],
+      }),
+    )
+
+    // The Oakling (1) became the Oak Lord (3): a two-step jump costing 2, leaving 2
+    // of the budget to arrive as save results.
+    expect(done.units[oakling]?.location).toEqual({ kind: 'dua' })
+    expect(done.units['p2:dua:1']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(done.log.find((e) => e.kind === 'units_promoted')).toMatchObject({ saveResults: 2 })
+  })
+
+  it('refuses a promotion the budget cannot afford', () => {
+    const board = stage({
+      attackers: ['firewalkers.gorgon'],
+      defenders: ['treefolk.strangle_vine', 'treefolk.oakling'],
+      rng: rngShowing(
+        ['firewalkers.gorgon', 'treefolk.strangle_vine', 'treefolk.oakling'],
+        [GORGON_ID, WILD_GROWTH_FACE, OAKLING_ID],
+      ),
+    })
+    const dead: UnitInstance = {
+      id: 'p2:dua:0',
+      typeId: 'treefolk.oak_lord',
+      owner: 'p2',
+      location: { kind: 'dua' },
+    }
+    const start = advance({ ...board, units: { ...board.units, [dead.id]: dead } })
+    const [oakling] = idsOf(start, 'treefolk.oakling') as [UnitId]
+
+    // A 1-health Oakling into a 3-health Oak Lord costs 2, which a 4 budget affords --
+    // but naming the same die twice does not.
+    expect(() =>
+      applyAction(start, {
+        kind: 'sai_promote',
+        pairs: [
+          { unitId: oakling, partnerId: dead.id },
+          { unitId: oakling, partnerId: dead.id },
+        ],
+      }),
+    ).toThrow(IllegalActionError)
+  })
+
+  /**
+   * The free move, and the rule that makes it the opposite of everything before it:
+   * "up to three health-worth", where p. 32 forced a maximum. Declining is a real
+   * answer, and it leaves no trace at all.
+   */
+  it('walks a die and its friends to another terrain, or declines and says nothing', () => {
+    const board = () =>
+      stage({
+        attackers: ['firewalkers.genie', 'firewalkers.gorgon'],
+        defenders: ['treefolk.oak'],
+        rng: rngShowing(
+          ['firewalkers.genie', 'firewalkers.gorgon'],
+          [7, 2],
+        ),
+      })
+
+    const start = advance(board())
+    const [genie] = idsOf(start, 'firewalkers.genie') as [UnitId]
+    expect(start.pending).toMatchObject({
+      kind: 'sai_move',
+      sai: 'Firewalking',
+      unitId: genie,
+      health: 3,
+    })
+    // "To any terrain" -- but not the one it is standing on.
+    expect((start.pending as { options: readonly string[] }).options).not.toContain('frontier')
+
+    const moved = applyAction(start, { kind: 'sai_move', slot: 'p1_home', unitIds: [] })
+    expect(moved.units[genie]?.location).toEqual({ kind: 'terrain', slot: 'p1_home' })
+    expect(moved.log.some((e) => e.kind === 'units_moved')).toBe(true)
+
+    const declined = applyAction(start, { kind: 'sai_move', slot: null, unitIds: [] })
+    expect(declined.units[genie]?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(declined.log.some((e) => e.kind === 'units_moved')).toBe(false)
+  })
+
+  it('refuses more passengers than it can carry', () => {
+    const start = advance(
+      stage({
+        attackers: ['firewalkers.genie', 'firewalkers.gorgon'],
+        defenders: ['treefolk.oak'],
+        rng: rngShowing(['firewalkers.genie', 'firewalkers.gorgon'], [7, 2]),
+      }),
+    )
+    const [gorgon] = idsOf(start, 'firewalkers.gorgon') as [UnitId]
+
+    // A 4-health Gorgon does not fit in three health-worth.
+    expect(() =>
+      applyAction(start, { kind: 'sai_move', slot: 'p1_home', unitIds: [gorgon] }),
+    ).toThrow(IllegalActionError)
+  })
+
+  /**
+   * The same SAI on an *attack* roll, where the half it does not spend is generated in
+   * a type the roll does not count.
+   *
+   * The rules allow the split anyway -- "in any way you choose" -- so the engine does
+   * too, and simply does not pretend the leftover arrived: `saveResultsCount` is what
+   * both clients read to stop offering it, and the log leaves it off.
+   */
+  it('counts no save results when the roll is an attack', () => {
+    const board = stage({
+      attackers: ['treefolk.strangle_vine', 'treefolk.oakling'],
+      defenders: ['firewalkers.gorgon'],
+      rng: rngShowing(
+        ['treefolk.strangle_vine', 'treefolk.oakling'],
+        [WILD_GROWTH_FACE, OAKLING_ID],
+      ),
+    })
+    const dead: UnitInstance = {
+      id: 'p1:dua:0',
+      typeId: 'treefolk.oak',
+      owner: 'p1',
+      location: { kind: 'dua' },
+    }
+    const start = advance({ ...board, units: { ...board.units, [dead.id]: dead } })
+
+    expect(start.pending).toMatchObject({
+      kind: 'sai_promote',
+      player: 'p1',
+      saveResultsCount: false,
+    })
+
+    const done = applyAction(start, { kind: 'sai_promote', pairs: [] })
+    // Something was decided, so it is logged -- but nothing is claimed for the budget.
+    expect(done.log.find((e) => e.kind === 'units_promoted')).toEqual({
+      kind: 'units_promoted',
+      player: 'p1',
+      sai: 'Wild Growth',
+      pairs: [],
+    })
+  })
+
+  /** The save roll is parked between two steps now, and like the attack roll it must
+   *  be gone by the time the exchange ends. */
+  it('drops the parked save dice when the exchange finishes', () => {
+    const start = advance(
+      stage({
+        attackers: ['treefolk.strangle_vine', 'treefolk.strangle_vine'],
+        defenders: ['treefolk.oak', 'treefolk.oak'],
+        rng: rngShowing(
+          ['treefolk.strangle_vine', 'treefolk.strangle_vine', 'treefolk.oak', 'treefolk.oak'],
+          [CHOKE_FACE, VINE_MELEE, OAK_ID, OAK_SAVE],
+        ),
+      }),
+    )
+    expect(combatOf(start)?.saves?.dice).toHaveLength(2)
+
+    const [rolledId] = idsOf(start, 'treefolk.oak') as [UnitId]
+    const done = advance(applyAction(start, { kind: 'sai_target', unitIds: [rolledId] }))
+
+    expect(combatOf(done)?.saves).toBeUndefined()
+    expect(validateState(done)).toEqual([])
+  })
+})

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import { replay, replayTo } from '../engine/replay'
+import { PRESETS, preset, presetHealth } from '../data/presets'
 import { setupGame, STARTER_FORCES, type SetupOptions } from '../engine/setup'
-import { DUA_RULES, livingUnits, type PlayerId, type RuleSet } from '../engine/types'
+import { FULL_RULES, livingUnits, type PlayerId } from '../engine/types'
 import { validateState } from '../engine/validate'
 
 import { passiveAi } from './passive'
@@ -191,45 +192,43 @@ describe('self-play fuzz', () => {
   })
 
   /**
-   * The same net, over `sai: 'full'` -- which `PLAN-V1.md` Risks said could not be
-   * fuzzed at all until 4e, on the strength of a claim that turned out to be false.
+   * The same net, over `sai: 'full'` -- which `PLAN-V1.md` Risks twice said could not
+   * be fuzzed at all, on the strength of a claim that was never true.
    *
-   * `'full'` refuses an SAI it has not built, so a force is fuzzable only if every SAI
-   * it carries is built. Four monster fixtures qualify once 4d lands: the Gorgon
-   * (Flame), the Redwood (Trample), the Darktree (Smother, Surprise) and the Phoenix
-   * (Fly, Rise from the Ashes, Seize, Smite). All four are 24 health, so any two of
-   * them pair -- mirrors included, which is a board made of one die read against
-   * itself.
+   * Phase 4d ran it over the four monster fixtures that carried no unbuilt SAI. Phase
+   * 4e finished the set, so **every hand-authored force is legal here**, and the pairs
+   * are built from the health groups rather than listed: a force that cannot be fuzzed
+   * is now a bug rather than a fact of life.
    *
-   * **The trigger counters are the point.** A clean run that never fired a Smother
-   * would prove nothing at all: Rend is one face on one of forty dice, and a thousand
-   * v0 games could easily never execute it.
+   * **The trigger counters are the point.** A clean run that never fired a Choke would
+   * prove nothing at all: Rend is one face on one of forty dice, and a thousand v0
+   * games could easily never execute it.
    */
-  it('survives self-play under sai: full', { timeout: 180_000 }, () => {
-    const playable = [
-      'treefolk_darktree',
-      'treefolk_redwood',
-      'firewalkers_gorgon',
-      'firewalkers_phoenix',
-    ]
-    const ruleSet: RuleSet = { ...DUA_RULES, sai: 'full' }
+  it('survives self-play under sai: full', { timeout: 300_000 }, () => {
+    const byHealth = new Map<number, string[]>()
+    for (const entry of PRESETS) {
+      const health = presetHealth(preset(entry.id))
+      byHealth.set(health, [...(byHealth.get(health) ?? []), entry.id])
+    }
+    const pairs: (readonly [string, string])[] = []
+    for (const ids of byHealth.values()) {
+      for (const p1 of ids) for (const p2 of ids) pairs.push([p1, p2] as const)
+    }
 
     let stuck = 0
     let games = 0
     const fired = new Map<string, number>()
 
-    for (let i = 0; i < 120; i += 1) {
-      const p1 = playable[i % playable.length] as string
-      const p2 = playable[(i * 3 + 1) % playable.length] as string
+    pairs.forEach(([p1, p2], i) => {
       const result = runGame({
         setup: {
-          seed: i + 1,
+          seed: (i % 5) + 1,
           forces: { kind: 'named', forces: { p1, p2 } },
-          ruleSet,
+          ruleSet: FULL_RULES,
         },
         players: { p1: randomAi, p2: randomAi },
         aiSeed: 900_000 + i,
-        maxDecisions: 1200,
+        maxDecisions: 1500,
         validate: true,
       })
       games += 1
@@ -237,13 +236,16 @@ describe('self-play fuzz', () => {
 
       for (const entry of result.state.log) {
         if (entry.kind === 'sai_resolved') fired.set(entry.sai, (fired.get(entry.sai) ?? 0) + 1)
+        if (entry.kind === 'units_promoted') fired.set('promote', (fired.get('promote') ?? 0) + 1)
+        if (entry.kind === 'units_moved') fired.set('move', (fired.get('move') ?? 0) + 1)
       }
-    }
+    })
 
-    expect(games).toBe(120)
+    expect(games).toBe(pairs.length)
     expect(stuck, 'a game ended with no winner and nothing pending').toBe(0)
-    // Every targeting SAI these four fixtures carry actually happened.
-    for (const name of ['Smother', 'Seize', 'Flame']) {
+    // Every shape of Phase 4 actually happened: a kill, a sub-roll, a delayed effect,
+    // a promotion and a move off the board.
+    for (const name of ['Flame', 'Smother', 'Seize', 'Confuse', 'promote', 'move']) {
       expect(fired.get(name) ?? 0, `${name} never fired, so this run proved nothing`)
         .toBeGreaterThan(0)
     }

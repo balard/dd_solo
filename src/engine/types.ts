@@ -100,13 +100,22 @@ export type MarchStep =
   // be a real state the machine can rest on, not a local variable.
   | 'resolve_attack'
   | 'sai_target_attack'
+  // And the save roll is two steps for the same reason the attack was: the rulebook's
+  // step 2 is "when rolling for saves against an attack, Delayed Effects are applied
+  // now", and Choke's targets are "units that rolled an ID icon" -- a question that
+  // cannot be asked until the save dice are on the table and must be answered before
+  // anything is counted.
   | 'resolve_attack_saves'
+  | 'sai_delayed_attack'
+  | 'resolve_attack_damage'
   | 'assign_attack_damage'
   | 'assign_attack_riposte'
   | 'offer_counter'
   | 'resolve_counter'
   | 'sai_target_counter'
   | 'resolve_counter_saves'
+  | 'sai_delayed_counter'
+  | 'resolve_counter_damage'
   | 'assign_counter_damage'
   | 'assign_counter_riposte'
 
@@ -128,6 +137,29 @@ export interface PendingAttack {
    * `CombatState`.
    */
   readonly targets?: readonly TargetTask[]
+  /**
+   * Choke and Confuse: chosen two steps later than `targets`, once the defender's
+   * dice have landed. Parked here rather than on the save roll because they are the
+   * *attacker's* SAIs, rolled on this roll, and they exist before there is anything
+   * to apply them to.
+   */
+  readonly delayed?: readonly TargetTask[]
+}
+
+/**
+ * The defender's save dice, held while the exchange is paused for delayed effects.
+ *
+ * Raw dice again, and mutable in the only sense that matters: Choke takes one out of
+ * this list and Confuse replaces one, both before a single result has been counted.
+ */
+export interface PendingSaves {
+  readonly dice: readonly RawDie[]
+  /** Tasks owed at this pause, in resolution order: the attacker's delayed effects
+   *  first, then the defending army's own Wild Growth and free moves. */
+  readonly tasks?: readonly TargetTask[]
+  /** Wild Growth's save share, chosen by the defender. Omitted when nobody chose
+   *  any, which is every save roll but a Wild Growth one. */
+  readonly bonus?: number
 }
 
 /**
@@ -156,9 +188,12 @@ export interface CombatState {
   readonly riposte?: number
   /** Surprise, rolled by the attacker: the defender may not counter-attack. */
   readonly counterSuppressed?: true
-  /** Set at `resolve_*`, read and dropped at `resolve_*_saves`. Never present at a
+  /** Set at `resolve_*`, read and dropped at `resolve_*_damage`. Never present at a
    *  step the machine rests on. */
   readonly attack?: PendingAttack
+  /** Set at `resolve_*_saves`, read and dropped at `resolve_*_damage`. Same lifetime
+   *  rule as `attack`, one step shorter. */
+  readonly saves?: PendingSaves
 }
 
 export interface TurnState {
@@ -248,6 +283,15 @@ export type Pending =
         | { readonly kind: 'health'; readonly budget: number }
         | { readonly kind: 'one' }
       /**
+       * The only units this SAI may take, when it may not take any of them.
+       *
+       * Choke's alone: "units in that army **that rolled an ID icon**" is the one
+       * targeting rule in the game that depends on a roll rather than on an army, and
+       * the tally, the confirm gate and the reducer all have to agree about it.
+       * Omitted means the whole army is fair game, which is every other SAI.
+       */
+      readonly eligible?: readonly UnitId[]
+      /**
        * Tasks this roll still owes, counting this one.
        *
        * Rendered when it is more than one, and load-bearing beyond that: `App` clears
@@ -271,6 +315,56 @@ export type Pending =
       readonly options: readonly TerrainSlot[]
       readonly remaining: number
     }
+  /**
+   * Wild Growth: split a budget between save results and promotions.
+   *
+   * **The first friendly targeting decision**, and the first that may legally be
+   * answered with nothing: "results may be split ... in any way you choose" is p. 29's
+   * *up to* rule, the opposite of p. 32's "select the maximum number of targets" that
+   * every decision before this one used. Whatever is not spent on promotions is save
+   * results, so the engine derives the split from the pairs rather than asking twice.
+   */
+  | {
+      readonly kind: 'sai_promote'
+      readonly player: PlayerId
+      readonly sai: string
+      /** Health-worth of promotion, where a promotion costs the health it *gains*. */
+      readonly budget: number
+      /**
+       * Whether the half of the budget that is *not* spent on promotions will actually
+       * be counted.
+       *
+       * On a save roll it is: that is the roll those results join. On an attack roll it
+       * is not -- Wild Growth generates *save* results and an attack roll counts melee,
+       * missile or magic -- so the split is still legal and the saves are still worth
+       * nothing. The rules permit the bad choice; the sheet should not advertise it.
+       */
+      readonly saveResultsCount: boolean
+      /** Where the army stands, so the board knows which dice to offer. */
+      readonly slot: TerrainSlot
+      readonly remaining: number
+    }
+  /**
+   * Firewalking, Teleport: this die moves, and may take up to three health-worth of
+   * its army with it, to any terrain.
+   *
+   * Also *up to*, and also declinable -- "this unit **may** move itself" -- which is
+   * why the action carries a nullable slot rather than a units list that can be empty:
+   * moving nobody and moving the mover alone are two different answers.
+   */
+  | {
+      readonly kind: 'sai_move'
+      readonly player: PlayerId
+      readonly sai: string
+      /** The die that rolled it. It moves itself, so it is never a choice. */
+      readonly unitId: UnitId
+      /** Where it is standing now. */
+      readonly slot: TerrainSlot
+      /** Health-worth of *other* units it may take along. */
+      readonly health: number
+      readonly options: readonly TerrainSlot[]
+      readonly remaining: number
+    }
   | { readonly kind: 'reinforce'; readonly player: PlayerId }
   | { readonly kind: 'retreat'; readonly player: PlayerId }
 
@@ -286,8 +380,32 @@ export type GameAction =
   | { readonly kind: 'assign_damage'; readonly unitIds: readonly UnitId[] }
   | { readonly kind: 'sai_target'; readonly unitIds: readonly UnitId[] }
   | { readonly kind: 'sai_target_army'; readonly slot: TerrainSlot }
+  /** Wild Growth. An empty list is a legal answer: it spends the whole budget on
+   *  save results. */
+  | { readonly kind: 'sai_promote'; readonly pairs: readonly PromotionPair[] }
+  /** A free move. `slot: null` declines it, which is not the same answer as moving
+   *  the mover alone. */
+  | {
+      readonly kind: 'sai_move'
+      readonly slot: TerrainSlot | null
+      /** Units travelling *with* the mover; the mover itself is never named. */
+      readonly unitIds: readonly UnitId[]
+    }
   | { readonly kind: 'reinforce'; readonly moves: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[] }
   | { readonly kind: 'retreat'; readonly unitIds: readonly UnitId[] }
+
+/**
+ * One unit promoted: `unitId` is in the army and goes to the DUA, `partnerId` is in
+ * the DUA and takes its place.
+ *
+ * Structurally `dua.ts`'s `Exchange`, and deliberately declared here instead of
+ * imported: `GameAction` is the engine's public vocabulary and nothing in it should
+ * depend on which file happens to implement a move.
+ */
+export interface PromotionPair {
+  readonly unitId: UnitId
+  readonly partnerId: UnitId
+}
 
 export type LogEntry =
   | { readonly kind: 'game_start'; readonly seed: number; readonly firstPlayer: PlayerId }
@@ -452,6 +570,31 @@ export type LogEntry =
       readonly toReserve?: true
     }
   /**
+   * Wild Growth: what the budget was spent on.
+   *
+   * Both halves in one entry because they are one decision -- "results may be split
+   * between saves and promotions in any way you choose" -- and a reader who sees only
+   * the promotions cannot tell whether the rest was wasted or saved.
+   */
+  | {
+      readonly kind: 'units_promoted'
+      readonly player: PlayerId
+      readonly sai: string
+      readonly pairs: readonly PromotionPair[]
+      /** Save results the budget bought instead. Omitted when none. */
+      readonly saveResults?: number
+    }
+  /** A free move: Firewalking or Teleport walking part of an army off to another
+   *  terrain, mid-roll. */
+  | {
+      readonly kind: 'units_moved'
+      readonly player: PlayerId
+      readonly sai: string
+      readonly unitIds: readonly UnitId[]
+      readonly from: TerrainSlot
+      readonly to: TerrainSlot
+    }
+  /**
    * Units moved from the DUA to the BUA, one way and for good.
    *
    * **No slot, deliberately.** A burial happens out of the DUA, which is not at a
@@ -578,6 +721,17 @@ export const SAI_RULES: RuleSet = { ...V0_RULES, sai: 'results' }
  * rather than a deleted branch.
  */
 export const DUA_RULES: RuleSet = { ...SAI_RULES, dua: 'active' }
+
+/**
+ * Every SAI in the box, targeting ones included: Phase 4's rung, and what the app and
+ * the CLI play from Phase 4e on.
+ *
+ * `magic` is still `'simplified'` -- the eighteen spells are Phase 7 -- and that is
+ * not a gap in this rung. Cantrip's magic results are generated and counted, and
+ * Dispel Magic's special roll cannot come up because no spell is ever announced to
+ * dispel.
+ */
+export const FULL_RULES: RuleSet = { ...DUA_RULES, sai: 'full' }
 
 
 export interface GameState {

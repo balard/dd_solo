@@ -3,7 +3,7 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: v0 alpha complete; v1 Phases 0–3 landed, and Phase 4 is four slices into five.**
+> **Status: v0 alpha complete; v1 Phases 0–4 landed. The app plays every SAI in the box.**
 > All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > and installable as a PWA. It opens on a screen that picks the two forces and the seed; saving is
@@ -16,8 +16,7 @@ the dice and the opponent.
 > inside `rollArmy` (0b), and forces rolled from the seed with the Frontier placed by the roll-off
 > loser (0a). **Phase 1 added `sai: 'results'`** — the twelve SAIs that only add results, plus
 > Rend's reroll. **Phase 2 added `dua: 'active'`** — the BUA, the promotion/recruitment/burial
-> machinery, and Rise from the Ashes' death trigger. The app and CLI play `DUA_RULES`, which is
-> both. **Phase 3 added `state.effects`** — effects with a duration, the Effects Expire Phase, and
+> machinery, and Rise from the Ashes' death trigger. **Phase 3 added `state.effects`** — effects with a duration, the Effects Expire Phase, and
 > `armyRoll` as the one door an army roll goes through; it is the first phase with **no `RuleSet`
 > flag**, because nothing produces an effect until Phase 4 and a flag would have gated nothing. The
 > ladder after it is targeting SAIs, eighth-face **icon** powers, spells, then dragons.
@@ -29,26 +28,30 @@ the dice and the opponent.
 > says why Sleep and Galeforce followed — **Phase 4 now owns five SAIs that all need one pause or
 > another in the middle of a roll**, which makes that seam the whole of its first half.
 >
-> **Phase 4 is landing in five slices; 4a, 4b, 4c and 4d are done.** 4a was the seam and nothing
-> else: the roll split four ways with `resolveFaces` pure, an exchange split into an attack step and
-> a save step with the raw dice stashed in `CombatState.attack`, and `sai: 'full'` refusing per
-> *name* rather than blanket. **4b added `sai_target` and `Flame`** — the first targeting SAI, the
-> first caller of `killAndBury`, and the first decision addressed to somebody other than the owner
-> of the dice at stake. **4c added `Sleep` and `Galeforce`** — the first two things in the project
-> that write to `state.effects`, so Phase 3's machinery has a caller three phases after it was
-> built. **4d added the five sub-roll SAIs** — Bullseye, Double Strike, Smother, Firecloud and
-> Seize — and with them `unitRoll` / `rollUnits`, the first unit rolls that are not the death
-> trigger's. The 25 goldens replay byte-identical and unregenerated through all four. Still to come:
-> 4e (Wild Growth, the free moves, Choke and Confuse, then the flip to `FULL_RULES`).
+> **Phase 4 landed in five slices.** 4a was the seam and nothing else: the roll split four ways with
+> `resolveFaces` pure, an exchange split into an attack step and a save step, and `sai: 'full'`
+> refusing per *name* rather than blanket. **4b added `sai_target` and `Flame`**, the first decision
+> addressed to somebody other than the owner of the dice at stake. **4c added `Sleep` and
+> `Galeforce`**, the first two things that write to `state.effects`. **4d added the five sub-roll
+> SAIs** and with them `unitRoll` / `rollUnits`. **4e added the delayed effects — `Choke` and
+> `Confuse` — plus `Wild Growth` and the free moves, and flipped the app to `FULL_RULES`.** The 25
+> goldens replay byte-identical and unregenerated through all five.
 >
-> **The app still plays `DUA_RULES`, so nothing built in 4b–4d happens in a real game yet** — but
-> `sai: 'full'` **is playable**, on four of the ten monster fixtures. It refuses only Wild Growth,
-> Choke and Confuse (plus the two that need spells), and the Darktree, Redwood, Gorgon and Phoenix
-> fixtures carry none of them; all four are 24 health, so any pair is legal. A standing 120-game
-> fuzz in `ai.test.ts` runs on exactly that. Read `PLAN-V1.md` §4b before repeating the old claim
-> that no force could reach the rung: it was written down twice and was never true — two Flames
-> combine into a budget of 4, which is precisely what a Gorgon mirror is for.
+> **The save roll is two steps now, like the attack roll**: the rulebook's step 2 is "when rolling
+> for saves against an attack, Delayed Effects are applied now", and Choke's targets are "units that
+> rolled an ID icon" -- a question about a roll, which cannot be asked any earlier. Both pauses hang
+> off `CombatState`: `attack` from `resolve_*` to `resolve_*_damage`, `saves` from `resolve_*_saves`
+> to the same place.
 >
+> **Nothing in `data/` throws any more.** 4e found that Cantrip and Dispel Magic had been misfiled
+> as "needs spells" whole: Cantrip's first sentence is a plain result generator ("during a magic
+> action, Cantrip generates X magic results") that belonged in Phase 1, and Dispel Magic's `Applies`
+> column is *Special*, so it takes no part in any ordinary roll. Without that the flip would have
+> crashed every force but four. The `'full'` refusal survives as the guard against a **new** SAI
+> arriving with a new species.
+>
+> The ladder after this is eighth-face **icon** powers (Phase 5), dragons (6), then spells (7).
+
 > Worth knowing before picking one up: **both home terrains are Towers and the Frontier is a City**
 > (Phase 0a gave each species a second die of its own type). So Tower's "may attack any terrain in
 > play during a missile action" is the icon power that covers two of the three terrains here, and
@@ -132,8 +135,8 @@ These are the things that break the project if violated:
 5. **Scope is controlled by the `RuleSet` config**, not by scattered `if`s. `V0_RULES` is
    `magic: 'simplified'`, `sai: 'inert'`, `eighthFace: 'standard'`, `dua: 'inert'`,
    `dragons: false`, and stays exactly that -- it is what the golden corpus is recorded against.
-   What the app plays is `DUA_RULES` = `SAI_RULES` + `dua: 'active'` = `V0_RULES` +
-   `sai: 'results'` + `dua: 'active'`. Adding a cut feature means implementing behind its flag,
+   What the app plays is `FULL_RULES` = `DUA_RULES` + `sai: 'full'`, and `DUA_RULES` is
+   `V0_RULES` + `sai: 'results'` + `dua: 'active'`. Adding a cut feature means implementing behind its flag,
    not deleting a condition -- and adding a key to `V0_RULES` is safe for the goldens, because
    `digestState` excludes `ruleSet` and `setupGame` pins an absent one to `V0_RULES`.
 
@@ -159,13 +162,12 @@ These are the things that break the project if violated:
 - **SAI faces produce zero results under `sai: 'inert'`** — but the face is still stored as
   `<count> SAI:<Name>`. That count is a result count for some SAIs and an X parameter for others
   (`2 SAI:Flame` targets two health-worth of units), so let each SAI interpret its own number.
-  Twelve of the 25 are live under `sai: 'results'`; see `RULES-V0.md` §8 and `src/engine/sai.ts`.
-- **`sai: 'full'` adds the SAIs that pick targets**, and on that rung an unbuilt one **throws**
-  rather than going quiet -- the opposite of `'results'`. Eight are built: Flame, Sleep, Galeforce,
-  Bullseye, Double Strike, Smother, Firecloud and Seize. Resolution order is roll order and
-  multiples of one SAI always combine -- except Sleep and Galeforce, which p. 32 names as never
-  combinable. All house rules, `RULES-V0.md` section 11. The app does not play this rung until
-  Phase 4e; four monster fixtures already can.
+  Fourteen of the 25 are live under `sai: 'results'`; see `RULES-V0.md` §8 and `src/engine/sai.ts`.
+- **`sai: 'full'` is what the app plays**, and it resolves all 25. On that rung an SAI no table
+  claims **throws** rather than going quiet -- the opposite of `'results'` -- which is now a guard
+  against a new species' face rather than against half-built work. Resolution order is roll order
+  and multiples of one SAI always combine -- except Sleep, Galeforce and the free moves, which p. 32
+  names as never combinable. All house rules, `RULES-V0.md` section 11.
 - **Five of those give their targets a roll** (v1 Phase 4d): a save roll for Bullseye and Double
   Strike, a maneuver roll for Smother and Firecloud, and a look for an ID *face* for Seize, whose
   survivors go to Reserves. Four rules, `RULES-V0.md` section 11: no army modifier reaches a unit
@@ -173,16 +175,34 @@ These are the things that break the project if violated:
   against **nothing** (so a Counter on it saves but sends no damage back), and targets roll in board
   order rather than the order the roller named them. "Roll this unit again" is the *roller's* die,
   at step 3, exactly as in Rend.
+- **Choke and Confuse are *delayed*: they are chosen after the defender's dice land** (v1 Phase 4e).
+  That is the rulebook's step 2, and it is why the save roll is two march steps. Choke may take only
+  the dice that rolled an ID icon -- `Pending.sai_target.eligible`, the one targeting rule that is a
+  fact about a roll -- and removes their results as well as the dice. Confuse **replaces** a face
+  rather than adding one, which `SaiOutcome.reroll` (step 3, appends) cannot express.
+- **Wild Growth and the free moves are the first *friendly* SAIs**, and the first decisions that may
+  legally be answered with nothing: p. 29's "up to, including none", against p. 32's forced maximum
+  that every earlier targeting SAI is held to. Wild Growth's budget buys **the health a promotion
+  gains**, so a promotion may jump several steps at once -- a house rule, `RULES-V0.md` section 11,
+  and deliberately not `promotionMatching`'s exactly-one-step rule.
+  - **What Wild Growth does not promote becomes save results, but only where a save roll counts
+    them.** On an attack roll they are generated in a type the roll does not count, so
+    `Pending.sai_promote.saveResultsCount` is false and both clients stop offering them. The split
+    stays legal; the app just does not advertise a choice that buys nothing.
+- **A sub-roll generates no free move and no promotion**, via `RollContext.isSubRoll`. Phase 4d's
+  sub-rolls *are* non-maneuver rolls, so Firewalking and Wild Growth apply to them by the letter --
+  but a die rolling for its life has no army to promote into, and the decision would be a pause
+  inside a pause. Wild Growth still generates its save results there, which is what stops a die
+  holding that face dying to a Bullseye.
 - **The DUA is a graveyard under `dua: 'inert'` and a resource under `'active'`** -- promotion,
-  recruitment, burial and Rise from the Ashes' death trigger. See `RULES-V0.md` §9. Still true of
-  both rungs: **nothing in a game calls promotion or recruitment yet** (Phase 5's City is the first
-  caller). **Flame buries**, but it is on the `sai: 'full'` rung, so nothing the app plays reaches
-  it either.
+  recruitment, burial and Rise from the Ashes' death trigger. See `RULES-V0.md` §9. **Wild Growth is
+  the first caller of promotion** (Phase 4e), on its own budget rule; **recruitment still has none**
+  -- Phase 5's City is the first. Flame buries, and the app reaches it now.
 - **Sleep and Galeforce are the first effects with a duration** (v1 Phase 4c) -- `RULES-V0.md` §10.
   Phase 3 shipped `Effect`, `expireEffects`, `pruneEffects` and the `asleep` status with no caller
   at all, deliberately; these two are it. Both are cast during the *attacker's* roll and bite in
-  that same exchange, which is what the Phase 4a seam exists for. Under `DUA_RULES`, which is what
-  the app plays, `state.effects` is still always empty -- and that is still not a bug.
+  that same exchange, which is what the Phase 4a seam exists for. The app has played them since
+  Phase 4e flipped it to `FULL_RULES`.
 
 - **Eighth face captures and wins** (two captures = victory) **and grants its two standard
   advantages**: the holder's army doubles all ID results when rolling *anything* there — attack,
@@ -341,9 +361,12 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   counter-attack's, and the riposte back at *that*. `finishExchange` and `applyAssignDamage` both
   route through `afterCombatStep`; they used to decide independently, which was survivable with one
   assignment per exchange and is not with two.
-  - **An attack and its save roll are two steps, not one.** `beginExchange` rolls the attack and
-    stashes the raw dice in `CombatState.attack`; `finishExchange` resolves those faces, rolls the
-    saves and computes the damage. The seam exists so a targeting SAI can be chosen between them —
+  - **An exchange is three steps, not one.** `beginExchange` rolls the attack and stashes the raw
+    dice in `CombatState.attack`; `rollSaves` rolls the defender's dice and stashes those in
+    `CombatState.saves`; `finishExchange` resolves both and computes the damage. Two pauses, because
+    the rulebook has two: a targeting SAI is chosen before the save roll and a **delayed** one after
+    it, and Choke cannot be chosen any earlier because its targets are the dice that rolled an ID.
+  - **The first of those seams exists so a targeting SAI can be chosen between the rolls** —
     Sleep takes a die out of the very save roll that follows, Galeforce subtracts four from it —
     and invariant 3 means such a decision *must* be a step the machine rests on.
     - **`rollAttack` rolls for magic too**, and the zero-total early return moved to the far side
@@ -370,6 +393,14 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     - The selection rule is `damageAssignmentProblem` unchanged: p. 32's "select the maximum number
       of targets" is §6's damage rule word for word. The *friendly* rule ("any number, including
       none") arrives with Wild Growth and has no case before it.
+  - **The delayed pause has two askers, and `taskOwner` is the one place that knows which.** Choke
+    and Confuse are the attacker's, about the defender's dice; Wild Growth and the free moves belong
+    to whoever made the roll, which at that pause is the defender. The attacker's go first -- the
+    rulebook's step 2 before its step 4 -- and they share one pause because no save roll in the game
+    has a step-3 reroll to come between them.
+  - **`taskQueue` / `dropHeadTask` are the two queues behind one set of appliers.** An answer
+    arrives at `applyAction` knowing only its own shape, so the march step is what says which queue
+    it came from. Add a third pause and this is the only thing that has to learn about it.
   - **`resolve_counter` is a gate, not a step to skip past.** Everything after it belongs to an
     exchange that happens only if the defender accepts, and its assignments read a `combat.damage`
     the counter has not written yet.
@@ -396,7 +427,7 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   `doubleIds: boolean`, which was enough while the eighth face was the only thing in the game with
   an opinion about a roll. Attacks, saves and contested maneuvers all count as "rolling the army".
 - **Effects with a duration are `state.effects` and `effects.ts`, and Sleep and Galeforce are what
-  produce them** (v1 Phase 4c, on the `sai: 'full'` rung -- so still nothing under `DUA_RULES`).
+  produce them** (v1 Phase 4c).
   An effect targets an army *at a place* (it does not follow the units) or a unit (it does),
   carries `Modifier`s and/or the `asleep` status, and ends at the start of its caster's next turn.
   `expireEffects` runs in the `effects_expire` phase; `pruneEffects` runs from `stepGame` beside
@@ -419,6 +450,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - **A sub-roll's targets roll in board order** (`Object.values(state.units)`), not in the order
     the player named them -- `death.ts`'s rule, for `death.ts`'s reason. Both replay identically, so
     no golden and no fuzz can see this; only a test can.
+- **`stepGame` prunes effects before it checks for victory**, and the order is load-bearing: the
+  action that wins the game is still an action, and the army it emptied may have been carrying a
+  Galeforce. With the check first the effect outlived the army forever and `validateState` called it
+  a breach. Found by Phase 4e's fuzz, three phases after the bug landed.
 - **Terrain `face === 8` and `capturedBy !== null` must always agree.** `validateState` enforces
   it; both the win check and the revert-to-7 rule depend on it.
 - **Damage assignment must be maximal, and greedy does not find it.** 4 damage against units of
@@ -580,6 +615,12 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   and dispatched on the spot, which is half the Reserves Phase and the half that matters when two
   fronts both need a die. The `reinforced` log entry names each destination for the same reason.
 
+- **The two friendly sheets are drafts, like reinforce's.** Wild Growth stages `{army die -> dead
+  die}` pairs the way the Reinforce Step stages `{die -> terrain}` -- tap one of your dice, then
+  press the partner it comes back as, which carries its own price. The partners are *buttons* rather
+  than a second selectable grid: they are the only legal answers, and the DUA is already on screen
+  further down the page. A free move tallies passengers against three health-worth and gates the
+  destinations, never "Stay put".
 - **Logic lives in pure functions in `prompts.ts`, not in components.** `damageSelection` is the
   example: the confirm-button rule is testable without a DOM. Keep it that way rather than
   reaching for jsdom.
@@ -736,9 +777,9 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     the type says cannot exist — the new flag reading `undefined`, behaving as its off value by
     accident rather than by decision. That is the reason `storage.ts` records for version 5, beside
     the version-4 one.
-- **A record written by the app names its ruleset.** `useGame` passes `ruleSet: DUA_RULES`
+- **A record written by the app names its ruleset.** `useGame` passes `ruleSet: FULL_RULES`
   explicitly rather than leaning on the default, so a save says which rules it was played under and
-  goes on replaying under them.
+  goes on replaying under them -- which is also why Phase 4e's flip needed no `SAVE_VERSION` bump.
 
 - **Wrap every `localStorage` access.** It throws in private windows, with site data blocked, and
   on a full quota. A game that cannot be saved must still be playable.

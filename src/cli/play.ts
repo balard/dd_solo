@@ -20,6 +20,8 @@ import type { AiPlayer } from '../ai/types'
 import { SPECIES, terrainDie, terrainFaceAction, unitType } from '../data/load'
 import type { TerrainFaceNumber } from '../data/types'
 import { damageOptions } from '../engine/damage'
+import { growthPartners, promotionGain } from '../engine/dua'
+import { isAsleep } from '../engine/effects'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
 import { saiPhrase } from '../engine/roll'
@@ -27,7 +29,7 @@ import { saiPhrase } from '../engine/roll'
 
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
 import {
-  DUA_RULES,
+  FULL_RULES,
   TERRAIN_SLOTS,
   armyAt,
   buriedUnits,
@@ -41,6 +43,7 @@ import {
   type Pending,
   type PlayerId,
   type TerrainSlot,
+  type UnitId,
   type UnitInstance,
 } from '../engine/types'
 
@@ -65,6 +68,20 @@ const SLOT_LABEL: Record<TerrainSlot, string> = {
 const actionName = (action: string) => action.charAt(0).toUpperCase() + action.slice(1)
 
 const name = (unit: UnitInstance) => unitType(unit.typeId).name
+
+/** The same, by id, for the entries that carry ids rather than units. */
+const nameOf = (state: GameState, id: UnitId): string => {
+  const unit = state.units[id]
+  return unit === undefined ? id : name(unit)
+}
+
+const healthOf = (state: GameState, id: UnitId): number => {
+  const unit = state.units[id]
+  return unit === undefined ? 0 : unitType(unit.typeId).health
+}
+
+/** Destination keys for the free-move sheet, kept off the numbers the dice use. */
+const letters = ['a', 'b', 'c', 'd']
 /** "treefolk" -> "Treefolk": ids are the engine's vocabulary, not the player's. */
 const speciesName = (id: string) => SPECIES.find((s) => s.id === id)?.name ?? id
 const health = (units: readonly UnitInstance[]) =>
@@ -226,6 +243,23 @@ function describe(entry: LogEntry, state: GameState): string | null {
           dim(` — until the start of ${entry.player}'s next turn`),
       )
     }
+    // Both halves of one decision: what the budget bought, and what it did not.
+    case 'units_promoted': {
+      const grown = entry.pairs
+        .map((pair) => `${nameOf(state, pair.unitId)} -> ${nameOf(state, pair.partnerId)}`)
+        .join(', ')
+      const saves = entry.saveResults === undefined ? '' : `${entry.saveResults} save results`
+      return green(
+        `  ${bold(entry.sai)}: ${[grown, saves].filter(Boolean).join(' and ') || 'nothing'}`,
+      )
+    }
+
+    case 'units_moved':
+      return cyan(
+        `  ${bold(entry.sai)} walks ${entry.unitIds.map((id) => nameOf(state, id)).join(', ')} ` +
+          `from ${SLOT_LABEL[entry.from]} to ${SLOT_LABEL[entry.to]}`,
+      )
+
     case 'units_buried':
       return red(
         `  ${entry.unitIds
@@ -334,6 +368,9 @@ function choicesFor(pending: Pending): Choice[] {
     case 'assign_damage':
     case 'sai_target':
     case 'sai_target_army':
+    // Their own sheets, like damage: a list of dice and a tally is not a menu.
+    case 'sai_promote':
+    case 'sai_move':
       return [] // handled separately
   }
 }
@@ -448,7 +485,11 @@ async function askDamage(state: GameState, pending: Pending): Promise<GameAction
 
 async function askSaiTarget(state: GameState, pending: Pending): Promise<GameAction> {
   if (pending.kind !== 'sai_target') throw new Error('not an SAI target')
-  const army = armyAt(state, pending.target, pending.slot)
+  // Choke may only take the dice that rolled an ID icon, so those are the only ones
+  // offered -- and the maximum it is held to is the maximum within them.
+  const army = armyAt(state, pending.target, pending.slot).filter(
+    (unit) => pending.eligible === undefined || pending.eligible.includes(unit.id),
+  )
   const more = pending.remaining > 1 ? dim(` (${pending.remaining} still to place)`) : ''
 
   // One die, not health-worth: a separate loop, because there is no budget to tally
@@ -474,6 +515,118 @@ async function askSaiTarget(state: GameState, pending: Pending): Promise<GameAct
     `${pending.sai} — target${more}`,
     `${pending.sai} can take ${pending.limit.budget} health-worth, and no die there is that small`,
   )
+}
+
+/**
+ * Wild Growth: pairs, not a budget of dice.
+ *
+ * Two lists, because a promotion is two dice -- one in the army going down to the DUA
+ * and one in the DUA coming up -- and the player picks both ends. Anything left over
+ * is save results, which is why "done" is always a legal answer and the sheet says
+ * what it will buy.
+ */
+async function askSaiPromote(state: GameState, pending: Pending): Promise<GameAction> {
+  if (pending.kind !== 'sai_promote') throw new Error('not a promotion')
+  const pairs: { unitId: UnitId; partnerId: UnitId }[] = []
+
+  for (;;) {
+    const spent = pairs.reduce((sum, pair) => sum + promotionGain(state, pair), 0)
+    const left = pending.budget - spent
+    const army = armyAt(state, pending.player, pending.slot).filter(
+      (unit) => !pairs.some((pair) => pair.unitId === unit.id),
+    )
+    const promotable = army.filter((unit) => growthPartners(state, unit.id, left).length > 0)
+
+    console.log(
+      `\n${bold(`${pending.sai} — ${left} health of promotion left`)}` +
+        dim(`, and ${left} save results if you stop here`),
+    )
+    for (const pair of pairs) {
+      console.log(dim(`    ${nameOf(state, pair.unitId)} -> ${nameOf(state, pair.partnerId)}`))
+    }
+    if (promotable.length === 0) {
+      console.log(dim('    nothing else can be promoted'))
+      return { kind: 'sai_promote', pairs }
+    }
+    promotable.forEach((unit, i) => {
+      console.log(`    ${i + 1}) promote ${name(unit)} ${dim(`(${unitType(unit.typeId).health}h)`)}`)
+    })
+    console.log('    0) done')
+
+    const reply = (await ask('> ')).trim()
+    if (reply === '0' || reply === '') return { kind: 'sai_promote', pairs }
+
+    const unit = promotable[Number(reply) - 1]
+    if (unit === undefined) {
+      console.log(red('  pick one of the listed dice'))
+      continue
+    }
+
+    const options = growthPartners(state, unit.id, left).filter(
+      (dead) => !pairs.some((pair) => pair.partnerId === dead.id),
+    )
+    if (options.length === 0) {
+      console.log(red('  nothing in your DUA it can grow into for that'))
+      continue
+    }
+
+    console.log(`  ${bold(`${name(unit)} becomes`)}`)
+    options.forEach((dead, i) => {
+      const cost = unitType(dead.typeId).health - unitType(unit.typeId).health
+      console.log(`    ${i + 1}) ${name(dead)} ${dim(`(costs ${cost})`)}`)
+    })
+    const partner = options[Number((await ask('  > ')).trim()) - 1]
+    if (partner === undefined) {
+      console.log(red('  not one of those'))
+      continue
+    }
+    pairs.push({ unitId: unit.id, partnerId: partner.id })
+  }
+}
+
+/** Firewalking and Teleport: a destination, and whoever is coming along. */
+async function askSaiMove(state: GameState, pending: Pending): Promise<GameAction> {
+  if (pending.kind !== 'sai_move') throw new Error('not a free move')
+  const others = armyAt(state, pending.player, pending.slot).filter(
+    (unit) => unit.id !== pending.unitId && !isAsleep(state, unit.id),
+  )
+  const chosen = new Set<UnitId>()
+
+  for (;;) {
+    const carried = [...chosen].reduce((sum, id) => sum + healthOf(state, id), 0)
+    console.log(
+      `\n${bold(`${pending.sai} — ${nameOf(state, pending.unitId)} may walk off`)}` +
+        dim(` carrying up to ${pending.health} health-worth (${carried} chosen)`),
+    )
+    others.forEach((unit, i) => {
+      const mark = chosen.has(unit.id) ? '*' : ' '
+      console.log(`   ${mark}${i + 1}) ${name(unit)} ${dim(`(${healthOf(state, unit.id)}h)`)}`)
+    })
+    pending.options.forEach((slot, i) => {
+      console.log(`    ${letters[i]}) go to ${SLOT_LABEL[slot]}`)
+    })
+    console.log('    0) stay put')
+
+    const reply = (await ask('> ')).trim()
+    if (reply === '0' || reply === '') return { kind: 'sai_move', slot: null, unitIds: [] }
+
+    const slot = pending.options[letters.indexOf(reply)]
+    if (slot !== undefined) {
+      if (carried > pending.health) {
+        console.log(red(`  that is ${carried} health-worth, and it can carry ${pending.health}`))
+        continue
+      }
+      return { kind: 'sai_move', slot, unitIds: [...chosen] }
+    }
+
+    const unit = others[Number(reply) - 1]
+    if (unit === undefined) {
+      console.log(red('  pick a die, a destination, or 0'))
+      continue
+    }
+    if (chosen.has(unit.id)) chosen.delete(unit.id)
+    else chosen.add(unit.id)
+  }
 }
 
 async function askSaiTargetArmy(state: GameState, pending: Pending): Promise<GameAction> {
@@ -564,6 +717,8 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
   if (pending.kind === 'assign_damage') return askDamage(state, pending)
   if (pending.kind === 'sai_target') return askSaiTarget(state, pending)
   if (pending.kind === 'sai_target_army') return askSaiTargetArmy(state, pending)
+  if (pending.kind === 'sai_promote') return askSaiPromote(state, pending)
+  if (pending.kind === 'sai_move') return askSaiMove(state, pending)
   if (pending.kind === 'reinforce' || pending.kind === 'retreat') return askUnits(state, pending)
 
   const choices = choicesFor(pending)
@@ -618,7 +773,7 @@ async function main() {
   const { seed, ai, forces }: { seed: number; ai: AiPlayer; forces: ForceSpec } = parseArgs()
   const human: PlayerId = 'p1'
 
-  let state = begin(setupGame({ seed, forces, ruleSet: DUA_RULES }))
+  let state = begin(setupGame({ seed, forces, ruleSet: FULL_RULES }))
 
   // Which species you are is a roll now, so the banner reads it off the board
   // rather than stating it.

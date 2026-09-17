@@ -79,8 +79,9 @@ export function promotionPartners(state: GameState, unitId: UnitId): readonly Un
  * answer for each is `min(candidates at h, DUA partners at h + 1)` independently.
  * Do not reach for the subset-sum in `damage.ts`: that solves a different problem.
  *
- * Health-budget promotion -- "X health-worth", where one unit may be promoted twice
- * to spend it -- belongs to Wild Growth and the City, and is not this.
+ * Health-budget promotion -- "X health-worth", where a promotion may jump several
+ * steps and costs what it gains -- is Wild Growth's, and lives in
+ * `promotionBudgetProblem` below rather than here.
  */
 export function promotionMatching(
   state: GameState,
@@ -104,6 +105,90 @@ export function promotionMatching(
   }
 
   return pairs
+}
+
+/**
+ * Promotion under a **health budget**, which is a different rule from the one above.
+ *
+ * Ordinary promotion is exactly one health larger (p. 30) and `promotionMatching`
+ * models it. Wild Growth says "promote X health-worth of units in this army", and X is
+ * spent on the health each promotion *gains*: three buys three 1-health units their
+ * 2-health partners, or takes a single 1-health unit all the way to a monster. So a
+ * promotion here may jump more than one step, and what it costs is the jump.
+ *
+ * Everything else about it is the same exchange: same owner, same species, partner in
+ * the DUA, nothing gains health that another die does not lose.
+ */
+export function promotionGain(state: GameState, pair: Exchange): number {
+  const unit = lookup(state, pair.unitId, 'promotionGain')
+  const partner = lookup(state, pair.partnerId, 'promotionGain')
+  return healthOf(partner) - healthOf(unit)
+}
+
+/** The DUA units this one could grow into for at most `budget`: same species, larger,
+ *  and affordable. */
+export function growthPartners(
+  state: GameState,
+  unitId: UnitId,
+  budget: number,
+): readonly UnitInstance[] {
+  const unit = lookup(state, unitId, 'growthPartners')
+  if (!isInPlay(unit)) return []
+
+  const species = speciesOfUnit(unit)
+  const health = healthOf(unit)
+  return deadUnits(state, unit.owner).filter(
+    (dead) =>
+      speciesOfUnit(dead) === species &&
+      healthOf(dead) > health &&
+      healthOf(dead) - health <= budget,
+  )
+}
+
+/**
+ * Why this set of pairs is an illegal way to spend `budget`, or null if it is fine.
+ *
+ * **Under budget is legal.** This is the friendly rule (p. 29, "any number ...
+ * including none"), not the opponent-targeting one that forces a maximum -- the
+ * leftover simply becomes save results. So this refuses overspending and nonsense,
+ * never thrift.
+ */
+export function promotionBudgetProblem(
+  state: GameState,
+  player: PlayerId,
+  pairs: readonly Exchange[],
+  budget: number,
+): string | null {
+  const used = new Set<UnitId>()
+  let spent = 0
+
+  for (const pair of pairs) {
+    const unit = state.units[pair.unitId]
+    const partner = state.units[pair.partnerId]
+    if (unit === undefined) return `no such unit ${pair.unitId}`
+    if (partner === undefined) return `no such unit ${pair.partnerId}`
+    if (used.has(pair.unitId) || used.has(pair.partnerId)) {
+      return `${pair.unitId} or ${pair.partnerId} is named twice; each die promotes once`
+    }
+    used.add(pair.unitId)
+    used.add(pair.partnerId)
+
+    if (unit.owner !== player || partner.owner !== player) return `${pair.unitId} is not yours`
+    if (!isInPlay(unit)) return `${pair.unitId} is not in play`
+    if (partner.location.kind !== 'dua') return `${pair.partnerId} is not in your DUA`
+    if (speciesOfUnit(unit) !== speciesOfUnit(partner)) {
+      return `${pair.unitId} cannot promote into ${pair.partnerId} -- a promotion stays within one species`
+    }
+
+    const gain = healthOf(partner) - healthOf(unit)
+    if (gain <= 0) {
+      return `${pair.partnerId} is not larger than ${pair.unitId}; a promotion goes up`
+    }
+    spent += gain
+  }
+
+  if (spent > budget) return `that spends ${spent} health of promotion, and you have ${budget}`
+  return null
 }
 
 /**

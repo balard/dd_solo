@@ -8,6 +8,7 @@
 import { terrainDie, terrainFaceAction, unitType } from '../../data/load'
 import type { TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
+import { growthPartners, promotionGain } from '../../engine/dua'
 import { isAsleep } from '../../engine/effects'
 import { legalDirections } from '../../engine/turn'
 import {
@@ -20,6 +21,7 @@ import {
   type GameState,
   type Pending,
   type PlayerId,
+  type PromotionPair,
   type TerrainFace,
   type TerrainSlot,
   type UnitId,
@@ -88,7 +90,13 @@ export interface Prompt {
   readonly question: string
   readonly choices: readonly Choice[]
   /** Handled by a dedicated surface rather than plain buttons. */
-  readonly custom?: 'assign_damage' | 'sai_target' | 'reinforce' | 'retreat'
+  readonly custom?:
+    | 'assign_damage'
+    | 'sai_target'
+    | 'sai_promote'
+    | 'sai_move'
+    | 'reinforce'
+    | 'retreat'
 }
 
 const stepFace = (face: TerrainFace, direction: Direction): TerrainFace =>
@@ -235,6 +243,32 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         custom: 'sai_target',
       }
 
+    /**
+     * Wild Growth and the free moves: the first prompts that can be answered with
+     * nothing, and the first that reach into your *own* army.
+     *
+     * Both get their own sheet rather than a list of buttons, because both are "pick
+     * some dice and then say what to do with them" -- which is the reinforce shape,
+     * not the missile-target shape.
+     */
+    case 'sai_promote':
+      return {
+        question:
+          `${pending.sai}: ${pending.budget} health of promotion` +
+          (pending.remaining > 1 ? ` (${pending.remaining} to place)` : ''),
+        choices: [],
+        custom: 'sai_promote',
+      }
+
+    case 'sai_move':
+      return {
+        question:
+          `${pending.sai}: walk off with up to ${pending.health} health-worth` +
+          (pending.remaining > 1 ? ` (${pending.remaining} to place)` : ''),
+        choices: [],
+        custom: 'sai_move',
+      }
+
     // A terrain, not dice -- so it is ordinary buttons, the way a missile target is.
     case 'sai_target_army':
       return {
@@ -299,7 +333,12 @@ export function saiTargetSelection(
   pending: Extract<Pending, { kind: 'sai_target' }>,
   selection: ReadonlySet<UnitId>,
 ): DamageSelection {
-  const army = armyAt(state, pending.target, pending.slot)
+  // Choke may take only the dice that rolled an ID icon, so they are the only ones
+  // the tally counts and the only ones the maximum is measured against. Every other
+  // SAI leaves `eligible` off and takes the army whole.
+  const army = armyAt(state, pending.target, pending.slot).filter(
+    (unit) => pending.eligible === undefined || pending.eligible.includes(unit.id),
+  )
 
   // Sleep counts *dice*, not health: one die is one die whatever it weighs, so the
   // maximal-subset arithmetic has nothing to chew on. The sheet is the same; only
@@ -315,7 +354,14 @@ export function saiTargetSelection(
     }
   }
 
-  return budgetSelection(state, pending.target, pending.slot, pending.limit.budget, selection)
+  return budgetSelection(
+    state,
+    pending.target,
+    pending.slot,
+    pending.limit.budget,
+    selection,
+    pending.eligible,
+  )
 }
 
 function budgetSelection(
@@ -324,8 +370,11 @@ function budgetSelection(
   slot: TerrainSlot,
   budget: number,
   selection: ReadonlySet<UnitId>,
+  eligible?: readonly UnitId[],
 ): DamageSelection {
-  const army = armyAt(state, owner, slot)
+  const army = armyAt(state, owner, slot).filter(
+    (unit) => eligible === undefined || eligible.includes(unit.id),
+  )
   const { required, suggestion } = damageOptions(army, budget)
 
   const absorbed = [...selection].reduce((sum, id) => {
@@ -336,6 +385,101 @@ function budgetSelection(
   }, 0)
 
   return { absorbed, required, ready: absorbed === required, suggestion }
+}
+
+/**
+ * A Wild Growth draft: which of your dice are growing into which of your dead.
+ *
+ * Pairs rather than a set of units, for the reason the *rule* is pairs: a dead Oak
+ * Lord and a dead Redwood are both three health and are not the same die, and the
+ * budget is spent on the health a promotion *gains* -- so which partner you pick is
+ * both a tactical choice and a price.
+ *
+ * **Under budget is legal**, which no selection in this file before Phase 4e was:
+ * p. 29's "any number ... including none" against p. 32's forced maximum. What is not
+ * spent is save results, so there is no such thing as a wasted budget and no reason to
+ * gate Confirm on anything.
+ */
+export interface PromoteDraft {
+  readonly spent: number
+  readonly left: number
+  /** What stopping here would buy instead. */
+  readonly saveResults: number
+  /** The dice that could still grow, given what is left. */
+  readonly growable: readonly UnitInstance[]
+  /** What the one selected die could become, cheapest first. */
+  readonly partners: readonly { readonly unit: UnitInstance; readonly cost: number }[]
+}
+
+export function promoteDraft(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'sai_promote' }>,
+  pairs: readonly PromotionPair[],
+  selection: ReadonlySet<UnitId>,
+): PromoteDraft {
+  const spent = pairs.reduce((sum, pair) => sum + promotionGain(state, pair), 0)
+  const left = pending.budget - spent
+
+  const army = armyAt(state, pending.player, pending.slot).filter(
+    (unit) => !pairs.some((pair) => pair.unitId === unit.id),
+  )
+  const taken = pairs.map((pair) => pair.partnerId)
+  const options = (unit: UnitInstance) =>
+    growthPartners(state, unit.id, left).filter((dead) => !taken.includes(dead.id))
+
+  const [only] = [...selection].filter((id) => army.some((unit) => unit.id === id))
+  const selected = only === undefined ? undefined : state.units[only]
+
+  return {
+    spent,
+    left,
+    saveResults: left,
+    growable: army.filter((unit) => options(unit).length > 0),
+    partners:
+      selected === undefined
+        ? []
+        : options(selected)
+            .map((dead) => ({
+              unit: dead,
+              cost: unitType(dead.typeId).health - unitType(selected.typeId).health,
+            }))
+            .sort((a, b) => a.cost - b.cost),
+  }
+}
+
+/**
+ * A free-move draft: who is going along, and whether that is still affordable.
+ *
+ * The mover is never in the selection -- it moves itself -- so everything counted here
+ * is a passenger. `ready` is `<=` rather than `===`, which is the whole difference
+ * between a friendly SAI and an opponent-targeting one.
+ */
+export interface MoveDraft {
+  readonly carried: number
+  readonly limit: number
+  readonly ready: boolean
+  /** Passengers that may not travel: a sleeping die cannot leave its terrain. */
+  readonly stuck: ReadonlySet<UnitId>
+}
+
+export function moveDraft(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'sai_move' }>,
+  selection: ReadonlySet<UnitId>,
+): MoveDraft {
+  const army = armyAt(state, pending.player, pending.slot)
+  const stuck = new Set<UnitId>()
+  let carried = 0
+
+  for (const id of selection) {
+    if (id === pending.unitId) continue
+    const unit = army.find((u) => u.id === id)
+    if (unit === undefined) continue
+    if (isAsleep(state, id)) stuck.add(id)
+    carried += unitType(unit.typeId).health
+  }
+
+  return { carried, limit: pending.health, ready: carried <= pending.health && stuck.size === 0, stuck }
 }
 
 /**
@@ -434,6 +578,11 @@ export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): Sele
     // that is selectable is not the side the question was addressed to.
     case 'sai_target':
       return { side: 'theirs', slot: pending.slot }
+    // Friendly, and so back to your own half of the board -- the first decisions since
+    // `sai_target` to point there, and the first ever that may be answered with none.
+    case 'sai_promote':
+    case 'sai_move':
+      return { side: 'mine', slot: pending.slot }
     case 'retreat':
       return { side: 'mine', slot: null }
     case 'reinforce':

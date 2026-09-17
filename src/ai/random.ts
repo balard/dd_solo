@@ -5,7 +5,8 @@
  * is the cheapest bug detector available here: it finds illegal states, unreachable
  * phases, infinite loops and crashes far faster than hand-written scenarios can.
  */
-import { damageOptions } from '../engine/damage'
+import { damageOptions, healthsOf } from '../engine/damage'
+import { growthPartners } from '../engine/dua'
 import { isAsleep } from '../engine/effects'
 import { nextInt, type RngState } from '../engine/rng'
 import {
@@ -31,6 +32,12 @@ function pick<T>(rng: RngState, options: readonly T[]): readonly [T, RngState] {
 function coin(rng: RngState): readonly [boolean, RngState] {
   const [value, next] = nextInt(rng, 2)
   return [value === 1, next] as const
+}
+
+/** One unit's health, for the two budgets this file has to respect. */
+function health(state: GameState, unitId: UnitId): number {
+  const unit = state.units[unitId]
+  return unit === undefined ? 0 : (healthsOf([unit])[0] ?? 0)
 }
 
 /** Fisher-Yates over the injected rng, so shuffles are reproducible too. */
@@ -101,7 +108,13 @@ export const randomAi: AiPlayer = {
       // the whole space of this decision is which maximal set, and that is what the
       // shuffle walks.
       case 'sai_target': {
-        const army = armyAt(state, pending.target, pending.slot)
+        // Choke may take only the dice that rolled an ID icon, and the maximum it is
+        // held to is the maximum *within that set* -- so a fuzz that picks from the
+        // whole army produces an illegal answer and fails the game rather than the
+        // rule. A decision that gains a dimension has to reach the fuzz opponent too.
+        const army = armyAt(state, pending.target, pending.slot).filter(
+          (unit) => pending.eligible === undefined || pending.eligible.includes(unit.id),
+        )
         const [shuffled, next] = shuffle(rng, army)
 
         // Sleep picks one die uniformly; the shuffle is the pick. A sleeping die is
@@ -126,6 +139,65 @@ export const randomAi: AiPlayer = {
        * rolled on, and picking `options[0]` here would mean a thousand fuzz games
        * never once produced a cross-terrain cast -- the reinforce bug again.
        */
+      /**
+       * Wild Growth. Builds a legal set of pairs by walking the army in a random
+       * order and spending what is left of the budget on the first affordable partner
+       * -- which is not a strategy, but it does reach the promotion path, including
+       * the multi-step jumps that `promotionMatching` cannot express.
+       */
+      case 'sai_promote': {
+        const [units, afterShuffle] = shuffle(rng, armyAt(state, pending.player, pending.slot))
+        let next = afterShuffle
+        let budget = pending.budget
+        const taken = new Set<UnitId>()
+        const pairs: { unitId: UnitId; partnerId: UnitId }[] = []
+
+        for (const unit of units) {
+          if (budget <= 0) break
+          const options = growthPartners(state, unit.id, budget).filter((p) => !taken.has(p.id))
+          if (options.length === 0) continue
+          const [take, afterCoin] = coin(next)
+          next = afterCoin
+          if (!take) continue
+
+          const [partner, afterPick] = pick(next, options)
+          next = afterPick
+          taken.add(partner.id)
+          pairs.push({ unitId: unit.id, partnerId: partner.id })
+          budget -= health(state, partner.id) - health(state, unit.id)
+        }
+
+        return [{ kind: 'sai_promote', pairs } as GameAction, next] as const
+      }
+
+      /** A free move: decline half the time, and otherwise take a random destination
+       *  and a random affordable handful along. */
+      case 'sai_move': {
+        const [go, afterCoin] = coin(rng)
+        if (!go || pending.options.length === 0) {
+          return [{ kind: 'sai_move', slot: null, unitIds: [] } as GameAction, afterCoin] as const
+        }
+
+        const [slot, afterSlot] = pick(afterCoin, pending.options)
+        const [others, afterShuffle] = shuffle(
+          afterSlot,
+          armyAt(state, pending.player, pending.slot).filter(
+            (unit) => unit.id !== pending.unitId && !isAsleep(state, unit.id),
+          ),
+        )
+
+        let carried = 0
+        const unitIds: UnitId[] = []
+        for (const unit of others) {
+          const cost = health(state, unit.id)
+          if (carried + cost > pending.health) continue
+          carried += cost
+          unitIds.push(unit.id)
+        }
+
+        return [{ kind: 'sai_move', slot, unitIds } as GameAction, afterShuffle] as const
+      }
+
       case 'sai_target_army': {
         const [slot, next] = pick(rng, pending.options)
         return [

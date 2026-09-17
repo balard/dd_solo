@@ -178,9 +178,15 @@ describe('the rungs of ruleSet.sai', () => {
       .toEqual({ melee: 4 })
   })
 
-  it('refuses an unimplemented targeting SAI under sai: full', () => {
+  /**
+   * Phase 4e built the last of the twenty-five, so this throw is no longer reachable
+   * by any name in the data -- and it is still the guard that matters: it is what a
+   * *new* SAI, transcribed for a new species, would hit instead of going quietly
+   * inert. The test says that in the only way it can, with a name nobody has written.
+   */
+  it('refuses a name no rung claims under sai: full', () => {
     expect(() =>
-      saiEffects(sai('Choke'), { purpose: melee, isCounter: false }, FULL_RULES),
+      saiEffects(sai('Backflip'), { purpose: melee, isCounter: false }, FULL_RULES),
     ).toThrow(/targeting SAIs are not implemented/)
   })
 
@@ -302,11 +308,29 @@ describe('the rungs of ruleSet.sai', () => {
     }
   })
 
-  it('says spells, not Phase 4, for the two SAIs that cast one', () => {
-    for (const name of ['Cantrip', 'Dispel Magic']) {
-      expect(() =>
-        saiEffects(sai(name), { purpose: melee, isCounter: false }, FULL_RULES),
-      ).toThrow(/casts a spell, which needs magic: 'spells'/)
+  /**
+   * Both of these used to throw "needs spells", and both were misfiled.
+   *
+   * Cantrip's *first* sentence is a plain result generator -- "during a magic action,
+   * Cantrip generates X magic results" -- which works under `magic: 'simplified'`
+   * because magic results are exactly what that house rule counts. Only its second
+   * sentence, magic results that may buy nothing but Cantrip spells, waits for Phase
+   * 7, and results with nothing to spend them on are worth zero rather than
+   * unimplemented. Dispel Magic's column is *Special*: it takes no part in any roll
+   * in the sequence, so nothing is its complete answer.
+   */
+  it('resolves the two that were filed as needing spells', () => {
+    expect(saiEffects(sai('Cantrip'), { purpose: magic, isCounter: false }, SAI_RULES).results)
+      .toEqual({ magic: 4 })
+    // The half that does need spells: magic results that can only buy a Cantrip spell,
+    // and under simplified magic there are none to buy.
+    for (const purpose of [melee, missile, saveVs('melee')]) {
+      expect(saiEffects(sai('Cantrip'), { purpose, isCounter: false }, FULL_RULES).results)
+        .toEqual({})
+    }
+    for (const purpose of [magic, melee, saveVs(null)]) {
+      expect(saiEffects(sai('Dispel Magic'), { purpose, isCounter: false }, FULL_RULES))
+        .toEqual({ results: {}, effects: [], reroll: false })
     }
   })
 
@@ -332,9 +356,10 @@ describe('the rungs of ruleSet.sai', () => {
     // Built, and absent from the rung the app plays -- the case the label got wrong.
     expect(resolvesSai('Smother', SAI_RULES)).toBe(false)
     expect(resolvesSai('Smother', FULL_RULES)).toBe(true)
-    // Unbuilt on every rung, and waiting on Phase 7 rather than on this flag.
-    expect(resolvesSai('Choke', FULL_RULES)).toBe(false)
-    expect(resolvesSai('Cantrip', FULL_RULES)).toBe(false)
+    // Every name in the box is claimed now, including the two that used to throw.
+    expect(resolvesSai('Cantrip', SAI_RULES)).toBe(true)
+    expect(resolvesSai('Dispel Magic', FULL_RULES)).toBe(true)
+    expect(resolvesSai('Backflip', FULL_RULES)).toBe(false)
     // `'inert'` resolves nothing, whatever the tables say.
     for (const name of [...LIVE_SAIS, ...TARGETING_SAIS]) {
       expect(resolvesSai(name, V0_RULES), name).toBe(false)
@@ -346,8 +371,13 @@ describe('the rungs of ruleSet.sai', () => {
     // `deferred` and into `LIVE_SAIS`, and this test is what makes that a deliberate
     // edit rather than something that happens quietly. `needsSpells` never moves --
     // Cantrip and Dispel Magic wait on Phase 7, not on any rung of this flag.
-    const needsSpells = new Set(['Cantrip', 'Dispel Magic'])
-    const deferred = new Set(['Choke', 'Confuse', 'Wild Growth'])
+    // Empty too, and for a reason worth keeping: Cantrip's magic half and Dispel
+    // Magic's special roll are not the same thing as an unimplemented SAI. Phase 7
+    // adds what they can *buy*, not the faces themselves.
+    const needsSpells = new Set<string>()
+    // Empty as of Phase 4e, and kept rather than deleted: it is the line a new SAI
+    // would be added to, and the count below is what makes adding one a decision.
+    const deferred = new Set<string>()
     const live = new Set(LIVE_SAIS)
     const targeting = new Set(TARGETING_SAIS)
 
@@ -360,10 +390,10 @@ describe('the rungs of ruleSet.sai', () => {
     // The split is pinned because the prose in CLAUDE.md, RULES-V0.md and PLAN-V1.md
     // all quote it, and nothing else would notice it going stale. Each Phase 4 slice
     // moves names from `deferred` into `TARGETING_SAIS` and edits these two numbers.
-    expect(live.size, 'SAIs live under sai: results').toBe(12)
-    expect(targeting.size, 'targeting SAIs built so far').toBe(8)
-    expect(deferred.size, 'targeting SAIs still unbuilt').toBe(3)
-    expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(2)
+    expect(live.size, 'SAIs live under sai: results').toBe(14)
+    expect(targeting.size, 'targeting SAIs built so far').toBe(11)
+    expect(deferred.size, 'targeting SAIs still unbuilt').toBe(0)
+    expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(0)
 
     for (const name of names) {
       const claimed =

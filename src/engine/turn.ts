@@ -15,14 +15,23 @@
  */
 import {
   attackEffects,
+  attackFacts,
+  finishSaves,
   legalActions,
   missileTargets,
-  resolveSaves,
   rollAttack,
+  rollSaveFaces,
+  saveEffects,
   terrainAction,
   type AttackSpec,
 } from './combat'
-import { damageAssignmentProblem, damageOptions } from './damage'
+import { damageAssignmentProblem, damageOptions, healthsOf } from './damage'
+import {
+  exchangeWithDua,
+  growthPartners,
+  promotionBudgetProblem,
+  promotionGain,
+} from './dua'
 import { killAndBury, killUnits } from './death'
 import { armyRoll, expireEffects, isAsleep, pruneEffects, unitRoll, type Effect } from './effects'
 
@@ -34,10 +43,11 @@ import {
   rollFaces,
   rollUnits,
   type DieRoll,
+  type RawDie,
 } from './roll'
 import type { Modifier } from './pipeline'
 import type { RollContext } from './sai'
-import { targetTasks, type TargetTask } from './targeting'
+import { delayedTasks, targetTasks, type TargetTask } from './targeting'
 import {
   IllegalActionError,
   TERRAIN_SLOTS,
@@ -55,11 +65,14 @@ import {
   type MarchStep,
   type Pending,
   type PendingAttack,
+  type PendingSaves,
+  type PromotionPair,
   type PlayerId,
   type TerrainFace,
   type TerrainSlot,
   type TurnState,
   type UnitId,
+  type UnitInstance,
 } from './types'
 
 const PLAYERS: readonly PlayerId[] = ['p1', 'p2']
@@ -237,12 +250,20 @@ function stepMarch(state: GameState): GameState {
     case 'sai_target_attack':
       return stepTargeting(state, false)
     case 'resolve_attack_saves':
+      return rollSaves(state, false)
+    case 'sai_delayed_attack':
+      return stepDelayed(state, false)
+    case 'resolve_attack_damage':
       return finishExchange(state, false)
     case 'resolve_counter':
       return beginExchange(state, true)
     case 'sai_target_counter':
       return stepTargeting(state, true)
     case 'resolve_counter_saves':
+      return rollSaves(state, true)
+    case 'sai_delayed_counter':
+      return stepDelayed(state, true)
+    case 'resolve_counter_damage':
       return finishExchange(state, true)
 
     case 'assign_attack_damage':
@@ -298,12 +319,16 @@ const COMBAT_SEQUENCE = [
   'resolve_attack',
   'sai_target_attack',
   'resolve_attack_saves',
+  'sai_delayed_attack',
+  'resolve_attack_damage',
   'assign_attack_damage',
   'assign_attack_riposte',
   'offer_counter',
   'resolve_counter',
   'sai_target_counter',
   'resolve_counter_saves',
+  'sai_delayed_counter',
+  'resolve_counter_damage',
   'assign_counter_damage',
   'assign_counter_riposte',
 ] as const satisfies readonly MarchStep[]
@@ -316,9 +341,13 @@ export const MID_EXCHANGE_STEPS: readonly MarchStep[] = [
   'resolve_attack',
   'sai_target_attack',
   'resolve_attack_saves',
+  'sai_delayed_attack',
+  'resolve_attack_damage',
   'resolve_counter',
   'sai_target_counter',
   'resolve_counter_saves',
+  'sai_delayed_counter',
+  'resolve_counter_damage',
 ]
 
 type AssignStep = Extract<CombatStep, `assign_${string}`>
@@ -448,7 +477,12 @@ function beginExchange(state: GameState, isCounter: boolean): GameState {
   // Reading the faces costs nothing and draws nothing -- `resolveFaces` is pure -- so
   // the targeting queue is worked out here and the same faces are resolved again for
   // real once the queue has drained. That is the whole point of the 4a seam.
-  const targets = targetTasks(attackEffects(state, spec, attack))
+  const effects = attackEffects(state, spec, attack)
+  const targets = targetTasks(effects)
+  // Choke and Confuse wait for the defender's dice. They are parked here rather than
+  // with the save roll because they are *this* roll's SAIs and exist two steps before
+  // there is anything to apply them to.
+  const delayed = delayedTasks(effects)
 
   // A spread, unlike the rebuild below, and safe for the opposite reason: this is
   // the *same* exchange one step later, not the next one. Nothing between here and
@@ -460,7 +494,11 @@ function beginExchange(state: GameState, isCounter: boolean): GameState {
       marchStep: isCounter ? 'sai_target_counter' : 'sai_target_attack',
       combat: {
         ...combat,
-        attack: { ...attack, ...(targets.length > 0 ? { targets } : {}) },
+        attack: {
+          ...attack,
+          ...(targets.length > 0 ? { targets } : {}),
+          ...(delayed.length > 0 ? { delayed } : {}),
+        },
       },
     },
   )
@@ -474,8 +512,64 @@ function withTargets(
 ): CombatState {
   return {
     ...combat,
-    attack: { dice: attack.dice, ...(targets.length > 0 ? { targets } : {}) },
+    attack: {
+      dice: attack.dice,
+      ...(targets.length > 0 ? { targets } : {}),
+      ...(attack.delayed !== undefined ? { delayed: attack.delayed } : {}),
+    },
   }
+}
+
+/** The save roll, with its own queue stripped back and anything else it carries kept. */
+function withSaves(combat: CombatState, saves: PendingSaves, next: Partial<PendingSaves>): CombatState {
+  const merged = { ...saves, ...next }
+  return {
+    ...combat,
+    saves: {
+      dice: merged.dice,
+      ...(merged.tasks !== undefined && merged.tasks.length > 0 ? { tasks: merged.tasks } : {}),
+      ...(merged.bonus !== undefined && merged.bonus > 0 ? { bonus: merged.bonus } : {}),
+    },
+  }
+}
+
+function requireSaves(state: GameState, combat: CombatState): PendingSaves {
+  const saves = combat.saves
+  if (saves === undefined) {
+    throw new Error(`reached ${state.turn.marchStep} with no save roll waiting to be resolved`)
+  }
+  return saves
+}
+
+/**
+ * Which queue the current step is draining.
+ *
+ * Two pauses, two queues, one set of appliers: an answer arrives at `applyAction`
+ * knowing only its own shape, so this is what tells it where the question came from.
+ */
+function taskQueue(state: GameState): readonly TargetTask[] {
+  const combat = state.turn.combat
+  if (combat === null) return []
+  const step = state.turn.marchStep
+  if (step === 'sai_target_attack' || step === 'sai_target_counter') {
+    return combat.attack?.targets ?? []
+  }
+  if (step === 'sai_delayed_attack' || step === 'sai_delayed_counter') {
+    return combat.saves?.tasks ?? []
+  }
+  return []
+}
+
+/** The same two queues, with the head dropped once it has been answered. */
+function dropHeadTask(state: GameState): GameState {
+  const combat = requireCombat(state)
+  const rest = taskQueue(state).slice(1)
+  const step = state.turn.marchStep
+
+  if (step === 'sai_target_attack' || step === 'sai_target_counter') {
+    return withTurn(state, { combat: withTargets(combat, requireAttack(state, combat), rest) })
+  }
+  return withTurn(state, { combat: withSaves(combat, requireSaves(state, combat), { tasks: rest }) })
 }
 
 function requireAttack(state: GameState, combat: CombatState): PendingAttack {
@@ -505,9 +599,66 @@ function opposingArmies(state: GameState, roller: PlayerId): readonly TerrainSlo
   return TERRAIN_SLOTS.filter((slot) => armyAt(state, enemy, slot).length > 0)
 }
 
-/** Whether this task has anything it could land on. */
-function taskHasWork(state: GameState, spec: AttackSpec, task: TargetTask): boolean {
+/**
+ * Which player answers a task, and about whose army.
+ *
+ * Every task before Phase 4e was the attacker's, about the defender. Wild Growth and
+ * the free moves are the first *friendly* ones, and at the delayed pause they belong
+ * to whoever made the roll that produced them -- which is the defender, because the
+ * roll is the save roll. Choke and Confuse are at the same pause and still the
+ * attacker's, because they came off the attack roll two steps earlier.
+ */
+interface TaskOwner {
+  readonly player: PlayerId
+  readonly army: PlayerId
+  readonly slot: TerrainSlot
+}
+
+function taskOwner(task: TargetTask, spec: AttackSpec, delayed: boolean): TaskOwner {
+  const friendly = task.kind === 'promote' || task.kind === 'move'
+  if (delayed && friendly) {
+    return { player: spec.defender, army: spec.defender, slot: spec.defenderSlot }
+  }
+  if (friendly) {
+    return { player: spec.attacker, army: spec.attacker, slot: spec.attackerSlot }
+  }
+  return { player: spec.attacker, army: spec.defender, slot: spec.defenderSlot }
+}
+
+/**
+ * Choke's legal targets: the defenders whose save die came up an ID icon.
+ *
+ * The only targeting rule in the game that is a fact about a *roll* rather than about
+ * an army, which is why it has to be computed here, from the parked dice, and handed
+ * to the client on the pending: the tally, the confirm gate and the reducer all have
+ * to agree about which dice are even on offer.
+ */
+function chokeEligible(state: GameState, spec: AttackSpec, saves: PendingSaves): readonly UnitId[] {
   const army = armyAt(state, spec.defender, spec.defenderSlot)
+  const ids: UnitId[] = []
+  for (const die of saves.dice) {
+    if (faceOf(die).icon !== 'ID') continue
+    if (!army.some((unit) => unit.id === die.unitId)) continue
+    if (!ids.includes(die.unitId)) ids.push(die.unitId)
+  }
+  return ids
+}
+
+/** The units a task may pick from, which is its owner's army for a friendly one. */
+function taskArmy(state: GameState, owner: TaskOwner): readonly UnitInstance[] {
+  return armyAt(state, owner.army, owner.slot)
+}
+
+/** Whether this task has anything it could land on. */
+function taskHasWork(
+  state: GameState,
+  spec: AttackSpec,
+  task: TargetTask,
+  delayed: boolean,
+): boolean {
+  const owner = taskOwner(task, spec, delayed)
+  const army = taskArmy(state, owner)
+
   switch (task.kind) {
     case 'enemy':
       return damageOptions(army, task.health).required > 0
@@ -515,59 +666,195 @@ function taskHasWork(state: GameState, spec: AttackSpec, task: TargetTask): bool
       return army.length > 0
     case 'galeforce':
       return opposingArmies(state, spec.attacker).length > 0
+    case 'confuse':
+      return damageOptions(army, task.health).required > 0
+    case 'choke': {
+      // Nothing rolled an ID, nothing to choke -- and the army may be picked from only
+      // within that set, so the budget is measured over it too.
+      const saves = state.turn.combat?.saves
+      if (saves === undefined) return false
+      const eligible = chokeEligible(state, spec, saves)
+      const units = army.filter((unit) => eligible.includes(unit.id))
+      return damageOptions(units, task.health).required > 0
+    }
+    case 'promote':
+      // No partner in the DUA and there is no decision: the whole budget is save
+      // results, and `stepTasks` applies that rather than asking about it.
+      return army.some((unit) => growthPartners(state, unit.id, task.budget).length > 0)
+    case 'move': {
+      const mover = state.units[task.unitId]
+      return mover !== undefined && mover.location.kind === 'terrain'
+    }
   }
 }
 
-/** The question this task asks its roller. */
+/** The question this task asks. */
 function taskPending(
   state: GameState,
   spec: AttackSpec,
   task: TargetTask,
   remaining: number,
+  delayed: boolean,
 ): Pending {
-  const common = { player: spec.attacker, sai: task.sai, remaining } as const
+  const owner = taskOwner(task, spec, delayed)
+  const common = { player: owner.player, sai: task.sai, remaining } as const
+  const aimed = { target: owner.army, slot: owner.slot } as const
 
   switch (task.kind) {
     case 'enemy':
-      return {
-        kind: 'sai_target',
-        ...common,
-        target: spec.defender,
-        slot: spec.defenderSlot,
-        limit: { kind: 'health', budget: task.health },
-      }
+      return { kind: 'sai_target', ...common, ...aimed, limit: { kind: 'health', budget: task.health } }
     case 'sleep':
+      return { kind: 'sai_target', ...common, ...aimed, limit: { kind: 'one' } }
+    case 'confuse':
+      return { kind: 'sai_target', ...common, ...aimed, limit: { kind: 'health', budget: task.health } }
+    case 'choke': {
+      const saves = requireSaves(state, requireCombat(state))
       return {
         kind: 'sai_target',
         ...common,
-        target: spec.defender,
-        slot: spec.defenderSlot,
-        limit: { kind: 'one' },
+        ...aimed,
+        limit: { kind: 'health', budget: task.health },
+        eligible: chokeEligible(state, spec, saves),
       }
+    }
     case 'galeforce':
       return { kind: 'sai_target_army', ...common, options: opposingArmies(state, spec.attacker) }
+    case 'promote':
+      return {
+        kind: 'sai_promote',
+        ...common,
+        budget: task.budget,
+        slot: owner.slot,
+        // Only the defender's own save roll counts save results. An attack roll
+        // generates them in a type it does not count.
+        saveResultsCount: delayed && owner.player === spec.defender,
+      }
+    case 'move':
+      return {
+        kind: 'sai_move',
+        ...common,
+        unitId: task.unitId,
+        slot: owner.slot,
+        health: task.health,
+        // "To any terrain" -- but not the one it is already standing on, which is an
+        // answer that moves nobody and reads as a mistake.
+        options: TERRAIN_SLOTS.filter((slot) => slot !== owner.slot),
+      }
   }
 }
 
+/**
+ * Drains a queue of tasks, one decision at a time.
+ *
+ * Shared by both pauses, because the only things that differ are where the queue is
+ * parked and who is asked -- and both of those are answers this file already has.
+ *
+ * Three ways a task leaves the queue without a decision:
+ *
+ *  - it can take nothing ("up to X health-worth" against an army whose smallest die is
+ *    bigger than X), which is `RULES-V0.md` section 6's rule about damage too small to
+ *    kill, in a second place;
+ *  - Choke found no ID icons in the save roll;
+ *  - Wild Growth found no partner in the DUA, and then its whole budget is save
+ *    results. That one is not *dropped*: `autoResolve` applies it, because a budget
+ *    that quietly evaporates is a Fireshadow smiting for 4 with nothing in the log.
+ */
+function stepTasks(state: GameState, isCounter: boolean, delayed: boolean): GameState {
+  const spec = exchangeSpec(state, isCounter)
+  const queue = taskQueue(state)
+  const head = queue[0]
+
+  if (head === undefined) {
+    return withTurn(state, {
+      marchStep: nextStepAfterTasks(isCounter, delayed),
+    })
+  }
+
+  if (!taskHasWork(state, spec, head, delayed)) return autoResolve(state, spec, head, delayed)
+
+  return { ...state, pending: taskPending(state, spec, head, queue.length, delayed) }
+}
+
+const nextStepAfterTasks = (isCounter: boolean, delayed: boolean): MarchStep => {
+  if (delayed) return isCounter ? 'resolve_counter_damage' : 'resolve_attack_damage'
+  return isCounter ? 'resolve_counter_saves' : 'resolve_attack_saves'
+}
+
+/** A task nobody can be asked about, resolved the only way it can be. */
+function autoResolve(
+  state: GameState,
+  spec: AttackSpec,
+  task: TargetTask,
+  delayed: boolean,
+): GameState {
+  const dropped = dropHeadTask(state)
+  if (task.kind !== 'promote') return dropped
+
+  // Wild Growth with nothing to promote into: the budget is save results, and they
+  // only exist if there is a save roll to put them in. On an attack roll they are
+  // counted in a type the roll does not count, which is the rules' own arithmetic
+  // rather than a loss.
+  const owner = taskOwner(task, spec, delayed)
+  if (!delayed || owner.player !== spec.defender) return dropped
+
+  const combat = requireCombat(dropped)
+  const saves = requireSaves(dropped, combat)
+  const logged = withLog(dropped, {
+    kind: 'units_promoted',
+    player: owner.player,
+    sai: task.sai,
+    pairs: [],
+    saveResults: task.budget,
+  })
+  return withTurn(logged, {
+    combat: withSaves(combat, saves, { bonus: (saves.bonus ?? 0) + task.budget }),
+  })
+}
+
 function stepTargeting(state: GameState, isCounter: boolean): GameState {
+  return stepTasks(state, isCounter, false)
+}
+
+function stepDelayed(state: GameState, isCounter: boolean): GameState {
+  return stepTasks(state, isCounter, true)
+}
+
+/**
+ * The defender's dice hit the table, and the exchange pauses again.
+ *
+ * Step 1 of their roll and nothing more. What waits at the next step is the rulebook's
+ * step 2 -- "when rolling for saves against an attack, Delayed Effects are applied
+ * now" -- plus the defending army's own Wild Growth and free moves, which are step 4
+ * SAIs and are folded into the same pause because nothing between the two can be
+ * observed: no save roll in the game has a step-3 reroll to come between them.
+ *
+ * A roll that earns no save roll at all skips straight to the damage, and its delayed
+ * effects go with it: there are no dice for a Choke to look at.
+ */
+function rollSaves(state: GameState, isCounter: boolean): GameState {
   const combat = requireCombat(state)
   const attack = requireAttack(state, combat)
   const spec = exchangeSpec(state, isCounter)
 
-  const queue = (attack.targets ?? []).filter((task) => taskHasWork(state, spec, task))
-
-  const head = queue[0]
-  if (head === undefined) {
+  if (!attackFacts(state, spec, attack).savesNeeded) {
     return withTurn(state, {
-      marchStep: isCounter ? 'resolve_counter_saves' : 'resolve_attack_saves',
-      combat: withTargets(combat, attack, []),
+      marchStep: isCounter ? 'resolve_counter_damage' : 'resolve_attack_damage',
     })
   }
 
-  return {
-    ...withTurn(state, { combat: withTargets(combat, attack, queue) }),
-    pending: taskPending(state, spec, head, queue.length),
-  }
+  const [saves, rng] = rollSaveFaces(state, spec, state.rng)
+  // The attacker's delayed effects first, then the defending army's own -- the
+  // rulebook's order, steps 2 then 4, and the one that lets a defender decide their
+  // Wild Growth split knowing what Choke has already taken.
+  const tasks = [...(attack.delayed ?? []), ...targetTasks(saveEffects(state, spec, saves))]
+
+  return withTurn(
+    { ...state, rng },
+    {
+      marchStep: isCounter ? 'sai_delayed_counter' : 'sai_delayed_attack',
+      combat: withSaves(combat, saves, { tasks }),
+    },
+  )
 }
 
 /**
@@ -611,9 +898,7 @@ function applySaiTargetArmy(state: GameState, slot: TerrainSlot): GameState {
     throw new IllegalActionError(`no SAI is waiting for an army (march step ${step})`)
   }
 
-  const combat = requireCombat(state)
-  const attack = requireAttack(state, combat)
-  const [task, ...rest] = attack.targets ?? []
+  const [task] = taskQueue(state)
   if (task === undefined || task.kind !== 'galeforce') {
     throw new IllegalActionError('no SAI is waiting for an army')
   }
@@ -636,7 +921,7 @@ function applySaiTargetArmy(state: GameState, slot: TerrainSlot): GameState {
     { target: enemy, slot },
   )
 
-  return withTurn(cast, { combat: withTargets(combat, attack, rest) })
+  return dropHeadTask(cast)
 }
 
 /**
@@ -648,18 +933,18 @@ function applySaiTargetArmy(state: GameState, slot: TerrainSlot): GameState {
  */
 function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState {
   const step = state.turn.marchStep
-  if (step !== 'sai_target_attack' && step !== 'sai_target_counter') {
+  const delayed = step === 'sai_delayed_attack' || step === 'sai_delayed_counter'
+  if (!delayed && step !== 'sai_target_attack' && step !== 'sai_target_counter') {
     throw new IllegalActionError(`no SAI is waiting for a target (march step ${step})`)
   }
 
   const combat = requireCombat(state)
-  const attack = requireAttack(state, combat)
-  const [task, ...rest] = attack.targets ?? []
-  if (task === undefined || task.kind === 'galeforce') {
+  const [task] = taskQueue(state)
+  if (task === undefined || task.kind === 'galeforce' || task.kind === 'promote' || task.kind === 'move') {
     throw new IllegalActionError('no SAI is waiting for unit targets')
   }
 
-  const spec = exchangeSpec(state, step === 'sai_target_counter')
+  const spec = exchangeSpec(state, step === 'sai_target_counter' || step === 'sai_delayed_counter')
   const army = armyAt(state, spec.defender, spec.defenderSlot)
 
   // Sleep takes one *die*, not health-worth, so it cannot go through the maximal
@@ -685,10 +970,19 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
       },
       { target: spec.defender, slot: spec.defenderSlot, unitId },
     )
-    return withTurn(cast, { combat: withTargets(combat, attack, rest) })
+    return dropHeadTask(withTurn(cast, { combat: combat }))
   }
 
-  const problem = damageAssignmentProblem(army, task.health, unitIds)
+  // Choke picks only from the dice that rolled an ID, so the maximum it is held to is
+  // the maximum *within that set* -- the same arithmetic over a smaller army.
+  const saves = delayed ? requireSaves(state, combat) : undefined
+  const pool =
+    task.kind === 'choke' && saves !== undefined
+      ? army.filter((unit) => chokeEligible(state, spec, saves).includes(unit.id))
+      : army
+
+  const budget = task.kind === 'enemy' ? task.health : task.health
+  const problem = damageAssignmentProblem(pool, budget, unitIds)
   if (problem !== null) throw new IllegalActionError(problem)
 
   // Named before anything happens to the dice, so the log reads as cause then effect
@@ -701,6 +995,9 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
     unitIds,
   })
 
+  if (task.kind === 'confuse') return applyConfuse(named, task, unitIds)
+  if (task.kind === 'choke') return applyChoke(named, spec, task, unitIds)
+
   // Bullseye, Double Strike, Smother, Firecloud and Seize give their targets a roll;
   // Flame does not. What comes back is the state with the escapes logged and moved,
   // and who is still standing there to be killed.
@@ -710,7 +1007,7 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
       : subRoll(named, spec, task, unitIds)
 
   const doomed = unitIds.filter((id) => !escaped.includes(id))
-  if (doomed.length === 0) return withTurn(rolled, { combat: withTargets(combat, attack, rest) })
+  if (doomed.length === 0) return dropHeadTask(rolled)
 
   // "The targets are killed and buried" is two steps because the rules are two, and a
   // Phoenix rolls Rise from the Ashes at each of them.
@@ -718,18 +1015,243 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
     task.fate === 'bury' ? killAndBury(rolled, doomed) : killUnits(rolled, doomed)
   const buried = doomed.filter((id) => dead.units[id]?.location.kind === 'bua')
 
+  return dropHeadTask(
+    withLog(
+      dead,
+      { kind: 'units_killed', player: spec.defender, slot: spec.defenderSlot, unitIds: doomed },
+      ...(risen.length > 0
+        ? [{ kind: 'units_risen', player: spec.defender, unitIds: risen } as const]
+        : []),
+      ...(buried.length > 0
+        ? [{ kind: 'units_buried', player: spec.defender, unitIds: buried } as const]
+        : []),
+    ),
+  )
+}
+
+/**
+ * Confuse: "re-roll the targeted units, ignoring all previous results".
+ *
+ * The only reroll in the game that **replaces** a face. Step 3's rerolls append a die
+ * and both faces count, which is why `SaiOutcome.reroll` cannot express this: the old
+ * face has to leave the list entirely, and it does so before anything has counted it.
+ *
+ * Board order again, and the new dice sit where the old ones sat, so a save roll reads
+ * in unit order however many times it has been confused.
+ */
+function applyConfuse(
+  state: GameState,
+  task: Extract<TargetTask, { kind: 'confuse' }>,
+  unitIds: readonly UnitId[],
+): GameState {
+  const combat = requireCombat(state)
+  const saves = requireSaves(state, combat)
+  const ordered = inBoardOrder(state, unitIds)
+
+  let rng = state.rng
+  const replaced = new Map<UnitId, RawDie>()
+  for (const id of ordered) {
+    const unit = state.units[id]
+    if (unit === undefined) continue
+    const [rolled, next] = rollFaces([unit], rng)
+    rng = next
+    const die = rolled[0]
+    if (die !== undefined) replaced.set(id, die)
+  }
+
+  const dice = saves.dice.map((die) => replaced.get(die.unitId) ?? die)
+
+  // No log entry of its own: `sai_resolved` has already named the dice, and what they
+  // rolled the second time shows up in the save strip at the end of the exchange --
+  // which is the only roll there is, because the first one is gone.
+  void task
+  return dropHeadTask(
+    withTurn({ ...state, rng }, { combat: withSaves(combat, saves, { dice }) }),
+  )
+}
+
+/**
+ * Choke: "the targets are killed. None of their results are counted towards the
+ * army's save results."
+ *
+ * Both halves matter and the second is the one that is easy to lose: the die is taken
+ * out of the parked save roll as well as out of the army, and because it is taken out
+ * *before* anything is counted, there is no subtraction to get wrong.
+ */
+function applyChoke(
+  state: GameState,
+  spec: AttackSpec,
+  task: Extract<TargetTask, { kind: 'choke' }>,
+  unitIds: readonly UnitId[],
+): GameState {
+  const combat = requireCombat(state)
+  const saves = requireSaves(state, combat)
+
+  const { state: dead, risen } = killUnits(state, unitIds)
   const logged = withLog(
     dead,
-    { kind: 'units_killed', player: spec.defender, slot: spec.defenderSlot, unitIds: doomed },
+    { kind: 'units_killed', player: spec.defender, slot: spec.defenderSlot, unitIds },
     ...(risen.length > 0
       ? [{ kind: 'units_risen', player: spec.defender, unitIds: risen } as const]
       : []),
-    ...(buried.length > 0
-      ? [{ kind: 'units_buried', player: spec.defender, unitIds: buried } as const]
-      : []),
   )
 
-  return withTurn(logged, { combat: withTargets(combat, attack, rest) })
+  const dice = saves.dice.filter((die) => !unitIds.includes(die.unitId))
+  void task
+  return dropHeadTask(withTurn(logged, { combat: withSaves(combat, saves, { dice }) }))
+}
+
+/**
+ * Wild Growth: the budget split between promotions and save results.
+ *
+ * The **first friendly decision in the game**, and so the first that may legally be
+ * answered with nothing: p. 29's "any number ... including none", where every
+ * targeting SAI before it was held to p. 32's maximum. Whatever the pairs do not
+ * spend becomes save results, which is why the action carries only the pairs -- asking
+ * for the split twice would let a player give two different answers to one question.
+ */
+function applySaiPromote(state: GameState, pairs: readonly PromotionPair[]): GameState {
+  const step = state.turn.marchStep
+  const delayed = step === 'sai_delayed_attack' || step === 'sai_delayed_counter'
+  if (!delayed && step !== 'sai_target_attack' && step !== 'sai_target_counter') {
+    throw new IllegalActionError(`no SAI is waiting for promotions (march step ${step})`)
+  }
+
+  const [task] = taskQueue(state)
+  if (task === undefined || task.kind !== 'promote') {
+    throw new IllegalActionError('no SAI is waiting for promotions')
+  }
+
+  const spec = exchangeSpec(state, step === 'sai_target_counter' || step === 'sai_delayed_counter')
+  const owner = taskOwner(task, spec, delayed)
+
+  const problem = promotionBudgetProblem(state, owner.player, pairs, task.budget)
+  if (problem !== null) throw new IllegalActionError(problem)
+
+  // Every pair must be in the army that rolled it: Wild Growth promotes "units in this
+  // army", not anything the player owns.
+  const army = taskArmy(state, owner)
+  for (const pair of pairs) {
+    if (!army.some((unit) => unit.id === pair.unitId)) {
+      throw new IllegalActionError(`${pair.unitId} is not in the army ${task.sai} was rolled by`)
+    }
+  }
+
+  const spent = pairs.reduce((sum, pair) => sum + promotionGain(state, pair), 0)
+  const saveResults = task.budget - spent
+  // The save share only exists if there is a save roll to join. On an attack roll it is
+  // generated in a type the roll does not count, which is the rules' arithmetic and not
+  // a special case -- and the log must not claim results nothing will count.
+  const counted = delayed && owner.player === spec.defender
+
+  const promoted = pairs.length === 0 ? state : exchangeWithDua(state, pairs)
+  const logged = withLog(promoted, {
+    kind: 'units_promoted',
+    player: owner.player,
+    sai: task.sai,
+    pairs,
+    ...(counted && saveResults > 0 ? { saveResults } : {}),
+  })
+
+  if (!counted || saveResults === 0) return dropHeadTask(logged)
+
+  const combat = requireCombat(logged)
+  const saves = requireSaves(logged, combat)
+  return dropHeadTask(
+    withTurn(logged, { combat: withSaves(combat, saves, { bonus: (saves.bonus ?? 0) + saveResults }) }),
+  )
+}
+
+/**
+ * Firewalking and Teleport: "this unit may move itself and up to three health-worth of
+ * units in its army to any terrain."
+ *
+ * *May*, so `slot: null` is a real answer and not an empty one -- and declining moves
+ * nothing and says nothing, because a log line for every free move nobody took would
+ * bury the ones somebody did.
+ *
+ * The dice that move have already rolled, and their results still stand: "if a die's
+ * results are used and it then leaves the army, its results still stand" (p. 27). So a
+ * defender can save with a die and walk it out of the army before the damage lands.
+ */
+function applySaiMove(
+  state: GameState,
+  slot: TerrainSlot | null,
+  unitIds: readonly UnitId[],
+): GameState {
+  const step = state.turn.marchStep
+  const delayed = step === 'sai_delayed_attack' || step === 'sai_delayed_counter'
+  if (!delayed && step !== 'sai_target_attack' && step !== 'sai_target_counter') {
+    throw new IllegalActionError(`no SAI is waiting for a move (march step ${step})`)
+  }
+
+  const [task] = taskQueue(state)
+  if (task === undefined || task.kind !== 'move') {
+    throw new IllegalActionError('no SAI is waiting for a move')
+  }
+
+  if (slot === null) {
+    if (unitIds.length > 0) {
+      throw new IllegalActionError(`${task.sai} was declined, so it takes nobody with it`)
+    }
+    return dropHeadTask(state)
+  }
+
+  const spec = exchangeSpec(state, step === 'sai_target_counter' || step === 'sai_delayed_counter')
+  const owner = taskOwner(task, spec, delayed)
+  const mover = state.units[task.unitId]
+  if (mover === undefined || mover.location.kind !== 'terrain') {
+    throw new IllegalActionError(`${task.sai}: ${task.unitId} is no longer at a terrain`)
+  }
+  if (slot === mover.location.slot) {
+    throw new IllegalActionError(`${task.sai} moves to another terrain, not the one it is on`)
+  }
+
+  const army = taskArmy(state, owner)
+  const extras = unitIds.filter((id) => id !== task.unitId)
+  for (const id of extras) {
+    if (!army.some((unit) => unit.id === id)) {
+      throw new IllegalActionError(`${id} is not in the army ${task.sai} was rolled by`)
+    }
+    // Sleep: "cannot be rolled **or leave the terrain they currently occupy**". The
+    // mover cannot be asleep -- a sleeping die never rolled the face -- but a
+    // passenger can be.
+    if (isAsleep(state, id)) {
+      throw new IllegalActionError(`${id} is asleep and cannot leave its terrain`)
+    }
+  }
+
+  // "Up to three health-worth" -- *up to*, so under is legal and none is legal. The
+  // opposite of every targeting SAI before Phase 4e.
+  const carried = healthsOf(army.filter((unit) => extras.includes(unit.id))).reduce(
+    (sum, health) => sum + health,
+    0,
+  )
+  if (carried > task.health) {
+    throw new IllegalActionError(
+      `${task.sai} carries up to ${task.health} health-worth, and that is ${carried}`,
+    )
+  }
+
+  const moved = [task.unitId, ...extras]
+  const units = { ...state.units }
+  for (const id of moved) {
+    const unit = units[id]
+    if (unit === undefined) continue
+    units[id] = { ...unit, location: { kind: 'terrain', slot } }
+  }
+
+  const from = mover.location.slot
+  return dropHeadTask(
+    withLog({ ...state, units }, {
+      kind: 'units_moved',
+      player: owner.player,
+      sai: task.sai,
+      unitIds: moved,
+      from,
+      to: slot,
+    }),
+  )
 }
 
 /**
@@ -800,7 +1322,17 @@ function subRoll(
     }
   } else {
     const type = task.escape === 'save' ? 'save' : 'maneuver'
-    const [rolls, next] = rollUnits(inputs, type, defaultContextFor(type), rng, state.ruleSet)
+    // `isSubRoll` is what tells an SAI this is one die rolling for its life rather
+    // than an army rolling for the action -- see `RollContext`. Without it a Firewalking
+    // face offers a free move nobody can be asked about, and `expectNoEffects` below
+    // refuses the roll rather than the effect being quietly dropped.
+    const [rolls, next] = rollUnits(
+      inputs,
+      type,
+      { ...defaultContextFor(type), isSubRoll: true },
+      rng,
+      state.ruleSet,
+    )
     rng = next
     for (const sub of rolls) {
       if (sub.roll === null) continue
@@ -856,7 +1388,9 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
   const pending = requireAttack(state, combat)
   const spec = exchangeSpec(state, isCounter)
   const { attacker, defender, attackerSlot, defenderSlot } = spec
-  const outcome = resolveSaves(state, spec, pending, state.rng)
+  // The save dice were rolled two steps ago and have been through the delayed effects
+  // since: a Choke may have taken one out of the list and a Confuse replaced another.
+  const outcome = finishSaves(state, spec, pending, combat.saves ?? null, state.rng)
 
   const entries: LogEntry[] = [
     {
@@ -901,7 +1435,7 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
 
   return afterCombatStep(
     withTurn(withLog({ ...state, rng: outcome.rng }, ...entries), { combat: next }),
-    isCounter ? 'resolve_counter_saves' : 'resolve_attack_saves',
+    isCounter ? 'resolve_counter_damage' : 'resolve_attack_damage',
   )
 }
 
@@ -910,6 +1444,20 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
  * decision, which is how the advance loop knows to stop.
  */
 export function stepGame(state: GameState): GameState {
+  // "The effect ends if there are no units remaining in the army. This is checked at
+  // the end of each action" (p. 28). `applyAction` never sets `pending`, so this runs
+  // after every action. Like `syncCaptures` it must return the same object when there
+  // is nothing to drop, or the advance loop never settles.
+  //
+  // **Before the victory check, and that is not tidiness.** The action that wins the
+  // game is still an action, and the army it emptied may have been carrying a
+  // Galeforce; with the check first, `stepGame` returned the finished game and the
+  // effect outlived the army forever, which `validateState` calls a breach and is
+  // right to. Found by the Phase 4e fuzz, in a Satyr mirror -- the first forces that
+  // could both cast an effect and be wiped out while it was live.
+  const pruned = pruneEffects(state)
+  if (pruned !== state) return pruned
+
   const victory = findVictory(state)
   if (victory !== null) {
     return withLog(
@@ -924,13 +1472,6 @@ export function stepGame(state: GameState): GameState {
 
   const synced = syncCaptures(state)
   if (synced !== state) return synced
-
-  // "The effect ends if there are no units remaining in the army. This is checked at
-  // the end of each action" (p. 28). `applyAction` never sets `pending`, so this runs
-  // after every action. Like `syncCaptures` it must return the same object when there
-  // is nothing to drop, or the advance loop never settles.
-  const pruned = pruneEffects(state)
-  if (pruned !== state) return pruned
 
   switch (state.turn.phase) {
     // No longer a no-op: effects with a duration end "at the beginning of your next
@@ -1283,6 +1824,10 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applySaiTarget(cleared, action.unitIds)
     case 'sai_target_army':
       return applySaiTargetArmy(cleared, action.slot)
+    case 'sai_promote':
+      return applySaiPromote(cleared, action.pairs)
+    case 'sai_move':
+      return applySaiMove(cleared, action.slot, action.unitIds)
     case 'reinforce':
       return applyReinforce(cleared, action.moves)
     case 'retreat':

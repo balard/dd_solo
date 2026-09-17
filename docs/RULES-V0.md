@@ -222,19 +222,24 @@ Live:
 | Rend | Melee attack: X melee **and roll the die again**, both faces counting. Maneuver roll: X maneuver, no reroll. |
 | Firewalking, Teleport | X maneuver on a maneuver roll. Their free move is Phase 4. |
 | Rise from the Ashes | X saves. Its death trigger needs `dua: 'active'` — §9. |
+| Cantrip | X magic results **during a magic action**. Its other half — magic results that may only buy spells marked *Cantrip* — waits on Phase 7, and under simplified magic there is nothing to buy. |
+| Dispel Magic | Nothing, in any roll: its `Applies` column is **Special**. It answers a spell being announced, and no spell is ever announced under `magic: 'simplified'`. |
 
 
-Deliberately inert on this rung: Bullseye, Cantrip, Choke, Confuse, Dispel Magic, Double Strike,
-Firecloud, Flame, Galeforce, Seize, Sleep, Smother, Wild Growth. They produce nothing and say
-nothing, which is what makes `'results'` playable rather than a half-built `'full'`; `sai: 'full'`
-is the rung that refuses.
+Deliberately inert on this rung: Bullseye, Choke, Confuse, Double Strike, Firecloud, Flame,
+Galeforce, Seize, Sleep, Smother, Wild Growth. They produce nothing and say nothing, which is what
+makes `'results'` playable rather than a half-built `'full'`; `sai: 'full'` is the rung that refuses.
 
-**Eight of those thirteen are now built** — Flame, Sleep, Galeforce, Bullseye, Double Strike,
-Smother, Firecloud and Seize (§11) — and are inert here anyway, because the rungs differ in *which
+**All eleven are now built** (§11), and are inert here anyway, because the rungs differ in *which
 SAIs exist* rather than in what any one of them does. `'results'` is the configuration Phase 1
 shipped and it does not change under it. That includes the rerolls: **Bullseye and Double Strike
 also say "roll this unit again"**, and on this rung they do not, because on this rung they do not
 exist. Rend is still the only reroll `'results'` can produce.
+
+**Cantrip and Dispel Magic moved onto this rung in Phase 4e, and that was a correction rather than
+a feature.** Both had been filed as "needs spells" whole. Only Cantrip's *second* sentence does:
+its first is "during a magic action, Cantrip generates X magic results", which is a plain result
+generator that works under the magic house rule in §4, and it should have landed in Phase 1.
 
 ### House rules this rung adds
 
@@ -315,10 +320,9 @@ where an unbuilt SAI is silently inert. That is the difference between a playabl
 half-built one: `'results'` is a game, `'full'` is a promise, and a promise that quietly does
 nothing is worse than one that refuses.
 
-**Built so far: Flame, Sleep, Galeforce, Bullseye, Double Strike, Smother, Firecloud, Seize.**
-Three are left — Wild Growth, Choke and Confuse (Phase 4e). Cantrip and Dispel Magic are not on this
-rung at all: they cast a spell, so they wait on `magic: 'spells'` (Phase 7) and say so in their own
-words when refused.
+**All eleven are built, and `FULL_RULES` is what the app and the CLI play** (v1 Phase 4e). Nothing
+in `data/` throws on this rung any more; the refusal remains as the guard against a *new* SAI
+arriving with a new species and going quietly inert instead.
 
 | SAI | What it does |
 |---|---|
@@ -349,6 +353,39 @@ same SAI again adds its budget to the same decision.
 **An escapee is not killed**, so no death trigger fires on one. A Seized die that rolls its ID goes
 to Reserves untouched; a Seized Phoenix that *fails* is killed like anything else and gets its Rise
 from the Ashes roll.
+
+### The delayed effects, and the first friendly SAIs (v1 Phase 4e)
+
+| SAI | What it does |
+|---|---|
+| Choke | During a melee attack, **after the defender's dice land**: kill up to X health-worth of the units **that rolled an ID icon**, and count none of their results. |
+| Confuse | During a melee or missile attack, at the same moment: **reroll** up to X health-worth of the defenders, "ignoring all previous results". |
+| Wild Growth | During **any non-maneuver roll**: X save results, or promote X health-worth of units in this army, split however the roller likes. |
+| Firewalking, Teleport | During any non-maneuver roll: this die **may move itself and up to three health-worth of its army to any terrain**. |
+
+**The save roll is two steps, like the attack roll.** The rulebook's roll sequence puts Delayed
+Effects at step 2 — "when rolling for saves against an attack, Delayed Effects are applied now" —
+between the dice landing and anything being counted. Choke's targets are a fact about a *roll*
+rather than about an army, and Confuse throws a rolled face away, so neither can be chosen any
+earlier. A roll that earns no save roll at all (magic, or a zero attack) has no delayed effects
+either: there are no dice to apply them to.
+
+**Two rolls, two askers, one pause.** The attacker's Choke and Confuse are resolved first, then the
+*defending* army's own Wild Growth and free moves — the rulebook's order, its step 2 then its step
+4. They share one pause because nothing between them can be observed: no save roll in the game has
+a step-3 reroll to come between them.
+
+| | Rule |
+|---|---|
+| **Confuse replaces, it does not add** | Step 3's rerolls append a die and both faces count. Confuse's face is *gone*: the die is rolled again in place, and the first result was never rolled as far as the total is concerned. |
+| **Choke's second half** | "None of their results are counted" — the die leaves the save roll as well as the army, and because it leaves before anything is counted there is no subtraction to get wrong. |
+| **A promotion costs the health it gains** | House rule, and the one the rulebook leaves open. Wild Growth's "X health-worth" is spent on the *difference*: three buys three 1-health units their 2-health partners, or takes a single 1-health unit all the way to a monster. So a promotion here may jump several steps at once, unlike the ordinary one-step promotion in §9. |
+| **What is not promoted is saved** | ...but only if a save roll is there to count it. On an attack roll Wild Growth's save results are generated in a type the roll does not count, so they are worth nothing; the split is still legal, and both clients say plainly that there is nothing to spend it on. |
+| **Up to, including none** | The friendly rule (p. 29), and the opposite of the maximum every opponent-targeting SAI is held to (p. 32). A free move may carry nobody, and a Wild Growth may promote nothing. |
+| **A free move is never combined** | p. 32 names SAIs "that move units out of the army" among the ones resolved one by one -- and a free move *is* a particular die, so there is nothing to merge it into. Choke, Confuse and Wild Growth all combine by name like the rest. |
+| **A sleeping passenger stays** | Sleep is "cannot be rolled **or leave the terrain they currently occupy**". The mover itself can never be asleep, because a sleeping die never rolled the face. |
+| **The dice that walk away have already rolled** | "If a die's results are used and it then leaves the army, its results still stand" (p. 27), so a defender may save with a die and march it out before the damage is assigned. |
+| **A sub-roll generates no free move, and no promotion** | House rule. Phase 4d's sub-rolls are literally non-maneuver rolls, so Firewalking and Wild Growth apply to them by the letter -- but a die rolling for its own life has no army to promote into and no business marching three friends across the board, and the decision would be a pause inside a pause. Wild Growth still *generates its save results* there, which is what keeps a die holding that face from dying to a Bullseye. |
 
 **All three are cast during the attacker's roll and take hold in that same exchange.** A slept die
 is not in the save roll that follows it, and a Galeforced army saves at −4 in the very exchange that

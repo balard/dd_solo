@@ -51,6 +51,19 @@ export interface RollContext {
   /** Surprise is the only SAI in Phase 1 that reads this: it "has no effect during
    *  a counter-attack", while Counter -- on the very same exchange -- still does. */
   readonly isCounter: boolean
+  /**
+   * This is one unit rolling for its own survival (Phase 4d's sub-rolls), not an army
+   * rolling for the action.
+   *
+   * **A house rule, and the narrow reading** (`RULES-V0.md` section 11). Firewalking
+   * and Teleport offer their free move on "any non-maneuver roll", which a Bullseye
+   * save roll literally is -- so without this a die rolling for its life could march
+   * three health-worth of its friends across the board, and the decision would be a
+   * pause inside a pause. The effect is not *dropped* here, which is the thing the
+   * guards exist to prevent: it is never generated, because a sub-roll is not one of
+   * the rolls that SAI is about.
+   */
+  readonly isSubRoll?: true
 }
 
 export interface SaiOutcome {
@@ -68,6 +81,20 @@ const gives = (type: ResultType, x: number): SaiOutcome => ({
   effects: [],
   reroll: false,
 })
+
+/**
+ * Firewalking and Teleport, which are the same SAI on two dice.
+ *
+ * X maneuver results on a maneuver roll -- on every rung, which is why these two stay
+ * in `HANDLERS` -- and on any other roll a free move, which only `'full'` can resolve.
+ * The move is "itself and up to three health-worth", a flat three that no face agrees
+ * with; `x` is read for the maneuver half and nothing else.
+ */
+const freeMove = (x: number, ctx: RollContext, rung: RuleSet['sai']): SaiOutcome => {
+  if (ctx.purpose.kind === 'maneuver') return gives('maneuver', x)
+  if (rung !== 'full' || ctx.isSubRoll === true) return NOTHING
+  return { results: {}, effects: [{ kind: 'free_move', health: 3 }], reroll: false }
+}
 
 /**
  * The single result type this roll counts.
@@ -92,7 +119,16 @@ const isAttack = (ctx: RollContext, action: ActionKind): boolean =>
 const isSaveAgainst = (ctx: RollContext, action: ActionKind): boolean =>
   ctx.purpose.kind === 'save' && ctx.purpose.against === action
 
-type SaiHandler = (x: number, ctx: RollContext) => SaiOutcome
+/**
+ * `rung` is `RuleSet['sai']`, and Firewalking and Teleport are what it is for.
+ *
+ * Phase 4a declared threading it premature and was right: until now the two rungs
+ * differed in *which SAIs exist*, which two tables express better than an argument.
+ * These two differ in what one SAI **does** -- their maneuver results work on every
+ * rung, their free move only on `'full'` -- and that is a question no table can
+ * answer, because a name can only be in one of them. Every other handler ignores it.
+ */
+type SaiHandler = (x: number, ctx: RollContext, rung: RuleSet['sai']) => SaiOutcome
 
 /**
  * The twelve SAIs `sai: 'results'` implements, and nothing else.
@@ -193,12 +229,48 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
     return NOTHING
   },
 
-  /** "During a maneuver roll, Firewalking generates X maneuver results." Its free-move
-   *  half on a non-maneuver roll is Phase 4. */
-  Firewalking: (x, ctx) => (ctx.purpose.kind === 'maneuver' ? gives('maneuver', x) : NOTHING),
+  /**
+   * "During a maneuver roll, Firewalking generates X maneuver results. During any
+   * **non-maneuver** roll, this unit may move itself and up to three health-worth of
+   * units in its army to any terrain."
+   *
+   * The one SAI whose two halves live on different rungs, which is what the `rung`
+   * argument above exists for. Three, not X: see `free_move` in `pipeline.ts`.
+   */
+  Firewalking: (x, ctx, rung) => freeMove(x, ctx, rung),
 
-  /** Identical to Firewalking, and likewise half-implemented until Phase 4. */
-  Teleport: (x, ctx) => (ctx.purpose.kind === 'maneuver' ? gives('maneuver', x) : NOTHING),
+  /** Word for word Firewalking, on a different die. */
+  Teleport: (x, ctx, rung) => freeMove(x, ctx, rung),
+
+  /**
+   * "During a magic action, Cantrip generates X magic results. During other
+   * non-maneuver rolls, Cantrip generates X magic results **that only allow you to
+   * cast spells marked as 'Cantrip'**."
+   *
+   * **Two halves, and only the second one needs spells** -- which is the thing this
+   * file had wrong from Phase 1 until Phase 4e. Cantrip sat in `NEEDS_SPELLS` whole,
+   * so a Genie rolling it in a magic action generated nothing and, on the `'full'`
+   * rung, threw. The first sentence is a plain result generator, no different from
+   * Create Fireminions, and it works under `magic: 'simplified'` because magic results
+   * are what that house rule counts.
+   *
+   * The second half is magic results with exactly one thing to spend them on, and
+   * under simplified magic there is nothing -- so they are worth zero rather than
+   * unimplemented. Phase 7 gives them something to buy.
+   */
+  Cantrip: (x, ctx) =>
+    ctx.purpose.kind === 'attack' && ctx.purpose.action === 'magic' ? gives('magic', x) : NOTHING,
+
+  /**
+   * "Whenever any magic targets this unit ... you may roll this unit after all spells
+   * are announced but before any are resolved."
+   *
+   * Its `Applies` column is **Special**: it takes no part in any roll in the ordinary
+   * sequence, so it contributes nothing here and that is the complete answer, not a
+   * placeholder. Under `magic: 'simplified'` no spell is ever announced, so it never
+   * fires at all; Phase 7 gives it its own roll, outside this function.
+   */
+  'Dispel Magic': () => NOTHING,
 
   /**
    * "During a save roll, Rise from the Ashes generates X save results."
@@ -365,6 +437,53 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
           reroll: false,
         }
       : NOTHING,
+
+  /**
+   * "During a melee attack, this effect is applied when resolving Delayed Effects.
+   * Target up to X health-worth of units in that army **that rolled an ID icon**. The
+   * targets are killed. None of their results are counted towards the army's save
+   * results."
+   *
+   * Delayed, so it is chosen after the defender's save dice have landed -- the only
+   * SAI whose legal targets are a fact about a roll rather than about an army.
+   */
+  Choke: (x, ctx) =>
+    isAttack(ctx, 'melee')
+      ? { results: {}, effects: [{ kind: 'choke', health: x }], reroll: false }
+      : NOTHING,
+
+  /**
+   * "During a melee or missile attack, this effect is applied when resolving Delayed
+   * Effects. Target up to X health-worth of units in that army. Re-roll the targeted
+   * units, **ignoring all previous results**."
+   *
+   * Also delayed, and the only reroll in the game that replaces a face rather than
+   * adding one -- `SaiOutcome.reroll` is step 3 and cannot express it.
+   */
+  Confuse: (x, ctx) =>
+    isAttack(ctx, 'melee') || isAttack(ctx, 'missile')
+      ? { results: {}, effects: [{ kind: 'confuse', health: x }], reroll: false }
+      : NOTHING,
+
+  /**
+   * "During any **non-maneuver** roll, Wild Growth generates X save results **or**
+   * allows you to promote X health-worth of units in this army. Results may be split
+   * between saves and promotions in any way you choose. Any promotions happen all at
+   * once."
+   *
+   * Applies by exclusion rather than by a list, which no other SAI here does -- and it
+   * means a melee attack roll carries it too, where the save half is worth nothing and
+   * the promotions are worth just as much.
+   */
+  'Wild Growth': (x, ctx) => {
+    if (ctx.purpose.kind === 'maneuver') return NOTHING
+    // A sub-roll is one die rolling for its own life. It may still *generate* the save
+    // results -- the rule plainly says it does, and a die that dies holding a Wild
+    // Growth face would be wrong -- but there is no split to decide: no army rolled
+    // this, and the promotion half would need a pause inside a pause.
+    if (ctx.isSubRoll === true) return gives('save', x)
+    return { results: {}, effects: [{ kind: 'wild_growth', budget: x }], reroll: false }
+  },
 }
 
 /** The SAI names `sai: 'results'` resolves. Anything else on a face is inert. */
@@ -398,41 +517,26 @@ function handlerFor(sai: string, ruleSet: RuleSet): SaiHandler | undefined {
 }
 
 /**
- * The two SAIs that cast a spell, and so wait on `magic: 'spells'` (Phase 7) rather
- * than on any rung of this flag.
- *
- * Named rather than left to the general refusal below so that `'full'` can say *why*
- * it will not play them. They are the two names still unclaimed when Phase 4 is done.
- */
-const NEEDS_SPELLS: readonly string[] = ['Cantrip', 'Dispel Magic']
-
-/**
  * What one SAI face contributes to this roll.
  *
  * **The rungs differ in what they do with a name no handler claims.** `'results'`
  * returns nothing, which is what makes it a playable rung rather than a half-built
  * `'full'`; `'full'` refuses, which is what stops a half-built `'full'` quietly
- * playing a wrong game. So a Phase 4 slice moves a name into `HANDLERS` and the
- * partition changes underneath both rungs at once -- there is no second table to keep
- * in step, and `sai.test.ts` pins the exact three-way split.
+ * playing a wrong game.
  *
- * The refusal is per *name*, not blanket: under `'full'` a Counter resolves normally
- * and only the unimplemented targeting SAIs throw. A blanket throw was right while
- * none of them were built and is wrong the moment one is.
+ * As of Phase 4e **every SAI in the box is claimed**, so the throw below is no longer
+ * reachable by anything in `data/` -- it is the guard against a *new* one arriving
+ * with a new species and going quietly inert instead. Cantrip and Dispel Magic used
+ * to have a message of their own here; they do not need one, because neither is
+ * unimplemented. See their handlers.
  */
 export function saiEffects(face: SaiFace, context: RollContext, ruleSet: RuleSet): SaiOutcome {
   if (ruleSet.sai === 'inert') return NOTHING
 
   const handler = handlerFor(face.sai, ruleSet)
-  if (handler !== undefined) return handler(face.count, context)
+  if (handler !== undefined) return handler(face.count, context, ruleSet.sai)
 
   if (ruleSet.sai === 'full') {
-    if (NEEDS_SPELLS.includes(face.sai)) {
-      throw new Error(
-        `${face.sai} casts a spell, which needs magic: 'spells' (Phase 7); ` +
-          `ruleSet.magic is '${ruleSet.magic}'`,
-      )
-    }
     throw new Error(
       `targeting SAIs are not implemented (ruleSet.sai === 'full', face ${face.count} ${face.sai})`,
     )

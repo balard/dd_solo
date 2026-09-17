@@ -18,13 +18,23 @@ import {
   type GameState,
   type Pending,
   type PlayerId,
+  type PromotionPair,
   type TerrainSlot,
   type UnitId,
 } from '../../engine/types'
 
 import { Glyph, type GlyphName } from './Glyph'
+
+/** A unit's name by id, for the sheets that carry ids rather than units. */
+const nameOf = (state: GameState, id: UnitId): string => {
+  const unit = state.units[id]
+  return unit === undefined ? id : unitType(unit.typeId).name
+}
+
 import {
   damageSelection,
+  moveDraft,
+  promoteDraft,
   saiTargetSelection,
   describeFace,
   plainLabel,
@@ -44,7 +54,9 @@ export function ActionBar({
   opponentThinking,
   selection,
   staged,
+  pairs,
   onStage,
+  onPair,
   onClearSelection,
   onClearDraft,
   dispatch,
@@ -57,7 +69,12 @@ export function ActionBar({
   selection: ReadonlySet<UnitId>
   /** The reinforce draft: which reserve dice are going where, so far. */
   staged: readonly ReinforceMove[]
+  /** The Wild Growth draft: which of your dice are growing into which of your dead.
+   *  A second draft rather than a wider one -- they answer different questions and
+   *  are never both live. */
+  pairs: readonly PromotionPair[]
   onStage: (moves: readonly ReinforceMove[]) => void
+  onPair: (pair: PromotionPair) => void
   onClearSelection: () => void
   /** Clear is not "unselect": mid-reinforce it has to drop the staged moves too. */
   onClearDraft: () => void
@@ -202,6 +219,148 @@ export function ActionBar({
           </button>
           <button type="button" className="choice secondary" onClick={onClearSelection}>
             Clear
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  /**
+   * Wild Growth: pick one of your dice, then pick what it comes back as.
+   *
+   * The reinforce idiom rather than the damage one -- tap a die, then press a button
+   * that says where it goes -- because a promotion is a *pair* and both ends are the
+   * player's to choose. The partners are buttons rather than a second selectable grid:
+   * they are the only legal answers, they carry their own price, and the DUA is
+   * already on screen further down the page for anyone who wants to look at it.
+   */
+  if (prompt.custom === 'sai_promote' && pending.kind === 'sai_promote') {
+    const draft = promoteDraft(state, pending, pairs, selection)
+    const chosen = [...selection][0]
+
+    return (
+      <div className="action-bar">
+        <p className="question">
+          <b>{pending.sai}</b> — {draft.left} health of promotion left
+          <span className="muted">
+            {draft.left > 0 &&
+              (pending.saveResultsCount
+                ? `, or ${draft.left} save results if you stop`
+                : ', and no save roll to spend the rest on')}
+            {pending.remaining > 1 && ` (${pending.remaining} to place)`}
+          </span>
+        </p>
+
+        {pairs.length > 0 && (
+          <p className="staged muted">
+            {pairs.map((pair, i) => (
+              <Fragment key={pair.unitId}>
+                {i > 0 && ' · '}
+                {nameOf(state, pair.unitId)} &rarr; <b>{nameOf(state, pair.partnerId)}</b>
+              </Fragment>
+            ))}
+          </p>
+        )}
+
+        <div className="choices">
+          {draft.partners.length > 0 ? (
+            draft.partners.map(({ unit, cost }) => (
+              <button
+                key={unit.id}
+                type="button"
+                className="choice"
+                onClick={() => {
+                  if (chosen !== undefined) onPair({ unitId: chosen, partnerId: unit.id })
+                  onClearSelection()
+                }}
+              >
+                &rarr; {unitType(unit.typeId).name}{' '}
+                <span className="muted">({cost})</span>
+              </button>
+            ))
+          ) : (
+            <>
+              <button
+                type="button"
+                className="choice"
+                onClick={() => {
+                  dispatch({ kind: 'sai_promote', pairs })
+                  onClearDraft()
+                }}
+              >
+                {pairs.length > 0
+                  ? `Confirm ${pairs.length} promotion${pairs.length === 1 ? '' : 's'}`
+                  : pending.saveResultsCount
+                    ? `Take ${draft.saveResults} save results`
+                    : 'Promote nothing'}
+              </button>
+              {draft.growable.length > 0 && (
+                <span className="tally muted">
+                  {chosen === undefined
+                    ? 'tap one of your dice to promote it'
+                    : 'that one cannot grow for what is left'}
+                </span>
+              )}
+            </>
+          )}
+          {(pairs.length > 0 || chosen !== undefined) && (
+            <button type="button" className="choice secondary" onClick={onClearDraft}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  /**
+   * Firewalking and Teleport: the mover is fixed, the passengers are optional, and
+   * "stay put" is a real answer rather than an empty one.
+   */
+  if (prompt.custom === 'sai_move' && pending.kind === 'sai_move') {
+    const draft = moveDraft(state, pending, selection)
+    const passengers = [...selection].filter((id) => id !== pending.unitId)
+
+    return (
+      <div className="action-bar">
+        <p className="question">
+          <b>{pending.sai}</b> — {nameOf(state, pending.unitId)} may walk off
+          <span className="muted">
+            {' '}
+            with up to {pending.health} health-worth
+            {pending.remaining > 1 && ` (${pending.remaining} to place)`}
+          </span>
+        </p>
+
+        <p className={`tally ${draft.ready ? 'is-ready' : ''}`}>
+          carrying <b>{draft.carried}</b> / up to <b>{draft.limit}</b>
+          {draft.stuck.size > 0 && <span className="muted"> — a sleeping die cannot leave</span>}
+        </p>
+
+        <div className="choices">
+          {pending.options.map((slot) => (
+            <button
+              key={slot}
+              type="button"
+              className="choice"
+              disabled={!draft.ready}
+              onClick={() => {
+                dispatch({ kind: 'sai_move', slot, unitIds: passengers })
+                onClearSelection()
+              }}
+            >
+              To {slotLabel(slot, human)}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="choice secondary"
+            onClick={() => {
+              dispatch({ kind: 'sai_move', slot: null, unitIds: [] })
+              onClearSelection()
+            }}
+          >
+            Stay put
           </button>
         </div>
       </div>

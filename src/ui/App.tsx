@@ -19,6 +19,7 @@ import {
   livingUnits,
   speciesOf,
   type PlayerId,
+  type PromotionPair,
   type TerrainSlot,
   type UnitId,
 } from '../engine/types'
@@ -65,6 +66,10 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // where the ones already placed are going, so the Reinforce Step can split a
   // reserve across terrains instead of committing it all to one.
   const [staged, setStaged] = useState<readonly ReinforceMove[]>([])
+  // And the Wild Growth draft: which of your dice are growing into which of your
+  // dead. A second list rather than a wider one -- the two questions are never asked
+  // at the same time, and a pair is not a move.
+  const [pairs, setPairs] = useState<readonly PromotionPair[]>([])
 
   const [inspecting, setInspecting] = useState<UnitId | null>(null)
   const [showFallen, setShowFallen] = useState(false)
@@ -77,6 +82,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   useEffect(() => {
     setSelection(new Set())
     setStaged([])
+    setPairs([])
     setInspecting(null)
   }, [key])
 
@@ -88,6 +94,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   const clearDraft = () => {
     setSelection(new Set())
     setStaged([])
+    setPairs([])
   }
 
   const toggle = (id: UnitId) =>
@@ -282,7 +289,9 @@ function GameView({ game }: { readonly game: PlayingGame }) {
         opponentThinking={opponentThinking}
         selection={selection}
         staged={staged}
+        pairs={pairs}
         onStage={(moves) => setStaged((current) => [...current, ...moves])}
+        onPair={(pair) => setPairs((current) => [...current, pair])}
         onClearSelection={() => setSelection(new Set())}
         onClearDraft={clearDraft}
         dispatch={dispatch}
