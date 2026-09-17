@@ -9,6 +9,7 @@ import type { Face } from '../../data/types'
 
 import { FaceGlyph, faceLabel } from './Glyph'
 import { useFaceArt } from './useFaceArt'
+import { useRuleSet } from './useRuleSet'
 
 export function FaceArt({
   typeId,
@@ -22,8 +23,9 @@ export function FaceArt({
   size?: number
 }) {
   const art = useFaceArt()
+  const ruleSet = useRuleSet()
   const url = art.unitFace(typeId, faceIndex)
-  const label = faceLabel(face)
+  const label = faceLabel(face, ruleSet)
 
   if (url === null) return <FaceGlyph face={face} size={Math.min(size, 22)} />
 

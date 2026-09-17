@@ -370,6 +370,25 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
 /** The SAI names `sai: 'results'` resolves. Anything else on a face is inert. */
 export const LIVE_SAIS: readonly string[] = Object.keys(HANDLERS)
 
+/**
+ * Whether this ruleset resolves this SAI at all.
+ *
+ * The question both clients actually want to ask -- "does this face do anything in
+ * the game being played?" -- and the reason it takes a `RuleSet` rather than reading
+ * `LIVE_SAIS`: the answer changes by rung, and a table lookup can only ever be right
+ * about one of them. `faceLabel` in the browser asked `LIVE_SAIS` and so called every
+ * targeting SAI unimplemented, which is true while the app plays `'results'` and
+ * becomes a lie the moment it plays `'full'`.
+ *
+ * Note what a `false` means on the `'full'` rung: not "inert" but **refused** --
+ * `saiEffects` throws. No game the app can start reaches that, and Phase 4e removes
+ * the last of them.
+ */
+export function resolvesSai(sai: string, ruleSet: RuleSet): boolean {
+  if (ruleSet.sai === 'inert') return false
+  return handlerFor(sai, ruleSet) !== undefined
+}
+
 /** The SAI names `sai: 'full'` adds on top of those. */
 export const TARGETING_SAIS: readonly string[] = Object.keys(FULL_HANDLERS)
 

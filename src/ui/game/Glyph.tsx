@@ -8,7 +8,10 @@
  * come from CSS and a glyph never needs a light and dark variant.
  */
 import type { Face, NormalIcon } from '../../data/types'
-import { LIVE_SAIS } from '../../engine/sai'
+import { resolvesSai } from '../../engine/sai'
+import type { RuleSet } from '../../engine/types'
+
+import { useRuleSet } from './useRuleSet'
 
 export type GlyphName = NormalIcon | 'SAI'
 
@@ -83,8 +86,9 @@ export function Glyph({ name, size = 20 }: { name: GlyphName; size?: number }) {
 
 /** A rolled face: its glyph plus how many icons it carries. */
 export function FaceGlyph({ face, size = 20 }: { face: Face; size?: number }) {
+  const ruleSet = useRuleSet()
   return (
-    <span className={`face-glyph i-${face.icon}`} title={faceLabel(face)}>
+    <span className={`face-glyph i-${face.icon}`} title={faceLabel(face, ruleSet)}>
       <Glyph name={face.icon} size={size} />
       {face.count > 1 && <span className="face-count">{face.count}</span>}
     </span>
@@ -94,15 +98,26 @@ export function FaceGlyph({ face, size = 20 }: { face: Face; size?: number }) {
 /**
  * What a face says on hover.
  *
- * An SAI is annotated only when this build cannot resolve it. `LIVE_SAIS` is the set
- * `sai.ts` has handlers for -- a fact about the code rather than about the ruleset --
- * so this needs no `RuleSet` threaded down through every die tile and roll strip. It
- * used to read "(inert in v0)", which stopped being true the moment twelve of them
- * started generating results.
+ * **An SAI is annotated when the rules being played cannot resolve it** -- which is a
+ * question about the game on screen, not about the build, and it took two wrong
+ * answers to land on that. It read "(inert in v0)", which stopped being true when
+ * twelve SAIs started generating results; then it asked `LIVE_SAIS`, the `'results'`
+ * table, which is right only while the app plays that rung and calls all eight
+ * targeting SAIs unimplemented the moment it does not. The ruleset is the only thing
+ * that knows, so `resolvesSai` is asked and `useRuleSet` is how it gets here without a
+ * prop on every die tile.
+ *
+ * `null` means nobody said which rules these are, and then it claims nothing at all:
+ * silence is the one failure mode that cannot be wrong.
  */
-export function faceLabel(face: Face): string {
+export function faceLabel(face: Face, ruleSet: RuleSet | null): string {
   if (face.icon !== 'SAI') return `${face.count} ${face.icon.toLowerCase()}`
-  return LIVE_SAIS.includes(face.sai)
-    ? `${face.count} ${face.sai}`
-    : `${face.count} ${face.sai} — not yet implemented`
+
+  const named = `${face.count} ${face.sai}`
+  if (ruleSet === null || resolvesSai(face.sai, ruleSet)) return named
+
+  // "Does nothing" is the truth on every rung the app can play. On `sai: 'full'` an
+  // unbuilt SAI is refused rather than idle -- but a game that could roll one cannot
+  // be started, and Phase 4e empties that set.
+  return `${named} — does nothing in this game`
 }

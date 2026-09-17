@@ -1133,11 +1133,14 @@ a Seize sends an ID to Reserves and kills the rest; neither sees an army modifie
   → *Seize · an ID icon or die · Frontier — none get away* → *The enemy loses Darktree*, with the
   target's rolled face drawn in a `RollStrip` above it.
 
-> **A 4e chore this turned up.** `faceLabel` in `Glyph.tsx` annotates any SAI outside `LIVE_SAIS` as
-> "not yet implemented", which is true of what the app *plays* (`sai: 'results'`) and becomes a lie
-> the moment 4e flips it to `FULL_RULES` — every targeting SAI would read "not yet implemented" on
-> hover. It needs both tables, or the rung threaded down. Left alone here deliberately: today it is
-> correct.
+> **A chore this turned up, fixed in the following commit.** `faceLabel` in `Glyph.tsx` annotated
+> any SAI outside `LIVE_SAIS` as "not yet implemented" — true of what the app plays today
+> (`sai: 'results'`) and a lie the moment 4e flips it, when every targeting SAI would still say so.
+> Neither table can answer it, because each is right about one rung: the ruleset is the only thing
+> that knows. `resolvesSai(name, ruleSet)` is now exported from `sai.ts` and the label reads
+> "— does nothing in this game", with `useRuleSet` — a context, because the two readers are a
+> tooltip inside a die tile and another inside a roll strip, and threading a prop to them means
+> fourteen call sites that a fifteenth can silently forget.
 
 ### 4e — what is still owed
 
@@ -1177,8 +1180,8 @@ new mechanisms any more:
 
 **Then the flip.** `FULL_RULES` exported, `useGame` and the CLI moved to it, the throwing set down
 to `{ Cantrip, Dispel Magic }` — which is the first moment any force can play Phase 4, the four
-monster fixtures having been able to since 4b. It is also when `faceLabel` in `Glyph.tsx` starts
-lying about every targeting SAI; see the note at the end of §4d.
+monster fixtures having been able to since 4b. `faceLabel` already follows the ruleset rather than a
+table, so the flip changes every face's hover text correctly and needs no edit there.
 
 **Exit criterion.** All 25 SAIs resolve except Cantrip and Dispel Magic, which throw a named
 "needs spells" error under `magic: 'simplified'`. 1000 fuzz games clean with `sai: 'full'`.

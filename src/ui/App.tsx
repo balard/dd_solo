@@ -38,13 +38,20 @@ import {
 
 import { NewGameScreen } from './game/NewGameScreen'
 import { useGame, type PlayingGame } from './game/useGame'
+import { RuleSetProvider } from './game/useRuleSet'
 
 export function App() {
   const game = useGame()
   return game.phase === 'choosing' ? (
     <NewGameScreen onStart={game.start} />
   ) : (
-    <GameView game={game} />
+    // The rules go in at the fork, because this is where "there is a game" is decided
+    // and a game is the only thing that has any. The one reader is a face's hover
+    // label, which has to say whether that face does anything in *this* game -- see
+    // `useRuleSet` for why it is not a prop.
+    <RuleSetProvider ruleSet={game.state.ruleSet}>
+      <GameView game={game} />
+    </RuleSetProvider>
   )
 }
 

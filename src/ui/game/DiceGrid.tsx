@@ -23,6 +23,7 @@ import { FaceArt } from './FaceArt'
 import { faceLabel } from './Glyph'
 import { orderedForDisplay } from './prompts'
 import { useFaceArt } from './useFaceArt'
+import { useRuleSet } from './useRuleSet'
 
 /**
  * The corner badge says what the die *does*, not how big it is.
@@ -126,10 +127,11 @@ function kindOf(type: UnitType): string {
  * portrait becomes a smudge; at 44px both are clear.
  */
 function FaceSheet({ typeId, faces }: { typeId: string; faces: readonly Face[] }) {
+  const ruleSet = useRuleSet()
   return (
     <div className="face-sheet">
       {faces.map((face, i) => (
-        <span key={i} className={`sheet-face i-${face.icon}`} title={faceLabel(face)}>
+        <span key={i} className={`sheet-face i-${face.icon}`} title={faceLabel(face, ruleSet)}>
           <FaceArt typeId={typeId} faceIndex={i} face={face} size={44} />
         </span>
       ))}
@@ -331,6 +333,7 @@ export function chainRerolls(dice: readonly StripDie[]): readonly (readonly Stri
 
 /** The dice of a roll, showing the face each one landed on. */
 export function RollStrip({ dice }: { dice: readonly StripDie[] }) {
+  const ruleSet = useRuleSet()
   return (
     <div className="roll-strip">
       {chainRerolls(dice).map((chain, c) => (
@@ -357,7 +360,7 @@ export function RollStrip({ dice }: { dice: readonly StripDie[] }) {
                   .filter(Boolean)
                   .join(' ')}
                 title={
-                  `${unitType(die.typeId).name}: ${faceLabel(die.face)}` +
+                  `${unitType(die.typeId).name}: ${faceLabel(die.face, ruleSet)}` +
                   (effectOf(die) === null ? '' : ` — ${effectOf(die)}`) +
                   (i > 0 ? ' (rerolled)' : '')
                 }

@@ -13,6 +13,7 @@ import { maxResults, resolveRoll, rollArmy, saiPhrase, saisBehind, type DieRoll 
 import {
   LIVE_SAIS,
   TARGETING_SAIS,
+  resolvesSai,
   saiEffects,
   saiMaxResults,
   type RollPurpose,
@@ -315,6 +316,29 @@ describe('the rungs of ruleSet.sai', () => {
       effects: [],
       reroll: false,
     })
+  })
+
+  /**
+   * The predicate both clients ask instead of reading a table.
+   *
+   * `LIVE_SAIS` and `TARGETING_SAIS` are each right about one rung, so a caller that
+   * consults either is wrong on the other -- which is exactly how the browser's hover
+   * label came to call eight finished SAIs unimplemented. This is the question that
+   * has an answer: *these* rules, this name.
+   */
+  it('answers whether a ruleset resolves a name at all', () => {
+    expect(resolvesSai('Counter', SAI_RULES)).toBe(true)
+    expect(resolvesSai('Counter', FULL_RULES)).toBe(true)
+    // Built, and absent from the rung the app plays -- the case the label got wrong.
+    expect(resolvesSai('Smother', SAI_RULES)).toBe(false)
+    expect(resolvesSai('Smother', FULL_RULES)).toBe(true)
+    // Unbuilt on every rung, and waiting on Phase 7 rather than on this flag.
+    expect(resolvesSai('Choke', FULL_RULES)).toBe(false)
+    expect(resolvesSai('Cantrip', FULL_RULES)).toBe(false)
+    // `'inert'` resolves nothing, whatever the tables say.
+    for (const name of [...LIVE_SAIS, ...TARGETING_SAIS]) {
+      expect(resolvesSai(name, V0_RULES), name).toBe(false)
+    }
   })
 
   it('names every SAI in the data, so none can fall through to inert unnoticed', () => {

@@ -610,6 +610,18 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     count. The willow and pine lines are trees and take the claw; the nymph/naiad/Lady Nereid line
     are water spirits and keep the foot. Firewalkers have one maneuver image, so nothing there
     needs pinning. All 280 unit faces now resolve with no ambiguity reported.
+- **A face's hover label asks the *ruleset*, not a table.** `faceLabel` says "— does nothing in this
+  game" for an SAI the rules being played cannot resolve, via `resolvesSai(name, ruleSet)` in
+  `sai.ts`. It has been wrong twice by consulting something else: "(inert in v0)" outlived v0, and
+  `LIVE_SAIS` -- the `'results'` table -- is right only while the app plays that rung, so it called
+  all eight built targeting SAIs unimplemented. **Each table is right about one rung**, which is why
+  neither can answer the question.
+  - **`useRuleSet` is a context, and the only one in the app.** The readers are a tooltip inside a
+    die tile and another inside a roll strip; a prop means fourteen `DiceGrid`/`RollStrip` call
+    sites that have no other use for it, and a fifteenth that forgets it fails *silently*. It is
+    not a general channel for game state -- everything else still renders from `state.pending` and
+    props. `null` means nobody said, and then the label claims nothing at all.
+
 - **A die that cannot be picked says why.** A sleeping unit is dimmed and dashed (`.die-asleep`),
   tapping it inspects rather than selects, and its `aria-label` ends "— asleep". The engine refuses
   it as a retreat either way; this is what stops the choice being offered, and `sleepingIds` in
