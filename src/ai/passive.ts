@@ -59,12 +59,21 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     // maximum it can (full rules p. 32), so the only choice is *which* maximal set,
     // and declining is not on offer. Taking the engine's own suggestion is the same
     // move `assign_damage` makes, pointed at the other army.
-    case 'sai_target':
-      return {
-        kind: 'sai_target',
-        unitIds: damageOptions(armyAt(state, pending.target, pending.slot), pending.budget)
-          .suggestion,
-      }
+    case 'sai_target': {
+      const army = armyAt(state, pending.target, pending.slot)
+      // Sleep takes one die and there is nothing to maximise; everything else takes
+      // the maximum it can, because p. 32 leaves no other legal answer.
+      const unitIds =
+        pending.limit.kind === 'one'
+          ? army.slice(0, 1).map((unit) => unit.id)
+          : damageOptions(army, pending.limit.budget).suggestion
+      return { kind: 'sai_target', unitIds }
+    }
+
+    // Likewise forced: the SAI fires, so an army must be named. The first is as good
+    // an answer as passive can give -- wanting a *particular* terrain is GreedyAI's.
+    case 'sai_target_army':
+      return { kind: 'sai_target_army', slot: pending.options[0] ?? 'frontier' }
 
     case 'reinforce':
       return { kind: 'reinforce', moves: [] }

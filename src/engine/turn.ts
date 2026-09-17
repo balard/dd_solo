@@ -24,9 +24,10 @@ import {
 } from './combat'
 import { damageAssignmentProblem, damageOptions } from './damage'
 import { killAndBury, killUnits } from './death'
-import { armyRoll, expireEffects, isAsleep, pruneEffects } from './effects'
+import { armyRoll, expireEffects, isAsleep, pruneEffects, type Effect } from './effects'
 
 import { expectNoEffects, rollArmy } from './roll'
+import type { Modifier } from './pipeline'
 import type { RollContext } from './sai'
 import { targetTasks, type TargetTask } from './targeting'
 import {
@@ -44,6 +45,7 @@ import {
   type GameState,
   type LogEntry,
   type MarchStep,
+  type Pending,
   type PendingAttack,
   type PlayerId,
   type TerrainFace,
@@ -489,15 +491,62 @@ function requireAttack(state: GameState, combat: CombatState): PendingAttack {
  * nothing at all. That is the same rule as damage too small to kill (`RULES-V0.md`
  * section 6), and it is the case a `2 SAI:Flame` meets against an army of monsters.
  */
+/** Terrains where the roller's opponent has an army. Galeforce reaches any of them. */
+function opposingArmies(state: GameState, roller: PlayerId): readonly TerrainSlot[] {
+  const enemy = opponentOf(roller)
+  return TERRAIN_SLOTS.filter((slot) => armyAt(state, enemy, slot).length > 0)
+}
+
+/** Whether this task has anything it could land on. */
+function taskHasWork(state: GameState, spec: AttackSpec, task: TargetTask): boolean {
+  const army = armyAt(state, spec.defender, spec.defenderSlot)
+  switch (task.kind) {
+    case 'enemy':
+      return damageOptions(army, task.health).required > 0
+    case 'sleep':
+      return army.length > 0
+    case 'galeforce':
+      return opposingArmies(state, spec.attacker).length > 0
+  }
+}
+
+/** The question this task asks its roller. */
+function taskPending(
+  state: GameState,
+  spec: AttackSpec,
+  task: TargetTask,
+  remaining: number,
+): Pending {
+  const common = { player: spec.attacker, sai: task.sai, remaining } as const
+
+  switch (task.kind) {
+    case 'enemy':
+      return {
+        kind: 'sai_target',
+        ...common,
+        target: spec.defender,
+        slot: spec.defenderSlot,
+        limit: { kind: 'health', budget: task.health },
+      }
+    case 'sleep':
+      return {
+        kind: 'sai_target',
+        ...common,
+        target: spec.defender,
+        slot: spec.defenderSlot,
+        limit: { kind: 'one' },
+      }
+    case 'galeforce':
+      return { kind: 'sai_target_army', ...common, options: opposingArmies(state, spec.attacker) }
+  }
+}
+
 function stepTargeting(state: GameState, isCounter: boolean): GameState {
   const combat = requireCombat(state)
   const attack = requireAttack(state, combat)
   const spec = exchangeSpec(state, isCounter)
-  const army = armyAt(state, spec.defender, spec.defenderSlot)
 
-  const queue = (attack.targets ?? []).filter(
-    (task) => damageOptions(army, task.health).required > 0,
-  )
+  const queue = (attack.targets ?? []).filter((task) => taskHasWork(state, spec, task))
 
   const head = queue[0]
   if (head === undefined) {
@@ -509,15 +558,77 @@ function stepTargeting(state: GameState, isCounter: boolean): GameState {
 
   return {
     ...withTurn(state, { combat: withTargets(combat, attack, queue) }),
-    pending: {
-      kind: 'sai_target',
-      player: spec.attacker,
-      sai: head.sai,
-      target: spec.defender,
-      slot: spec.defenderSlot,
-      budget: head.health,
-    },
+    pending: taskPending(state, spec, head, queue.length),
   }
+}
+
+/**
+ * Casts an effect with a duration, and says so in the log.
+ *
+ * "Until the beginning of your next turn" -- *your* being the roller, which on a
+ * counter-attack is the defending player rather than the marching one. `expireEffects`
+ * reads that field at the top of each turn, so getting it wrong shortens or doubles
+ * the effect rather than failing.
+ */
+function castEffect(
+  state: GameState,
+  caster: PlayerId,
+  effect: Effect,
+  where: { readonly target: PlayerId; readonly slot: TerrainSlot; readonly unitId?: UnitId },
+): GameState {
+  return withLog(
+    { ...state, effects: [...state.effects, effect] },
+    {
+      kind: 'effect_cast',
+      player: caster,
+      source: effect.source,
+      target: where.target,
+      slot: where.slot,
+      ...(where.unitId !== undefined ? { unitId: where.unitId } : {}),
+    },
+  )
+}
+
+/** Galeforce's arithmetic: "subtracts four save and four maneuver results from all
+ *  rolls". Two modifiers because a `Modifier` carries exactly one result type. */
+const GALEFORCE_MODIFIERS: readonly Modifier[] = [
+  { kind: 'subtract', resultType: 'save', amount: 4 },
+  { kind: 'subtract', resultType: 'maneuver', amount: 4 },
+]
+
+/** Galeforce: one opposing army, anywhere, at minus four save and maneuver. */
+function applySaiTargetArmy(state: GameState, slot: TerrainSlot): GameState {
+  const step = state.turn.marchStep
+  if (step !== 'sai_target_attack' && step !== 'sai_target_counter') {
+    throw new IllegalActionError(`no SAI is waiting for an army (march step ${step})`)
+  }
+
+  const combat = requireCombat(state)
+  const attack = requireAttack(state, combat)
+  const [task, ...rest] = attack.targets ?? []
+  if (task === undefined || task.kind !== 'galeforce') {
+    throw new IllegalActionError('no SAI is waiting for an army')
+  }
+
+  const spec = exchangeSpec(state, step === 'sai_target_counter')
+  const enemy = opponentOf(spec.attacker)
+  if (!opposingArmies(state, spec.attacker).includes(slot)) {
+    throw new IllegalActionError(`${enemy} has no army at ${slot} for ${task.sai} to target`)
+  }
+
+  const cast = castEffect(
+    state,
+    spec.attacker,
+    {
+      source: task.sai,
+      target: { kind: 'army', player: enemy, army: slot },
+      modifiers: GALEFORCE_MODIFIERS,
+      expiresAtStartOfTurnOf: spec.attacker,
+    },
+    { target: enemy, slot },
+  )
+
+  return withTurn(cast, { combat: withTargets(combat, attack, rest) })
 }
 
 /**
@@ -536,10 +647,39 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
   const combat = requireCombat(state)
   const attack = requireAttack(state, combat)
   const [task, ...rest] = attack.targets ?? []
-  if (task === undefined) throw new IllegalActionError('no SAI is waiting for a target')
+  if (task === undefined || task.kind === 'galeforce') {
+    throw new IllegalActionError('no SAI is waiting for unit targets')
+  }
 
   const spec = exchangeSpec(state, step === 'sai_target_counter')
   const army = armyAt(state, spec.defender, spec.defenderSlot)
+
+  // Sleep takes one *die*, not health-worth, so it cannot go through the maximal
+  // subset check -- there is nothing to maximise, only a count to get right.
+  if (task.kind === 'sleep') {
+    const [unitId, ...extra] = unitIds
+    if (unitId === undefined || extra.length > 0) {
+      throw new IllegalActionError(`${task.sai} targets exactly one unit, not ${unitIds.length}`)
+    }
+    if (!army.some((unit) => unit.id === unitId)) {
+      throw new IllegalActionError(`${unitId} is not in the army ${task.sai} is aimed at`)
+    }
+
+    const cast = castEffect(
+      state,
+      spec.attacker,
+      {
+        source: task.sai,
+        target: { kind: 'unit', unitId },
+        modifiers: [],
+        asleep: true,
+        expiresAtStartOfTurnOf: spec.attacker,
+      },
+      { target: spec.defender, slot: spec.defenderSlot, unitId },
+    )
+    return withTurn(cast, { combat: withTargets(combat, attack, rest) })
+  }
+
   const problem = damageAssignmentProblem(army, task.health, unitIds)
   if (problem !== null) throw new IllegalActionError(problem)
 
@@ -1017,6 +1157,8 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyAssignDamage(cleared, action.unitIds)
     case 'sai_target':
       return applySaiTarget(cleared, action.unitIds)
+    case 'sai_target_army':
+      return applySaiTargetArmy(cleared, action.slot)
     case 'reinforce':
       return applyReinforce(cleared, action.moves)
     case 'retreat':

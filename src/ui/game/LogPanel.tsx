@@ -278,6 +278,21 @@ function Line({
           at {slotLabel(entry.slot, human)}
         </p>
       )
+    case 'effect_cast': {
+      const unit = entry.unitId === undefined ? undefined : state.units[entry.unitId]
+      return (
+        <p className="log-line">
+          <strong>{entry.source}</strong> catches{' '}
+          {unit
+            ? unitType(unit.typeId).name
+            : `${entry.target === human ? 'your' : 'the enemy'} army at ${slotLabel(entry.slot, human)}`}
+          <span className="muted">
+            {' '}
+            — until the start of {entry.player === human ? 'your' : "the enemy's"} next turn
+          </span>
+        </p>
+      )
+    }
     case 'units_buried':
       return (
         <p className="log-line kill">

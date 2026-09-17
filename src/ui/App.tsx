@@ -30,6 +30,7 @@ import { speciesInfo } from './game/Elements'
 import { LogPanel } from './game/LogPanel'
 import {
   focusedSlot,
+  pendingKey,
   reinforcePlan,
   selectModeFor,
   type ReinforceMove,
@@ -63,13 +64,14 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   const [openTerrain, setOpenTerrain] = useState<TerrainSlot | null>(null)
 
   // A selection is a draft answer to one question. When the question changes, the
-  // draft is meaningless, so it goes.
-  const pendingKey = pending === null ? 'none' : `${pending.kind}:${pending.player}`
+  // draft is meaningless, so it goes. What counts as a change is `pendingKey` --
+  // two consecutive Sleeps are two questions, not one.
+  const key = pendingKey(pending)
   useEffect(() => {
     setSelection(new Set())
     setStaged([])
     setInspecting(null)
-  }, [pendingKey])
+  }, [key])
 
 
   // Every army is on screen now, so there is nothing to look away *to*: this only

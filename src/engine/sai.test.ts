@@ -238,9 +238,7 @@ describe('the rungs of ruleSet.sai', () => {
       'Confuse',
       'Double Strike',
       'Firecloud',
-      'Galeforce',
       'Seize',
-      'Sleep',
       'Smother',
       'Wild Growth',
     ])
@@ -257,8 +255,8 @@ describe('the rungs of ruleSet.sai', () => {
     // all quote it, and nothing else would notice it going stale. Each Phase 4 slice
     // moves names from `deferred` into `TARGETING_SAIS` and edits these two numbers.
     expect(live.size, 'SAIs live under sai: results').toBe(12)
-    expect(targeting.size, 'targeting SAIs built so far').toBe(1)
-    expect(deferred.size, 'targeting SAIs still unbuilt').toBe(10)
+    expect(targeting.size, 'targeting SAIs built so far').toBe(3)
+    expect(deferred.size, 'targeting SAIs still unbuilt').toBe(8)
     expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(2)
 
     for (const name of names) {

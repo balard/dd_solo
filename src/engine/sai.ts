@@ -247,6 +247,34 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
           reroll: false,
         }
       : NOTHING,
+
+  /**
+   * "During a melee attack, target one unit in an opponent's army at this terrain.
+   * The target unit is asleep and cannot be rolled or leave the terrain they currently
+   * occupy until the beginning of your next turn."
+   *
+   * One *unit*, not X health-worth -- an Oakling and a monster are each one die. The
+   * face's count is read by nothing here, which is the case that shows `X` is a rule
+   * about SAIs that say X and not about every face with a number on it.
+   */
+  Sleep: (_x, ctx) =>
+    isAttack(ctx, 'melee')
+      ? { results: {}, effects: [{ kind: 'sleep' }], reroll: false }
+      : NOTHING,
+
+  /**
+   * "During a melee or missile attack, or a magic action at a terrain, target an
+   * opposing army at any terrain. Until the beginning of your next turn, the target
+   * army subtracts four save and four maneuver results from all rolls."
+   *
+   * All three attack kinds, which is why the magic branch of an exchange had to stop
+   * short-circuiting past the targeting step in Phase 4a. **Any** terrain, not this
+   * one -- the only SAI so far that can reach off the board it was rolled on.
+   */
+  Galeforce: (_x, ctx) =>
+    ctx.purpose.kind === 'attack'
+      ? { results: {}, effects: [{ kind: 'galeforce' }], reroll: false }
+      : NOTHING,
 }
 
 /** The SAI names `sai: 'results'` resolves. Anything else on a face is inert. */

@@ -198,6 +198,16 @@ function describe(entry: LogEntry, state: GameState): string | null {
           .map((id) => (state.units[id] ? name(state.units[id]!) : id))
           .join(', ')} at ${SLOT_LABEL[entry.slot]}`,
       )
+    // Says when it ends as well as what it hit: an effect with a duration is the one
+    // thing in the log that is still true on the next line.
+    case 'effect_cast': {
+      const unit = entry.unitId === undefined ? undefined : state.units[entry.unitId]
+      const what = unit ? name(unit) : `${entry.target}'s army at ${SLOT_LABEL[entry.slot]}`
+      return cyan(
+        `  ${bold(entry.source)} catches ${what}` +
+          dim(` — until the start of ${entry.player}'s next turn`),
+      )
+    }
     case 'units_buried':
       return red(
         `  ${entry.unitIds
@@ -305,6 +315,7 @@ function choicesFor(pending: Pending): Choice[] {
     case 'retreat':
     case 'assign_damage':
     case 'sai_target':
+    case 'sai_target_army':
       return [] // handled separately
   }
 }
@@ -419,14 +430,52 @@ async function askDamage(state: GameState, pending: Pending): Promise<GameAction
 
 async function askSaiTarget(state: GameState, pending: Pending): Promise<GameAction> {
   if (pending.kind !== 'sai_target') throw new Error('not an SAI target')
+  const army = armyAt(state, pending.target, pending.slot)
+  const more = pending.remaining > 1 ? dim(` (${pending.remaining} still to place)`) : ''
+
+  // One die, not health-worth: a separate loop, because there is no budget to tally
+  // and "absorbed 4 / must reach 4" would be a lie about what is being asked.
+  if (pending.limit.kind === 'one') {
+    for (;;) {
+      console.log(`\n${bold(`${pending.sai} — put one die to sleep`)}${more}`)
+      army.forEach((unit, i) => {
+        console.log(`    ${i + 1}) ${name(unit)} ${dim(`(${unitType(unit.typeId).health}h)`)}`)
+      })
+      const reply = (await ask('> ')).trim()
+      const unit = army[Number(reply) - 1]
+      if (unit !== undefined) return { kind: 'sai_target', unitIds: [unit.id] }
+      console.log(red('  pick one of the listed dice'))
+    }
+  }
+
   return askBudget(
     state,
     'sai_target',
-    armyAt(state, pending.target, pending.slot),
-    pending.budget,
-    `${pending.sai} — target`,
-    `${pending.sai} can take ${pending.budget} health-worth, and no die there is that small`,
+    army,
+    pending.limit.budget,
+    `${pending.sai} — target${more}`,
+    `${pending.sai} can take ${pending.limit.budget} health-worth, and no die there is that small`,
   )
+}
+
+async function askSaiTargetArmy(state: GameState, pending: Pending): Promise<GameAction> {
+  if (pending.kind !== 'sai_target_army') throw new Error('not an SAI army target')
+  const enemy = pending.player === 'p1' ? 'p2' : 'p1'
+
+  for (;;) {
+    console.log(
+      `\n${bold(`${pending.sai} — target an opposing army`)}` +
+        (pending.remaining > 1 ? dim(` (${pending.remaining} still to place)`) : ''),
+    )
+    pending.options.forEach((slot, i) => {
+      const units = armyAt(state, enemy, slot)
+      console.log(`    ${i + 1}) ${SLOT_LABEL[slot]} ${dim(`(${units.length}d/${health(units)}h)`)}`)
+    })
+    const reply = (await ask('> ')).trim()
+    const slot = pending.options[Number(reply) - 1]
+    if (slot !== undefined) return { kind: 'sai_target_army', slot }
+    console.log(red('  pick one of the listed terrains'))
+  }
 }
 
 async function askUnits(state: GameState, pending: Pending): Promise<GameAction> {
@@ -496,6 +545,7 @@ async function askReinforce(state: GameState, player: PlayerId): Promise<GameAct
 async function askHuman(state: GameState, pending: Pending): Promise<GameAction> {
   if (pending.kind === 'assign_damage') return askDamage(state, pending)
   if (pending.kind === 'sai_target') return askSaiTarget(state, pending)
+  if (pending.kind === 'sai_target_army') return askSaiTargetArmy(state, pending)
   if (pending.kind === 'reinforce' || pending.kind === 'retreat') return askUnits(state, pending)
 
   const choices = choicesFor(pending)

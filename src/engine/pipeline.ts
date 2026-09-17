@@ -90,6 +90,24 @@ export type RollEffectBody =
       readonly escape: 'none' | 'save' | 'maneuver' | 'id'
       readonly fate: 'kill' | 'bury'
     }
+  /**
+   * Sleep: one *unit* in an opposing army at this terrain, asleep until the roller's
+   * next turn.
+   *
+   * No parameters at all -- not even a count. "Target one unit" means one die whatever
+   * its health, which is why it cannot ride on `target_enemy`'s health budget, and p.
+   * 32 names individual-unit SAIs among the ones that are never combined.
+   */
+  | { readonly kind: 'sleep' }
+  /**
+   * Galeforce: one opposing *army*, at any terrain, minus four save and four maneuver
+   * until the roller's next turn.
+   *
+   * Also parameterless: the reference says four, flatly, and not X. The `4` on the
+   * Genie's face is a coincidence of it being a monster face, which is exactly why
+   * reading it would be wrong.
+   */
+  | { readonly kind: 'galeforce' }
 
 /** A `RollEffectBody` once `resolveRoll` has stamped it with the die that made it,
  *  so the log can say *which* Fireshadow smote you. */

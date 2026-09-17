@@ -163,9 +163,14 @@ export function ActionBar({
     return (
       <div className="action-bar">
         <p className="question">
-          <b>{pending.sai}</b> — target {pending.budget} health-worth at{' '}
+          <b>{pending.sai}</b> — target{' '}
+          {pending.limit.kind === 'one' ? 'one die' : `${pending.limit.budget} health-worth`} at{' '}
           {slotLabel(pending.slot, human)}
-          <span className="muted"> — choose enemy units</span>
+          <span className="muted">
+            {' '}
+            — choose enemy units
+            {pending.remaining > 1 && ` (${pending.remaining} to place)`}
+          </span>
         </p>
 
         <p className={`tally ${ready ? 'is-ready' : ''}`}>

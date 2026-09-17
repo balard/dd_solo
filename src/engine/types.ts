@@ -237,8 +237,39 @@ export type Pending =
       readonly sai: string
       readonly target: PlayerId
       readonly slot: TerrainSlot
-      /** Health-worth that may be picked. */
-      readonly budget: number
+      /**
+       * What "how many" means for this SAI.
+       *
+       * Two kinds because the rules use two: Flame takes *health-worth*, and Sleep
+       * takes **one unit** whatever its health. An Oakling and a monster are each one
+       * die, so a single number could not say both.
+       */
+      readonly limit:
+        | { readonly kind: 'health'; readonly budget: number }
+        | { readonly kind: 'one' }
+      /**
+       * Tasks this roll still owes, counting this one.
+       *
+       * Rendered when it is more than one, and load-bearing beyond that: `App` clears
+       * its selection draft on a key built from the pending, and two Satyrs both
+       * rolling Sleep produce two consecutive `sai_target` pendings with the same kind
+       * and the same player. Without this the first answer's selection bleeds into the
+       * second, which no engine test can see.
+       */
+      readonly remaining: number
+    }
+  /**
+   * Galeforce: one opposing army, at any terrain.
+   *
+   * A slot rather than units, so it is `choose_missile_target`'s shape and not
+   * `sai_target`'s -- a fat member with a dead `unitIds` reads worse than a second kind.
+   */
+  | {
+      readonly kind: 'sai_target_army'
+      readonly player: PlayerId
+      readonly sai: string
+      readonly options: readonly TerrainSlot[]
+      readonly remaining: number
     }
   | { readonly kind: 'reinforce'; readonly player: PlayerId }
   | { readonly kind: 'retreat'; readonly player: PlayerId }
@@ -254,6 +285,7 @@ export type GameAction =
   | { readonly kind: 'choose_counter_attack'; readonly counter: boolean }
   | { readonly kind: 'assign_damage'; readonly unitIds: readonly UnitId[] }
   | { readonly kind: 'sai_target'; readonly unitIds: readonly UnitId[] }
+  | { readonly kind: 'sai_target_army'; readonly slot: TerrainSlot }
   | { readonly kind: 'reinforce'; readonly moves: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[] }
   | { readonly kind: 'retreat'; readonly unitIds: readonly UnitId[] }
 
@@ -404,6 +436,25 @@ export type LogEntry =
       readonly kind: 'units_buried'
       readonly player: PlayerId
       readonly unitIds: readonly UnitId[]
+    }
+  /**
+   * An effect with a duration started.
+   *
+   * Separate from `sai_resolved`, which says who was *targeted*: a Flame is finished
+   * once its victims are buried, and a Sleep has only just begun. This is the entry
+   * that has to say when it ends, and it is the one every spell in Phase 7 will write.
+   */
+  | {
+      readonly kind: 'effect_cast'
+      /** The roller. The effect ends at the start of *their* next turn. */
+      readonly player: PlayerId
+      /** `Effect.source`: an SAI name today, a spell name from Phase 7. */
+      readonly source: string
+      /** Whose unit or army it sits on. */
+      readonly target: PlayerId
+      readonly slot: TerrainSlot
+      /** Omitted when the effect sits on the whole army rather than one die. */
+      readonly unitId?: UnitId
     }
   /**
    * Rise from the Ashes: units that were killed and then rolled their way into

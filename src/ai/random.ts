@@ -103,8 +103,35 @@ export const randomAi: AiPlayer = {
       case 'sai_target': {
         const army = armyAt(state, pending.target, pending.slot)
         const [shuffled, next] = shuffle(rng, army)
-        const { suggestion } = damageOptions(shuffled as readonly UnitInstance[], pending.budget)
+
+        // Sleep picks one die uniformly; the shuffle is the pick. A sleeping die is
+        // deliberately *not* filtered out -- it is a legal target, and a fuzz that
+        // never produces one never exercises the double-Sleep path.
+        if (pending.limit.kind === 'one') {
+          const unit = shuffled[0]
+          const unitIds = unit === undefined ? [] : [unit.id]
+          return [{ kind: 'sai_target', unitIds } as GameAction, next] as const
+        }
+
+        const { suggestion } = damageOptions(
+          shuffled as readonly UnitInstance[],
+          pending.limit.budget,
+        )
         return [{ kind: 'sai_target', unitIds: suggestion } as GameAction, next] as const
+      }
+
+      /**
+       * Uniform over every terrain the opponent holds, not just the one being
+       * attacked. Galeforce is the first SAI that can reach off the board it was
+       * rolled on, and picking `options[0]` here would mean a thousand fuzz games
+       * never once produced a cross-terrain cast -- the reinforce bug again.
+       */
+      case 'sai_target_army': {
+        const [slot, next] = pick(rng, pending.options)
+        return [
+          { kind: 'sai_target_army', slot: slot ?? 'frontier' } as GameAction,
+          next,
+        ] as const
       }
 
       case 'reinforce': {

@@ -19,6 +19,7 @@ import {
   orderedForDisplay,
   describeFace,
   plainLabel,
+  pendingKey,
   promptFor,
   reinforcePlan,
   saiTargetSelection,
@@ -437,7 +438,8 @@ describe('selection targeting', () => {
       sai: 'Flame',
       target: 'p2',
       slot: 'frontier',
-      budget: 2,
+      limit: { kind: 'health', budget: 2 },
+      remaining: 1,
     } as const
 
     const mode = selectModeFor(pending, 'p1')
@@ -456,7 +458,8 @@ describe('selection targeting', () => {
       sai: 'Flame',
       target: 'p2',
       slot: 'frontier',
-      budget: 2,
+      limit: { kind: 'health', budget: 2 },
+      remaining: 1,
     } as const
 
     // p2 owns the dice being picked from and is not the one choosing.
@@ -480,7 +483,8 @@ describe('selection targeting', () => {
       sai: 'Flame',
       target: 'p2',
       slot: 'p2_home',
-      budget: 2,
+      limit: { kind: 'health', budget: 2 },
+      remaining: 1,
     } as const
 
     const empty = saiTargetSelection(state, pending, new Set())
@@ -499,10 +503,70 @@ describe('selection targeting', () => {
     expect(enemy.length).toBeGreaterThan(0)
   })
 
+  /**
+   * The Satyr carries Sleep on two faces, so two of them produce two consecutive
+   * `sai_target` pendings with the same kind and the same player. On kind and player
+   * alone the key does not change, `App` keeps the first answer's selection, and
+   * Confirm is enabled for a question nothing has been picked for.
+   */
+  it('gives two consecutive Sleeps two different draft keys', () => {
+    const sleep = (remaining: number) =>
+      ({
+        kind: 'sai_target',
+        player: 'p1',
+        sai: 'Sleep',
+        target: 'p2',
+        slot: 'frontier',
+        limit: { kind: 'one' },
+        remaining,
+      }) as const
+
+    expect(pendingKey(sleep(2))).not.toBe(pendingKey(sleep(1)))
+    // And a pending with no `remaining` still keys on kind and player, as before.
+    expect(pendingKey(damagePending(3))).toBe('assign_damage:p1')
+    expect(pendingKey(null)).toBe('none')
+  })
+
+  it('counts dice rather than health when the SAI takes one unit', () => {
+    const state = fresh()
+    const army = armyAt(state, 'p2', 'p2_home')
+    const pending = {
+      kind: 'sai_target',
+      player: 'p1',
+      sai: 'Sleep',
+      target: 'p2',
+      slot: 'p2_home',
+      limit: { kind: 'one' },
+      remaining: 1,
+    } as const
+
+    expect(saiTargetSelection(state, pending, new Set())).toMatchObject({
+      absorbed: 0,
+      required: 1,
+      ready: false,
+    })
+    // One die is ready whatever it weighs -- there is no maximum to reach.
+    const big = army.reduce((a, b) =>
+      unitType(a.typeId).health >= unitType(b.typeId).health ? a : b,
+    )
+    expect(saiTargetSelection(state, pending, new Set([big.id])).ready).toBe(true)
+    // Two is not "more"; it is illegal, and the sheet must not offer to confirm it.
+    const two = army.slice(0, 2).map((u) => u.id)
+    expect(saiTargetSelection(state, pending, new Set(two)).ready).toBe(false)
+  })
+
   it('names the SAI and the terrain in the question', () => {
     const state = fresh()
     const prompt = promptFor(
-      { kind: 'sai_target', player: 'p1', sai: 'Flame', target: 'p2', slot: 'frontier', budget: 2 },
+      {
+        kind: 'sai_target',
+        player: 'p1',
+        sai: 'Flame',
+        target: 'p2',
+        slot: 'frontier',
+        limit: { kind: 'health', budget: 2 },
+        remaining: 1,
+      },
       'p1',
       state,
     )

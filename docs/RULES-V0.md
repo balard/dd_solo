@@ -279,10 +279,10 @@ roll — the seam Phase 4 builds for Bullseye, Choke and Confuse. It stays inert
 
 ## 10. Effects with a duration (v1 Phase 3)
 
-No ruleset gates this one, because **nothing in a game produces an effect yet**. `state.effects` is
-empty in every game the project can play; what Phase 3 built is the machinery that receives them,
-and Phase 4's Sleep and Galeforce are the first two casters. Recorded here anyway, because the rules
-below are what every later duration — dragon breath, and all eighteen spells — will be read against.
+No ruleset gates this one. Phase 3 shipped it with **no caller at all**; **Phase 4c's Sleep and
+Galeforce are the first two casters**, and they are on the `sai: 'full'` rung, so `state.effects` is
+still empty in every game the app can currently play. The rules below are what every later duration
+— dragon breath, and all eighteen spells — will be read against.
 
 An effect targets **an army at a place** or **one unit**, carries roll modifiers and/or a status,
 and ends at the beginning of its caster's next turn.
@@ -294,7 +294,7 @@ and ends at the beginning of its caster's next turn.
 | **The exchange exception** | An army whose every unit is replaced in a single exchange is still present, so its effects survive. Nothing implements this: an exchange resolves in one pass, so no state with the army empty is ever observed. |
 | **Where a unit effect lives** | On the unit. It follows it into another army, and ends with the unit if it is killed. |
 | **Army modifiers and unit rolls** | "Modifiers that affect an army do not affect the roll of an individual unit from that army", and the reverse. The only unit rolls today are the death trigger's, which consults no modifiers at all; Phase 4's sub-rolls are the first that could get this wrong. |
-| **Stacking** | Two castings of a subtracting effect both apply. The only caps the rules state are **one divide and one multiply per result type**, which the pipeline already enforces — and the eighth face's ID doubling *is* that type's one multiplier. |
+| **Stacking** | Two castings of a subtracting effect both apply — though Galeforce, the only SAI that subtracts, is never *combined*, so two of them stack only when the roller aims both at the same army. The only caps the rules state are **one divide and one multiply per result type**, which the pipeline already enforces — and the eighth face's ID doubling *is* that type's one multiplier. |
 
 **Sleep is a status, not arithmetic.** A sleeping unit cannot be rolled and cannot leave the terrain
 it stands on. It is otherwise entirely normal: still in its army, still counted for "the army is
@@ -310,12 +310,23 @@ where an unbuilt SAI is silently inert. That is the difference between a playabl
 half-built one: `'results'` is a game, `'full'` is a promise, and a promise that quietly does
 nothing is worse than one that refuses.
 
-**Built so far: Flame.** Cantrip and Dispel Magic are not on this rung at all — they cast a spell,
-so they wait on `magic: 'spells'` (Phase 7) and say so in their own words when refused.
+**Built so far: Flame, Sleep, Galeforce.** Cantrip and Dispel Magic are not on this rung at all —
+they cast a spell, so they wait on `magic: 'spells'` (Phase 7) and say so in their own words when
+refused.
 
 | SAI | What it does |
 |---|---|
 | Flame | During a melee attack, target up to two health-worth of units in the defending army. The targets are killed **and buried** — they go to the BUA, not the DUA, and nothing brings them back. |
+| Sleep | During a melee attack, target **one unit** in an opposing army at this terrain. It cannot be rolled or leave that terrain until the beginning of the roller's next turn. |
+| Galeforce | During a melee or missile attack, or a magic action, target an opposing army at **any** terrain. It subtracts four save and four maneuver results from every roll until the beginning of the roller's next turn. |
+
+**All three are cast during the attacker's roll and take hold in that same exchange.** A slept die
+is not in the save roll that follows it, and a Galeforced army saves at −4 in the very exchange that
+caught it. That is the whole reason the engine splits an attack from its save roll into two steps.
+
+**Sleep counts dice; everything else counts health.** "Target one unit" means one die whatever it
+weighs — an Oakling and a monster are each one — so it is the one targeting SAI whose limit is not
+a health budget.
 
 ### House rules this rung adds
 
@@ -332,7 +343,9 @@ Three, and the first two are about what the rulebook leaves to the roller.
   the roller: two Flames of two health-worth take nothing from a 3-health die where one Flame of
   four takes it, and the roller is forced to a maximum anyway, so the option is not a decision.
   The rulebook's exceptions (p. 32) are SAIs that target an individual unit or move units out of
-  the army — Sleep, Galeforce and the two free moves — and those are never combined.
+  the army. **Sleep and Galeforce are both exceptions, for different reasons**: Sleep because p. 32
+  names individual-unit SAIs, and Galeforce because two of them may legitimately name two different
+  armies, so merging them would throw one away. The two free moves join them in Phase 4e.
 - **An SAI that can take nothing raises no decision.** "Up to X health-worth" against an army whose
   smallest die is larger than X can absorb nothing at all, so nothing is asked. That is §6's rule
   about damage too small to kill, applied to the same arithmetic. It is the normal case for

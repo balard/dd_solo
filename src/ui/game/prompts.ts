@@ -224,9 +224,27 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
     // where rather than leaving the sentence to imply it.
     case 'sai_target':
       return {
-        question: `${pending.sai}: target ${pending.budget} health-worth at ${label(pending.slot)}`,
+        question:
+          `${pending.sai}: target ` +
+          (pending.limit.kind === 'one'
+            ? 'one die'
+            : `${pending.limit.budget} health-worth`) +
+          ` at ${label(pending.slot)}` +
+          (pending.remaining > 1 ? ` (${pending.remaining} to place)` : ''),
         choices: [],
         custom: 'sai_target',
+      }
+
+    // A terrain, not dice -- so it is ordinary buttons, the way a missile target is.
+    case 'sai_target_army':
+      return {
+        question:
+          `${pending.sai}: which enemy army?` +
+          (pending.remaining > 1 ? ` (${pending.remaining} to place)` : ''),
+        choices: pending.options.map((slot) => ({
+          label: label(slot),
+          action: { kind: 'sai_target_army', slot },
+        })),
       }
 
     case 'reinforce':
@@ -281,7 +299,23 @@ export function saiTargetSelection(
   pending: Extract<Pending, { kind: 'sai_target' }>,
   selection: ReadonlySet<UnitId>,
 ): DamageSelection {
-  return budgetSelection(state, pending.target, pending.slot, pending.budget, selection)
+  const army = armyAt(state, pending.target, pending.slot)
+
+  // Sleep counts *dice*, not health: one die is one die whatever it weighs, so the
+  // maximal-subset arithmetic has nothing to chew on. The sheet is the same; only
+  // what the two numbers count changes, and `promptFor` says which in the question.
+  if (pending.limit.kind === 'one') {
+    const absorbed = [...selection].filter((id) => army.some((unit) => unit.id === id)).length
+    const first = army[0]
+    return {
+      absorbed,
+      required: army.length === 0 ? 0 : 1,
+      ready: absorbed === 1,
+      suggestion: first === undefined ? [] : [first.id],
+    }
+  }
+
+  return budgetSelection(state, pending.target, pending.slot, pending.limit.budget, selection)
 }
 
 function budgetSelection(
@@ -415,6 +449,23 @@ export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): Sele
  * `side` says which army is being asked about -- the caller's own or the opponent's --
  * because the board draws both and only one of them is ever pickable at a time.
  */
+/**
+ * A key that changes whenever the draft answer to the current question would become
+ * meaningless -- so `App` can throw the selection away on exactly those changes.
+ *
+ * **Kind and player are not enough**, which is the bug this exists to close: the Satyr
+ * carries Sleep on two faces, so two of them rolling it produce two consecutive
+ * `sai_target` pendings with the same kind and the same player. Without `remaining`
+ * the key does not change, the first answer's selection survives into the second
+ * question, and Confirm is enabled before anything has been picked for it. No engine
+ * test can see that -- it is entirely a fact about the draft.
+ */
+export function pendingKey(pending: Pending | null): string {
+  if (pending === null) return 'none'
+  const step = 'remaining' in pending ? `:${pending.remaining}` : ''
+  return `${pending.kind}:${pending.player}${step}`
+}
+
 export function selectableAt(
   mode: SelectMode | null,
   slot: TerrainSlot,

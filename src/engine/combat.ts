@@ -279,12 +279,14 @@ export function resolveSaves(
   const attackRoll = asResult(resolveFaces(attack.dice, rollSpec, state.ruleSet), spec.action)
   const afterAttack = rng
 
-  // `target_enemy` is consumed by the targeting step *before* this one, so by the time
-  // the faces are resolved for their totals it has already done its work -- but it is
-  // still on the list, so it is still allowed here.
+  // Every targeting kind is consumed by the step *before* this one, so by the time the
+  // faces are resolved for their totals they have already done their work -- but they
+  // are still on the list, so they still have to be allowed here. Forgetting to widen
+  // this is how each of Phase 4's slices announces itself: the effect is computed, and
+  // the guard that exists to stop it being dropped refuses it instead.
   expectOnly(
     attackRoll.effects,
-    ['unsavable', 'suppress_counter', 'target_enemy'],
+    ['unsavable', 'suppress_counter', 'target_enemy', 'sleep', 'galeforce'],
     `a ${spec.action} attack`,
   )
   const unsavable = damageFrom(attackRoll.effects, 'unsavable')

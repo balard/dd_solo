@@ -28,21 +28,24 @@ the dice and the opponent.
 > says why Sleep and Galeforce followed — **Phase 4 now owns five SAIs that all need one pause or
 > another in the middle of a roll**, which makes that seam the whole of its first half.
 >
-> **Phase 4 is landing in five slices; 4a and 4b are done.** 4a was the seam and nothing else: the
-> roll split four ways with `resolveFaces` pure, an exchange split into an attack step and a save
-> step with the raw dice stashed in `CombatState.attack`, and `sai: 'full'` refusing per *name*
+> **Phase 4 is landing in five slices; 4a, 4b and 4c are done.** 4a was the seam and nothing else:
+> the roll split four ways with `resolveFaces` pure, an exchange split into an attack step and a
+> save step with the raw dice stashed in `CombatState.attack`, and `sai: 'full'` refusing per *name*
 > rather than blanket. **4b added `sai_target` and `Flame`** — the first targeting SAI, the first
-> caller of `killAndBury`, and the first decision in the game addressed to somebody other than the
-> owner of the dice at stake. The 25 goldens replay byte-identical and unregenerated through both.
-> Still to come: 4c (Sleep and Galeforce, the first `state.effects` producers), 4d (the five
+> caller of `killAndBury`, and the first decision addressed to somebody other than the owner of the
+> dice at stake. **4c added `Sleep` and `Galeforce`** — the first two things in the project that
+> write to `state.effects`, so Phase 3's machinery has a caller three phases after it was built. The
+> 25 goldens replay byte-identical and unregenerated through all three. Still to come: 4d (the five
 > sub-roll SAIs), 4e (Wild Growth, the free moves, Choke and Confuse, then the flip to
 > `FULL_RULES`).
 >
-> **The app still plays `DUA_RULES`, so nothing built in 4b happens in a real game yet.** `'full'`
-> refuses the ten unbuilt targeting SAIs, so no force can play it until 4e — not even the Gorgon
-> mirror, whose only SAI is Flame but whose dice are all too big for a 2-health budget to take. Read
-> `PLAN-V1.md` §4b *Verification* before assuming the client surface is unexercised: it was checked
-> against a temporary scaffold, and 4c and 4d will need the same.
+> **The app still plays `DUA_RULES`, so nothing built in 4b or 4c happens in a real game yet.**
+> `'full'` refuses the eight unbuilt targeting SAIs *and* the two that need spells, so no force can
+> play it until 4e — not even a monster mirror, since the Satyr also carries Confuse and the Genie
+> carries Cantrip and Firecloud. Each slice has been verified in the browser against a **temporary
+> scaffold**, reverted before its commit; read `PLAN-V1.md` §4b and §4c *Verification* before
+> assuming the client surface is unexercised. **The scaffold is getting heavier each slice, and §4c
+> ends with the question of whether 4d should flip the app early instead.**
 >
 > Worth knowing before picking one up: **both home terrains are Towers and the Frontier is a City**
 > (Phase 0a gave each species a second die of its own type). So Tower's "may attack any terrain in
@@ -155,17 +158,19 @@ These are the things that break the project if violated:
   (`2 SAI:Flame` targets two health-worth of units), so let each SAI interpret its own number.
   Twelve of the 25 are live under `sai: 'results'`; see `RULES-V0.md` §8 and `src/engine/sai.ts`.
 - **`sai: 'full'` adds the SAIs that pick targets**, and on that rung an unbuilt one **throws**
-  rather than going quiet -- the opposite of `'results'`. Flame is the only one built so far.
-  Resolution order is roll order and multiples of one SAI always combine; both are house rules,
-  `RULES-V0.md` section 11. Nothing reaches this rung in a real game until Phase 4e.
+  rather than going quiet -- the opposite of `'results'`. Flame, Sleep and Galeforce are built.
+  Resolution order is roll order and multiples of one SAI always combine -- except Sleep and
+  Galeforce, which p. 32 names as never combinable. All house rules, `RULES-V0.md` section 11.
+  Nothing reaches this rung in a real game until Phase 4e.
 - **The DUA is a graveyard under `dua: 'inert'` and a resource under `'active'`** -- promotion,
   recruitment, burial and Rise from the Ashes' death trigger. See `RULES-V0.md` §9. Still true of
   both rungs: **nothing in a game calls promotion or recruitment yet** (Phase 5's City is the first
   caller) and **nothing buries** (Phase 4's Flame).
-- **Nor does anything produce an effect with a duration yet**, though the machinery is there and
-  runs on every roll and every action -- `RULES-V0.md` §10. Phase 4's Sleep and Galeforce are the
-  first casters. Three phases have now shipped machinery ahead of its caller, deliberately; a
-  `state.effects` that is always empty is not a bug.
+- **Sleep and Galeforce are the first effects with a duration** (v1 Phase 4c) -- `RULES-V0.md` §10.
+  Phase 3 shipped `Effect`, `expireEffects`, `pruneEffects` and the `asleep` status with no caller
+  at all, deliberately; these two are it. Both are cast during the *attacker's* roll and bite in
+  that same exchange, which is what the Phase 4a seam exists for. Under `DUA_RULES`, which is what
+  the app plays, `state.effects` is still always empty -- and that is still not a bug.
 
 - **Eighth face captures and wins** (two captures = victory) **and grants its two standard
   advantages**: the holder's army doubles all ID results when rolling *anything* there — attack,

@@ -27,15 +27,20 @@
 import type { RollEffect } from './pipeline'
 
 /** One decision the roller owes, after combination. */
-export type TargetTask = {
-  readonly kind: 'enemy'
-  /** For the log and the prompt. Nothing branches on it. */
-  readonly sai: string
-  /** Health-worth to pick from the army this roll is aimed at. */
-  readonly health: number
-  readonly escape: 'none' | 'save' | 'maneuver' | 'id'
-  readonly fate: 'kill' | 'bury'
-}
+export type TargetTask =
+  | {
+      readonly kind: 'enemy'
+      /** For the log and the prompt. Nothing branches on it. */
+      readonly sai: string
+      /** Health-worth to pick from the army this roll is aimed at. */
+      readonly health: number
+      readonly escape: 'none' | 'save' | 'maneuver' | 'id'
+      readonly fate: 'kill' | 'bury'
+    }
+  /** Sleep: one unit in the army being attacked. */
+  | { readonly kind: 'sleep'; readonly sai: string }
+  /** Galeforce: one opposing army, at any terrain. */
+  | { readonly kind: 'galeforce'; readonly sai: string }
 
 /**
  * The tasks a roll owes, in roll order, with same-SAI budgets summed.
@@ -46,21 +51,28 @@ export type TargetTask = {
  */
 export function targetTasks(effects: readonly RollEffect[]): readonly TargetTask[] {
   const tasks: TargetTask[] = []
-  const bySai = new Map<string, number>()
+  const combinableAt = new Map<string, number>()
 
   for (const effect of effects) {
+    // The two that are never combined, each for its own reason from p. 32: Sleep
+    // targets an individual unit, and two Galeforces may legitimately name two
+    // different armies -- so merging them would silently throw one away.
+    if (effect.kind === 'sleep' || effect.kind === 'galeforce') {
+      tasks.push({ kind: effect.kind, sai: effect.sai })
+      continue
+    }
     if (effect.kind !== 'target_enemy') continue
 
-    const at = bySai.get(effect.sai)
+    const at = combinableAt.get(effect.sai)
     if (at !== undefined) {
       const existing = tasks[at]
-      if (existing !== undefined) {
+      if (existing !== undefined && existing.kind === 'enemy') {
         tasks[at] = { ...existing, health: existing.health + effect.health }
       }
       continue
     }
 
-    bySai.set(effect.sai, tasks.length)
+    combinableAt.set(effect.sai, tasks.length)
     tasks.push({
       kind: 'enemy',
       sai: effect.sai,

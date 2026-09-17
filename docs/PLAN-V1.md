@@ -792,7 +792,7 @@ honest alternative to regenerating 25 games for a field empty in all of them.
 > |---|---|---|
 > | **4a** | The seam: the roll split four ways, the exchange split in two, `'full'` refusing per name | ✅ landed |
 > | **4b** | `sai_target`, `targeting.ts`, **Flame**, and the whole client surface (enemy-selectable board, prompts, CLI, both AIs) | ✅ landed |
-> | 4c | **Sleep** and **Galeforce** — the first `state.effects` producers, and `sai_target_army` | |
+> | **4c** | **Sleep** and **Galeforce** — the first `state.effects` producers, and `sai_target_army` | ✅ landed |
 > | 4d | The sub-rolls: **Bullseye, Double Strike, Smother, Firecloud, Seize**, via `rollUnits` / `unitRoll` | |
 > | 4e | **Wild Growth**, the free moves, **Choke** and **Confuse**, then the flip to `FULL_RULES` | |
 >
@@ -954,6 +954,91 @@ before commit): the attack stopped at the seam, only the targeted enemy army lit
 disabled at 2 of 4 and enabled at 4, and the log read *Flame targets Oak, Oak* → *the enemy loses
 Oak, Oak* → *Oak, Oak are buried — no resurrection*. Worth knowing when reading 4c and 4d: their
 client surfaces have the same problem, and the same answer.
+
+### 4c — Sleep and Galeforce — **landed**
+
+**Delivered.** `RollEffectBody` gained `sleep` and `galeforce`; `TargetTask` became a union;
+`Pending.sai_target` gained `limit` and `remaining`; `sai_target_army` is a new pending and action;
+`effect_cast` is a new log entry. **These are the first two things in the project that write to
+`state.effects`**, so Phase 3's `Effect`, `expireEffects`, `pruneEffects`, `armyRoll` and the
+`asleep` status all get their first caller — three phases after they were built. The 25 goldens
+replay byte-identical and unregenerated.
+
+Both are cast during the **attacker's** roll and bite in that same exchange, which is what the 4a
+seam was for: a slept die is out of the save roll that follows, and a Galeforced army saves at −4
+in the exchange that cast it.
+
+#### Where this section was wrong
+
+- **"Two Galeforces stack to −8" is not reachable, and the test for it would have been a fiction.**
+  Galeforce is one of the SAIs p. 32 names as *never* combined — two of them may name two different
+  armies, so merging them would silently throw one away. Two Galeforces are therefore two separate
+  casts, and they stack only if the roller aims both at the same army. `effects.test.ts` already
+  covers two effects stacking on one army from Phase 3; what 4c owes is the non-combination, which
+  is a `targetTasks` test.
+- **`Pending.sai_target` needed `limit` to be a union, not a bigger number.** Sleep takes one *die*
+  — an Oakling and a monster are each one — so it cannot ride on Flame's health budget, and
+  `saiTargetSelection` needs a separate branch that counts dice. The plan had this right; 4b's
+  decision to defer it was still right, because the alternative was a field with one reachable arm.
+- **`remaining` became reachable exactly here**, as predicted: the Satyr carries Sleep on two faces,
+  so two Satyrs rolling it produce two consecutive `sai_target` pendings with the same kind and
+  player. `pendingKey` in `prompts.ts` is the fix, and it is a pure function with its own test
+  rather than a template string in `App`.
+
+#### One thing that would have shipped silently — again
+
+**`expectOnly` did not name `sleep` or `galeforce`.** Exactly the miss 4b's commit message flagged,
+one slice later and for two new kinds at once: the effect is computed correctly and the guard that
+exists to stop it being *dropped* refuses it instead. It fails loudly and a test caught it
+immediately — but that is twice now, so the whitelist comment says what it is for.
+
+**Exit criterion.** A Sleep takes a die out of the save roll of the exchange that cast it and wears
+off at the start of the caster's next turn; a Galeforce subtracts four save and four maneuver from
+an opposing army at any terrain. ✅
+
+**Tests, as delivered.** `targeting.test.ts` grew to 24 cases; `prompts.test.ts` gained two.
+
+| Case | Expected |
+|---|---|
+| Sleep's pending | `limit: { kind: 'one' }` — one die, not health-worth |
+| The save roll that follows | **one die instead of two, and one draw instead of two** |
+| The slept die | still in `armyAt`, still killable, `validateState` clean |
+| Expiry | survives the victim's whole turn; gone at the *caster's* |
+| Two Satyrs rolling Sleep | two pendings, `remaining` 2 then 1, two different dice slept |
+| Two dice, or a die from the wrong army | `IllegalActionError` |
+| Galeforce's options | every terrain the opponent holds, not just the one under attack |
+| Galeforce at the attacked army | save total 4 → 0, so the 4 melee gets through whole |
+| Galeforce aimed elsewhere | the same dice do nothing — the control for the line above |
+| Its modifiers | subtract 4 save **and** 4 maneuver, and `armyRoll` gathers both |
+| A terrain the opponent has left | refused |
+| The army wiped | `pruneEffects` drops the effect |
+| `pendingKey` | two consecutive Sleeps give two different draft keys |
+| `saiTargetSelection` under `limit: 'one'` | counts dice: 0/1, one die ready whatever its health, two not ready |
+
+**`SAVE_VERSION` stays at 6.** 4b already bumped it for the decision-order change that introduced
+`sai_target`; 4c adds another pending to the same seam, and a version-6 record was written by an
+app that could not reach either. Nothing replays differently that was not already discarded.
+
+#### Verification
+
+240 `RandomAI` games (starter, bestiary and rolled forces under `DUA_RULES` and `SAI_RULES`),
+12,674 exchanges, 0 stuck, `validateState` clean, and `effect_cast` never logged — the check that
+4c changed nothing for the rules the app plays.
+
+The client surface again cannot be reached by playing, for the reason 4b recorded, and **this time
+the scaffold had to be bigger**: the Satyr also carries Confuse and the Genie carries Cantrip and
+Firecloud, all unbuilt, so `'full'` refuses them and the game crashes into the error boundary on the
+first one. The temporary scaffold therefore stubbed *both* refusal branches as well as flipping the
+ruleset and pairing the two monster fixtures — all reverted before commit. With it: Galeforce
+offered all three terrains, was aimed at a terrain other than the one under attack, and logged
+"Galeforce catches the enemy army at Enemy home — until the start of your next turn"; Sleep read
+"target one die", tallied 0/1, enabled Confirm at 1, logged "Sleep catches Genie — until the start
+of your next turn", and left the Genie tile dashed with an `aria-label` ending "— asleep".
+
+> **That scaffold is now load-bearing for 4d too, and it is getting heavier each slice.** Worth
+> considering at 4d whether to flip the app to `FULL_RULES` early and let the remaining unbuilt SAIs
+> be *inert* rather than refusing — trading the `'full'`-refuses-a-half-built-ruleset discipline for
+> a client surface that can actually be played. 4e restores it either way.
 
 ### The rest of the phase
 
