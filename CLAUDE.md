@@ -615,6 +615,30 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   and dispatched on the spot, which is half the Reserves Phase and the half that matters when two
   fronts both need a die. The `reinforced` log entry names each destination for the same reason.
 
+- **Roll, then SAIs, then the totals** -- the order the rules resolve in, and now the order the
+  screen shows. Every SAI sheet opens with `SaiHeader`: the dice that produced the decision, drawn
+  with the same `RollStrip` the log uses, above the rule itself. Before it, the dice reached the log
+  only at `combat_resolved`, so a player picked a Flame's victims -- or split a Wild Growth -- without
+  ever being shown the roll that offered the choice.
+  - **`rollOnTheTable(state)` is the engine query behind it**, not a log entry: a `dice_rolled`
+    entry would appear in every roll of every game and rewrite all 25 golden digests to show
+    something `CombatState` already holds. It returns the *save* dice at the delayed pause and the
+    *attack* dice at the targeting one, which is what each decision is actually about.
+  - **The rule text is `SAI_TEXT` in `sai.ts`**, beside the handlers rather than in either client,
+    because both need it and because a handler that changes beside a sentence that does not is the
+    drift this file has been bitten by twice. `X` stays `X`: the sheet's own line says what the
+    number is on this die. `sai.test.ts` asserts every SAI that can raise a pending has text, since
+    a missing one renders as *nothing at all*.
+- **An effect with a duration is drawn on the army it sits on** (`.army-effects`, from
+  `effectsOnArmy`). It is the one thing on the board that is true *between* rolls, and it used to be
+  invisible: a Galeforced army saved at minus four with the arithmetic only in a log line that had
+  already scrolled away. The modifiers are rendered as arithmetic (`−4 save, −4 maneuver`) rather
+  than named, because the name tells you which SAI and the number is what you can plan against.
+- **`effectSummary`'s callback is annotated `: string`, and that is load-bearing.** Without it a
+  missing `case` returns `undefined`, `join` renders it as nothing, and the roll strip draws
+  "Flame — " with an empty half-sentence -- which is what every targeting SAI did from Phase 4b
+  until Phase 4e's polish pass, with the compiler silent throughout. Annotated, a new
+  `RollEffectBody` kind is a build error there.
 - **The two friendly sheets are drafts, like reinforce's.** Wild Growth stages `{army die -> dead
   die}` pairs the way the Reinforce Step stages `{die -> terrain}` -- tap one of your dice, then
   press the partner it comes back as, which carries its own price. The partners are *buttons* rather

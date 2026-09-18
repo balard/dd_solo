@@ -12,6 +12,7 @@ import { maxResults, resolveRoll, rollArmy, saiPhrase, saisBehind, type DieRoll 
 
 import {
   LIVE_SAIS,
+  SAI_TEXT,
   TARGETING_SAIS,
   resolvesSai,
   saiEffects,
@@ -363,6 +364,27 @@ describe('the rungs of ruleSet.sai', () => {
     // `'inert'` resolves nothing, whatever the tables say.
     for (const name of [...LIVE_SAIS, ...TARGETING_SAIS]) {
       expect(resolvesSai(name, V0_RULES), name).toBe(false)
+    }
+  })
+
+  /**
+   * Every SAI that can stop the game and ask something has to be able to say what it
+   * does.
+   *
+   * The failure this guards is silent: a prompt renders `SAI_TEXT[name]` and an absent
+   * one is simply nothing on screen, which reads as a decision with no rule behind it.
+   * The list is derived from `TARGETING_SAIS` rather than typed out, so a twelfth
+   * targeting SAI fails here rather than shipping mute.
+   */
+  it('spells out every SAI that asks the player something', () => {
+    for (const name of TARGETING_SAIS) {
+      expect(SAI_TEXT[name], name).toBeDefined()
+      expect(SAI_TEXT[name]?.length ?? 0, name).toBeGreaterThan(40)
+    }
+    // The two whose *free move* asks a question while their maneuver half does not, so
+    // they are not in `TARGETING_SAIS` and still need the words.
+    for (const name of ['Firewalking', 'Teleport']) {
+      expect(SAI_TEXT[name], name).toContain('may move itself')
     }
   })
 

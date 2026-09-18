@@ -26,7 +26,14 @@ import {
 import { DiceGrid } from './DiceGrid'
 import { ElementDots, speciesInfo } from './Elements'
 import { Glyph, type GlyphName } from './Glyph'
-import { selectableAt, sleepingIds, slotLabel, type SelectMode } from './prompts'
+import {
+  effectsOnArmy,
+  selectableAt,
+  sleepingIds,
+  slotLabel,
+  type ArmyEffect,
+  type SelectMode,
+} from './prompts'
 import { useFaceArt } from './useFaceArt'
 
 /**
@@ -154,6 +161,7 @@ function ArmySide({
   title,
   species,
   units,
+  effects,
   selectable,
   asleep,
   selected,
@@ -164,6 +172,8 @@ function ArmySide({
   title: string
   species: Species
   units: readonly UnitInstance[]
+  /** What is sitting on this army until somebody's next turn. */
+  effects: readonly ArmyEffect[]
   selectable: boolean
   asleep: ReadonlySet<UnitId>
   selected: ReadonlySet<UnitId>
@@ -187,6 +197,23 @@ function ArmySide({
           {dice}d / {health}h
         </span>
       </h3>
+      {/*
+       * An effect with a duration is the only thing on this board that is true
+       * between rolls, and it used to be invisible: a Galeforced army saved at minus
+       * four with nothing on screen to say so, because the only mention of it was a
+       * log line that had already scrolled away.
+       */}
+      {effects.length > 0 && (
+        <ul className="army-effects">
+          {effects.map((effect, i) => (
+            <li key={`${effect.source}-${i}`}>
+              <b>{effect.source}</b>
+              {effect.what !== '' && <> {effect.what}</>}
+              <span className="muted"> &middot; until {effect.until}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <DiceGrid
         units={units}
         selectable={selectable}
@@ -303,6 +330,7 @@ export function Board({
               title="Enemy"
               species={theirSpecies}
               units={armyAt(state, enemy, slot)}
+              effects={effectsOnArmy(state, enemy, slot, human)}
               selectable={enemySelectableHere}
               asleep={asleep}
               selected={selected}
@@ -314,6 +342,7 @@ export function Board({
               title="Yours"
               species={mySpecies}
               units={armyAt(state, human, slot)}
+              effects={effectsOnArmy(state, human, slot, human)}
               selectable={selectableHere}
               asleep={asleep}
               selected={selected}

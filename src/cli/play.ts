@@ -24,7 +24,9 @@ import { growthPartners, promotionGain } from '../engine/dua'
 import { isAsleep } from '../engine/effects'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
-import { saiPhrase } from '../engine/roll'
+import { saiPhrase, type DieRoll } from '../engine/roll'
+import { SAI_TEXT } from '../engine/sai'
+import { rollOnTheTable } from '../engine/turn'
 
 
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
@@ -57,6 +59,7 @@ const red = (t: string) => paint('31', t)
 const green = (t: string) => paint('32', t)
 const yellow = (t: string) => paint('33', t)
 const cyan = (t: string) => paint('36', t)
+const magenta = (t: string) => paint('35', t)
 
 const SLOT_LABEL: Record<TerrainSlot, string> = {
   p1_home: 'P1 home',
@@ -93,6 +96,36 @@ function armySummary(state: GameState, player: PlayerId, slot: TerrainSlot): str
   return `${units.length}d/${health(units)}h`.padEnd(9)
 }
 
+/** What is sitting on one army, in words: `Galeforce −4 save, −4 maneuver (until p1's
+ *  next turn)`, or a die that cannot be rolled. */
+function effectsOn(state: GameState, player: PlayerId, slot: TerrainSlot): readonly string[] {
+  const out: string[] = []
+
+  for (const effect of state.effects) {
+    if (effect.target.kind !== 'army') continue
+    if (effect.target.player !== player || effect.target.army !== slot) continue
+    const what = effect.modifiers
+      .map((m) =>
+        m.kind === 'subtract'
+          ? `−${m.amount} ${m.resultType}`
+          : m.kind === 'add'
+            ? `+${m.amount} ${m.resultType}`
+            : m.kind === 'divide'
+              ? `${m.resultType} ÷ ${m.by}`
+              : `${m.resultType} × ${m.by}`,
+      )
+      .join(', ')
+    out.push(`${effect.source} ${what} ${dim(`(until ${effect.expiresAtStartOfTurnOf}'s turn)`)}`)
+  }
+
+  for (const unit of armyAt(state, player, slot)) {
+    if (!isAsleep(state, unit.id)) continue
+    out.push(`${name(unit)} is asleep — cannot be rolled or leave`)
+  }
+
+  return out
+}
+
 function board(state: GameState, human: PlayerId): string {
   const lines: string[] = []
   const turn = state.log.filter((e) => e.kind === 'turn_end').length + 1
@@ -111,6 +144,15 @@ function board(state: GameState, human: PlayerId): string {
         `${String(terrain.face)} ▸ ${action.padEnd(10)} ` +
         `P1 ${armySummary(state, 'p1', slot)} P2 ${armySummary(state, 'p2', slot)}${held}`,
     )
+
+    // An effect with a duration is the only thing here that is true between rolls, so
+    // it is printed under the terrain it sits on rather than left in a log line that
+    // has already scrolled away.
+    for (const player of ['p1', 'p2'] as const) {
+      for (const effect of effectsOn(state, player, slot)) {
+        lines.push(magenta(`              ${player} ${effect}`))
+      }
+    }
   }
 
   const reserve = (p: PlayerId) =>
@@ -483,6 +525,33 @@ async function askDamage(state: GameState, pending: Pending): Promise<GameAction
   )
 }
 
+/**
+ * What every SAI prompt opens with: the dice that produced it, then the rule.
+ *
+ * **Roll, then SAIs, then the totals** -- the order the rules resolve in, which is not
+ * the order either client used to show: the dice reached the log only when the whole
+ * exchange was over, long after the decision they caused had been answered.
+ *
+ * The rule comes with them because "target 4 health-worth" is the part a player can
+ * already see, and what happens to the dice afterwards is the part it hides.
+ */
+/** One rolled die as `Genie 4 Firewalking` or `Oak 4 save (4)`. */
+function shown(die: DieRoll): string {
+  const face = die.face
+  const what = face.icon === 'SAI' ? `${face.count} ${face.sai}` : `${face.count} ${face.icon.toLowerCase()}`
+  return `${unitType(die.typeId).name} ${what}${die.results > 0 ? ` (${die.results})` : ''}`
+}
+
+function saiHeader(state: GameState, sai: string): void {
+  const roll = rollOnTheTable(state)
+  if (roll !== null && roll.dice.length > 0) {
+    console.log(dim(`  ${roll.kind === 'save' ? 'saves' : 'the roll'}: ${roll.dice.map(shown).join('  ')}`))
+  }
+
+  const text = SAI_TEXT[sai]
+  if (text !== undefined) console.log(dim(`  ${text}`))
+}
+
 async function askSaiTarget(state: GameState, pending: Pending): Promise<GameAction> {
   if (pending.kind !== 'sai_target') throw new Error('not an SAI target')
   // Choke may only take the dice that rolled an ID icon, so those are the only ones
@@ -497,6 +566,7 @@ async function askSaiTarget(state: GameState, pending: Pending): Promise<GameAct
   if (pending.limit.kind === 'one') {
     for (;;) {
       console.log(`\n${bold(`${pending.sai} — put one die to sleep`)}${more}`)
+      saiHeader(state, pending.sai)
       army.forEach((unit, i) => {
         console.log(`    ${i + 1}) ${name(unit)} ${dim(`(${unitType(unit.typeId).health}h)`)}`)
       })
@@ -507,6 +577,7 @@ async function askSaiTarget(state: GameState, pending: Pending): Promise<GameAct
     }
   }
 
+  saiHeader(state, pending.sai)
   return askBudget(
     state,
     'sai_target',
@@ -537,6 +608,7 @@ async function askSaiPromote(state: GameState, pending: Pending): Promise<GameAc
     )
     const promotable = army.filter((unit) => growthPartners(state, unit.id, left).length > 0)
 
+    saiHeader(state, pending.sai)
     console.log(
       `\n${bold(`${pending.sai} — ${left} health of promotion left`)}` +
         dim(`, and ${left} save results if you stop here`),
@@ -594,6 +666,7 @@ async function askSaiMove(state: GameState, pending: Pending): Promise<GameActio
 
   for (;;) {
     const carried = [...chosen].reduce((sum, id) => sum + healthOf(state, id), 0)
+    saiHeader(state, pending.sai)
     console.log(
       `\n${bold(`${pending.sai} — ${nameOf(state, pending.unitId)} may walk off`)}` +
         dim(` carrying up to ${pending.health} health-worth (${carried} chosen)`),

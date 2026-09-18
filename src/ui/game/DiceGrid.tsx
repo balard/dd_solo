@@ -278,8 +278,12 @@ export interface StripDie {
 export function effectSummary(effects: readonly RollEffectBody[]): string | null {
   if (effects.length === 0) return null
 
+  // **The return type is annotated on purpose.** Without it a missing arm yields
+  // `undefined`, which `join` renders as nothing at all -- so every targeting SAI from
+  // Phase 4b on drew "Flame — " with an empty half-sentence after the dash, and the
+  // compiler had no opinion. Annotated, a new effect kind is a build error here.
   return effects
-    .map((effect) => {
+    .map((effect): string => {
       switch (effect.kind) {
         case 'unsavable':
           return `${effect.damage} damage, no save possible`
@@ -287,6 +291,30 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
           return `${effect.damage} damage straight back`
         case 'suppress_counter':
           return 'no counter-attack'
+        case 'target_enemy':
+          switch (effect.escape) {
+            case 'none':
+              return `${effect.health} health-worth ${effect.fate === 'bury' ? 'killed and buried' : 'killed'}`
+            case 'save':
+              return `${effect.health} health-worth must save or die`
+            case 'maneuver':
+              return `${effect.health} health-worth must maneuver or die`
+            case 'id':
+              return `${effect.health} health-worth seized — an ID goes to reserves`
+          }
+        // eslint-disable-next-line no-fallthrough -- every arm above returns
+        case 'sleep':
+          return 'one die asleep'
+        case 'galeforce':
+          return 'an opposing army at −4 save and maneuver'
+        case 'choke':
+          return `${effect.health} health-worth of the dice that rolled an ID`
+        case 'confuse':
+          return `${effect.health} health-worth rerolled`
+        case 'wild_growth':
+          return `${effect.budget} to split between saves and promotions`
+        case 'free_move':
+          return `may move itself and ${effect.health} health-worth`
       }
     })
     .join('; ')

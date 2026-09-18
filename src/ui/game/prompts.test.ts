@@ -15,6 +15,7 @@ import {
 
 import {
   damageSelection,
+  effectsOnArmy,
   focusedSlot,
   orderedForDisplay,
   describeFace,
@@ -653,5 +654,64 @@ describe('display order', () => {
     const before = units.map((u) => u.id)
     orderedForDisplay(units)
     expect(units.map((u) => u.id)).toEqual(before)
+  })
+})
+
+describe('effectsOnArmy', () => {
+  /**
+   * An effect with a duration is the one thing on the board that is true between
+   * rolls, and the only sign of one used to be a dashed die for Sleep and nothing at
+   * all for Galeforce -- an army saving at minus four with the arithmetic visible only
+   * in a log line that had already scrolled away.
+   */
+  it('turns an army effect into the arithmetic it costs you', () => {
+    const base = fresh()
+    const state: GameState = {
+      ...base,
+      effects: [
+        {
+          source: 'Galeforce',
+          target: { kind: 'army', player: 'p2', army: 'frontier' },
+          modifiers: [
+            { kind: 'subtract', resultType: 'save', amount: 4 },
+            { kind: 'subtract', resultType: 'maneuver', amount: 4 },
+          ],
+          expiresAtStartOfTurnOf: 'p1',
+        },
+      ],
+    }
+
+    expect(effectsOnArmy(state, 'p2', 'frontier', 'p1')).toEqual([
+      { source: 'Galeforce', what: '−4 save, −4 maneuver', until: 'your next turn' },
+    ])
+    // It sits on a place, not on the dice: another terrain shows nothing.
+    expect(effectsOnArmy(state, 'p2', 'p1_home', 'p1')).toEqual([])
+    // And it reads from whoever is looking.
+    expect(effectsOnArmy(state, 'p2', 'frontier', 'p2')[0]?.until).toBe("the enemy's next turn")
+  })
+
+  it('names a sleeping die on the army it is standing in', () => {
+    const base = fresh()
+    const [unit] = armyAt(base, 'p2', 'frontier')
+    const state: GameState = {
+      ...base,
+      effects: [
+        {
+          source: 'Sleep',
+          target: { kind: 'unit', unitId: unit!.id },
+          modifiers: [],
+          asleep: true,
+          expiresAtStartOfTurnOf: 'p1',
+        },
+      ],
+    }
+
+    expect(effectsOnArmy(state, 'p2', 'frontier', 'p1')).toEqual([
+      {
+        source: 'Sleep',
+        what: `${unitType(unit!.typeId).name} cannot be rolled or leave`,
+        until: 'your next turn',
+      },
+    ])
   })
 })

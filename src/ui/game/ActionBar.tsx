@@ -12,6 +12,8 @@ import { terrainDie, terrainFaceAction, unitType } from '../../data/load'
 
 import type { TerrainFaceNumber } from '../../data/types'
 
+import { rollOnTheTable } from '../../engine/turn'
+import { SAI_TEXT } from '../../engine/sai'
 import {
   livingUnits,
   type GameAction,
@@ -23,6 +25,7 @@ import {
   type UnitId,
 } from '../../engine/types'
 
+import { RollStrip } from './DiceGrid'
 import { Glyph, type GlyphName } from './Glyph'
 
 /** A unit's name by id, for the sheets that carry ids rather than units. */
@@ -165,6 +168,37 @@ export function ActionBar({
     )
   }
 
+/**
+ * What every SAI sheet opens with: the dice that produced it, and the rule.
+ *
+ * **Roll, then SAIs, then the totals.** That is the order the rules resolve in, and
+ * until this existed it was not the order the game showed: the dice reached the log
+ * only at `combat_resolved`, long after the decision they caused had been answered.
+ * So a player picked a Flame's victims -- or split a Wild Growth -- without being shown
+ * the roll that offered it.
+ *
+ * The rule text comes with them, because the arithmetic in the question ("target 4
+ * health-worth") is the part a player can already see, and the part it hides is what
+ * happens to the dice afterwards. `SAI_TEXT` lives beside the handlers so the sentence
+ * and the behaviour cannot drift.
+ */
+function SaiHeader({ state, sai }: { state: GameState; sai: string }) {
+  const roll = rollOnTheTable(state)
+  const text = SAI_TEXT[sai]
+
+  return (
+    <>
+      {roll !== null && roll.dice.length > 0 && (
+        <div className="sai-roll">
+          <div className="roll-head">{roll.kind === 'save' ? 'saves' : 'the roll'}</div>
+          <RollStrip dice={roll.dice} />
+        </div>
+      )}
+      {text !== undefined && <p className="sai-text">{text}</p>}
+    </>
+  )
+}
+
   /**
    * The same sheet as a damage assignment, pointed at the army opposite.
    *
@@ -189,6 +223,8 @@ export function ActionBar({
             {pending.remaining > 1 && ` (${pending.remaining} to place)`}
           </span>
         </p>
+
+        <SaiHeader state={state} sai={pending.sai} />
 
         <p className={`tally ${ready ? 'is-ready' : ''}`}>
           targeted <b>{absorbed}</b> / must reach <b>{required}</b>
@@ -250,6 +286,8 @@ export function ActionBar({
             {pending.remaining > 1 && ` (${pending.remaining} to place)`}
           </span>
         </p>
+
+        <SaiHeader state={state} sai={pending.sai} />
 
         {pairs.length > 0 && (
           <p className="staged muted">
@@ -331,6 +369,8 @@ export function ActionBar({
             {pending.remaining > 1 && ` (${pending.remaining} to place)`}
           </span>
         </p>
+
+        <SaiHeader state={state} sai={pending.sai} />
 
         <p className={`tally ${draft.ready ? 'is-ready' : ''}`}>
           carrying <b>{draft.carried}</b> / up to <b>{draft.limit}</b>
@@ -483,6 +523,10 @@ export function ActionBar({
   return (
     <div className="action-bar">
       <p className="question">{prompt.question}</p>
+      {/* Galeforce picks a terrain rather than dice, so it comes through the ordinary
+          button path -- but it is still an SAI being chosen in the middle of a roll,
+          and it gets the same roll strip and the same rule text as the rest. */}
+      {pending.kind === 'sai_target_army' && <SaiHeader state={state} sai={pending.sai} />}
       <div className="choices">
         {prompt.choices.map((choice, i) => (
           <button

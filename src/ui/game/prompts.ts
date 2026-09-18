@@ -9,6 +9,7 @@ import { terrainDie, terrainFaceAction, unitType } from '../../data/load'
 import type { TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
 import { growthPartners, promotionGain } from '../../engine/dua'
+import type { Modifier } from '../../engine/pipeline'
 import { isAsleep } from '../../engine/effects'
 import { legalDirections } from '../../engine/turn'
 import {
@@ -621,6 +622,79 @@ export function selectableAt(
   side: 'mine' | 'theirs' = 'mine',
 ): boolean {
   return mode?.side === side && (mode.slot === null || mode.slot === slot)
+}
+
+/**
+ * What an effect sitting on an army actually does, in words.
+ *
+ * An effect with a duration is the one thing on the board that is true *between*
+ * rolls, and until now the only sign of one was a die drawn dashed for Sleep and
+ * nothing whatever for Galeforce: an army quietly saving at minus four, with the
+ * arithmetic visible only in a log line that had already scrolled away.
+ *
+ * The modifier list is turned into text rather than named, because "Galeforce" tells
+ * you which SAI and `-4 save, -4 maneuver` tells you what it will cost you, and only
+ * one of those is a number you can plan against.
+ */
+export interface ArmyEffect {
+  readonly source: string
+  readonly what: string
+  /** Whose turn it ends at the start of -- "yours" or "the enemy's", from `human`. */
+  readonly until: string
+}
+
+export function effectsOnArmy(
+  state: GameState,
+  player: PlayerId,
+  slot: TerrainSlot,
+  human: PlayerId,
+): readonly ArmyEffect[] {
+  const out: ArmyEffect[] = []
+
+  for (const effect of state.effects) {
+    if (effect.target.kind !== 'army') continue
+    if (effect.target.player !== player || effect.target.army !== slot) continue
+    out.push({
+      source: effect.source,
+      what: describeModifiers(effect.modifiers),
+      until: effect.expiresAtStartOfTurnOf === human ? 'your next turn' : "the enemy's next turn",
+    })
+  }
+
+  // A unit effect is drawn on the die itself -- a sleeping die is dashed and says so
+  // in its label -- but the army heading is where you look to see what an army is
+  // carrying, so it is counted here too.
+  const asleep = armyAt(state, player, slot).filter((unit) => isAsleep(state, unit.id))
+  for (const unit of asleep) {
+    const effect = state.effects.find(
+      (e) => e.target.kind === 'unit' && e.target.unitId === unit.id && e.asleep === true,
+    )
+    out.push({
+      source: effect?.source ?? 'Sleep',
+      what: `${unitType(unit.typeId).name} cannot be rolled or leave`,
+      until:
+        effect?.expiresAtStartOfTurnOf === human ? 'your next turn' : "the enemy's next turn",
+    })
+  }
+
+  return out
+}
+
+/** `-4 save, -4 maneuver`, or "no arithmetic" for a status like Sleep. */
+function describeModifiers(modifiers: readonly Modifier[]): string {
+  const parts = modifiers.map((modifier) => {
+    switch (modifier.kind) {
+      case 'subtract':
+        return `\u2212${modifier.amount} ${modifier.resultType}`
+      case 'add':
+        return `+${modifier.amount} ${modifier.resultType}`
+      case 'divide':
+        return `${modifier.resultType} \u00f7 ${modifier.by}`
+      case 'multiply':
+        return `${modifier.resultType} \u00d7 ${modifier.by}`
+    }
+  })
+  return parts.join(', ')
 }
 
 /**

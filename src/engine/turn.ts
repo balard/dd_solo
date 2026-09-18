@@ -16,12 +16,14 @@
 import {
   attackEffects,
   attackFacts,
+  attackRollDice,
   finishSaves,
   legalActions,
   missileTargets,
   rollAttack,
   rollSaveFaces,
   saveEffects,
+  saveRollDice,
   terrainAction,
   type AttackSpec,
 } from './combat'
@@ -1437,6 +1439,49 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
     withTurn(withLog({ ...state, rng: outcome.rng }, ...entries), { combat: next }),
     isCounter ? 'resolve_counter_damage' : 'resolve_attack_damage',
   )
+}
+
+/**
+ * The dice on the table right now, if the game is paused in the middle of a roll.
+ *
+ * **Roll, then SAIs, then the totals** -- which is the order the rules resolve in and,
+ * until this existed, not the order the game showed. Every targeting SAI is chosen
+ * between a roll and the arithmetic that consumes it, and both clients rendered the
+ * dice only at `combat_resolved`, after the decision was long gone. So a player picked
+ * a Flame's victims, or split a Wild Growth, without being shown the roll that offered
+ * it.
+ *
+ * A query rather than a log entry on purpose: a `dice_rolled` entry would appear in
+ * every roll of every game, which rewrites all 25 golden digests to show something the
+ * state already knows.
+ *
+ * `null` whenever nothing is parked, which is every step but the two pauses.
+ */
+export function rollOnTheTable(
+  state: GameState,
+): { readonly dice: readonly DieRoll[]; readonly kind: 'attack' | 'save' } | null {
+  const combat = state.turn.combat
+  if (combat === null) return null
+
+  const step = state.turn.marchStep
+  const isCounter = step === 'sai_target_counter' || step === 'sai_delayed_counter'
+  const delayed = step === 'sai_delayed_attack' || step === 'sai_delayed_counter'
+  if (!delayed && step !== 'sai_target_attack' && step !== 'sai_target_counter') return null
+
+  const attack = combat.attack
+  if (attack === undefined) return null
+  const spec = exchangeSpec(state, isCounter)
+
+  // At the delayed pause the save dice are what the decision is about -- Choke reads
+  // them, Confuse replaces them, and a defender splitting Wild Growth is looking at
+  // the roll it is being split into.
+  if (delayed) {
+    const saves = combat.saves
+    if (saves === undefined) return null
+    return { dice: saveRollDice(state, spec, saves), kind: 'save' }
+  }
+
+  return { dice: attackRollDice(state, spec, attack), kind: 'attack' }
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   rerollSweep,
   rollFaces,
   type RawDie,
+  type DieRoll,
   type RollResult,
   type RollSpec,
 } from './roll'
@@ -354,6 +355,32 @@ export function saveEffects(
   saves: SaveRollState,
 ): readonly RollEffect[] {
   return resolveFaces(saves.dice, saveRollSpec(state, spec, undefined), state.ruleSet).effects
+}
+
+/**
+ * The parked dice of either roll, resolved for display.
+ *
+ * Pure, and the same `resolveFaces` the totals come from -- so what a player is shown
+ * mid-decision is what the arithmetic will use, rather than a second opinion about it.
+ * `RollOutcome.dice` carries the per-die results and the SAI attribution the roll strip
+ * already knows how to draw.
+ */
+export function attackRollDice(
+  state: GameState,
+  spec: AttackSpec,
+  attack: AttackRollState,
+): readonly DieRoll[] {
+  const attackers = armyRoll(state, spec.attacker, spec.attackerSlot, spec.action)
+  return resolveFaces(attack.dice, attackRollSpec(spec, attackers.modifiers), state.ruleSet).dice
+}
+
+/** The same for the defender's save dice, which sit parked across the delayed pause. */
+export function saveRollDice(
+  state: GameState,
+  spec: AttackSpec,
+  saves: SaveRollState,
+): readonly DieRoll[] {
+  return resolveFaces(saves.dice, saveRollSpec(state, spec, saves.bonus), state.ruleSet).dice
 }
 
 /**

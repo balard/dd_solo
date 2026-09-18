@@ -486,6 +486,77 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
   },
 }
 
+/**
+ * What each SAI actually says, for the player being asked to use one.
+ *
+ * Every decision in this game is a rule most people will not have memorised, and a
+ * prompt that says "Seize: target 4 health-worth" tells you the arithmetic while
+ * hiding the only thing that matters -- that the dice you pick get a roll, and that an
+ * ID sends them home rather than killing them. So the sheet prints the rule.
+ *
+ * It lives here rather than in either client because both need it and because it
+ * belongs beside the handler it describes: a handler that changes and a sentence that
+ * does not is exactly the drift this file has been bitten by twice.
+ *
+ * **`X` is left as `X`.** The sheet's own line says what the number is on this die;
+ * substituting it into the prose would make the two disagree the moment a face with a
+ * different count is transcribed.
+ */
+export const SAI_TEXT: Readonly<Record<string, string>> = {
+  Flame:
+    'During a melee attack, target up to two health-worth of units in the defending ' +
+    'army. The targets are killed and buried.',
+  Sleep:
+    "During a melee attack, target one unit in an opponent's army at this terrain. " +
+    'The target unit is asleep and cannot be rolled or leave the terrain they ' +
+    'currently occupy until the beginning of your next turn.',
+  Galeforce:
+    'During a melee or missile attack, or a magic action at a terrain, target an ' +
+    'opposing army at any terrain. Until the beginning of your next turn, the target ' +
+    'army subtracts four save and four maneuver results from all rolls.',
+  Bullseye:
+    'During a missile attack, target X health-worth of units in the defending army. ' +
+    'The targets make a save roll. Those that do not generate a save result are ' +
+    'killed. Roll this unit again and apply the new result as well.',
+  'Double Strike':
+    'During a melee attack, target four health-worth of units in the defending army. ' +
+    'The targets make a save roll. Those that do not generate a save result are ' +
+    'killed. Roll this unit again and apply the new result as well.',
+  Smother:
+    'During a melee attack, target up to X health-worth of units in the defending ' +
+    'army. The targets make a maneuver roll. Those that do not generate a maneuver ' +
+    'result are killed.',
+  Firecloud:
+    'During a melee or missile attack, target up to X health-worth of units in the ' +
+    'defending army. The targets make a maneuver roll. Those that do not generate a ' +
+    'maneuver result are killed.',
+  Seize:
+    'During a missile attack, target up to X health-worth of units in the defending ' +
+    'army. Roll the targets. If they roll an ID icon, they are immediately moved to ' +
+    'their Reserve Area. Any that do not roll an ID are killed.',
+  Choke:
+    'During a melee attack, this effect is applied when resolving Delayed Effects. ' +
+    'Target up to X health-worth of units in that army that rolled an ID icon. The ' +
+    "targets are killed. None of their results are counted towards the army's save " +
+    'results.',
+  Confuse:
+    'During a melee or missile attack, this effect is applied when resolving Delayed ' +
+    'Effects. Target up to X health-worth of units in that army. Re-roll the targeted ' +
+    'units, ignoring all previous results.',
+  'Wild Growth':
+    'During any non-maneuver roll, Wild Growth generates X save results or allows you ' +
+    'to promote X health-worth of units in this army. Results may be split between ' +
+    'saves and promotions in any way you choose. Any promotions happen all at once.',
+  Firewalking:
+    'During a maneuver roll, Firewalking generates X maneuver results. During any ' +
+    'non-maneuver roll, this unit may move itself and up to three health-worth of ' +
+    'units in its army to any terrain.',
+  Teleport:
+    'During a maneuver roll, Teleport generates X maneuver results. During any ' +
+    'non-maneuver roll, this unit may move itself and up to three health-worth of ' +
+    'units in its army to any terrain.',
+}
+
 /** The SAI names `sai: 'results'` resolves. Anything else on a face is inert. */
 export const LIVE_SAIS: readonly string[] = Object.keys(HANDLERS)
 

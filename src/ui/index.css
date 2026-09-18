@@ -141,6 +141,20 @@ body {
 
 .chip-held { display: block; font-size: .72rem; color: var(--magic); margin-top: 2px; }
 
+/* What is sitting on an army until somebody's next turn. Small, but not muted: an
+   effect is arithmetic you have to plan against, not a footnote. */
+.army-effects {
+  list-style: none;
+  margin: 2px 0 4px;
+  padding: 0;
+  font-size: .72rem;
+  line-height: 1.5;
+}
+.army-effects li {
+  border-left: 2px solid var(--magic);
+  padding-left: 6px;
+}
+
 /* --- focused terrain ------------------------------------------------------ */
 
 .page {
@@ -364,6 +378,18 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .tally.is-ready { color: var(--accent); font-weight: 600; }
+
+/* The roll a decision is about, above the decision. */
+.sai-roll { margin: 2px 0 6px; }
+/* The rule itself, in the words the book uses. Readable rather than muted: it is the
+   part of the question a player is least likely to already know. */
+.sai-text {
+  margin: 0 0 8px;
+  font-size: .78rem;
+  line-height: 1.45;
+  opacity: .85;
+  max-width: 64ch;
+}
 
 .choices { display: flex; flex-wrap: wrap; gap: 7px; }
 
