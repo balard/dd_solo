@@ -61,8 +61,15 @@ const KEY = 'dd_solo.save'
  *    but only after the log has already diverged. This is a decision-order bump, the
  *    plainest kind there is, and the first one since version 3 that is not mostly
  *    about which ruleset the app plays.
+ *
+ * 7: two reasons, Phase 5. Dice consumption at setup -- a record written by the app
+ *    never pins a terrain slot, so a version-6 record replayed here draws three
+ *    dice the old engine did not, and every face roll after them lands somewhere
+ *    else. And decision order -- the Eighth Face Phase gains two `Pending` kinds
+ *    (City, Temple), so a version-6 log's next answer can land on a question that
+ *    did not exist when it was recorded, the same shape as version 6's own reason.
  */
-export const SAVE_VERSION = 6
+export const SAVE_VERSION = 7
 
 
 export interface SavedGame {

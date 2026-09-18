@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { UNIT_TYPES, unitType } from '../data/load'
-import { PRESETS, maxArmyHealth, preset, speciesProfile } from '../data/presets'
+import { SPECIES, TERRAIN_DICE, UNIT_TYPES, terrainDie, terrainType, unitType } from '../data/load'
+import { PRESETS, maxArmyHealth, preset } from '../data/presets'
 
 import { reduce } from './reduce'
 import { rngFrom } from './rng'
@@ -19,12 +19,20 @@ import {
   capturedCount,
   deadUnits,
   livingUnits,
+  opponentOf,
   reserveArmy,
+  speciesOf,
   unitsOf,
   type GameState,
   type PlayerId,
 } from './types'
 import { validateState } from './validate'
+
+const elementsOfSpecies = (id: string): readonly string[] => {
+  const species = SPECIES.find((s) => s.id === id)
+  if (!species) throw new Error(`unknown species ${id}`)
+  return species.elements
+}
 
 const OPTIONS: SetupOptions = {
   seed: 1234,
@@ -217,28 +225,14 @@ describe('setupGame', () => {
     }
   })
 
-  it('takes each home terrain from that species profile', () => {
-    expect(state.terrains.p1_home.dieId).toBe(speciesProfile('treefolk').homeTerrain)
-    expect(state.terrains.p2_home.dieId).toBe(speciesProfile('firewalkers').homeTerrain)
-  })
-
-  /**
-   * `OPTIONS` names p1 as the first player, so there is no roll-off and p2 is the
-   * loser who sets the Frontier.
-   */
-  it('takes the Frontier from the second terrain of whoever marches second', () => {
-    expect(state.terrains.frontier.dieId).toBe(speciesProfile('firewalkers').secondTerrain)
-    expect(setupGame({ ...OPTIONS, firstPlayer: 'p2' }).terrains.frontier.dieId).toBe(
-      speciesProfile('treefolk').secondTerrain,
-    )
-  })
-
   it('lets a caller pin a terrain die, which is how the goldens keep their board', () => {
     const pinned = setupGame({ ...OPTIONS, terrains: { frontier: 'highland_tower' } })
     expect(pinned.terrains.frontier.dieId).toBe('highland_tower')
-    // And nothing else moves: the same seed still rolls the same faces.
-    expect(pinned.terrains.p1_home).toEqual(state.terrains.p1_home)
-    expect(pinned.rng).toEqual(state.rng)
+    // Pinning the Frontier does not touch the p1_home *die* draw before it in the
+    // stream. Its face still moves, because every face is rolled from one shared
+    // counter after all three dice are drawn, and skipping the Frontier's two
+    // draws shifts everything after it -- see "the Phase 5b terrain draw" below.
+    expect(pinned.terrains.p1_home.dieId).toEqual(state.terrains.p1_home.dieId)
   })
 
   it('starts every terrain on a face between 1 and 6, uncaptured', () => {
@@ -281,6 +275,109 @@ describe('setupGame', () => {
     expect(() =>
       setupGame({ ...OPTIONS, forces: { kind: 'named', forces: { p1: 'nope', p2: 'nope' } } }),
     ).toThrow()
+  })
+})
+
+describe('the Phase 5b terrain draw', () => {
+  const ALL_PINNED = {
+    p1_home: 'swampland_tower',
+    frontier: 'highland_tower',
+    p2_home: 'wasteland_tower',
+  } as const
+
+  it('draws each Home Terrain uniformly from all 24 dice, over 1000 seeds', () => {
+    const p1Home = new Set<string>()
+    const p2Home = new Set<string>()
+    for (let seed = 1; seed <= 1000; seed++) {
+      const state = setupGame({ seed, forces: STARTER_FORCES, firstPlayer: 'p1' })
+      p1Home.add(state.terrains.p1_home.dieId)
+      p2Home.add(state.terrains.p2_home.dieId)
+    }
+    expect(p1Home.size).toBe(TERRAIN_DICE.length)
+    expect(p2Home.size).toBe(TERRAIN_DICE.length)
+  })
+
+  it('always draws a Frontier sharing an element with the roll-off loser, over 1000 random-force seeds', () => {
+    for (let seed = 1; seed <= 1000; seed++) {
+      const state = setupGame({ seed, forces: { kind: 'random' } })
+      expect(validateState(state), `seed ${seed}`).toEqual([])
+
+      const loserElements = elementsOfSpecies(speciesOf(state, opponentOf(state.turn.marching)))
+      const frontierElements = terrainType(terrainDie(state.terrains.frontier.dieId).type).elements
+      expect(frontierElements.some((e) => loserElements.includes(e)), `seed ${seed}`).toBe(true)
+    }
+  })
+
+  it("draws the loser's own home type about twice as often as the others", () => {
+    // p2 (firewalkers, air+fire) always loses here, since p1 always marches first.
+    const counts = new Map<string, number>()
+    for (let seed = 1; seed <= 1000; seed++) {
+      const state = setupGame({ seed, forces: STARTER_FORCES, firstPlayer: 'p1' })
+      const type = terrainDie(state.terrains.frontier.dieId).type
+      counts.set(type, (counts.get(type) ?? 0) + 1)
+    }
+    const wasteland = counts.get('wasteland') ?? 0
+    for (const [type, n] of counts) {
+      if (type === 'wasteland') continue
+      expect(wasteland, type).toBeGreaterThan(n)
+    }
+  })
+
+  it('lets the other player species decide the Frontier when firstPlayer is given explicitly', () => {
+    const p1LosesToP2 = setupGame({ ...OPTIONS, firstPlayer: 'p2' })
+    const p2LosesToP1 = setupGame({ ...OPTIONS, firstPlayer: 'p1' })
+    expect(
+      terrainType(terrainDie(p1LosesToP2.terrains.frontier.dieId).type).elements.some((e) =>
+        elementsOfSpecies('treefolk').includes(e),
+      ),
+    ).toBe(true)
+    expect(
+      terrainType(terrainDie(p2LosesToP1.terrains.frontier.dieId).type).elements.some((e) =>
+        elementsOfSpecies('firewalkers').includes(e),
+      ),
+    ).toBe(true)
+  })
+
+  it('consumes no terrain draw at all when every slot is pinned', () => {
+    const pinned = setupGame({ ...OPTIONS, terrains: ALL_PINNED })
+    // Recorded once, empirically: with all three terrains pinned the only draws
+    // left are the three opening face rolls. A pinned slot has never consumed a
+    // draw, before or after Phase 5b -- this is the fast version of what the 25
+    // goldens prove at full length.
+    expect(pinned.rng.counter).toBe(3)
+  })
+
+  it('draws only for the slot left unpinned', () => {
+    const full = setupGame({ ...OPTIONS, terrains: ALL_PINNED })
+    const partial = setupGame({
+      ...OPTIONS,
+      terrains: { p1_home: ALL_PINNED.p1_home, p2_home: ALL_PINNED.p2_home },
+    })
+    expect(partial.terrains.p1_home.dieId).toBe(full.terrains.p1_home.dieId)
+    expect(partial.terrains.p2_home.dieId).toBe(full.terrains.p2_home.dieId)
+    // Exactly the Frontier's two draws (element, then die) more than the fully
+    // pinned board -- the faces differ too, since all three are rolled off one
+    // shared counter after the dice, and those two extra draws shift it.
+    expect(partial.rng.counter).toBe(full.rng.counter + 2)
+  })
+
+  it('sets up and validates a game whose two homes draw the same die', () => {
+    const state = setupGame({ seed: 5, forces: STARTER_FORCES, firstPlayer: 'p1' })
+    expect(state.terrains.p1_home.dieId).toBe(state.terrains.p2_home.dieId)
+    expect(validateState(state)).toEqual([])
+  })
+
+  it('draws Standing Stones like any other icon, in every slot', () => {
+    const seenIn = { p1_home: false, frontier: false, p2_home: false }
+    for (let seed = 1; seed <= 1000; seed++) {
+      const state = setupGame({ seed, forces: { kind: 'random' } })
+      for (const slot of TERRAIN_SLOTS) {
+        if (terrainDie(state.terrains[slot].dieId).eighthFace === 'standing_stones') {
+          seenIn[slot] = true
+        }
+      }
+    }
+    expect(seenIn).toEqual({ p1_home: true, frontier: true, p2_home: true })
   })
 })
 

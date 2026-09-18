@@ -20,17 +20,22 @@ import {
 } from './types'
 import { validateState } from './validate'
 /**
- * Every test below reads an action off a terrain face, so which terrain sits at the
- * Frontier decides what they mean: Highland runs magic on faces 1-3 and melee on
- * 6-7, Wasteland magic on 1 alone. Phase 0a made the Frontier depend on who lost
- * the roll-off, so it is pinned here rather than left to the setup.
+ * Every test below reads an action off a terrain face, so which terrain sits at
+ * each slot decides what they mean: Highland runs magic on faces 1-3 and melee on
+ * 6-7, Swampland magic on 1-2 and melee on 5-7, Wasteland magic on 1 alone and
+ * melee on 4-7. Phase 0a pinned the Frontier for this reason; Phase 5b draws all
+ * three from the seed, so all three are pinned here rather than left to the draw.
  */
 const fresh = (seed = 1234, firstPlayer: PlayerId = 'p1') =>
   setupGame({
     seed,
     forces: STARTER_FORCES,
     firstPlayer,
-    terrains: { frontier: 'highland_tower' },
+    terrains: {
+      p1_home: 'swampland_tower',
+      frontier: 'highland_tower',
+      p2_home: 'wasteland_tower',
+    },
   })
 function play(state: GameState, ...actions: GameAction[]): GameState {
   return actions.reduce((current, action) => {

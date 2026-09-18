@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { unitType, unitsOfSpecies } from '../data/load'
+import { SPECIES, terrainDie, terrainType, unitType, unitsOfSpecies } from '../data/load'
 import { PRESET_ARMY_NAMES, maxArmyHealth } from '../data/presets'
 
 import { FORCE_SIZES, drawForce, generateForces, repairSplit, splitForce } from './force'
 import { rngFrom } from './rng'
 import { setupGame, STARTER_FORCES } from './setup'
-import { TERRAIN_SLOTS, armyAt, unitsOf, type PlayerId } from './types'
+import { TERRAIN_SLOTS, armyAt, opponentOf, speciesOf, unitsOf, type PlayerId } from './types'
 import { validateState } from './validate'
 
 const PLAYERS: readonly PlayerId[] = ['p1', 'p2']
@@ -132,7 +132,6 @@ describe('generateForces', () => {
 
 describe('a game set up from nothing but a seed', () => {
   it('is legal, every time, across 1000 seeds', () => {
-    const frontiers = new Set<string>()
     const sizes = new Set<number>()
 
     for (let seed = 1; seed <= 1000; seed++) {
@@ -156,13 +155,22 @@ describe('a game set up from nothing but a seed', () => {
       expect(unitHealth(unitsOf(state, 'p1')), `seed ${seed}`).toBe(
         unitHealth(unitsOf(state, 'p2')),
       )
-      frontiers.add(state.terrains.frontier.dieId)
+
+      // Phase 5b: the Frontier is drawn from a terrain sharing an element with the
+      // roll-off loser's species -- checked exhaustively since every seed here
+      // already sets a game up. Distribution and edge cases live in
+      // setup.test.ts's "the Phase 5b terrain draw".
+      const loser = opponentOf(state.turn.marching)
+      const loserSpecies = SPECIES.find((s) => s.id === speciesOf(state, loser))
+      if (!loserSpecies) throw new Error(`unknown species for ${loser}`)
+      const frontierElements = terrainType(terrainDie(state.terrains.frontier.dieId).type).elements
+      expect(
+        frontierElements.some((e) => loserSpecies.elements.includes(e)),
+        `seed ${seed}`,
+      ).toBe(true)
     }
 
     expect([...sizes].sort((a, b) => a - b)).toEqual([...FORCE_SIZES])
-    // The Frontier is no longer a constant: both species' second terrains turn up,
-    // depending on who lost the roll-off.
-    expect(frontiers.size).toBe(2)
   })
 
   it('reproduces itself exactly from the same seed', () => {
@@ -185,17 +193,22 @@ describe('a game set up from nothing but a seed', () => {
    * different board than it was recorded on.
    */
   it('consumes no generation draws when the forces are named', () => {
-    const named = setupGame({ seed: 8, forces: STARTER_FORCES })
-    const pinned = setupGame({
+    const state = setupGame({
       seed: 8,
       forces: STARTER_FORCES,
-      terrains: { frontier: 'highland_tower' },
+      firstPlayer: 'p1',
+      terrains: {
+        p1_home: 'swampland_tower',
+        frontier: 'highland_tower',
+        p2_home: 'wasteland_tower',
+      },
     })
-    // The roll-off is the first thing to draw, so both of these agree with a state
-    // whose only randomness is the roll-off and three terrain faces.
-    expect(named.rng.counter).toBe(pinned.rng.counter)
-    expect(named.log.some((e) => e.kind === 'forces_drawn')).toBe(false)
-    expect(Object.keys(named.units)).toHaveLength(28)
+    // With the roll-off skipped and every terrain pinned, the only draws left are
+    // the three opening face rolls -- proof that a named force runs no draws of
+    // its own, since generateForces alone would consume many more than three.
+    expect(state.rng.counter).toBe(3)
+    expect(state.log.some((e) => e.kind === 'forces_drawn')).toBe(false)
+    expect(Object.keys(state.units)).toHaveLength(28)
   })
 
   it('says in the log what it rolled', () => {

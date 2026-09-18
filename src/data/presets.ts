@@ -1,15 +1,13 @@
 /**
  * Hand-authored setup content from `data/presets.json`.
  *
- * Two things, deliberately separate. A **species profile** is the pair of terrain
- * dice a species brings -- its Home Terrain and the second one it proposes as the
- * Frontier -- and every game needs one per side. A **preset** is a named force: a
- * species and three army lists. Ordinary games roll their force from the seed
- * instead (`engine/force.ts`), so presets exist for the things randomness is no use
- * to: a test that needs a particular die on the board, and a golden corpus that has
- * to mean the same thing next year.
+ * A **preset** is a named force: a species and three army lists. Ordinary games
+ * roll their force from the seed instead (`engine/force.ts`), so presets exist for
+ * the things randomness is no use to: a test that needs a particular die on the
+ * board, and a golden corpus that has to mean the same thing next year.
  *
- * They were one type, which worked only while every force implied its own terrains.
+ * Terrain no longer has a per-species profile (Phase 5b): both Home Terrains and
+ * the Frontier are drawn from the seed, from all 24 dice -- see `engine/setup.ts`.
  *
  * Unlike `data/starter/`, this file is not generated -- it is content someone chose.
  * Validated eagerly here for the same reason as the die data: a broken preset should
@@ -25,15 +23,6 @@ import { DataError } from './types'
 export type PresetArmyName = 'home' | 'campaign' | 'horde'
 
 export const PRESET_ARMY_NAMES: readonly PresetArmyName[] = ['home', 'campaign', 'horde']
-
-/** The two terrain dice a species brings to a game. */
-export interface SpeciesProfile {
-  readonly id: string
-  /** Placed at that player's own terrain slot. */
-  readonly homeTerrain: string
-  /** Proposed as the Frontier, and placed there if this side loses the roll-off. */
-  readonly secondTerrain: string
-}
 
 /** A named force: who they are and how they are split at setup. */
 export interface Preset {
@@ -120,40 +109,13 @@ function load(): readonly Preset[] {
   return presets
 }
 
-function loadProfiles(): readonly SpeciesProfile[] {
-  return Object.entries(rawPresets.species).map(([id, p]): SpeciesProfile => {
-    const profile: SpeciesProfile = {
-      id,
-      homeTerrain: p.homeTerrain,
-      secondTerrain: p.secondTerrain,
-    }
-    // A species cannot bring the same physical die twice, and setup would put both
-    // on the board at once.
-    if (profile.homeTerrain === profile.secondTerrain) {
-      throw new DataError(
-        `species ${id}: home and second terrain are both ${profile.homeTerrain}; ` +
-          `they are two dice, so they have to be two dice`,
-      )
-    }
-    return profile
-  })
-}
-
 export const PRESETS: readonly Preset[] = load()
-export const SPECIES_PROFILES: readonly SpeciesProfile[] = loadProfiles()
 
 const byId = new Map(PRESETS.map((p) => [p.id, p]))
-const profilesById = new Map(SPECIES_PROFILES.map((p) => [p.id, p]))
 
 export function preset(id: string): Preset {
   const found = byId.get(id)
   if (!found) throw new DataError(`no such preset: ${id}`)
-  return found
-}
-
-export function speciesProfile(id: string): SpeciesProfile {
-  const found = profilesById.get(id)
-  if (!found) throw new DataError(`no terrain profile for species: ${id}`)
   return found
 }
 

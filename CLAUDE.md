@@ -52,13 +52,14 @@ the dice and the opponent.
 >
 > The ladder after this is eighth-face **icon** powers (Phase 5), dragons (6), then spells (7).
 
-> Worth knowing before picking one up: **both home terrains are Towers and the Frontier is a City**
-> (Phase 0a gave each species a second die of its own type). So Tower's "may attack any terrain in
-> play during a missile action" is the icon power that covers two of the three terrains here, and
-> it is the smallest of the four — one condition inside `missileTargets` — which makes it a cheap
-> way to start the eighth face long before Temple and Standing Stones become reachable. The City is
-> now the *other* cheap one: Phase 2 built everything it needs, so it is a `Pending` and an
-> `eighth_face` phase handler away, and it fires at the Frontier every turn.
+> **Phase 5a and 5b are landed.** 5a transcribed Coastland, Feyland and Flatland, so all six basic
+> terrain types (24 dice) are in the data. 5b replaced the species terrain profile with a draw: each
+> Home Terrain is now drawn uniformly from all 24 dice, and the Frontier is drawn from a terrain
+> sharing an element with the roll-off loser's species -- so a board is no longer "both homes are
+> Towers, the Frontier a City" the way Phase 0a left it. The old per-species profile
+> (`SpeciesProfile`, `data/presets.json`'s `species` block) is gone; see `PLAN-V1-Phase5.md` for the
+> exact distribution. `SAVE_VERSION` is 7. The remaining slices -- the seam, Tower, City and Temple
+> -- are next.
 
 ## Read these first
 

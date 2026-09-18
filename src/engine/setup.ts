@@ -2,24 +2,27 @@
  * Builds the opening position, following RULES-V0.md section 7.
  *
  * Both setup choices are made here now. Order of play comes from the Horde roll-off,
- * and the *Frontier* comes from the loser of that roll-off, who places the second
- * terrain their species brings. The rules give the winner the choice of one prize or
- * the other; splitting them one each costs nothing while the opponent is `PassiveAI`,
- * which could hold no opinion about which terrain it would rather fight on, and it
- * means no decision has to be raised. `GreedyAI` (Phase 9) gets the real rule.
+ * and the *Frontier* comes from the loser of that roll-off, who draws it (Phase 5b
+ * house rule). The rules give the winner the choice of one prize or the other;
+ * splitting them one each costs nothing while the opponent is `PassiveAI`, which
+ * could hold no opinion about which terrain it would rather fight on, and it means
+ * no decision has to be raised. `GreedyAI` (Phase 9) gets the real rule.
+ *
+ * Terrain has no per-species profile any more (Phase 5b removed it): each Home
+ * Terrain is drawn uniformly from all 24 dice, and the Frontier is drawn from the
+ * terrains that share an element with the loser's species -- see `drawHomeDie` /
+ * `drawFrontierDie`.
  *
  * A force is either named -- a preset, for tests and the golden corpus -- or rolled
  * from the seed. **The named path must consume no generation draws at all**, or a
  * named game lands on a different board than v0 gave it and every golden quietly
- * changes meaning.
+ * changes meaning. The same is true of a pinned terrain slot (`SetupOptions.terrains`):
+ * it consumes no draw either, not "the same draw" -- so the goldens' three pins leave
+ * the whole terrain-draw stream skipped.
  */
-import { terrainDie, unitType } from '../data/load'
-import {
-  preset,
-  speciesProfile,
-  PRESET_ARMY_NAMES,
-  type PresetArmyName,
-} from '../data/presets'
+import { SPECIES, TERRAIN_DICE, terrainDie, terrainType, unitType } from '../data/load'
+import type { Element } from '../data/types'
+import { preset, PRESET_ARMY_NAMES, type PresetArmyName } from '../data/presets'
 
 import { generateForces, type GeneratedForce } from './force'
 import { nextInt, rngFrom, type RngState } from './rng'
@@ -98,9 +101,9 @@ export interface SetupOptions {
    */
   readonly firstPlayer?: PlayerId
   /**
-   * Pins a terrain die to a slot, overriding what the species would bring. Setup
-   * needs no such thing; tests do -- this is how a test says "a Tower, here" -- and
-   * it is what lets the golden corpus keep replaying the board it was recorded on.
+   * Pins a terrain die to a slot, overriding the draw. Setup needs no such thing;
+   * tests do -- this is how a test says "a Tower, here" -- and it is what lets the
+   * golden corpus keep replaying the board it was recorded on.
    */
   readonly terrains?: Readonly<Partial<Record<TerrainSlot, string>>>
   readonly ruleSet?: RuleSet
@@ -127,6 +130,50 @@ function startingSlot(armyName: PresetArmyName, player: PlayerId): TerrainSlot {
     case 'horde':
       return enemy
   }
+}
+
+/**
+ * All 24 terrain dice, sorted by id. Reordering the raw file must not reseat a
+ * game, so both this and the Frontier's filtered list below draw from a sorted list
+ * rather than `TERRAIN_DICE`'s raw-file order.
+ */
+const SORTED_TERRAIN_DICE: readonly string[] = [...TERRAIN_DICE].map((d) => d.id).sort()
+
+/** A species' two elements, from the unit data -- the one copy of this fact. */
+function speciesElements(speciesId: string): readonly Element[] {
+  const species = SPECIES.find((s) => s.id === speciesId)
+  if (!species) throw new Error(`unknown species ${speciesId}`)
+  return species.elements
+}
+
+/** Draws a Home Terrain die uniformly from all 24 (Phase 5b house rule). */
+function drawHomeDie(rng: RngState): readonly [string, RngState] {
+  const [index, next] = nextInt(rng, SORTED_TERRAIN_DICE.length)
+  const dieId = SORTED_TERRAIN_DICE[index]
+  if (dieId === undefined) throw new Error(`drew home terrain ${index}`)
+  return [dieId, next] as const
+}
+
+/**
+ * Draws the Frontier die: one of the loser's two elements, then uniformly among the
+ * dice whose type carries it (Phase 5b house rule, the "element first" reading).
+ * The loser's own home type carries both of the loser's elements, so it is reachable
+ * from either draw of the first step and comes up twice as often as a type that
+ * shares only one element with the loser.
+ */
+function drawFrontierDie(loserSpecies: string, rng: RngState): readonly [string, RngState] {
+  const elements = speciesElements(loserSpecies)
+  const [elementIndex, afterElement] = nextInt(rng, elements.length)
+  const element = elements[elementIndex]
+  if (element === undefined) throw new Error(`drew element ${elementIndex}`)
+
+  const eligible = SORTED_TERRAIN_DICE.filter((dieId) =>
+    terrainType(terrainDie(dieId).type).elements.includes(element),
+  )
+  const [dieIndex, afterDie] = nextInt(afterElement, eligible.length)
+  const dieId = eligible[dieIndex]
+  if (dieId === undefined) throw new Error(`drew frontier die ${dieIndex} of ${eligible.length}`)
+  return [dieId, afterDie] as const
 }
 
 /**
@@ -299,17 +346,47 @@ export function setupGame(options: SetupOptions): GameState {
 
   log.unshift({ kind: 'game_start', seed: options.seed, firstPlayer })
 
-  // The roll-off's other prize: the loser places the Frontier, from the second
-  // terrain their species brings. It reads the result rather than rolling, so it
-  // consumes nothing and cannot disturb the stream below.
+  // The roll-off's other prize: the loser draws the Frontier, from a terrain sharing
+  // an element with their species.
   const frontierSetter = opponentOf(firstPlayer)
 
-  // Step 5: opening terrain faces.
+  // Step 5: the three terrain dice, drawn in this order -- p1_home, then the
+  // Frontier (element, then die), then p2_home -- and only for the slots
+  // `options.terrains` does not pin. A pinned slot consumes no draw at all, the
+  // named-force rule again: not "the same draws", none, or a partly pinned game
+  // would land on a different board than the same seed gives a fully pinned one.
+  let p1HomeDie: string
+  if (options.terrains?.p1_home !== undefined) {
+    p1HomeDie = options.terrains.p1_home
+  } else {
+    const [dieId, next] = drawHomeDie(rng)
+    p1HomeDie = dieId
+    rng = next
+  }
+
+  let frontierDie: string
+  if (options.terrains?.frontier !== undefined) {
+    frontierDie = options.terrains.frontier
+  } else {
+    const [dieId, next] = drawFrontierDie(forces[frontierSetter].species, rng)
+    frontierDie = dieId
+    rng = next
+  }
+
+  let p2HomeDie: string
+  if (options.terrains?.p2_home !== undefined) {
+    p2HomeDie = options.terrains.p2_home
+  } else {
+    const [dieId, next] = drawHomeDie(rng)
+    p2HomeDie = dieId
+    rng = next
+  }
+
+  // Step 6: opening terrain faces.
   const dice: Readonly<Record<TerrainSlot, string>> = {
-    p1_home: options.terrains?.p1_home ?? speciesProfile(forces.p1.species).homeTerrain,
-    frontier:
-      options.terrains?.frontier ?? speciesProfile(forces[frontierSetter].species).secondTerrain,
-    p2_home: options.terrains?.p2_home ?? speciesProfile(forces.p2.species).homeTerrain,
+    p1_home: p1HomeDie,
+    frontier: frontierDie,
+    p2_home: p2HomeDie,
   }
   const terrains = {} as Record<TerrainSlot, TerrainInPlay>
 
