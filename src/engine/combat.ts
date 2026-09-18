@@ -7,7 +7,7 @@
 import { terrainFaceAction } from '../data/load'
 import type { TerrainFaceNumber } from '../data/types'
 
-import { armyRoll } from './effects'
+import { armyRoll, iconAt } from './effects'
 import type { Modifier, RollEffect } from './pipeline'
 import {
   asResult,
@@ -24,7 +24,9 @@ import {
   TERRAIN_SLOTS,
   armyAt,
   opponentOf,
+  reserveArmy,
   type ActionKind,
+  type ArmyRef,
   type GameState,
   type PlayerId,
   type RuleSet,
@@ -49,19 +51,29 @@ const isHome = (slot: TerrainSlot): boolean => slot !== 'frontier'
  *
  * "You cannot target the opponent's Reserves Army or attack from one Home Terrain
  * to the other Home Terrain." Reserves fall out for free, since a reserve army is
- * not at a terrain and so cannot be named by a slot.
+ * not at a terrain and so cannot be named by a slot -- **unless the attacker holds
+ * a Tower right where they stand** (Phase 5d): "your controlling army may use a
+ * missile action to attack any opponent's army." A Tower held elsewhere lends
+ * nothing, which is why `iconAt` is asked at `fromSlot` and not anywhere the
+ * attacker merely captured.
  */
 export function missileTargets(
   state: GameState,
   attacker: PlayerId,
   fromSlot: TerrainSlot,
-): readonly TerrainSlot[] {
+): readonly ArmyRef[] {
   const defender = opponentOf(attacker)
-  return TERRAIN_SLOTS.filter((slot) => {
+  const holdsTower = iconAt(state, attacker, fromSlot) === 'tower'
+
+  const targets: ArmyRef[] = TERRAIN_SLOTS.filter((slot) => {
     if (armyAt(state, defender, slot).length === 0) return false
-    if (isHome(fromSlot) && isHome(slot) && slot !== fromSlot) return false
+    if (!holdsTower && isHome(fromSlot) && isHome(slot) && slot !== fromSlot) return false
     return true
   })
+
+  if (holdsTower && reserveArmy(state, defender).length > 0) targets.push('reserve')
+
+  return targets
 }
 
 /**
@@ -150,7 +162,9 @@ export interface AttackSpec {
   readonly attacker: PlayerId
   readonly attackerSlot: TerrainSlot
   readonly defender: PlayerId
-  readonly defenderSlot: TerrainSlot
+  /** A Reserve Army after a Tower's missile (Phase 5d): the attacker always stands
+   *  at a terrain, but the defender need not. */
+  readonly defenderSlot: ArmyRef
   /**
    * Whether this exchange is the counter-attack rather than the opening attack.
    *
@@ -206,6 +220,9 @@ function attackRollSpec(spec: AttackSpec, modifiers: readonly Modifier[]): RollS
     kinds: [spec.action],
     modifiers,
     context: { purpose: { kind: 'attack', action: spec.action }, isCounter: spec.isCounter },
+    // Tower's "if attacking a Reserve Army, only count non-ID missile results"
+    // (Phase 5d): a missile action is the only one a Tower can aim at Reserves.
+    ...(spec.defenderSlot === 'reserve' ? { countIds: false as const } : {}),
   }
 }
 

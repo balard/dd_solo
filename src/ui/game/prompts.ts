@@ -15,7 +15,9 @@ import { legalDirections } from '../../engine/turn'
 import {
   TERRAIN_SLOTS,
   armyAt,
+  army as armyRef,
   reserveArmy,
+  type ArmyRef,
   type Direction,
 
   type GameAction,
@@ -36,8 +38,10 @@ export const SLOT_LABEL: Record<TerrainSlot, string> = {
   p2_home: 'Enemy home',
 }
 
-/** Slot labels from the perspective of whoever is reading. */
-export function slotLabel(slot: TerrainSlot, human: 'p1' | 'p2'): string {
+/** Slot labels from the perspective of whoever is reading. A Reserve Army is
+ *  nobody's terrain, so it reads the same for both sides (Phase 5d, Tower). */
+export function slotLabel(slot: ArmyRef, human: 'p1' | 'p2'): string {
+  if (slot === 'reserve') return 'Reserves'
   if (slot === 'frontier') return 'Frontier'
   const isOwn = (slot === 'p1_home') === (human === 'p1')
   return isOwn ? 'Your home' : 'Enemy home'
@@ -115,7 +119,7 @@ export function describeFace({ dieId, face }: FaceHint): string {
 }
 
 export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState): Prompt {
-  const label = (slot: TerrainSlot) => slotLabel(slot, human)
+  const label = (slot: ArmyRef) => slotLabel(slot, human)
 
   switch (pending.kind) {
     case 'choose_march_army':
@@ -123,7 +127,7 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         question: 'Which army marches?',
         choices: [
           ...pending.options.map((army) => ({
-            label: label(army as TerrainSlot),
+            label: label(army),
             action: { kind: 'choose_march_army', army } as GameAction,
           })),
           { label: 'Skip march', action: { kind: 'choose_march_army', army: null }, passive: true },
@@ -337,7 +341,7 @@ export function saiTargetSelection(
   // Choke may take only the dice that rolled an ID icon, so they are the only ones
   // the tally counts and the only ones the maximum is measured against. Every other
   // SAI leaves `eligible` off and takes the army whole.
-  const army = armyAt(state, pending.target, pending.slot).filter(
+  const army = armyRef(state, pending.target, pending.slot).filter(
     (unit) => pending.eligible === undefined || pending.eligible.includes(unit.id),
   )
 
@@ -368,12 +372,12 @@ export function saiTargetSelection(
 function budgetSelection(
   state: GameState,
   owner: 'p1' | 'p2',
-  slot: TerrainSlot,
+  slot: ArmyRef,
   budget: number,
   selection: ReadonlySet<UnitId>,
   eligible?: readonly UnitId[],
 ): DamageSelection {
-  const army = armyAt(state, owner, slot).filter(
+  const army = armyRef(state, owner, slot).filter(
     (unit) => eligible === undefined || eligible.includes(unit.id),
   )
   const { required, suggestion } = damageOptions(army, budget)
@@ -421,7 +425,7 @@ export function promoteDraft(
   const spent = pairs.reduce((sum, pair) => sum + promotionGain(state, pair), 0)
   const left = pending.budget - spent
 
-  const army = armyAt(state, pending.player, pending.slot).filter(
+  const army = armyRef(state, pending.player, pending.slot).filter(
     (unit) => !pairs.some((pair) => pair.unitId === unit.id),
   )
   const taken = pairs.map((pair) => pair.partnerId)
@@ -468,7 +472,7 @@ export function moveDraft(
   pending: Extract<Pending, { kind: 'sai_move' }>,
   selection: ReadonlySet<UnitId>,
 ): MoveDraft {
-  const army = armyAt(state, pending.player, pending.slot)
+  const army = armyRef(state, pending.player, pending.slot)
   const stuck = new Set<UnitId>()
   let carried = 0
 
@@ -542,10 +546,17 @@ export function reinforcePlan(
   }
 }
 
-/** Which terrain the player should be looking at right now. */
+/**
+ * Which terrain the player should be looking at right now.
+ *
+ * A pending decision aimed at the Reserve Army (Phase 5d, Tower) has no terrain
+ * card to highlight, so it falls through to the marching army's own terrain --
+ * where the action came from -- the same fallback an unanswerable `marchingArmy`
+ * already used.
+ */
 export function focusedSlot(state: GameState): TerrainSlot {
   const pending = state.pending
-  if (pending !== null && 'slot' in pending) return pending.slot
+  if (pending !== null && 'slot' in pending && pending.slot !== 'reserve') return pending.slot
   const army = state.turn.marchingArmy
   if (army !== null && army !== 'reserve') return army
   return 'frontier'
@@ -567,7 +578,9 @@ export interface SelectMode {
    * army, so `Board` hard-coded the opposing side unselectable.
    */
   readonly side: 'mine' | 'theirs' | 'reserve'
-  readonly slot: TerrainSlot | null
+  /** A Reserve Army is a legal target since Phase 5d's Tower, so this is an
+   *  `ArmyRef` rather than a `TerrainSlot`; `null` still means "wherever". */
+  readonly slot: ArmyRef | null
 }
 
 export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): SelectMode | null {
@@ -618,7 +631,7 @@ export function pendingKey(pending: Pending | null): string {
 
 export function selectableAt(
   mode: SelectMode | null,
-  slot: TerrainSlot,
+  slot: ArmyRef,
   side: 'mine' | 'theirs' = 'mine',
 ): boolean {
   return mode?.side === side && (mode.slot === null || mode.slot === slot)

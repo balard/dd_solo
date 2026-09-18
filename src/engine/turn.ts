@@ -54,6 +54,7 @@ import {
   IllegalActionError,
   TERRAIN_SLOTS,
   armyAt,
+  army as armyRef,
   capturedCount,
   livingUnits,
   opponentOf,
@@ -96,6 +97,20 @@ function marchingSlot(state: GameState): TerrainSlot {
   if (army === null) throw new Error('no army is marching')
   if (army === 'reserve') throw new Error('the Reserve Army cannot march in v0')
   return army
+}
+
+/**
+ * `combat.targetSlot` as a terrain, for the steps that can only ever see one.
+ *
+ * A Tower's missile is the one way `targetSlot` becomes a Reserve Army (Phase 5d),
+ * and melee is the only action a counter-attack ever answers -- `stepHasWork`
+ * offers one only after a melee exchange, which a Tower cannot aim at Reserves.
+ * So this throws rather than narrows: reaching `'reserve'` here means that
+ * invariant broke, not that this step has a Reserve Army to handle.
+ */
+function requireTerrainTarget(ref: ArmyRef): TerrainSlot {
+  if (ref === 'reserve') throw new Error('a counter-attack cannot target a Reserve Army')
+  return ref
 }
 
 /**
@@ -300,11 +315,12 @@ function stepMarch(state: GameState): GameState {
       // is left standing on `offer_counter`. Deciding it one step earlier would end
       // the march first and change the state every golden was recorded in.
       if (combat.counterSuppressed === true) return endMarch(state)
-      if (armyAt(state, defender, combat.targetSlot).length === 0) return endMarch(state)
+      const targetSlot = requireTerrainTarget(combat.targetSlot)
+      if (armyAt(state, defender, targetSlot).length === 0) return endMarch(state)
       if (armyAt(state, player, marchingSlot(state)).length === 0) return endMarch(state)
       return {
         ...state,
-        pending: { kind: 'choose_counter_attack', player: defender, slot: combat.targetSlot },
+        pending: { kind: 'choose_counter_attack', player: defender, slot: targetSlot },
       }
     }
   }
@@ -367,7 +383,7 @@ const isAssignStep = (step: MarchStep): step is AssignStep => step.startsWith('a
 function damageTarget(
   state: GameState,
   step: AssignStep,
-): { readonly player: PlayerId; readonly slot: TerrainSlot } {
+): { readonly player: PlayerId; readonly slot: ArmyRef } {
   const combat = requireCombat(state)
   const marcher = state.turn.marching
   const atTarget = { player: opponentOf(marcher), slot: combat.targetSlot } as const
@@ -405,9 +421,9 @@ function damageAt(state: GameState, step: AssignStep): number {
 function stepHasWork(state: GameState, step: CombatStep): boolean {
   if (isAssignStep(step)) {
     const target = damageTarget(state, step)
-    const army = armyAt(state, target.player, target.slot)
+    const targetArmy = armyRef(state, target.player, target.slot)
     // Damage too small to kill anything is dropped rather than asked about.
-    return damageOptions(army, damageAt(state, step)).required > 0
+    return damageOptions(targetArmy, damageAt(state, step)).required > 0
   }
 
   // Only melee is countered, and a counter is never itself countered. Whether the
@@ -456,7 +472,7 @@ function exchangeSpec(state: GameState, isCounter: boolean): AttackSpec {
   return {
     action: combat.action,
     attacker: isCounter ? enemy : marcher,
-    attackerSlot: isCounter ? combat.targetSlot : marchSlot,
+    attackerSlot: isCounter ? requireTerrainTarget(combat.targetSlot) : marchSlot,
     defender: isCounter ? marcher : enemy,
     defenderSlot: isCounter ? marchSlot : combat.targetSlot,
     isCounter,
@@ -613,7 +629,9 @@ function opposingArmies(state: GameState, roller: PlayerId): readonly TerrainSlo
 interface TaskOwner {
   readonly player: PlayerId
   readonly army: PlayerId
-  readonly slot: TerrainSlot
+  /** A Reserve Army when a targeting SAI rides a Tower's missile there (Phase 5d);
+   *  a terrain otherwise. */
+  readonly slot: ArmyRef
 }
 
 function taskOwner(task: TargetTask, spec: AttackSpec, delayed: boolean): TaskOwner {
@@ -636,7 +654,7 @@ function taskOwner(task: TargetTask, spec: AttackSpec, delayed: boolean): TaskOw
  * to agree about which dice are even on offer.
  */
 function chokeEligible(state: GameState, spec: AttackSpec, saves: PendingSaves): readonly UnitId[] {
-  const army = armyAt(state, spec.defender, spec.defenderSlot)
+  const army = armyRef(state, spec.defender, spec.defenderSlot)
   const ids: UnitId[] = []
   for (const die of saves.dice) {
     if (faceOf(die).icon !== 'ID') continue
@@ -648,7 +666,7 @@ function chokeEligible(state: GameState, spec: AttackSpec, saves: PendingSaves):
 
 /** The units a task may pick from, which is its owner's army for a friendly one. */
 function taskArmy(state: GameState, owner: TaskOwner): readonly UnitInstance[] {
-  return armyAt(state, owner.army, owner.slot)
+  return armyRef(state, owner.army, owner.slot)
 }
 
 /** Whether this task has anything it could land on. */
@@ -726,6 +744,9 @@ function taskPending(
         kind: 'sai_promote',
         ...common,
         budget: task.budget,
+        // A Reserve Army rolling saves against a Tower's missile (Phase 5d) can
+        // roll Wild Growth on its own dice same as any other; promotion cares
+        // about the DUA, not the terrain, so `owner.slot` needs no narrowing.
         slot: owner.slot,
         // Only the defender's own save roll counts save results. An attack roll
         // generates them in a type it does not count.
@@ -738,8 +759,9 @@ function taskPending(
         unitId: task.unitId,
         slot: owner.slot,
         health: task.health,
-        // "To any terrain" -- but not the one it is already standing on, which is an
-        // answer that moves nobody and reads as a mistake.
+        // "To any terrain" -- but not the one it is already standing on, which is
+        // never true when the mover is a Reserve Army, so a free move out of
+        // Reserves offers every terrain.
         options: TERRAIN_SLOTS.filter((slot) => slot !== owner.slot),
       }
   }
@@ -947,7 +969,7 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
   }
 
   const spec = exchangeSpec(state, step === 'sai_target_counter' || step === 'sai_delayed_counter')
-  const army = armyAt(state, spec.defender, spec.defenderSlot)
+  const army = armyRef(state, spec.defender, spec.defenderSlot)
 
   // Sleep takes one *die*, not health-worth, so it cannot go through the maximal
   // subset check -- there is nothing to maximise, only a count to get right.
@@ -960,6 +982,9 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
       throw new IllegalActionError(`${unitId} is not in the army ${task.sai} is aimed at`)
     }
 
+    // Sleep applies only to a melee attack (`sai.ts`), which never targets a
+    // Reserve Army -- so `defenderSlot` is always a terrain here.
+    const slot = requireTerrainTarget(spec.defenderSlot)
     const cast = castEffect(
       state,
       spec.attacker,
@@ -970,7 +995,7 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
         asleep: true,
         expiresAtStartOfTurnOf: spec.attacker,
       },
-      { target: spec.defender, slot: spec.defenderSlot, unitId },
+      { target: spec.defender, slot, unitId },
     )
     return dropHeadTask(withTurn(cast, { combat: combat }))
   }
@@ -1352,7 +1377,13 @@ function subRoll(
     test: task.escape === 'id' ? 'id' : task.escape === 'save' ? 'save' : 'maneuver',
     dice,
     escaped,
-    ...(task.escapeTo === 'reserve' ? { toReserve: true as const } : {}),
+    // Omitted when the army was already the Reserve Army (a Tower's missile,
+    // Phase 5d): Seize's escapees end up exactly where they started, and a log
+    // that says "escapes to reserves" about a die that never moved is a claim
+    // `moveEscapees` does not back up.
+    ...(task.escapeTo === 'reserve' && spec.defenderSlot !== 'reserve'
+      ? { toReserve: true as const }
+      : {}),
   }
 
   const logged = withLog({ ...state, rng }, entry)
@@ -1726,7 +1757,7 @@ function applyChooseAction(state: GameState, action: ActionKind | null): GameSta
   })
 }
 
-function applyMissileTarget(state: GameState, slot: TerrainSlot): GameState {
+function applyMissileTarget(state: GameState, slot: ArmyRef): GameState {
   const player = state.turn.marching
   const options = missileTargets(state, player, marchingSlot(state))
   if (!options.includes(slot)) {
@@ -1766,7 +1797,7 @@ function applyAssignDamage(state: GameState, unitIds: readonly UnitId[]): GameSt
   }
 
   const { player: victim, slot } = damageTarget(state, step)
-  const army = armyAt(state, victim, slot)
+  const army = armyRef(state, victim, slot)
   const problem = damageAssignmentProblem(army, damageAt(state, step), unitIds)
   if (problem !== null) throw new IllegalActionError(problem)
 

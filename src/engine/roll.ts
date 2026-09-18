@@ -229,6 +229,17 @@ export interface RollSpec {
    * the answer -- without a second draw.
    */
   readonly saiResults?: Readonly<Partial<Record<ResultType, number>>>
+  /**
+   * Tower's "only count non-ID missile results" against a Reserve Army (Phase 5d):
+   * a counting rule at step 5, not a modifier. It cannot be a `subtract` -- the
+   * amount is not known until the dice land, and step 6 removes ID results last --
+   * and it cannot ride on step 9's one-multiplier-per-type cap, since the same roll
+   * may also be doubling IDs for the eighth face. So it is its own spec field, the
+   * third after `saiResults` and `context`: a fact about what the roll is *for*,
+   * which the pipeline has to know before step 6 ever runs. Optional-and-omitted,
+   * like every new field near the digest -- `false` is the only value written.
+   */
+  readonly countIds?: false
 }
 
 export interface RollOutcome {
@@ -308,13 +319,14 @@ function perDieResults(
   face: Face,
   contribution: Contribution,
   primary: ResultType,
-  modifiers: readonly Modifier[],
+  spec: RollSpec,
 ): number {
   const sai = contribution.saiResults[primary] ?? 0
 
   if (face.icon !== 'ID') return (contribution.normals[primary] ?? 0) + sai
+  if (spec.countIds === false) return sai
 
-  for (const modifier of modifiers) {
+  for (const modifier of spec.modifiers) {
     if (modifier.kind === 'multiply' && modifier.share === 'id' && modifier.resultType === primary) {
       return contribution.idPool * modifier.by + sai
     }
@@ -439,13 +451,16 @@ export function resolveFaces(
       typeId: die.typeId,
       faceIndex: die.faceIndex,
       face,
-      results: perDieResults(face, contribution, primary, spec.modifiers),
+      results: perDieResults(face, contribution, primary, spec),
       ...(die.reroll === true ? { reroll: true as const } : {}),
       ...(contribution.effects.length > 0 ? { effects: contribution.effects } : {}),
     })
   }
 
-  const allocation = allocateIds(idPool, spec.kinds, spec.idAllocation)
+  // Step 5's other half: Tower's "only count non-ID missile results" gives every
+  // counted type an ID share of zero, ahead of the ordinary allocation -- step 9's
+  // doubling then doubles zero, which is the right answer either way.
+  const allocation = spec.countIds === false ? new Map() : allocateIds(idPool, spec.kinds, spec.idAllocation)
   const totals: Partial<Record<ResultType, number>> = {}
 
   for (const kind of spec.kinds) {

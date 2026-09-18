@@ -11,7 +11,7 @@ import { isAsleep } from '../engine/effects'
 import { nextInt, type RngState } from '../engine/rng'
 import {
   TERRAIN_SLOTS,
-  armyAt,
+  army as armyRef,
   type GameAction,
   type GameState,
   type Pending,
@@ -97,7 +97,7 @@ export const randomAi: AiPlayer = {
         // Every maximal set is legal and they are not interchangeable -- which units
         // die changes the game. Shuffling before solving explores that space without
         // enumerating it.
-        const army = armyAt(state, pending.player, pending.slot)
+        const army = armyRef(state, pending.player, pending.slot)
         const [shuffled, next] = shuffle(rng, army)
         const { suggestion } = damageOptions(shuffled as readonly UnitInstance[], pending.damage)
         return [{ kind: 'assign_damage', unitIds: suggestion } as GameAction, next] as const
@@ -112,7 +112,7 @@ export const randomAi: AiPlayer = {
         // held to is the maximum *within that set* -- so a fuzz that picks from the
         // whole army produces an illegal answer and fails the game rather than the
         // rule. A decision that gains a dimension has to reach the fuzz opponent too.
-        const army = armyAt(state, pending.target, pending.slot).filter(
+        const army = armyRef(state, pending.target, pending.slot).filter(
           (unit) => pending.eligible === undefined || pending.eligible.includes(unit.id),
         )
         const [shuffled, next] = shuffle(rng, army)
@@ -146,7 +146,7 @@ export const randomAi: AiPlayer = {
        * the multi-step jumps that `promotionMatching` cannot express.
        */
       case 'sai_promote': {
-        const [units, afterShuffle] = shuffle(rng, armyAt(state, pending.player, pending.slot))
+        const [units, afterShuffle] = shuffle(rng, armyRef(state, pending.player, pending.slot))
         let next = afterShuffle
         let budget = pending.budget
         const taken = new Set<UnitId>()
@@ -181,7 +181,7 @@ export const randomAi: AiPlayer = {
         const [slot, afterSlot] = pick(afterCoin, pending.options)
         const [others, afterShuffle] = shuffle(
           afterSlot,
-          armyAt(state, pending.player, pending.slot).filter(
+          armyRef(state, pending.player, pending.slot).filter(
             (unit) => unit.id !== pending.unitId && !isAsleep(state, unit.id),
           ),
         )

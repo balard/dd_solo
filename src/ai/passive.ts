@@ -17,7 +17,7 @@
 import { damageOptions } from '../engine/damage'
 import type { RngState } from '../engine/rng'
 import type { GameAction, GameState, Pending } from '../engine/types'
-import { armyAt } from '../engine/types'
+import { army as armyRef } from '../engine/types'
 
 import type { AiPlayer } from './types'
 
@@ -51,7 +51,7 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     case 'assign_damage':
       return {
         kind: 'assign_damage',
-        unitIds: damageOptions(armyAt(state, pending.player, pending.slot), pending.damage)
+        unitIds: damageOptions(armyRef(state, pending.player, pending.slot), pending.damage)
           .suggestion,
       }
 
@@ -62,7 +62,7 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     case 'sai_target': {
       // Choke may pick only from the dice that rolled an ID, so the maximum it is held
       // to is the maximum within that set.
-      const army = armyAt(state, pending.target, pending.slot).filter(
+      const army = armyRef(state, pending.target, pending.slot).filter(
         (unit) => pending.eligible === undefined || pending.eligible.includes(unit.id),
       )
       // Sleep takes one die and there is nothing to maximise; everything else takes

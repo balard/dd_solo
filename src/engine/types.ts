@@ -180,8 +180,11 @@ export interface PendingSaves {
  */
 export interface CombatState {
   readonly action: ActionKind
-  /** The terrain holding the army under attack. */
-  readonly targetSlot: TerrainSlot
+  /**
+   * The army under attack: a terrain, or (Tower, Phase 5d) a Reserve Army, which
+   * holds no terrain and so cannot be named by a `TerrainSlot`.
+   */
+  readonly targetSlot: ArmyRef
   /** Damage awaiting assignment by whoever is about to lose units. */
   readonly damage: number
   /** Counter/Volley damage owed back to whoever made *this* exchange's attack roll. */
@@ -242,13 +245,17 @@ export type Pending =
   | {
       readonly kind: 'choose_missile_target'
       readonly player: PlayerId
-      readonly options: readonly TerrainSlot[]
+      /** A Tower (Phase 5d) may add the opponent's Reserve Army, which is why this
+       *  is an `ArmyRef` rather than a `TerrainSlot`. */
+      readonly options: readonly ArmyRef[]
     }
   | { readonly kind: 'choose_counter_attack'; readonly player: PlayerId; readonly slot: TerrainSlot }
   | {
       readonly kind: 'assign_damage'
       readonly player: PlayerId
-      readonly slot: TerrainSlot
+      /** Whichever army is losing units -- a terrain, or a Reserve Army after a
+       *  Tower's missile (Phase 5d). */
+      readonly slot: ArmyRef
       readonly damage: number
     }
   /**
@@ -271,7 +278,9 @@ export type Pending =
       /** For the prompt and the log. */
       readonly sai: string
       readonly target: PlayerId
-      readonly slot: TerrainSlot
+      /** Whose army is being picked from -- a terrain, or a Reserve Army after a
+       *  Tower's missile (Phase 5d). */
+      readonly slot: ArmyRef
       /**
        * What "how many" means for this SAI.
        *
@@ -340,8 +349,10 @@ export type Pending =
        * nothing. The rules permit the bad choice; the sheet should not advertise it.
        */
       readonly saveResultsCount: boolean
-      /** Where the army stands, so the board knows which dice to offer. */
-      readonly slot: TerrainSlot
+      /** Where the army stands, so the board knows which dice to offer -- a
+       *  Reserve Army after a Tower's missile (Phase 5d) included: promotion
+       *  cares about the DUA, not the terrain. */
+      readonly slot: ArmyRef
       readonly remaining: number
     }
   /**
@@ -358,8 +369,8 @@ export type Pending =
       readonly sai: string
       /** The die that rolled it. It moves itself, so it is never a choice. */
       readonly unitId: UnitId
-      /** Where it is standing now. */
-      readonly slot: TerrainSlot
+      /** Where it is standing now -- a Reserve Army included (Phase 5d). */
+      readonly slot: ArmyRef
       /** Health-worth of *other* units it may take along. */
       readonly health: number
       readonly options: readonly TerrainSlot[]
@@ -375,7 +386,7 @@ export type GameAction =
   | { readonly kind: 'contest_maneuver'; readonly contest: boolean }
   | { readonly kind: 'choose_direction'; readonly direction: Direction }
   | { readonly kind: 'choose_action'; readonly action: ActionKind | null }
-  | { readonly kind: 'choose_missile_target'; readonly slot: TerrainSlot }
+  | { readonly kind: 'choose_missile_target'; readonly slot: ArmyRef }
   | { readonly kind: 'choose_counter_attack'; readonly counter: boolean }
   | { readonly kind: 'assign_damage'; readonly unitIds: readonly UnitId[] }
   | { readonly kind: 'sai_target'; readonly unitIds: readonly UnitId[] }
@@ -481,7 +492,7 @@ export type LogEntry =
        * picked, not when the action is declared** — otherwise the one action that can
        * name a second terrain would be the one unable to.
        */
-      readonly toSlot: TerrainSlot
+      readonly toSlot: ArmyRef
       readonly action: ActionKind
     }
   | { readonly kind: 'action_skipped'; readonly player: PlayerId; readonly slot: TerrainSlot }
@@ -495,7 +506,9 @@ export type LogEntry =
        * shoots at another terrain, and a counter-attack swaps them.
        */
       readonly attackerSlot: TerrainSlot
-      readonly defenderSlot: TerrainSlot
+      /** A Reserve Army after a Tower's missile (Phase 5d) -- the attacker always
+       *  stands at a terrain, but the defender need not. */
+      readonly defenderSlot: ArmyRef
       readonly action: ActionKind
       readonly isCounter: boolean
       readonly attackTotal: number
@@ -522,7 +535,7 @@ export type LogEntry =
   | {
       readonly kind: 'units_killed'
       readonly player: PlayerId
-      readonly slot: TerrainSlot
+      readonly slot: ArmyRef
       readonly unitIds: readonly UnitId[]
     }
   /**
@@ -538,7 +551,7 @@ export type LogEntry =
       /** The roller, who chose. Not the owner of `unitIds`. */
       readonly player: PlayerId
       readonly sai: string
-      readonly slot: TerrainSlot
+      readonly slot: ArmyRef
       readonly unitIds: readonly UnitId[]
     }
   /**
@@ -557,7 +570,9 @@ export type LogEntry =
       /** The owner of the dice that rolled. *Not* the roller who targeted them. */
       readonly player: PlayerId
       readonly sai: string
-      readonly slot: TerrainSlot
+      /** A Reserve Army after a Tower's missile (Phase 5d): Bullseye and Seize
+       *  both reach one. */
+      readonly slot: ArmyRef
       /** What the targets had to produce. `'id'` is a face, the other two a total. */
       readonly test: 'save' | 'maneuver' | 'id'
       /** Empty for a target that could not be rolled at all -- a sleeping die, which
@@ -651,8 +666,10 @@ export type LogEntry =
   | { readonly kind: 'effects_expired'; readonly player: PlayerId; readonly sources: readonly string[] }
 
   /** Surprise. A separate entry rather than a flag on `combat_resolved`: without it
-   *  the march simply ends, with no `counter_declined` and no explanation. */
-  | { readonly kind: 'counter_suppressed'; readonly player: PlayerId; readonly slot: TerrainSlot }
+   *  the march simply ends, with no `counter_declined` and no explanation. Surprise
+   *  is melee-only, so `slot` is always a terrain in practice, but it mirrors
+   *  `combat_resolved.defenderSlot`'s type rather than narrowing it back down. */
+  | { readonly kind: 'counter_suppressed'; readonly player: PlayerId; readonly slot: ArmyRef }
   | { readonly kind: 'turn_end'; readonly player: PlayerId }
   | {
       readonly kind: 'victory'

@@ -34,11 +34,13 @@ import {
   FULL_RULES,
   TERRAIN_SLOTS,
   armyAt,
+  army as armyRef,
   buriedUnits,
   deadUnits,
 
   livingUnits,
   speciesOf,
+  type ArmyRef,
   type GameAction,
   type GameState,
   type LogEntry,
@@ -61,10 +63,11 @@ const yellow = (t: string) => paint('33', t)
 const cyan = (t: string) => paint('36', t)
 const magenta = (t: string) => paint('35', t)
 
-const SLOT_LABEL: Record<TerrainSlot, string> = {
+const SLOT_LABEL: Record<ArmyRef, string> = {
   p1_home: 'P1 home',
   frontier: 'Frontier',
   p2_home: 'P2 home',
+  reserve: 'Reserves',
 }
 
 /** "melee" -> "Melee": the action reads as a name in a sentence, not a keyword. */
@@ -518,7 +521,7 @@ async function askDamage(state: GameState, pending: Pending): Promise<GameAction
   return askBudget(
     state,
     'assign_damage',
-    armyAt(state, pending.player, pending.slot),
+    armyRef(state, pending.player, pending.slot),
     pending.damage,
     `Assign ${pending.damage} damage — you must lose`,
     `${pending.damage} damage cannot kill anything — no die has few enough health`,
@@ -556,7 +559,7 @@ async function askSaiTarget(state: GameState, pending: Pending): Promise<GameAct
   if (pending.kind !== 'sai_target') throw new Error('not an SAI target')
   // Choke may only take the dice that rolled an ID icon, so those are the only ones
   // offered -- and the maximum it is held to is the maximum within them.
-  const army = armyAt(state, pending.target, pending.slot).filter(
+  const army = armyRef(state, pending.target, pending.slot).filter(
     (unit) => pending.eligible === undefined || pending.eligible.includes(unit.id),
   )
   const more = pending.remaining > 1 ? dim(` (${pending.remaining} still to place)`) : ''
@@ -603,7 +606,7 @@ async function askSaiPromote(state: GameState, pending: Pending): Promise<GameAc
   for (;;) {
     const spent = pairs.reduce((sum, pair) => sum + promotionGain(state, pair), 0)
     const left = pending.budget - spent
-    const army = armyAt(state, pending.player, pending.slot).filter(
+    const army = armyRef(state, pending.player, pending.slot).filter(
       (unit) => !pairs.some((pair) => pair.unitId === unit.id),
     )
     const promotable = army.filter((unit) => growthPartners(state, unit.id, left).length > 0)
@@ -659,7 +662,7 @@ async function askSaiPromote(state: GameState, pending: Pending): Promise<GameAc
 /** Firewalking and Teleport: a destination, and whoever is coming along. */
 async function askSaiMove(state: GameState, pending: Pending): Promise<GameAction> {
   if (pending.kind !== 'sai_move') throw new Error('not a free move')
-  const others = armyAt(state, pending.player, pending.slot).filter(
+  const others = armyRef(state, pending.player, pending.slot).filter(
     (unit) => unit.id !== pending.unitId && !isAsleep(state, unit.id),
   )
   const chosen = new Set<UnitId>()

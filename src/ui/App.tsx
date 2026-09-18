@@ -125,6 +125,16 @@ function GameView({ game }: { readonly game: PlayingGame }) {
       ? reinforcePlan(state, human, staged)
       : null
   const reserveShown = plan?.unassigned ?? reserve
+  // A Tower's missile can put an `assign_damage` on the human's own Reserve Army
+  // (Phase 5d), which is the same grid as reinforce's, just a different reason to
+  // be selectable.
+  const mineReserveSelectable =
+    selectMode?.side === 'reserve' || (selectMode?.side === 'mine' && selectMode.slot === 'reserve')
+
+  // Or a `sai_target` -- Flame, Bullseye, Seize -- can aim at the *enemy's*
+  // Reserve Army, which nothing before Tower ever needed to show at all.
+  const theirReserveSelectable = selectMode?.side === 'theirs' && selectMode.slot === 'reserve'
+  const theirReserve = livingUnits(state, enemy).filter((u) => u.location.kind === 'reserve')
 
   const myFallen = deadUnits(state, human)
   const theirFallen = deadUnits(state, enemy)
@@ -216,7 +226,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
           theirSpecies={theirSpecies}
         />
 
-        {(reserveShown.length > 0 || selectMode?.side === 'reserve') && (
+        {(reserveShown.length > 0 || mineReserveSelectable) && (
 
           <section className="army off-board">
             <h3>
@@ -229,7 +239,29 @@ function GameView({ game }: { readonly game: PlayingGame }) {
             <DiceGrid
               units={reserveShown}
 
-              selectable={selectMode?.side === 'reserve'}
+              selectable={mineReserveSelectable}
+              selected={selection}
+              onToggle={toggle}
+              inspecting={inspecting}
+              onInspect={setInspecting}
+            />
+          </section>
+        )}
+
+        {/* A Tower's missile is the first thing in the game to target the enemy's
+            Reserve Army (Phase 5d), so this is the first time it needs to be shown
+            at all -- "Your reserve" above is always the human's own. */}
+        {(theirReserve.length > 0 && theirReserveSelectable) && (
+          <section className="army off-board">
+            <h3>
+              Enemy reserve{' '}
+              <span className="muted">
+                {theirReserve.length}d / {health(theirReserve)}h
+              </span>
+            </h3>
+            <DiceGrid
+              units={theirReserve}
+              selectable={theirReserveSelectable}
               selected={selection}
               onToggle={toggle}
               inspecting={inspecting}

@@ -15,10 +15,10 @@ import { saiPhrase, saisBehind } from '../../engine/roll'
 
 import {
   TERRAIN_SLOTS,
+  type ArmyRef,
   type GameState,
   type LogEntry,
   type PlayerId,
-  type TerrainSlot,
   type UnitId,
 } from '../../engine/types'
 
@@ -71,7 +71,7 @@ function Line({
 }): ReactElement | null {
   const who = (player: PlayerId) => (player === human ? 'You' : 'The enemy')
   const whoLower = (player: PlayerId) => (player === human ? 'you' : 'the enemy')
-  const where = (slot: TerrainSlot) => slotLabel(slot, human)
+  const where = (slot: ArmyRef) => slotLabel(slot, human)
   const verb = (player: PlayerId, singular: string, plural: string) =>
     player === human ? plural : singular
 
@@ -103,7 +103,7 @@ function Line({
       return (
         <p className="log-line">
           {who(entry.player)} {verb(entry.player, 'marches', 'march')} at{' '}
-          {where(entry.army as TerrainSlot)}
+          {where(entry.army)}
         </p>
       )
     case 'march_skipped':

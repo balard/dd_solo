@@ -9,7 +9,9 @@ import { setupGame, STARTER_FORCES } from './setup'
 import {
   IllegalActionError,
   armyAt,
+  army as armyRef,
   livingUnits,
+  reserveArmy,
   type GameAction,
   type GameState,
   type LogEntry,
@@ -17,6 +19,7 @@ import {
   type TerrainFace,
   type TerrainSlot,
   V0_RULES,
+  FULL_RULES,
 } from './types'
 import { validateState } from './validate'
 /**
@@ -64,7 +67,7 @@ function emptyArmy(state: GameState, player: PlayerId, slot: TerrainSlot): GameS
 function damageSuggestion(state: GameState): { suggestion: readonly string[] } {
   const pending = state.pending
   if (pending?.kind !== 'assign_damage') throw new Error('not awaiting damage')
-  return damageOptions(armyAt(state, pending.player, pending.slot), pending.damage)
+  return damageOptions(armyRef(state, pending.player, pending.slot), pending.damage)
 }
 const combatEntries = (state: GameState) =>
   state.log.filter((e): e is Extract<LogEntry, { kind: 'combat_resolved' }> =>
@@ -134,12 +137,92 @@ describe('missileTargets', () => {
     const state = emptyArmy(fresh(), 'p2', 'frontier')
     expect(missileTargets(state, 'p1', 'frontier')).not.toContain('frontier')
   })
-  it('can never reach the Reserve Army, which is not at a terrain', () => {
+  it('cannot reach the Reserve Army without a held Tower', () => {
     let state = fresh()
     state = emptyArmy(state, 'p2', 'frontier') // sends them to reserve
     for (const slot of missileTargets(state, 'p1', 'frontier')) {
-      expect(armyAt(state, 'p2', slot).length).toBeGreaterThan(0)
+      expect(armyRef(state, 'p2', slot).length).toBeGreaterThan(0)
     }
+  })
+})
+describe('the Phase 5d Tower', () => {
+  const EIGHTH_FACE_FULL = { ...FULL_RULES, eighthFace: 'full' as const }
+
+  const withHeldTower = (state: GameState, slot: TerrainSlot, holder: PlayerId): GameState => ({
+    ...state,
+    ruleSet: EIGHTH_FACE_FULL,
+    terrains: {
+      ...state.terrains,
+      [slot]: { ...state.terrains[slot], face: 8, capturedBy: holder },
+    },
+  })
+
+  it('lifts the home-to-home restriction only with a Tower held right there', () => {
+    const state = fresh()
+    expect(missileTargets(state, 'p1', 'p1_home')).not.toContain('p2_home')
+
+    const held = withHeldTower(state, 'p1_home', 'p1')
+    expect(missileTargets(held, 'p1', 'p1_home')).toContain('p2_home')
+  })
+
+  it('does nothing under eighthFace: standard, even on a Tower at face 8', () => {
+    const state = fresh()
+    const captured: GameState = {
+      ...state,
+      terrains: {
+        ...state.terrains,
+        p1_home: { ...state.terrains.p1_home, face: 8, capturedBy: 'p1' },
+      },
+    }
+    expect(captured.ruleSet.eighthFace).toBe('standard')
+    expect(missileTargets(captured, 'p1', 'p1_home')).not.toContain('p2_home')
+  })
+
+  it('offers the Reserve Army only when the defender has one and the Tower is held right here', () => {
+    const state = fresh()
+    const held = withHeldTower(state, 'frontier', 'p1')
+    expect(missileTargets(held, 'p1', 'frontier')).not.toContain('reserve')
+
+    const reserved = emptyArmy(held, 'p2', 'p2_home')
+    expect(reserveArmy(reserved, 'p2').length).toBeGreaterThan(0)
+    expect(missileTargets(reserved, 'p1', 'frontier')).toContain('reserve')
+  })
+
+  it('lends nothing when the Tower is held elsewhere', () => {
+    const state = fresh()
+    const held = withHeldTower(state, 'p2_home', 'p1') // Tower held, not where p1 stands
+    const reserved = emptyArmy(held, 'p2', 'frontier')
+    expect(missileTargets(reserved, 'p1', 'p1_home')).not.toContain('reserve')
+  })
+
+  it('resolves a missile attack at Reserves end to end', () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const held = withHeldTower(fresh(seed, 'p1'), 'frontier', 'p1')
+      const reserved = emptyArmy(held, 'p2', 'p2_home')
+      if (reserveArmy(reserved, 'p2').length === 0) continue
+
+      let state = attackFromFrontier(reserved, 'missile')
+      if (state.pending?.kind !== 'choose_missile_target') continue
+      if (!state.pending.options.includes('reserve')) continue
+      state = play(state, { kind: 'choose_missile_target', slot: 'reserve' })
+
+      const combat = combatEntries(state).find((e) => e.action === 'missile')
+      if (combat === undefined) continue
+      expect(combat.defenderSlot).toBe('reserve')
+
+      if (state.pending?.kind === 'assign_damage') {
+        expect(state.pending.slot).toBe('reserve')
+        const before = reserveArmy(state, 'p2').length
+        const { suggestion } = damageSuggestion(state)
+        state = play(state, { kind: 'assign_damage', unitIds: suggestion })
+        expect(reserveArmy(state, 'p2').length).toBe(before - suggestion.length)
+
+        const killed = [...state.log].reverse().find((e) => e.kind === 'units_killed')
+        expect(killed?.kind === 'units_killed' && killed.slot).toBe('reserve')
+      }
+      return
+    }
+    throw new Error('no seed in the sweep produced a missile attack at Reserves')
   })
 })
 describe('magicDamage', () => {

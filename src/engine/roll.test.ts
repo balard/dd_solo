@@ -15,6 +15,7 @@ import {
   resolveRoll,
   rollArmy,
   rollFaces,
+  type RawDie,
   type RollSpec,
 } from './roll'
 import { SAI_RULES, V0_RULES, type RuleSet, type UnitInstance } from './types'
@@ -272,5 +273,51 @@ describe('the roll pipeline, split', () => {
     expect(resolveFaces(dice, { ...spec(), saiResults: {} }, SAI_RULES)).toEqual(
       resolveFaces(dice, spec(), SAI_RULES),
     )
+  })
+})
+
+/**
+ * Tower's "if attacking a Reserve Army, only count non-ID missile results"
+ * (Phase 5d): a step-5 counting rule, not a modifier. Firestormer is the fixture
+ * because its ID face (3) and its non-ID missile face (4) are different numbers,
+ * so "the ID share is zero" and "the total is zero" cannot be confused for one
+ * another the way a 1-health die's faces would.
+ */
+describe('countIds', () => {
+  const FIRESTORMER = 'firewalkers.firestormer'
+  const idDie: RawDie = { unitId: 'a', typeId: FIRESTORMER, faceIndex: 0 } // 3 ID
+  const missileDie: RawDie = { unitId: 'b', typeId: FIRESTORMER, faceIndex: 1 } // 4 MISSILE
+
+  const missileSpec = (extra: Partial<RollSpec> = {}): RollSpec => ({
+    kinds: ['missile'],
+    modifiers: [],
+    context: { purpose: { kind: 'attack', action: 'missile' }, isCounter: false },
+    ...extra,
+  })
+
+  it('counts the ID face normally by default', () => {
+    const result = resolveFaces([idDie, missileDie], missileSpec(), V0_RULES)
+    expect(result.totals['missile']).toBe(3 + 4)
+  })
+
+  it('drops the ID share to zero when countIds is false', () => {
+    const result = resolveFaces([idDie, missileDie], missileSpec({ countIds: false }), V0_RULES)
+    expect(result.totals['missile']).toBe(4)
+  })
+
+  it('stays zero under the eighth face doubling -- doubling zero is still zero', () => {
+    const doubling: Modifier = { kind: 'multiply', resultType: 'missile', by: 2, share: 'id' }
+    const result = resolveFaces(
+      [idDie, missileDie],
+      missileSpec({ countIds: false, modifiers: [doubling] }),
+      V0_RULES,
+    )
+    expect(result.totals['missile']).toBe(4)
+  })
+
+  it('shows the ID die contributing nothing to the per-die display either', () => {
+    const result = resolveFaces([idDie, missileDie], missileSpec({ countIds: false }), V0_RULES)
+    expect(result.dice.find((d) => d.unitId === 'a')?.results).toBe(0)
+    expect(result.dice.find((d) => d.unitId === 'b')?.results).toBe(4)
   })
 })
