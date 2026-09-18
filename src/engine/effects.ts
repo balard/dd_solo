@@ -34,13 +34,16 @@
  * always empty in a `DUA_RULES` game, which is what the app plays.
  */
 import { doubleIdsModifier, type Modifier } from './pipeline'
-import type { ResultType } from '../data/types'
+import { terrainDie } from '../data/load'
+import type { EighthFaceIcon, ResultType } from '../data/types'
 import {
   army as armyOf,
   type ArmyRef,
   type GameState,
   type LogEntry,
   type PlayerId,
+  type RuleSet,
+  type TerrainSlot,
   type UnitId,
   type UnitInstance,
 } from './types'
@@ -102,6 +105,61 @@ export function isAsleep(state: GameState, unitId: UnitId): boolean {
 export function doublesIds(state: GameState, player: PlayerId, ref: ArmyRef): boolean {
   if (ref === 'reserve') return false
   return state.ruleSet.eighthFace !== 'captureOnly' && state.terrains[ref].capturedBy === player
+}
+
+/**
+ * The eighth-face icon this player may use at this terrain, or `null` (Phase 5c).
+ *
+ * Non-null exactly when `eighthFace: 'full'`, the terrain sits on face 8, and this
+ * player is the one who captured it. Every icon power in Phase 5d and 5e asks this
+ * and nothing else, which is what makes "losing the eighth face ends the icon's
+ * effect in the same step" free: nothing is stored here, so there is nothing to
+ * revoke -- `syncCaptures` and `moveTerrain` already turn face 8 back to 7 the
+ * moment a capture is lost, and the next call to `iconAt` simply answers `null`.
+ */
+export function iconAt(
+  state: GameState,
+  player: PlayerId,
+  slot: TerrainSlot,
+): EighthFaceIcon | null {
+  if (state.ruleSet.eighthFace !== 'full') return null
+  const terrain = state.terrains[slot]
+  if (terrain.face !== 8 || terrain.capturedBy !== player) return null
+  return terrainDie(terrain.dieId).eighthFace
+}
+
+/**
+ * Whether this ruleset resolves this icon at all -- the twin of `resolvesSai`, and
+ * for the same reason: the answer changes by rung, so a table lookup can only ever
+ * be right about one of them. Standing Stones is a rules fact, not unbuilt work: it
+ * has nothing to do until magic is `'spells'` (Phase 7), on any `eighthFace` rung.
+ */
+export function resolvesIcon(icon: EighthFaceIcon, ruleSet: RuleSet): boolean {
+  if (icon === 'standing_stones') return ruleSet.magic === 'spells'
+  return ruleSet.eighthFace === 'full'
+}
+
+/**
+ * One line per icon, for a hover label. Lives beside `iconAt` / `resolvesIcon` for
+ * the reason `SAI_TEXT` sits beside `sai.ts`'s handlers: the sentence drifts the
+ * moment it lives anywhere but next to the rule it describes.
+ */
+export const ICON_TEXT: Readonly<Record<EighthFaceIcon, string>> = {
+  tower: 'may take a missile action against any army, including a Reserve Army',
+  city: 'may recruit or promote one unit each Eighth Face Phase',
+  temple: 'may force a burial each Eighth Face Phase; your army resists death magic',
+  standing_stones: 'a magic bonus at this terrain, once spells land',
+}
+
+/**
+ * What an eighth-face icon says on hover -- `faceLabel`'s twin. An icon this
+ * ruleset cannot resolve reads "does nothing in this game", via `resolvesIcon`;
+ * `null` means nobody said which rules these are, and claims nothing at all.
+ */
+export function eighthFaceLabel(icon: EighthFaceIcon, ruleSet: RuleSet | null): string {
+  const name = icon.replace(/_/g, ' ')
+  if (ruleSet === null || resolvesIcon(icon, ruleSet)) return `${name} — ${ICON_TEXT[icon]}`
+  return `${name} — does nothing in this game`
 }
 
 /** What `rollArmy` needs to roll one army: which of its dice may be rolled, and

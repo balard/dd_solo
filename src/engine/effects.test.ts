@@ -19,9 +19,12 @@ import { exchangeWithDua, type Exchange } from './dua'
 import {
   armyRoll,
   doublesIds,
+  eighthFaceLabel,
   expireEffects,
+  iconAt,
   isAsleep,
   pruneEffects,
+  resolvesIcon,
   type Effect,
 } from './effects'
 import { applyModifiers, type Modifier } from './pipeline'
@@ -31,7 +34,9 @@ import { rollArmy } from './roll'
 import { setupGame, STARTER_FORCES } from './setup'
 import {
   DUA_RULES,
+  FULL_RULES,
   IllegalActionError,
+  V0_RULES,
   armyAt,
   type GameState,
   type Location,
@@ -354,5 +359,81 @@ describe('validateState', () => {
 
   it('is quiet about a board with no effects at all, which is every game so far', () => {
     expect(validateState(board([{ id: 'a', typeId: OAK, at: home }]))).toEqual([])
+  })
+})
+
+describe('the Phase 5c seam', () => {
+  // FULL_RULES itself does not flip to eighthFace: 'full' until Phase 5e -- these
+  // tests exercise the seam ahead of that flip, the way 4a's did for sai: 'full'.
+  const EIGHTH_FACE_FULL: GameState['ruleSet'] = { ...FULL_RULES, eighthFace: 'full' }
+
+  const capturedTower = (ruleSet: GameState['ruleSet']): GameState => {
+    const state = board([{ id: 'a', typeId: OAK, at: home }])
+    return {
+      ...state,
+      ruleSet,
+      terrains: {
+        ...state.terrains,
+        // p1_home is drawn from the seed since Phase 5b, so pin the die itself
+        // rather than trust it to already be a Tower.
+        p1_home: { ...state.terrains.p1_home, dieId: 'swampland_tower', face: 8, capturedBy: 'p1' },
+      },
+    }
+  }
+
+  describe('iconAt', () => {
+    it('is null under eighthFace: standard, even on a captured Tower', () => {
+      expect(iconAt(capturedTower(DUA_RULES), 'p1', 'p1_home')).toBeNull()
+    })
+
+    it('is the die eighth face under eighthFace: full, for the holder', () => {
+      expect(iconAt(capturedTower(EIGHTH_FACE_FULL), 'p1', 'p1_home')).toBe('tower')
+    })
+
+    it('is null for the player who does not hold it', () => {
+      expect(iconAt(capturedTower(EIGHTH_FACE_FULL), 'p2', 'p1_home')).toBeNull()
+    })
+
+    it('is null once the terrain is no longer captured -- nothing to revoke', () => {
+      const held = capturedTower(EIGHTH_FACE_FULL)
+      const lost: GameState = {
+        ...held,
+        terrains: { ...held.terrains, p1_home: { ...held.terrains.p1_home, face: 7, capturedBy: null } },
+      }
+      expect(iconAt(lost, 'p1', 'p1_home')).toBeNull()
+    })
+  })
+
+  describe('resolvesIcon', () => {
+    it('resolves Tower, City and Temple only under eighthFace: full', () => {
+      for (const icon of ['tower', 'city', 'temple'] as const) {
+        expect(resolvesIcon(icon, EIGHTH_FACE_FULL), icon).toBe(true)
+        expect(resolvesIcon(icon, DUA_RULES), icon).toBe(false)
+        expect(resolvesIcon(icon, V0_RULES), icon).toBe(false)
+      }
+    })
+
+    it('never resolves Standing Stones until magic is spells, on any eighthFace rung', () => {
+      expect(resolvesIcon('standing_stones', EIGHTH_FACE_FULL)).toBe(false)
+      expect(resolvesIcon('standing_stones', { ...EIGHTH_FACE_FULL, magic: 'spells' })).toBe(true)
+    })
+  })
+
+  describe('eighthFaceLabel', () => {
+    it('names the power when the ruleset resolves it', () => {
+      expect(eighthFaceLabel('tower', EIGHTH_FACE_FULL)).toMatch(/^tower — /)
+      expect(eighthFaceLabel('tower', EIGHTH_FACE_FULL)).not.toMatch(/does nothing/)
+    })
+
+    it('says "does nothing in this game" when the ruleset cannot resolve it', () => {
+      expect(eighthFaceLabel('tower', DUA_RULES)).toBe('tower — does nothing in this game')
+      expect(eighthFaceLabel('standing_stones', EIGHTH_FACE_FULL)).toBe(
+        'standing stones — does nothing in this game',
+      )
+    })
+
+    it('claims nothing when nobody said which rules these are', () => {
+      expect(eighthFaceLabel('tower', null)).not.toMatch(/does nothing/)
+    })
   })
 })

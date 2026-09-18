@@ -12,6 +12,7 @@
  */
 import { terrainDie, terrainFaceAction, terrainType, unitType } from '../../data/load'
 import type { TerrainFaceNumber } from '../../data/types'
+import { eighthFaceLabel } from '../../engine/effects'
 import {
   TERRAIN_SLOTS,
   armyAt,
@@ -35,6 +36,7 @@ import {
   type SelectMode,
 } from './prompts'
 import { useFaceArt } from './useFaceArt'
+import { useRuleSet } from './useRuleSet'
 
 /**
  * The terrain die face.
@@ -47,16 +49,20 @@ function renderFace(
   art: ReturnType<typeof useFaceArt>,
   terrain: GameState['terrains'][TerrainSlot],
   icon: GlyphName | null,
+  ruleSet: ReturnType<typeof useRuleSet>,
 ) {
   const die = terrainDie(terrain.dieId)
 
   if (terrain.face === 8) {
     const url = art.eighthFace(die.eighthFace)
     const label = die.eighthFace.replace('_', ' ')
+    const title = eighthFaceLabel(die.eighthFace, ruleSet)
     return url !== null ? (
-      <img className="chip-art" src={url} width={30} height={30} alt={label} title={label} />
+      <img className="chip-art" src={url} width={30} height={30} alt={label} title={title} />
     ) : (
-      <span className="chip-eighth">{label}</span>
+      <span className="chip-eighth" title={title}>
+        {label}
+      </span>
     )
   }
 
@@ -92,10 +98,12 @@ const TERRAIN_FACES: readonly TerrainFaceNumber[] = [1, 2, 3, 4, 5, 6, 7]
  */
 export function TerrainDetail({ terrain }: { terrain: TerrainInPlay }) {
   const art = useFaceArt()
+  const ruleSet = useRuleSet()
   const die = terrainDie(terrain.dieId)
   const type = terrainType(die.type)
   const eighthLabel = die.eighthFace.replace(/_/g, ' ')
   const eighthUrl = art.eighthFace(die.eighthFace)
+  const eighthTitle = eighthFaceLabel(die.eighthFace, ruleSet)
 
   return (
     <div className="terrain-detail">
@@ -131,7 +139,7 @@ export function TerrainDetail({ terrain }: { terrain: TerrainInPlay }) {
 
         <span
           className={'sheet-face terrain-sheet-face is-eighth' + (terrain.face === 8 ? ' is-current' : '')}
-          title={`face 8 — ${eighthLabel}`}
+          title={`face 8 — ${eighthTitle}`}
         >
           <span className="sheet-number">8</span>
           {eighthUrl !== null ? (
@@ -260,6 +268,7 @@ export function Board({
   // as asleep when you are looking at what you are about to attack.
   const asleep = sleepingIds(state)
   const art = useFaceArt()
+  const ruleSet = useRuleSet()
 
   return (
     <div className="board">
@@ -297,15 +306,18 @@ export function Board({
                 <span className="chip-name">
                   {slotLabel(slot, human)}
                   {/*
-                   * The eighth-face icon, not just the type. Since Phase 0a the
-                   * Frontier is a second die of one species' own type, so a board
-                   * can hold two Wastelands -- identical here unless the thing that
-                   * differs is on screen. It is also what face 8 will do from
-                   * Phase 5, which is worth reading before you turn a terrain up.
+                   * The eighth-face icon, not just the type. Phase 5b draws both
+                   * Home Terrains independently of species, so a board can hold two
+                   * of the same type -- identical here unless the thing that
+                   * differs is on screen. The icon is what face 8 does once
+                   * captured, hence the tooltip from `eighthFaceLabel`.
                    */}
                   <span className="chip-terrain">
                     {type.name}
-                    <span className="chip-eighth">
+                    <span
+                      className="chip-eighth"
+                      title={eighthFaceLabel(terrainDie(terrain.dieId).eighthFace, ruleSet)}
+                    >
                       {terrainDie(terrain.dieId).eighthFace.replace(/_/g, ' ')}
                     </span>
                   </span>
@@ -314,7 +326,7 @@ export function Board({
                     title={`${type.name} — ${type.elements.join(' + ')}`}
                   />
                 </span>
-                <span className="chip-face">{renderFace(art, terrain, icon)}</span>
+                <span className="chip-face">{renderFace(art, terrain, icon, ruleSet)}</span>
               </span>
             </button>
 
