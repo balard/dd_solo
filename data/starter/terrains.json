@@ -50,6 +50,54 @@
         "6": "MELEE",
         "7": "MELEE"
       }
+    },
+    "coastland": {
+      "name": "Coastland",
+      "elements": [
+        "air",
+        "water"
+      ],
+      "faces": {
+        "1": "MAGIC",
+        "2": "MISSILE",
+        "3": "MISSILE",
+        "4": "MISSILE",
+        "5": "MISSILE",
+        "6": "MELEE",
+        "7": "MELEE"
+      }
+    },
+    "feyland": {
+      "name": "Feyland",
+      "elements": [
+        "water",
+        "fire"
+      ],
+      "faces": {
+        "1": "MAGIC",
+        "2": "MAGIC",
+        "3": "MAGIC",
+        "4": "MISSILE",
+        "5": "MELEE",
+        "6": "MELEE",
+        "7": "MELEE"
+      }
+    },
+    "flatland": {
+      "name": "Flatland",
+      "elements": [
+        "air",
+        "earth"
+      ],
+      "faces": {
+        "1": "MAGIC",
+        "2": "MISSILE",
+        "3": "MISSILE",
+        "4": "MISSILE",
+        "5": "MELEE",
+        "6": "MELEE",
+        "7": "MELEE"
+      }
     }
   },
   "terrains": [
@@ -111,6 +159,66 @@
     {
       "id": "wasteland_temple",
       "type": "wasteland",
+      "eighthFace": "temple"
+    },
+    {
+      "id": "coastland_tower",
+      "type": "coastland",
+      "eighthFace": "tower"
+    },
+    {
+      "id": "coastland_city",
+      "type": "coastland",
+      "eighthFace": "city"
+    },
+    {
+      "id": "coastland_standing_stones",
+      "type": "coastland",
+      "eighthFace": "standing_stones"
+    },
+    {
+      "id": "coastland_temple",
+      "type": "coastland",
+      "eighthFace": "temple"
+    },
+    {
+      "id": "feyland_tower",
+      "type": "feyland",
+      "eighthFace": "tower"
+    },
+    {
+      "id": "feyland_city",
+      "type": "feyland",
+      "eighthFace": "city"
+    },
+    {
+      "id": "feyland_standing_stones",
+      "type": "feyland",
+      "eighthFace": "standing_stones"
+    },
+    {
+      "id": "feyland_temple",
+      "type": "feyland",
+      "eighthFace": "temple"
+    },
+    {
+      "id": "flatland_tower",
+      "type": "flatland",
+      "eighthFace": "tower"
+    },
+    {
+      "id": "flatland_city",
+      "type": "flatland",
+      "eighthFace": "city"
+    },
+    {
+      "id": "flatland_standing_stones",
+      "type": "flatland",
+      "eighthFace": "standing_stones"
+    },
+    {
+      "id": "flatland_temple",
+      "type": "flatland",
       "eighthFace": "temple"
     }
   ]

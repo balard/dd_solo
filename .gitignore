@@ -32,3 +32,6 @@ assets/faces/
 # And the archive it arrives in, which `assets/faces/` does not cover -- one
 # `git add -A` is all it would take to put their artwork in the history for good.
 assets*.zip
+
+# Temporary working plan for the phase in progress; folded into docs/PLAN-V1.md when it lands.
+docs/PLAN-V1-Phase5.md

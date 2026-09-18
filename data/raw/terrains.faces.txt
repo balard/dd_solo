@@ -1,4 +1,6 @@
-# Terrain die faces. Transcribed 2026-09-14.
+# Terrain die faces. Transcribed 2026-09-14, with Coastland/Feyland/Flatland
+# added 2026-09-18. Six of the seven basic terrain types; only Deadland
+# (death-only, out of scope) is missing.
 #
 # NOTE: the numbers here are FACE NUMBERS (1-8), not icon counts. This is the
 # opposite of the unit files, where "2 Melee" means two melee icons on one face.
@@ -128,6 +130,129 @@ Wasteland Temple
 6 Melee
 5 Melee
 4 Melee
+3 Missile
+2 Missile
+1 Magic
+
+# Transcribed 2026-09-18 from the dice. Three more basic types; with these the
+# only basic terrain missing is Deadland (death-only, out of scope).
+
+Coastland Tower
+8 Tower
+7 Melee
+6 Melee
+5 Missile
+4 Missile
+3 Missile
+2 Missile
+1 Magic
+
+Coastland City
+8 City
+7 Melee
+6 Melee
+5 Missile
+4 Missile
+3 Missile
+2 Missile
+1 Magic
+
+Coastland Standing Stones
+8 Standing Stones
+7 Melee
+6 Melee
+5 Missile
+4 Missile
+3 Missile
+2 Missile
+1 Magic
+
+Coastland Temple
+8 Temple
+7 Melee
+6 Melee
+5 Missile
+4 Missile
+3 Missile
+2 Missile
+1 Magic
+
+Feyland Tower
+8 Tower
+7 Melee
+6 Melee
+5 Melee
+4 Missile
+3 Magic
+2 Magic
+1 Magic
+
+Feyland City
+8 City
+7 Melee
+6 Melee
+5 Melee
+4 Missile
+3 Magic
+2 Magic
+1 Magic
+
+Feyland Standing Stones
+8 Standing Stones
+7 Melee
+6 Melee
+5 Melee
+4 Missile
+3 Magic
+2 Magic
+1 Magic
+
+Feyland Temple
+8 Temple
+7 Melee
+6 Melee
+5 Melee
+4 Missile
+3 Magic
+2 Magic
+1 Magic
+
+Flatland Tower
+8 Tower
+7 Melee
+6 Melee
+5 Melee
+4 Missile
+3 Missile
+2 Missile
+1 Magic
+
+Flatland City
+8 City
+7 Melee
+6 Melee
+5 Melee
+4 Missile
+3 Missile
+2 Missile
+1 Magic
+
+Flatland Standing Stones
+8 Standing Stones
+7 Melee
+6 Melee
+5 Melee
+4 Missile
+3 Missile
+2 Missile
+1 Magic
+
+Flatland Temple
+8 Temple
+7 Melee
+6 Melee
+5 Melee
+4 Missile
 3 Missile
 2 Missile
 1 Magic

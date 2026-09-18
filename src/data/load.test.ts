@@ -94,9 +94,9 @@ describe('unit data', () => {
 })
 
 describe('terrain data', () => {
-  it('loads 3 types and 12 dice', () => {
-    expect(TERRAIN_TYPES).toHaveLength(3)
-    expect(TERRAIN_DICE).toHaveLength(12)
+  it('loads 6 types and 24 dice', () => {
+    expect(TERRAIN_TYPES).toHaveLength(6)
+    expect(TERRAIN_DICE).toHaveLength(24)
   })
 
   it('pairs every type with all four eighth-face icons', () => {
@@ -115,12 +115,20 @@ describe('terrain data', () => {
   })
 
   it('reads back the three split points, which differ per type', () => {
-    const profile = (id: string) => {
+    const counts = (id: string) => {
       const faces = terrainType(id).faces
-      return ([1, 2, 3, 4, 5, 6, 7] as const).map((n) => faces[n]).join(' ')
+      const list = ([1, 2, 3, 4, 5, 6, 7] as const).map((n) => faces[n])
+      return {
+        melee: list.filter((f) => f === 'MELEE').length,
+        missile: list.filter((f) => f === 'MISSILE').length,
+        magic: list.filter((f) => f === 'MAGIC').length,
+      }
     }
-    expect(profile('swampland')).toBe('MAGIC MAGIC MISSILE MISSILE MELEE MELEE MELEE')
-    expect(profile('highland')).toBe('MAGIC MAGIC MAGIC MISSILE MISSILE MELEE MELEE')
-    expect(profile('wasteland')).toBe('MAGIC MISSILE MISSILE MELEE MELEE MELEE MELEE')
+    expect(counts('swampland')).toEqual({ melee: 3, missile: 2, magic: 2 })
+    expect(counts('highland')).toEqual({ melee: 2, missile: 2, magic: 3 })
+    expect(counts('wasteland')).toEqual({ melee: 4, missile: 2, magic: 1 })
+    expect(counts('coastland')).toEqual({ melee: 2, missile: 4, magic: 1 })
+    expect(counts('feyland')).toEqual({ melee: 3, missile: 1, magic: 3 })
+    expect(counts('flatland')).toEqual({ melee: 3, missile: 3, magic: 1 })
   })
 })
