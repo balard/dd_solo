@@ -250,4 +250,74 @@ describe('self-play fuzz', () => {
         .toBeGreaterThan(0)
     }
   })
+
+  /**
+   * The Phase 5e net, over `eighthFace: 'full'`. The 66-pair fuzz above draws its
+   * terrains from the seed (Phase 5b), and only five distinct seeds' worth of board
+   * turn up across all 66 pairings -- not enough to promise a Tower, a City and a
+   * Temple all get captured and used in the same run. So this pins all three,
+   * the same fix the plan calls for when a counter would otherwise stay at zero:
+   * a `stuck === 0` run that never captured a Tower proves nothing about Tower.
+   */
+  it('fires Tower, City and Temple over a fuzz with all three pinned', () => {
+    const counters = {
+      tower_reserve: 0,
+      tower_home_to_home: 0,
+      city_recruit: 0,
+      city_promote: 0,
+      temple_bury: 0,
+    }
+    let stuck = 0
+
+    for (let seed = 1; seed <= 80; seed++) {
+      const result = runGame({
+        setup: {
+          seed,
+          // Not the bestiary: it fields "every monster and every large die," which
+          // means no 1-health unit ever reaches its DUA, and City could never
+          // recruit one. The starter lists carry a small unit each.
+          forces: STARTER_FORCES,
+          ruleSet: FULL_RULES,
+          terrains: {
+            p1_home: 'swampland_tower',
+            frontier: 'highland_city',
+            p2_home: 'wasteland_temple',
+          },
+        },
+        players: { p1: randomAi, p2: randomAi },
+        aiSeed: 700_000 + seed,
+        maxDecisions: 1500,
+        validate: true,
+      })
+      if (result.stoppedBecause === 'stuck') stuck += 1
+
+      for (const entry of result.state.log) {
+        if (
+          entry.kind === 'combat_resolved' &&
+          entry.action === 'missile' &&
+          entry.defenderSlot === 'reserve'
+        ) {
+          counters.tower_reserve += 1
+        }
+        if (
+          entry.kind === 'action_chosen' &&
+          entry.action === 'missile' &&
+          entry.fromSlot !== entry.toSlot &&
+          (entry.fromSlot === 'p1_home' || entry.fromSlot === 'p2_home') &&
+          (entry.toSlot === 'p1_home' || entry.toSlot === 'p2_home')
+        ) {
+          counters.tower_home_to_home += 1
+        }
+        if (entry.kind === 'units_recruited') counters.city_recruit += 1
+        if (entry.kind === 'units_promoted' && entry.source === 'city') counters.city_promote += 1
+        if (entry.kind === 'units_buried' && entry.source === 'temple') counters.temple_bury += 1
+      }
+    }
+
+    expect(stuck, 'a game ended with no winner and nothing pending').toBe(0)
+    for (const [name, count] of Object.entries(counters)) {
+      expect(count, `${name} never fired across the fuzz, so this run proved nothing about it`)
+        .toBeGreaterThan(0)
+    }
+  })
 })

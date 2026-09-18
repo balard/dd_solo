@@ -1274,76 +1274,122 @@ magic results may *buy* and the window Dispel Magic answers in — not the faces
 
 ---
 
-## Phase 5 — Terrains and the four eighth faces
+## Phase 5 — Terrains and the eighth-face icon powers — **landed**
 
-**Deliverable.** Six terrain types, 24 terrain dice, and `eighthFace: 'full'`.
+**Delivered.** Six terrain types (24 dice), a house rule that draws all three terrains from the
+seed, and `eighthFace: 'full'` — Tower, City and Temple resolved, Standing Stones declared inert
+until spells land and labelled so, with the app flipped to it. Five slices, each its own commit,
+each leaving the 25 goldens byte-identical and unregenerated: data, then setup, then the seam, then
+Tower, then City and Temple.
 
-### 5a — Tower (pull this forward)
+- **5a — the data.** Coastland, Feyland and Flatland transcribed from the physical dice (not
+  inferred — see *Where this section was wrong*) into `data/raw/terrains.faces.txt`. 6 terrain
+  types, 24 dice, all passing validation. Nothing plays them yet, so nothing else could break.
+- **5b — the draw.** Replaced Phase 0a's "second die of your own type" with a real house rule: each
+  Home Terrain is drawn uniformly from all 24 dice, and the Frontier is drawn from a terrain
+  sharing an element with the roll-off loser's species — one of the loser's two elements, then
+  uniformly among the dice carrying it, so the loser's own home type comes up about twice as often
+  as a type sharing only one element with them. `SpeciesProfile`, `SPECIES_PROFILES` and
+  `data/presets.json`'s `species` block are gone — there is no second copy of "which terrain a
+  species brings" left to drift. The draw sits after the roll-off and before the terrain faces, and
+  a pinned slot still consumes no draw at all — not "the same draws", none, which is what keeps a
+  partly-pinned board and a fully-pinned one on the same footing the named-force rule already gives
+  everything else. `SAVE_VERSION` became 7, for two true reasons: dice consumption at setup, and
+  (recorded ahead of time) the two Eighth Face Phase decisions 5e was already known to add.
+- **5c — the seam.** `iconAt(state, player, slot)` in `effects.ts`, beside `doublesIds`: non-null
+  exactly when `eighthFace: 'full'`, the terrain sits on face 8, and this player captured it.
+  `resolvesIcon` is `resolvesSai`'s twin. Nothing else changed — the same shape 4a gave `sai: 'full'`
+  — so 5d and 5e each had exactly one thing to add.
+- **5d — Tower.** "Your controlling army may use a missile action to attack any opponent's army. If
+  attacking a Reserve Army, only count non-ID missile results." Two rules, and the second was the
+  whole slice: a `RollSpec.countIds?: false` flag, a step-5 counting rule rather than a modifier,
+  since it can't be a `subtract` (the amount isn't known until the dice land and step 6 removes IDs
+  last) and can't share step 9's one-multiplier cap with the eighth face's own ID doubling on the
+  same roll. The first rule — any army, home-to-home restriction lifted — cost far more than the
+  line it reads like: `TerrainSlot` widened to `ArmyRef` everywhere a defender's slot is named
+  (`CombatState.targetSlot`, the matching `Pending`/`GameAction`/`LogEntry` fields, both AIs, the
+  CLI, and a new "Enemy reserve" grid in the browser), and two fields the plan's own table missed —
+  `sai_sub_roll` and `counter_suppressed` — because Bullseye and Seize can now reach Reserves too.
+- **5e — City, Temple, the phase, the flip.** The Eighth Face Phase stopped being a no-op:
+  `eighthFacePending` looks for the one terrain the marching player holds with an icon that has
+  something to offer, raises it, and the applier advances the phase — at most one terrain fires,
+  since two captures already win. City is one unit, recruited or promoted, or neither. Temple is
+  two decisions because two players decide: the holder chooses whether to force a burial (a real
+  choice — an opponent's DUA holding a Phoenix means forcing them a roll at Rise from the Ashes),
+  and the opponent chooses which of their own units pays for it, tracked by
+  `TurnState.eighthFaceStep`, the phase's own one-value `marchStep`. `FULL_RULES` gained
+  `eighthFace: 'full'` here, guarded by a dedicated fuzz that pins all three icons rather than
+  trusting the ordinary self-play run to draw and capture them by chance.
 
-One condition in `missileTargets`: the controlling army may make a missile attack against **any**
-opposing army, and against a Reserve Army counting only non-ID missile results. Every terrain in
-both current presets is a Tower, so this is the only icon power reachable today and it is a day's
-work. Do it right after Phase 0 if you want something visible early.
+### Where this section was wrong
 
-### 5b — The other three icons
+- **The order was inverted.** The original plan pulled Tower forward as a day's work reachable
+  immediately, on the reasoning that both starter presets already carried Towers everywhere. That
+  reasoning stopped being true the moment 5b landed: terrains are drawn from the seed, so no board
+  is reliably a Tower board any more, and every test written against "the Frontier is a Tower"
+  needed pinning it explicitly instead. Data-first, then setup, then the seam, then the two icon
+  slices turned out to be the order that let each slice be exercised by the app that already
+  existed, which the original ordering did not manage.
+- **"Home terrain follows from species elements" and "the second terrain becomes a real choice"
+  never happened.** Both were replaced outright by the draw. There is no species-terrain link left
+  at all — not "Treefolk favour Swampland", nothing. A house rule this plan did not anticipate,
+  because the plan was still thinking in terms of a proposal each species makes, not a die pulled
+  from a shared pool of 24.
+- **"Tower is one condition inside `missileTargets`" undersold the slice by an order of magnitude.**
+  The condition itself is one line; widening every place that assumed a defender's slot was always
+  a terrain was most of 5d, and it found two call sites (`sai_sub_roll`, `counter_suppressed`) that
+  no table in this file had named.
+- **"Temple's burial is refused when the opponent's DUA is empty" described the wrong rule.** It is
+  not refused, it is **not asked** — the same "a decision with no legal answer is dropped" rule that
+  governs damage too small to kill and a Flame task with nothing to take. Raising a decision and
+  then rejecting the only sensible answer would have been a UI dead end; the rule is silence, not a
+  refusal message.
+- **"The Frontier is always a City" and "a question for the phase that implements City" were both
+  made moot by the draw.** The Frontier's icon is chance now, the same as either Home Terrain's, and
+  City fires wherever its die happens to land.
+- **There was no unbuilt-icon problem, unlike `sai: 'full'`'s.** Every terrain in the game carries
+  one of the four icons, so `'full'` could never be asked about a die it didn't recognize the way an
+  unbuilt SAI name could reach `saiEffects`. `resolvesIcon` returning `false` for Standing Stones is
+  a rules fact (nothing to convert without spells), not a refusal — and that distinction is why the
+  flip in 5e needed a fuzz to prove coverage rather than a refusal path to prove safety.
+- **The terrain data was not, in the end, a blocking question** for long: it was transcribed from
+  the physical dice on 2026-09-18, the same way Swampland, Highland and Wasteland were originally.
+  The warning against inferring split points from a pattern that held for three known types stood
+  until the fourth, fifth and sixth were in hand, and turned out right to keep — Coastland's four
+  missile faces and Feyland's single one are not something the "low magic, high melee" pattern would
+  have predicted.
 
-| Icon | Effect | Needs |
-|---|---|---|
-| City | Eighth Face Phase: recruit a 1-health unit to, or promote one unit in, the controlling army | Phase 2 |
-| Temple | Controlling army immune to opponents' death magic; Eighth Face Phase: force an opponent to bury one unit from their DUA | Phase 2 |
-| Standing Stones | All units in the controlling army may convert any or all magic results to an element this terrain contains | Phase 7 |
+### One thing that would have shipped silently
 
-The Eighth Face Phase stops being a no-op here. Note it runs **before** the Dragon Attack Phase and
-both marches — a City promotion helps the army that is about to fight.
+**A test built from `STARTER_FORCES` with no terrain pin quietly assumed every board was
+Swampland/Highland/Wasteland**, the way `combat.test.ts`'s `terrainAction` fixture did. After 5b
+that fixture drew a random board and the test went red on some seeds and stayed green on others —
+exactly the flakiness the plan predicted in its own "what this plan expects to get wrong" section,
+before a line of 5b was written. The fix was to pin the fixture's three terrains explicitly, not to
+chase the seed: a test that wants a Tower has to say so.
 
-**Standing Stones does nothing until Phase 7.** Magic results have no element under
-`magic: 'simplified'`, so there is nothing to convert. Implement it in Phase 7 and say so in the UI
-rather than shipping an icon that silently does nothing.
+A second: **Seize's sub-roll log entry claimed a move that never happened** when its target was
+already the Reserve Army it escapes *to*. `moveEscapees` is idempotent — setting a unit's location
+to `reserve` when it is already there does nothing — but the log entry's `toReserve: true` flag was
+set unconditionally from the SAI's own static `escapeTo` field, so the line read "escapes to
+reserves" about a die that never moved. Fixed by gating the flag on `spec.defenderSlot !== 'reserve'`.
 
-**Half of Temple is inert in this matchup.** Neither Treefolk nor Firewalkers can cast death magic,
-so the immunity clause can never fire. The burial clause is the whole of Temple here. Implement
-both; expect only one to matter.
+**Exit criterion.** A seed alone produces a board of three dice drawn from six types, and the app
+plays every icon on it: a held Tower fires missile at Reserves and across the homes counting no IDs
+there; a held City recruits or promotes one unit each turn; a held Temple forces one burial each
+turn and a Phoenix can rise from it; a held Standing Stones is labelled inert and does nothing.
+Losing the eighth face ends each of these in the same step, with nothing stored to revoke. The 25
+goldens replay byte-identical and unregenerated through all five slices, `SAVE_VERSION` is 7 for two
+true reasons, and a dedicated fuzz (pinned Tower/City/Temple, `STARTER_FORCES` for the 1-health unit
+City needs to recruit) has fired every counter at least once. The general `sai: 'full'` fuzz was not
+widened to assert the same, since its terrains are drawn from the seed and only five distinct boards
+turn up across its 66 pairings — not enough to promise a capture of all three icons in the same run.
 
-### 5c — The terrain data
-
-Currently: Swampland, Highland, Wasteland × 4 icons = 12 dice. Every pair of the four elements in
-play is a legal terrain, which is six types:
-
-| Type | Elements | Status |
-|---|---|---|
-| Swampland | Water & Earth | ✅ in `data/raw/terrains.faces.txt` — Treefolk home |
-| Wasteland | Air & Fire | ✅ — Firewalkers home |
-| Highland | Fire & Earth | ✅ |
-| Coastland | Air & Water | ❌ **faces 1–7 unknown** |
-| Flatland | Air & Earth | ❌ **faces 1–7 unknown** |
-| Feyland | Water & Fire | ❌ **faces 1–7 unknown** |
-
-Deadland is Death-only and out of scope. Castle, Dragon's Lair, Grove and Vortex are advanced
-terrains and out of scope.
-
-> **⚠ Blocking data question.** Neither rulebook contains terrain face layouts — the existing three
-> types were transcribed from dice. The three new types need the same treatment. **Do not infer
-> them.** The tempting pattern (magic low, melee high, split point varies) holds for all three known
-> types but says nothing about where Coastland's split falls, and a wrong split silently changes
-> which actions are available at a terrain for the whole game. Leave them `TODO`, add them to
-> `data/raw/terrains.faces.txt` when transcribed, re-run `python tools/import_terrains.py`.
-
-Also in this phase: home terrain follows from species elements (Treefolk → Swampland, Firewalkers →
-Wasteland), and the second terrain each species proposes becomes a real choice rather than the
-second die of its own type that Phase 0a settled for. Three new types mean Treefolk can propose
-Coastland or Feyland and Firewalkers Flatland or Feyland, which is the first point at which the
-proposal is worth thinking about — and the point at which the Frontier stops always being a City.
-
-**Exit criterion.** All four icons resolve. A captured terrain reverting to face 7 removes the
-icon's effect in the same step. `validateState` still enforces `face === 8 ⟺ capturedBy !== null`.
-
-**Tests.**
-
-- City promotes when the DUA can supply a partner and recruits when it cannot, at the player's
-  choice.
-- Temple's burial is refused when the opponent's DUA is empty.
-- Tower against a Reserve Army counts non-ID missile results only.
-- Losing the eighth face mid-turn ends the icon's effect immediately, not at end of turn.
+**What Phase 6 inherits.** `iconAt` and `resolvesIcon` are the pattern a dragon's terrain-based
+rules would reach for first. The Eighth Face Phase now has a real handler, so Phase 6's Dragon
+Attack Phase is the next no-op in the sequence to retire, not the first. And the `ArmyRef` widening
+from 5d is done: any future rule that can name a Reserve Army as a target has the type system on its
+side already, rather than a `TerrainSlot` cast waiting to be found by the compiler.
 
 ---
 

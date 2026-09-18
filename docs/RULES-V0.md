@@ -19,8 +19,12 @@ below together with the phase that retires it. **This document stays normative r
 - Two species: **Treefolk** (water + earth) and **Firewalkers** (air + fire).
 - Unit dice: small (1 health), medium (2), large (3) — d6; **monsters** (4 health) — d10.
 - Three armies per player: **Home**, **Campaign**, **Horde**, plus a **Reserve Area**.
-- Three terrain types — **Swampland** (water+earth), **Highland** (fire+earth), **Wasteland**
-  (air+fire) — each existing in four eighth-face variants (City, Standing Stones, Temple, Tower).
+- Six terrain types — **Swampland** (water+earth), **Highland** (fire+earth), **Wasteland**
+  (air+fire), **Coastland** (air+water), **Feyland** (water+fire), **Flatland** (air+earth) — each
+  existing in four eighth-face variants (City, Standing Stones, Temple, Tower). The terrain pool
+  itself is not behind a `RuleSet` flag (Phase 5a/5b): even a `V0_RULES` game draws all three
+  terrains from the seed, from all 24 dice. `eighthFace: 'standard'` is what keeps the icon powers
+  themselves inert regardless of which four the board happens to draw.
 - Three terrains in play: each player's **Home Terrain** plus one **Frontier Terrain**.
 - Maneuver, including **contested maneuver rolls**.
 - Melee (with counter-attack), Missile, and **simplified Magic** (§4).
@@ -38,7 +42,7 @@ below together with the phase that retires it. **This document stays normative r
 | **Spells / elements** | The entire spell list is the single biggest chunk of rules. Replaced by §4. | v1 |
 | **Dragons, Summoning Pool, Dragon Attack phase** | Needs the spell system (Summon Dragon) to even enter play. Phase 6 builds the dragon machinery and Phase 7 supplies the only way to summon one, so dragons are not actually reachable in a game until spells land. | v1 |
 | **SAIs** | **25** distinct icons, many with delayed effects and targeting. Faces are *recorded* in the data as `<count> SAI:<Name>` but produce **zero results** under `sai: 'inert'` — that is 58 of the 280 faces, so roughly one die in five rolls a blank. **Twelve of the 25 are live under `sai: 'results'`** (§8), which is what the app now plays; `V0_RULES` keeps all 25 inert. | v1 (partly landed) |
-| **Eighth-face icon powers** (City, Temple, Standing Stones, Tower) | Each is a separate subsystem. Which icon a die carries **is** recorded in the data; in v0 all four behave identically, so the choice is cosmetic. | v1 |
+| ~~**Eighth-face icon powers**~~ (City, Temple, Standing Stones, Tower) | **Now in, §13** — Tower, City and Temple under `eighthFace: 'full'`, which is what the app plays since Phase 5e. Standing Stones stays inert until spells land in Phase 7; `V0_RULES` stays on `standard`, where all four icons still behave identically. | — |
 | ~~Eighth-face combat bonuses~~ | **Now in.** ID doubling and the melee-only restriction are implemented; see §5. | — |
 | ~~**Buried Unit Area (BUA)**~~ | **Now in**, under `dua: 'active'` — see §9. `V0_RULES` still has no way to bury anything, and neither does the live rung until Phase 4's Flame. | — |
 | ~~**Promotion / recruitment**~~ | **The machinery is in**, under `dua: 'active'` — see §9. Nothing calls it in a game until the City lands in Phase 5. | — |
@@ -52,7 +56,7 @@ below together with the phase that retires it. **This document stays normative r
 Per turn, for the **marching player**:
 
 1. **Effects Expire** — no longer a no-op: effects with a duration end here, at the beginning of their caster's next turn (§10). Nothing produces one yet, so in practice it still does nothing.
-2. **Eighth Face** — still a no-op *phase*: the holder's advantages are passive (§5), and the icon powers that would trigger here are cut.
+2. **Eighth Face** — no longer a no-op under `eighthFace: 'full'` (§13): a held City may recruit or promote, and a held Temple may force a burial. `V0_RULES` still sees a no-op, since the holder's advantages are passive (§5) and its rung never rises past `standard`.
 3. **Dragon Attack** — no-op in v0 (no dragons).
 4. **First March** — pick one army, then: Maneuver step (optional) → Action step (optional).
 5. **Second March** — pick a *different* army, same two steps.
@@ -99,17 +103,21 @@ in which case the eighth face overrides it entirely:
 An action still needs something to hit, so a holder with no enemy present at the terrain is
 offered only missile, and only if it can reach an army elsewhere.
 
-Still cut: the Eighth Face Icon powers (City, Standing Stones, Temple, Tower) — `RuleSet.eighthFace`
-runs `captureOnly` → `standard` (where v0 now sits) → `full`.
+**Now in, under `eighthFace: 'full'`** (the app's rung since Phase 5e): Tower, City and Temple —
+§13. `V0_RULES` stays on `standard`, where the icon powers do nothing but the two advantages above
+still apply; `RuleSet.eighthFace` runs `captureOnly` → `standard` → `full`.
 
 For an uncaptured terrain, faces run magic → missile → melee as the number rises, but the split
 points differ sharply by terrain type:
 
 | Type | Melee faces | Missile faces | Magic faces |
 |---|---|---|---|
-| Swampland | 5, 6, 7 | 3, 4 | 1, 2 |
-| Highland | 6, 7 | 4, 5 | 1, 2, 3 |
-| Wasteland | 4, 5, 6, 7 | 2, 3 | 1 |
+| Swampland (water, earth) | 5, 6, 7 | 3, 4 | 1, 2 |
+| Highland (fire, earth) | 6, 7 | 4, 5 | 1, 2, 3 |
+| Wasteland (air, fire) | 4, 5, 6, 7 | 2, 3 | 1 |
+| Coastland (air, water) | 6, 7 | 2, 3, 4, 5 | 1 |
+| Feyland (water, fire) | 5, 6, 7 | 4 | 1, 2, 3 |
+| Flatland (air, earth) | 5, 6, 7 | 2, 3, 4 | 1 |
 
 This matters more in v0 than in the real game. With spells cut, a magic face is strictly weaker
 than a melee face (§4 costs two symbols per point of damage and allows no counter-attack), so
@@ -135,9 +143,10 @@ when reading early playtest feel — some of it will be the terrain, not the rul
 
 A defending army reduced to zero units does not counter-attack.
 
-**Missile** (any enemy army except Reserves; and not from one Home Terrain to the other):
+**Missile** (any enemy army except Reserves; and not from one Home Terrain to the other — **unless
+the attacker holds a Tower right where they stand**, §13, which lifts both restrictions):
 
-1. Marching army rolls missile → `A`.
+1. Marching army rolls missile → `A`. Against a Reserve Army, only non-ID results count (§13).
 2. If `A ≥ 1`, defending army rolls saves → `S`.
 3. Damage = `max(0, A - S)`. Resolve (§6). No counter-attack.
 
@@ -191,10 +200,15 @@ Preset terrains, matching each species to its own elements: Treefolk bring **Swa
 Home Terrain and Firewalkers **Wasteland**. For the alpha both propose **Highland** — the only type
 sharing an element with both — as their Frontier, which is what lets v0 sidestep step 4.
 
-v1 Phase 0a needs the two proposals to differ, and with three types in the box element-matching
-leaves no third option for either species, so each proposes **a second die of its own type**:
-Swampland for Treefolk, Wasteland for Firewalkers, with the eighth-face icon (Tower at home, City
-at the Frontier) separating the dice. Cosmetic until Phase 5 implements the icons.
+v1 Phase 0a needed the two proposals to differ, and with three types in the box element-matching
+left no third option for either species, so each proposed a second die of its own type: Swampland
+for Treefolk, Wasteland for Firewalkers. **Phase 5b replaced that with a draw**, now that Coastland,
+Feyland and Flatland are in the data alongside Swampland, Highland and Wasteland (§5's table): each
+Home Terrain is drawn uniformly from all 24 dice, and the Frontier is drawn from a terrain sharing
+an element with the roll-off loser's species — one of the loser's two elements, then uniformly among
+the dice carrying it, so the loser's own home type comes up about twice as often as the other three
+it merely shares an element with. There is no longer a per-species profile to consult; "which
+terrain a species brings" is answered by the seed, not by a table.
 
 ## 8. SAIs under `sai: 'results'` (v1 Phase 1)
 
@@ -432,18 +446,12 @@ Three, and the first two are about what the rulebook leaves to the roller.
 - **The roller chooses, not the owner of the dice.** A targeting SAI is the first decision in the
   game addressed to somebody other than the player whose units are at stake.
 
-
-
 ## 12. Open questions
 
 
 - **Army builder** in the alpha, or only the two 30-health presets? (Currently: presets only.)
   Still open, and deliberately outside `PLAN-V1.md` — an army builder is what makes *more species*
   worth having, so it belongs with them rather than with the rules.
-- **Which terrain dice each species brings** — the choice in §7 is a guess at what plays well, not
-  a rule, and Phase 0a's second-die-of-your-own-type is forced by there being only three types
-  rather than chosen. Phase 5 adds three more and makes the eighth-face icon matter, at which point
-  both halves become real decisions — including whether the Frontier should go on being a City.
 - **Undo.** Architecturally free, but it lets you re-roll bad dice. Misclick-rewind only, or not
   at all in the alpha?
 - **How the random force distribution should be shaped.** Phase 0a draws units uniformly over a
@@ -460,10 +468,13 @@ Answered by `PLAN-V1.md` rather than here:
 
 Resolved so far:
 
-- **All unit and terrain die data is transcribed** — 40 unit dice and 12 terrain dice, passing
-  validation. **Two data gaps are now known and named**: terrain faces 1–7 for Coastland, Flatland
-  and Feyland, and the dragon die face layouts. Neither is in either rulebook; both block v1 phases
-  and neither may be inferred (`PLAN-V1.md` §5c, §6).
+- **All unit and terrain die data is transcribed** — 40 unit dice and 24 terrain dice (all six basic
+  types, Phase 5a), passing validation. **One data gap remains**: the dragon die face layouts, which
+  are in neither rulebook and block Phase 6 until transcribed (`PLAN-V1.md` §6).
+- **Which terrain dice each species brings** — resolved by Phase 5b, and not by a per-species rule:
+  each Home Terrain is drawn uniformly from all 24 dice, and the Frontier is drawn from a terrain
+  sharing an element with the roll-off loser's species. There is no "should the Frontier go on being
+  a City" question either, since which icon it carries is now a draw rather than a species choice.
 - Magic targets **same terrain only** — it is a melee variant in v0 (§4).
 - A Reserve Army may **not** take a magic action, and so cannot march in v0 (§3, §4).
 - Capturing the eighth face wins and grants both standard advantages; no icon powers (§2, §5).
@@ -482,3 +493,50 @@ Resolved so far:
   this matchup. All five elements are transcribed anyway, for data completeness — it becomes
   playable when a death-casting species arrives, and no house rule is added to reach it sooner
   (`PLAN-V1.md` Phase 6).
+
+## 13. Eighth-face icons under `eighthFace: 'full'` (v1 Phase 5)
+
+`V0_RULES` and `DUA_RULES` never see this rung; the app and CLI play it from Phase 5e on.
+`resolvesIcon` is what a client asks whether an icon does anything in the game on screen, the same
+way `resolvesSai` answers that question for a face — a table can only ever be right about one rung.
+
+**Tower** — "your controlling army may use a missile action to attack any opponent's army. If
+attacking a Reserve Army, only count non-ID missile results." Two rules:
+
+- The home-to-home restriction (§5) does not apply, and a Reserve Army becomes a legal target,
+  whenever the attacker holds a Tower **at the terrain they are attacking from** — a Tower held
+  elsewhere lends nothing.
+- Against a Reserve Army, ID results are worth nothing toward the missile total — not reduced, not
+  redirected, simply not counted — whether or not the same roll is also doubling IDs for holding
+  the eighth face there. The two are independent facts about the roll and do not interact.
+
+**City** — "during the Eighth Face Phase you may recruit a small (1 health) unit to, or promote one
+unit in, the controlling army." One or the other, once, and "may": both offers can be empty and the
+answer can still be nothing. Recruiting moves a 1-health unit straight from the DUA to the
+controlling army; promoting is the ordinary one-step exchange (§9), not Wild Growth's budget rule.
+
+**Temple** — "your controlling army and all units in it cannot be affected by any opponent's death
+magic. During the Eighth Face Phase you may force another player to bury one unit of their choice in
+their DUA." Two decisions, because two players decide: the holder decides whether to force a burial
+at all, and the opponent decides which of their own DUA units pays for it. Forcing is a real choice
+and not a formality — an opponent's DUA holding a Phoenix means forcing them hands them a roll at
+Rise from the Ashes they would not otherwise have had yet. The death-magic immunity is dormant: no
+spell exists under `magic: 'simplified'`, so nothing has needed it yet.
+
+**Standing Stones** does nothing at all on this rung, or any rung before Phase 7 gives magic its
+elements back — it is a rules fact, not unbuilt work, and `resolvesIcon` gates it on `magic:
+'spells'` rather than on `eighthFace`.
+
+**At most one terrain fires per Eighth Face Phase.** Two captures win the game, so a player holding
+two terrains has already won before this phase could ask about the second one. That is what lets the
+phase be a single decision with no queue behind it — a future rule that changes what wins the game
+is the one thing that would turn this into a queue.
+
+**Losing the capture ends an icon's effect in the same step, because nothing about it is stored.**
+Every icon power asks `iconAt(state, player, slot)` fresh each time, which answers non-null only
+while the terrain is still on face 8 and still held by that player; there is nothing left over to
+revoke when it changes.
+
+House rule, alongside the Frontier draw (§7): both Home Terrains and the Frontier are drawn from all
+24 dice rather than chosen by species, so which icon a board's terrains carry is chance rather than
+a decision either side made.

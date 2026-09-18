@@ -309,7 +309,14 @@ function describe(entry: LogEntry, state: GameState): string | null {
       return red(
         `  ${entry.unitIds
           .map((id) => (state.units[id] ? name(state.units[id]!) : id))
-          .join(', ')} ${entry.unitIds.length === 1 ? 'is' : 'are'} buried — no resurrection`,
+          .join(', ')} ${entry.unitIds.length === 1 ? 'is' : 'are'} buried — no resurrection` +
+          (entry.source === 'temple' ? ' (forced by the Temple)' : ''),
+      )
+    case 'units_recruited':
+      return green(
+        `  ${entry.player} recruits ${entry.unitIds
+          .map((id) => (state.units[id] ? name(state.units[id]!) : id))
+          .join(', ')} from the DUA to ${SLOT_LABEL[entry.slot]}`,
       )
     case 'effects_expired':
       return dim(`${entry.sources.join(', ')} wears off at the start of ${entry.player}'s turn`)
@@ -408,6 +415,12 @@ function choicesFor(pending: Pending): Choice[] {
         { key: '0', label: 'do not counter', action: { kind: 'choose_counter_attack', counter: false } },
       ]
 
+    case 'eighth_face_temple':
+      return [
+        { key: '1', label: 'force a burial', action: { kind: 'eighth_face_temple', force: true } },
+        { key: '0', label: 'let it go', action: { kind: 'eighth_face_temple', force: false } },
+      ]
+
     case 'reinforce':
     case 'retreat':
     case 'assign_damage':
@@ -416,6 +429,8 @@ function choicesFor(pending: Pending): Choice[] {
     // Their own sheets, like damage: a list of dice and a tally is not a menu.
     case 'sai_promote':
     case 'sai_move':
+    case 'eighth_face_city':
+    case 'temple_bury':
       return [] // handled separately
   }
 }
@@ -705,6 +720,56 @@ async function askSaiMove(state: GameState, pending: Pending): Promise<GameActio
   }
 }
 
+/**
+ * City: one unit, either recruited or promoted -- or neither, since "may" both ways.
+ * Same shape as Wild Growth's promotion sheet, minus the budget: a City promotion is
+ * the ordinary one-step rule, not health-worth.
+ */
+async function askEighthFaceCity(state: GameState, pending: Pending): Promise<GameAction> {
+  if (pending.kind !== 'eighth_face_city') throw new Error('not the City')
+
+  console.log(`\n${bold('City')} — recruit or promote one unit, or do nothing`)
+  const options: { label: string; action: GameAction }[] = []
+
+  for (const partnerId of pending.recruits) {
+    options.push({
+      label: `recruit ${nameOf(state, partnerId)} to ${SLOT_LABEL[pending.slot]}`,
+      action: { kind: 'eighth_face_city', choice: { kind: 'recruit', unitId: partnerId } },
+    })
+  }
+  for (const pair of pending.promotions) {
+    options.push({
+      label: `promote ${nameOf(state, pair.unitId)} -> ${nameOf(state, pair.partnerId)}`,
+      action: { kind: 'eighth_face_city', choice: { kind: 'promote', pair } },
+    })
+  }
+
+  options.forEach((option, i) => console.log(`    ${i + 1}) ${option.label}`))
+  console.log('    0) do nothing')
+
+  const reply = (await ask('> ')).trim()
+  if (reply === '0' || reply === '') return { kind: 'eighth_face_city', choice: null }
+  const chosen = options[Number(reply) - 1]
+  return chosen === undefined
+    ? { kind: 'eighth_face_city', choice: null }
+    : chosen.action
+}
+
+/** Temple's second decision: the opponent picks which of their own DUA units is
+ *  buried. Never offered with nothing to pick from -- see `eighthFacePending`. */
+async function askTempleBury(state: GameState, pending: Pending): Promise<GameAction> {
+  if (pending.kind !== 'temple_bury') throw new Error('nobody is being forced to bury a unit')
+
+  for (;;) {
+    console.log(`\n${bold('Temple')} — ${pending.player} must bury one unit`)
+    pending.options.forEach((id, i) => console.log(`    ${i + 1}) ${nameOf(state, id)}`))
+    const reply = (await ask('> ')).trim()
+    const unitId = pending.options[Number(reply) - 1]
+    if (unitId !== undefined) return { kind: 'temple_bury', unitId }
+    console.log(red('  pick one of the listed dice'))
+  }
+}
+
 async function askSaiTargetArmy(state: GameState, pending: Pending): Promise<GameAction> {
   if (pending.kind !== 'sai_target_army') throw new Error('not an SAI army target')
   const enemy = pending.player === 'p1' ? 'p2' : 'p1'
@@ -796,6 +861,8 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
   if (pending.kind === 'sai_promote') return askSaiPromote(state, pending)
   if (pending.kind === 'sai_move') return askSaiMove(state, pending)
   if (pending.kind === 'reinforce' || pending.kind === 'retreat') return askUnits(state, pending)
+  if (pending.kind === 'eighth_face_city') return askEighthFaceCity(state, pending)
+  if (pending.kind === 'temple_bury') return askTempleBury(state, pending)
 
   const choices = choicesFor(pending)
   for (;;) {

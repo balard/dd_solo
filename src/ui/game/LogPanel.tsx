@@ -387,6 +387,15 @@ function Line({
             })
             .join(', ')}{' '}
           {entry.unitIds.length === 1 ? 'is' : 'are'} buried — no resurrection
+          {entry.source === 'temple' && <span className="muted"> (forced by the Temple)</span>}
+        </p>
+      )
+    case 'units_recruited':
+      return (
+        <p className="log-line">
+          {who(entry.player)} {verb(entry.player, 'recruits', 'recruit')}{' '}
+          {entry.unitIds.map((id) => nameOf(state, id)).join(', ')} from the DUA to{' '}
+          {where(entry.slot)}
         </p>
       )
     case 'effects_expired':

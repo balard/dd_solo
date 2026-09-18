@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import { begin, reduce } from './reduce'
 import { setupGame, STARTER_FORCES } from './setup'
-import { findVictory, legalDirections, marchableArmies } from './turn'
+import { applyAction, findVictory, legalDirections, marchableArmies, stepGame } from './turn'
 import {
+  FULL_RULES,
   IllegalActionError,
   TERRAIN_SLOTS,
   armyAt,
@@ -11,6 +12,7 @@ import {
   reserveArmy,
   type GameAction,
   type GameState,
+  type Location,
   type PlayerId,
   type TerrainFace,
   type TerrainSlot,
@@ -476,5 +478,183 @@ describe('reserves phase', () => {
     )
     const enemy = armyAt(state, 'p2', 'frontier')[0]!.id
     expect(() => reduce(state, { kind: 'retreat', unitIds: [enemy] })).toThrow(/not yours/)
+  })
+})
+
+describe('the Eighth Face Phase (Phase 5e)', () => {
+  const EIGHTH_FACE_FULL = { ...FULL_RULES, eighthFace: 'full' as const }
+  const dua: Location = { kind: 'dua' }
+
+  const OAKLING = 'treefolk.oakling' // 1 health
+  const OAK = 'treefolk.oak' // 2 health
+
+  /** p1 holds `icon` at p1_home, with `extra` units added to the roster (typically
+   *  DUA fixtures), and the phase pointer sitting on `eighth_face`. */
+  function eighthFaceBoard(
+    icon: 'city' | 'temple',
+    extra: readonly { id: string; typeId: string; owner?: PlayerId; at: Location }[] = [],
+  ): GameState {
+    const base = setupGame({
+      seed: 1,
+      forces: STARTER_FORCES,
+      ruleSet: EIGHTH_FACE_FULL,
+      firstPlayer: 'p1',
+      terrains: {
+        p1_home: `swampland_${icon}`,
+        frontier: 'highland_tower',
+        p2_home: 'wasteland_tower',
+      },
+    })
+    const units = { ...base.units }
+    for (const spec of extra) {
+      units[spec.id] = { id: spec.id, typeId: spec.typeId, owner: spec.owner ?? 'p1', location: spec.at }
+    }
+    return {
+      ...base,
+      units,
+      turn: { ...base.turn, marching: 'p1', phase: 'eighth_face' },
+      terrains: {
+        ...base.terrains,
+        p1_home: { ...base.terrains.p1_home, face: 8, capturedBy: 'p1' },
+      },
+    }
+  }
+
+  describe('City', () => {
+    it('is skipped silently when there is nothing to recruit or promote', () => {
+      const state = stepGame(eighthFaceBoard('city'))
+      expect(state.pending).toBeNull()
+      expect(state.turn.phase).toBe('dragon_attack')
+    })
+
+    it('offers a recruit for a 1-health unit in the DUA', () => {
+      const state = stepGame(
+        eighthFaceBoard('city', [{ id: 'p1:dead-oakling', typeId: OAKLING, at: dua }]),
+      )
+      expect(state.pending?.kind).toBe('eighth_face_city')
+      if (state.pending?.kind !== 'eighth_face_city') throw new Error('unreachable')
+      expect(state.pending.recruits).toEqual(['p1:dead-oakling'])
+      expect(state.pending.promotions).toEqual([])
+    })
+
+    it('offers a promotion for a matching partner in the DUA', () => {
+      const state = stepGame(eighthFaceBoard('city', [{ id: 'p1:dead-oak', typeId: OAK, at: dua }]))
+      expect(state.pending?.kind).toBe('eighth_face_city')
+      if (state.pending?.kind !== 'eighth_face_city') throw new Error('unreachable')
+      // The starter home army fields an Oakling, one health short of the dead Oak.
+      expect(state.pending.promotions.some((p) => p.partnerId === 'p1:dead-oak')).toBe(true)
+    })
+
+    it('recruits, logs it, and moves the game on past the (still no-op) dragon phase', () => {
+      const offered = stepGame(
+        eighthFaceBoard('city', [{ id: 'p1:dead-oakling', typeId: OAKLING, at: dua }]),
+      )
+      const state = reduce(offered, {
+        kind: 'eighth_face_city',
+        choice: { kind: 'recruit', unitId: 'p1:dead-oakling' },
+      })
+      expect(state.units['p1:dead-oakling']?.location).toEqual({ kind: 'terrain', slot: 'p1_home' })
+      const entry = state.log.find((e) => e.kind === 'units_recruited')
+      expect(entry?.kind === 'units_recruited' && entry.unitIds).toEqual(['p1:dead-oakling'])
+      expect(state.turn.phase).toBe('march')
+    })
+
+    it('promotes and logs it with source: city', () => {
+      const offered = stepGame(eighthFaceBoard('city', [{ id: 'p1:dead-oak', typeId: OAK, at: dua }]))
+      if (offered.pending?.kind !== 'eighth_face_city') throw new Error('unreachable')
+      const pair = offered.pending.promotions[0]
+      if (pair === undefined) throw new Error('expected a legal promotion')
+
+      const state = reduce(offered, { kind: 'eighth_face_city', choice: { kind: 'promote', pair } })
+      expect(state.units[pair.partnerId]?.location).toEqual({ kind: 'terrain', slot: 'p1_home' })
+      expect(state.units[pair.unitId]?.location).toEqual({ kind: 'dua' })
+      const entry = state.log.find((e) => e.kind === 'units_promoted')
+      expect(entry?.kind === 'units_promoted' && entry.source).toBe('city')
+    })
+
+    it('does nothing when declined', () => {
+      const offered = stepGame(
+        eighthFaceBoard('city', [{ id: 'p1:dead-oakling', typeId: OAKLING, at: dua }]),
+      )
+      const state = reduce(offered, { kind: 'eighth_face_city', choice: null })
+      expect(state.units['p1:dead-oakling']?.location).toEqual({ kind: 'dua' })
+    })
+
+    it('rejects a promotion pair the phase did not offer', () => {
+      const state = stepGame(eighthFaceBoard('city'))
+      expect(() =>
+        applyAction(state, {
+          kind: 'eighth_face_city',
+          choice: { kind: 'promote', pair: { unitId: 'nobody', partnerId: 'nobody-else' } },
+        }),
+      ).toThrow(IllegalActionError)
+    })
+  })
+
+  describe('Temple', () => {
+    it("is skipped silently when the opponent's DUA is empty", () => {
+      const state = stepGame(eighthFaceBoard('temple'))
+      expect(state.pending).toBeNull()
+      expect(state.turn.phase).toBe('dragon_attack')
+    })
+
+    it("offers to force a burial when the opponent's DUA is not empty", () => {
+      const state = stepGame(
+        eighthFaceBoard('temple', [{ id: 'p2:dead-oak', typeId: OAK, owner: 'p2', at: dua }]),
+      )
+      expect(state.pending).toEqual({ kind: 'eighth_face_temple', player: 'p1', slot: 'p1_home' })
+    })
+
+    it('lets it go without forcing anything', () => {
+      const offered = stepGame(
+        eighthFaceBoard('temple', [{ id: 'p2:dead-oak', typeId: OAK, owner: 'p2', at: dua }]),
+      )
+      const state = reduce(offered, { kind: 'eighth_face_temple', force: false })
+      expect(state.units['p2:dead-oak']?.location).toEqual({ kind: 'dua' })
+      expect(state.turn.eighthFaceStep).toBeUndefined()
+    })
+
+    it('forces the opponent to choose and bury one of their own DUA units', () => {
+      const offered = stepGame(
+        eighthFaceBoard('temple', [
+          { id: 'p2:dead-oak', typeId: OAK, owner: 'p2', at: dua },
+          { id: 'p2:dead-oakling', typeId: OAKLING, owner: 'p2', at: dua },
+        ]),
+      )
+      const forcing = applyAction(offered, { kind: 'eighth_face_temple', force: true })
+      const asked = stepGame(forcing)
+      expect(asked.pending?.kind).toBe('temple_bury')
+      if (asked.pending?.kind !== 'temple_bury') throw new Error('unreachable')
+      expect(asked.pending.player).toBe('p2')
+      expect([...asked.pending.options].sort()).toEqual(['p2:dead-oak', 'p2:dead-oakling'])
+
+      const state = reduce(asked, { kind: 'temple_bury', unitId: 'p2:dead-oakling' })
+      expect(state.units['p2:dead-oakling']?.location).toEqual({ kind: 'bua' })
+      expect(state.units['p2:dead-oak']?.location).toEqual({ kind: 'dua' })
+      const entry = state.log.find((e) => e.kind === 'units_buried')
+      expect(entry?.kind === 'units_buried' && entry.source).toBe('temple')
+      expect(state.turn.eighthFaceStep).toBeUndefined()
+    })
+
+    it('rejects burying a unit not offered', () => {
+      const offered = stepGame(
+        eighthFaceBoard('temple', [{ id: 'p2:dead-oak', typeId: OAK, owner: 'p2', at: dua }]),
+      )
+      const forcing = applyAction(offered, { kind: 'eighth_face_temple', force: true })
+      const asked = stepGame(forcing)
+      expect(() => applyAction(asked, { kind: 'temple_bury', unitId: 'p1:oak_lord#0' })).toThrow(
+        IllegalActionError,
+      )
+    })
+  })
+
+  it('does nothing under eighthFace: standard, even on a City or Temple die', () => {
+    const cityState: GameState = {
+      ...eighthFaceBoard('city', [{ id: 'p1:dead-oakling', typeId: OAKLING, at: dua }]),
+      ruleSet: { ...EIGHTH_FACE_FULL, eighthFace: 'standard' },
+    }
+    const advanced = stepGame(cityState)
+    expect(advanced.pending).toBeNull()
+    expect(advanced.turn.phase).toBe('dragon_attack')
   })
 })

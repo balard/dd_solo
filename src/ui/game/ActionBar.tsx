@@ -520,6 +520,51 @@ function SaiHeader({ state, sai }: { state: GameState; sai: string }) {
     )
   }
 
+  /**
+   * City (Phase 5e): one unit, recruited or promoted, or neither. Every button
+   * dispatches on the spot -- unlike Wild Growth's sheet, there is no budget to
+   * spend across several dice and no partner to pick afterwards, so there is
+   * nothing for a draft to hold.
+   */
+  if (prompt.custom === 'eighth_face_city' && pending.kind === 'eighth_face_city') {
+    return (
+      <div className="action-bar">
+        <p className="question">{prompt.question}</p>
+        <div className="choices">
+          {pending.recruits.map((unitId) => (
+            <button
+              key={unitId}
+              type="button"
+              className="choice"
+              onClick={() =>
+                dispatch({ kind: 'eighth_face_city', choice: { kind: 'recruit', unitId } })
+              }
+            >
+              Recruit {nameOf(state, unitId)}
+            </button>
+          ))}
+          {pending.promotions.map((pair) => (
+            <button
+              key={`${pair.unitId}-${pair.partnerId}`}
+              type="button"
+              className="choice"
+              onClick={() => dispatch({ kind: 'eighth_face_city', choice: { kind: 'promote', pair } })}
+            >
+              Promote {nameOf(state, pair.unitId)} &rarr; {nameOf(state, pair.partnerId)}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="choice secondary"
+            onClick={() => dispatch({ kind: 'eighth_face_city', choice: null })}
+          >
+            Do nothing
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="action-bar">
       <p className="question">{prompt.question}</p>

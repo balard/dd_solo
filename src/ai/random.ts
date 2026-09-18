@@ -244,6 +244,30 @@ export const randomAi: AiPlayer = {
           next,
         ] as const
       }
+
+      // City: uniform over recruit / promote / nothing, so the fuzz reaches every
+      // branch rather than always taking the first legal one.
+      case 'eighth_face_city': {
+        const options: (() => GameAction)[] = [() => ({ kind: 'eighth_face_city', choice: null })]
+        for (const unitId of pending.recruits) {
+          options.push(() => ({ kind: 'eighth_face_city', choice: { kind: 'recruit', unitId } }))
+        }
+        for (const pair of pending.promotions) {
+          options.push(() => ({ kind: 'eighth_face_city', choice: { kind: 'promote', pair } }))
+        }
+        const [make, next] = pick(rng, options)
+        return [make(), next] as const
+      }
+
+      case 'eighth_face_temple': {
+        const [force, next] = coin(rng)
+        return [{ kind: 'eighth_face_temple', force } as GameAction, next] as const
+      }
+
+      case 'temple_bury': {
+        const [unitId, next] = pick(rng, pending.options)
+        return [{ kind: 'temple_bury', unitId } as GameAction, next] as const
+      }
     }
   },
 }

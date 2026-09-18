@@ -3,13 +3,14 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: v0 alpha complete; v1 Phases 0–4 landed. The app plays every SAI in the box.**
+> **Status: v0 alpha complete; v1 Phases 0–5 landed. The app plays every SAI and every eighth-face
+> icon power in the box.**
 > All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > and installable as a PWA. It opens on a screen that picks the two forces and the seed; saving is
 > switched off while v1 lands, so a reload starts there too. Since the alpha landed, the board grew to
-> show every army at once and the eighth face started granting its two standard advantages
-> (`eighthFace: 'standard'`).
+> show every army at once and the eighth face started granting its two standard advantages, then
+> (Phase 5e) the icon powers themselves.
 >
 > **Phases 0, 1, 2 and 3 of `docs/PLAN-V1.md` are done.** Phase 0 landed in three commits: a golden
 > corpus of 25 recorded games (Phase G), the rulebook's ten-step roll pipeline replacing the sum
@@ -52,14 +53,20 @@ the dice and the opponent.
 >
 > The ladder after this is eighth-face **icon** powers (Phase 5), dragons (6), then spells (7).
 
-> **Phase 5a and 5b are landed.** 5a transcribed Coastland, Feyland and Flatland, so all six basic
-> terrain types (24 dice) are in the data. 5b replaced the species terrain profile with a draw: each
-> Home Terrain is now drawn uniformly from all 24 dice, and the Frontier is drawn from a terrain
-> sharing an element with the roll-off loser's species -- so a board is no longer "both homes are
-> Towers, the Frontier a City" the way Phase 0a left it. The old per-species profile
-> (`SpeciesProfile`, `data/presets.json`'s `species` block) is gone; see `PLAN-V1-Phase5.md` for the
-> exact distribution. `SAVE_VERSION` is 7. The remaining slices -- the seam, Tower, City and Temple
-> -- are next.
+> **Phase 5 landed in five slices.** 5a transcribed Coastland, Feyland and Flatland, so all six
+> basic terrain types (24 dice) are in the data. 5b replaced the species terrain profile with a
+> draw: each Home Terrain is drawn uniformly from all 24 dice, and the Frontier is drawn from a
+> terrain sharing an element with the roll-off loser's species -- so a board is no longer "both
+> homes are Towers, the Frontier a City" the way Phase 0a left it, and `SpeciesProfile` is gone.
+> `SAVE_VERSION` became 7 here, for dice consumption at setup and the two Eighth Face Phase
+> decisions 5e was already known to add. **5c added the seam** -- `iconAt` / `resolvesIcon` -- and
+> nothing else, the same shape 4a gave `sai: 'full'`. **5d added Tower**: any army may be missiled,
+> including a Reserve Army, which counts no ID results; the cost was widening `TerrainSlot` to
+> `ArmyRef` everywhere a defender's slot is named, two fields more than the plan's own table
+> predicted (`sai_sub_roll`, `counter_suppressed`). **5e added City and Temple**, turned the Eighth
+> Face Phase from a no-op into a single decision with no queue (at most one terrain can fire --
+> two captures already win), and flipped `FULL_RULES` to `eighthFace: 'full'`. The 25 goldens
+> replay byte-identical and unregenerated through all five slices.
 
 ## Read these first
 
@@ -136,8 +143,8 @@ These are the things that break the project if violated:
 5. **Scope is controlled by the `RuleSet` config**, not by scattered `if`s. `V0_RULES` is
    `magic: 'simplified'`, `sai: 'inert'`, `eighthFace: 'standard'`, `dua: 'inert'`,
    `dragons: false`, and stays exactly that -- it is what the golden corpus is recorded against.
-   What the app plays is `FULL_RULES` = `DUA_RULES` + `sai: 'full'`, and `DUA_RULES` is
-   `V0_RULES` + `sai: 'results'` + `dua: 'active'`. Adding a cut feature means implementing behind its flag,
+   What the app plays is `FULL_RULES` = `DUA_RULES` + `sai: 'full'` + `eighthFace: 'full'`
+   (Phase 5e), and `DUA_RULES` is `V0_RULES` + `sai: 'results'` + `dua: 'active'`. Adding a cut feature means implementing behind its flag,
    not deleting a condition -- and adding a key to `V0_RULES` is safe for the goldens, because
    `digestState` excludes `ruleSet` and `setupGame` pins an absent one to `V0_RULES`.
 
@@ -197,8 +204,9 @@ These are the things that break the project if violated:
   holding that face dying to a Bullseye.
 - **The DUA is a graveyard under `dua: 'inert'` and a resource under `'active'`** -- promotion,
   recruitment, burial and Rise from the Ashes' death trigger. See `RULES-V0.md` §9. **Wild Growth is
-  the first caller of promotion** (Phase 4e), on its own budget rule; **recruitment still has none**
-  -- Phase 5's City is the first. Flame buries, and the app reaches it now.
+  the first caller of promotion** (Phase 4e), on its own budget rule; **City is the first caller of
+  recruitment** (Phase 5e), moving a 1-health unit straight from the DUA. Flame buries, and the app
+  reaches it now.
 - **Sleep and Galeforce are the first effects with a duration** (v1 Phase 4c) -- `RULES-V0.md` §10.
   Phase 3 shipped `Effect`, `expireEffects`, `pruneEffects` and the `asleep` status with no caller
   at all, deliberately; these two are it. Both are cast during the *attacker's* roll and bite in
@@ -208,8 +216,9 @@ These are the things that break the project if violated:
 - **Eighth face captures and wins** (two captures = victory) **and grants its two standard
   advantages**: the holder's army doubles all ID results when rolling *anything* there — attack,
   save or maneuver — and may take melee, missile or magic, while any army facing them at that
-  terrain is restricted to melee. Still cut: the icon powers (City, Standing Stones, Temple,
-  Tower), which is what `eighthFace: 'full'` will add.
+  terrain is restricted to melee. **Now in, under `eighthFace: 'full'`** (Phase 5e, `RULES-V0.md`
+  §13): Tower, City and Temple. Standing Stones stays inert until spells land in Phase 7.
+  `V0_RULES` stays on `standard`, where the four icons still behave identically.
 - **No dragons and no spells.** Promotion and burying exist as machinery from v1 Phase 2, but
   `V0_RULES` still reaches neither.
 
@@ -228,8 +237,9 @@ python tools/fetch_faces.py       # optional: mirror reference art into public/f
 Never hand-edit `data/starter/units.json` — edit the raw file and re-import. Re-running the
 importer is always safe. Format and vocabulary: `data/ICONS.md`.
 
-**Status: complete.** 40 unit dice (280 faces) and 12 terrain dice (3 types × 4 eighth-face
-variants), all passing validation. Nothing is `TODO`.
+**Status: complete.** 40 unit dice (280 faces) and 24 terrain dice (6 basic types × 4 eighth-face
+variants -- Coastland, Feyland and Flatland joined Swampland, Highland and Wasteland in Phase 5a),
+all passing validation. Nothing is `TODO` except the dragon dice (Phase 6).
 
 **A terrain die is a type plus an eighth-face icon.** Faces 1–7 come from the type, face 8 from the
 icon. Every type runs magic → missile → melee as the face number rises, but the split points differ
@@ -260,19 +270,30 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 
   ```
   race -> size -> p1 units -> p1 split -> p2 units -> p2 split   (random forces only)
-       -> Horde roll-off -> Frontier set by the loser (no draw) -> terrain faces
+       -> Horde roll-off
+       -> p1 home die -> Frontier element -> Frontier die -> p2 home die   (unpinned slots only)
+       -> terrain faces
   ```
 
   **A named force must consume no generation draws at all** -- not "the same draws", none -- or a
   named game lands on a different board than v0 gave it and the golden corpus quietly changes
-  meaning. The generation steps live inside the random branch, not before it.
-- **The roll-off's two prizes are split one each**: the winner marches first, the loser places the
-  Frontier from the second terrain their species brings. The rules give the winner the choice of
-  one *or* the other; that is a real decision and `PassiveAI` could hold no opinion about it, so
-  `GreedyAI` gets the real rule in Phase 9. A house rule, recorded in `RULES-V0.md` section 7.
+  meaning. The generation steps live inside the random branch, not before it. The same rule applies
+  to a pinned terrain slot (Phase 5b): it consumes no draw either, which is why the die draws sit
+  after the roll-off and before the faces, and why a partly pinned game draws only for what is left
+  unpinned.
+- **The roll-off's two prizes are split one each**: the winner marches first, the loser draws the
+  Frontier (Phase 5b). The rules give the winner the choice of one *or* the other; that is a real
+  decision and `PassiveAI` could hold no opinion about it, so `GreedyAI` gets the real rule in
+  Phase 9. A house rule, recorded in `RULES-V0.md` section 7.
+- **Both Home Terrains and the Frontier are drawn, not chosen by species** (Phase 5b). Each Home
+  Terrain is uniform over all 24 dice; the Frontier draws one of the loser's two elements and then
+  draws uniformly among the dice carrying it, so the loser's own home type comes up about twice as
+  often as a type sharing only one element with them. `SpeciesProfile` and the old per-species
+  profile in `data/presets.json` are gone -- there is no second copy of "which terrain a species
+  brings" left to drift.
 - **`SetupOptions.terrains` pins a die to a slot.** That is how a test says "a Tower, here", and it
-  is what lets the golden corpus keep replaying the board it was recorded on now that the Frontier
-  moves. Applied last, over whatever the species would have brought.
+  is what lets the golden corpus keep replaying the board it was recorded on now that the terrains
+  are drawn rather than fixed. Applied last, over whatever would have been drawn.
 - **Named forces are `data/presets.json`, which the importers never touch.** `STARTER_FORCES` is
   the 30-health pair the alpha shipped with and the one the goldens are recorded against -- do not
   edit those two lists. `BESTIARY_FORCES` is 35 health and holds one of every monster and every
@@ -427,6 +448,16 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   a Galeforce quietly not applying. `rollArmy` takes the modifier list; it used to take a
   `doubleIds: boolean`, which was enough while the eighth face was the only thing in the game with
   an opinion about a roll. Attacks, saves and contested maneuvers all count as "rolling the army".
+- **`iconAt(state, player, slot)` is the eighth-face seam** (Phase 5c, `effects.ts`, beside
+  `doublesIds`): non-null exactly when `eighthFace: 'full'`, the terrain is on face 8, and this
+  player captured it. Every icon power (Tower, City, Temple) asks this and nothing else, which is
+  what makes losing the capture end the power in the same step free -- nothing is stored, so there
+  is nothing to revoke. `resolvesIcon` is `resolvesSai`'s twin: ask the ruleset, not a table,
+  because a table is right about one rung.
+- **At most one terrain fires per Eighth Face Phase.** Two captures win the game, so a player
+  holding two has already won before the phase could ask about the second. That is what lets
+  `eighthFacePending` be a single decision with no queue -- a future rule that changes what wins
+  the game is the one thing that would turn this into one.
 - **Effects with a duration are `state.effects` and `effects.ts`, and Sleep and Galeforce are what
   produce them** (v1 Phase 4c).
   An effect targets an army *at a place* (it does not follow the units) or a unit (it does),

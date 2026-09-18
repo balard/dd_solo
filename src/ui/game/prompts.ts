@@ -102,6 +102,7 @@ export interface Prompt {
     | 'sai_move'
     | 'reinforce'
     | 'retreat'
+    | 'eighth_face_city'
 }
 
 const stepFace = (face: TerrainFace, direction: Direction): TerrainFace =>
@@ -291,6 +292,42 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
 
     case 'retreat':
       return { question: 'Pull units back to reserve?', choices: [], custom: 'retreat' }
+
+    // Compound -- recruit, or promote, or neither -- so it gets its own sheet the
+    // way Wild Growth's promotion draft does, rather than a button per option.
+    case 'eighth_face_city':
+      return {
+        question: `City at ${label(pending.slot)}: recruit or promote one unit, or do nothing`,
+        choices: [],
+        custom: 'eighth_face_city',
+      }
+
+    case 'eighth_face_temple':
+      return {
+        question: `Force the Temple at ${label(pending.slot)} to make an opponent bury a unit?`,
+        choices: [
+          { label: 'Force a burial', action: { kind: 'eighth_face_temple', force: true } },
+          {
+            label: 'Let it go',
+            action: { kind: 'eighth_face_temple', force: false },
+            passive: true,
+          },
+        ],
+      }
+
+    // "Of their choice" -- one button per unit in the DUA, the way the DUA is
+    // already shown as a plain list rather than a selectable grid.
+    case 'temple_bury':
+      return {
+        question: 'The Temple forces a burial. Choose one of your DUA units.',
+        choices: pending.options.map((unitId) => {
+          const unit = state.units[unitId]
+          return {
+            label: unit === undefined ? unitId : unitType(unit.typeId).name,
+            action: { kind: 'temple_bury', unitId },
+          }
+        }),
+      }
   }
 }
 

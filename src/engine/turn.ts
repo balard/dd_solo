@@ -31,11 +31,14 @@ import { damageAssignmentProblem, damageOptions, healthsOf } from './damage'
 import {
   exchangeWithDua,
   growthPartners,
+  promote,
   promotionBudgetProblem,
   promotionGain,
+  promotionPartners,
+  recruit,
 } from './dua'
-import { killAndBury, killUnits } from './death'
-import { armyRoll, expireEffects, isAsleep, pruneEffects, unitRoll, type Effect } from './effects'
+import { buryUnits, killAndBury, killUnits } from './death'
+import { armyRoll, expireEffects, iconAt, isAsleep, pruneEffects, unitRoll, type Effect } from './effects'
 
 import {
   defaultContextFor,
@@ -50,12 +53,14 @@ import {
 import type { Modifier } from './pipeline'
 import type { RollContext } from './sai'
 import { delayedTasks, targetTasks, type TargetTask } from './targeting'
+import { unitType } from '../data/load'
 import {
   IllegalActionError,
   TERRAIN_SLOTS,
   armyAt,
   army as armyRef,
   capturedCount,
+  deadUnits,
   livingUnits,
   opponentOf,
   type ActionKind,
@@ -1515,6 +1520,152 @@ export function rollOnTheTable(
   return { dice: attackRollDice(state, spec, attack), kind: 'attack' }
 }
 
+// --- the Eighth Face Phase (Phase 5e) -----------------------------------------
+// "At most one terrain fires per phase" -- a player holding two has already won,
+// so the phase is a single decision with no queue: look for the one slot with an
+// icon, raise its decision if it has one, and let the applier advance the phase.
+// A future rule that changes what wins the game is the one thing that would turn
+// this into a queue.
+
+/** City's offer at this slot: recruits and one-step promotions, or null when
+ *  neither has a legal answer -- the same "nothing to ask" rule as damage too
+ *  small to kill. */
+function cityPending(state: GameState, player: PlayerId, slot: TerrainSlot): Pending | null {
+  const recruits = deadUnits(state, player)
+    .filter((unit) => unitType(unit.typeId).health === 1)
+    .map((unit) => unit.id)
+
+  const promotions: PromotionPair[] = []
+  for (const unit of armyAt(state, player, slot)) {
+    for (const partner of promotionPartners(state, unit.id)) {
+      promotions.push({ unitId: unit.id, partnerId: partner.id })
+    }
+  }
+
+  if (recruits.length === 0 && promotions.length === 0) return null
+  return { kind: 'eighth_face_city', player, slot, recruits, promotions }
+}
+
+/** The one decision the Eighth Face Phase has to raise, if any. */
+function eighthFacePending(state: GameState): Pending | null {
+  const marching = state.turn.marching
+
+  // Temple's second decision: already committed to forcing, so this phase is not
+  // looking for a new terrain -- it is waiting on the answer it already asked for.
+  if (state.turn.eighthFaceStep === 'temple_bury') {
+    const options = deadUnits(state, opponentOf(marching)).map((unit) => unit.id)
+    return { kind: 'temple_bury', player: opponentOf(marching), options }
+  }
+
+  for (const slot of TERRAIN_SLOTS) {
+    const icon = iconAt(state, marching, slot)
+    if (icon === 'city') {
+      const pending = cityPending(state, marching, slot)
+      if (pending !== null) return pending
+    }
+    if (icon === 'temple' && deadUnits(state, opponentOf(marching)).length > 0) {
+      return { kind: 'eighth_face_temple', player: marching, slot }
+    }
+  }
+  return null
+}
+
+/**
+ * City: recruit, promote, or do nothing -- one unit either way.
+ *
+ * Recomputes the offer with `eighthFacePending` rather than trusting
+ * `state.pending`: `applyAction` clears `pending` before any applier runs (see the
+ * note at the top of this file), so by the time this executes there is nothing
+ * left to read there. Every other applier in this file recomputes for the same
+ * reason -- `damageTarget`, `taskOwner`, `chokeEligible` and the rest.
+ */
+function applyEighthFaceCity(
+  state: GameState,
+  choice: Extract<GameAction, { kind: 'eighth_face_city' }>['choice'],
+): GameState {
+  const pending = eighthFacePending(state)
+  if (pending?.kind !== 'eighth_face_city') {
+    throw new IllegalActionError('the Eighth Face Phase is not offering City')
+  }
+  if (choice === null) return withTurn(state, { phase: 'dragon_attack' })
+
+  if (choice.kind === 'recruit') {
+    if (!pending.recruits.includes(choice.unitId)) {
+      throw new IllegalActionError(`${choice.unitId} is not a 1-health unit in your DUA`)
+    }
+    const recruited = recruit(state, [choice.unitId], pending.slot)
+    const logged = withLog(recruited, {
+      kind: 'units_recruited',
+      player: pending.player,
+      slot: pending.slot,
+      unitIds: [choice.unitId],
+    })
+    return withTurn(logged, { phase: 'dragon_attack' })
+  }
+
+  const { pair } = choice
+  if (
+    !pending.promotions.some((p) => p.unitId === pair.unitId && p.partnerId === pair.partnerId)
+  ) {
+    throw new IllegalActionError(`${pair.unitId} -> ${pair.partnerId} is not a legal promotion here`)
+  }
+  const promoted = promote(state, [pair])
+  const logged = withLog(promoted, {
+    kind: 'units_promoted',
+    player: pending.player,
+    sai: 'City',
+    pairs: [pair],
+    source: 'city',
+  })
+  return withTurn(logged, { phase: 'dragon_attack' })
+}
+
+/** Temple's first decision: force a burial, or let it go. */
+function applyEighthFaceTemple(state: GameState, force: boolean): GameState {
+  if (eighthFacePending(state)?.kind !== 'eighth_face_temple') {
+    throw new IllegalActionError('the Eighth Face Phase is not offering Temple')
+  }
+  if (!force) return withTurn(state, { phase: 'dragon_attack' })
+  return withTurn(state, { eighthFaceStep: 'temple_bury' })
+}
+
+/** Temple's second decision: the opponent buries one of their own choosing. */
+function applyTempleBury(state: GameState, unitId: UnitId): GameState {
+  const pending = eighthFacePending(state)
+  if (pending?.kind !== 'temple_bury') {
+    throw new IllegalActionError('nobody is being forced to bury a unit')
+  }
+  if (!pending.options.includes(unitId)) {
+    throw new IllegalActionError(`${unitId} is not in ${pending.player}'s DUA`)
+  }
+
+  const { state: buried } = buryUnits(state, [unitId])
+  const logged = withLog(buried, {
+    kind: 'units_buried',
+    player: pending.player,
+    unitIds: [unitId],
+    source: 'temple',
+  })
+
+  // Built field by field rather than spread over the old turn, the way
+  // `finishExchange` drops `combat.attack`: `eighthFaceStep` is omitted-or-present
+  // like every other optional field near the digest, and a spread would carry it
+  // forward as a stale "still waiting" marker instead of dropping it.
+  const turn = logged.turn
+  return {
+    ...logged,
+    turn: {
+      marching: turn.marching,
+      phase: 'dragon_attack',
+      marchIndex: turn.marchIndex,
+      marchStep: turn.marchStep,
+      marchingArmy: turn.marchingArmy,
+      armiesMarched: turn.armiesMarched,
+      combat: turn.combat,
+    },
+  }
+}
+
 /**
  * One step of the game. Returns the same object when nothing can happen without a
  * decision, which is how the advance loop knows to stop.
@@ -1556,10 +1707,14 @@ export function stepGame(state: GameState): GameState {
     case 'effects_expire':
       return withTurn(expireEffects(state), { phase: 'eighth_face' })
 
-    // The two remaining no-op phases. Real phases rather than omissions, because they
-    // are where eighth-face powers and dragons land in v1.
-    case 'eighth_face':
+    // City and Temple, since Phase 5e -- the marching player's own held terrains,
+    // which is why this asks nothing about the opponent's. Dragons (Phase 6) are
+    // still a no-op below.
+    case 'eighth_face': {
+      const pending = eighthFacePending(state)
+      if (pending !== null) return { ...state, pending }
       return withTurn(state, { phase: 'dragon_attack' })
+    }
     case 'dragon_attack':
       return withTurn(state, { phase: 'march', marchIndex: 0, marchStep: 'select_army' })
 
@@ -1908,5 +2063,11 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyReinforce(cleared, action.moves)
     case 'retreat':
       return applyRetreat(cleared, action.unitIds)
+    case 'eighth_face_city':
+      return applyEighthFaceCity(cleared, action.choice)
+    case 'eighth_face_temple':
+      return applyEighthFaceTemple(cleared, action.force)
+    case 'temple_bury':
+      return applyTempleBury(cleared, action.unitId)
   }
 }

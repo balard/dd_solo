@@ -211,6 +211,14 @@ export interface TurnState {
   readonly armiesMarched: readonly ArmyRef[]
   /** Non-null only while an action is being resolved. */
   readonly combat: CombatState | null
+  /**
+   * The Eighth Face Phase's own one-value `marchStep` (Phase 5e): Temple's two
+   * decisions are two different players answering, so `applyAction` cannot just
+   * advance a step the way a march does -- the phase has to remember it already
+   * has a "yes" on file when it comes back around. Omitted the rest of the time,
+   * like every optional `TurnState` field near the digest.
+   */
+  readonly eighthFaceStep?: 'temple_bury'
 }
 
 export type Direction = 'up' | 'down'
@@ -378,6 +386,33 @@ export type Pending =
     }
   | { readonly kind: 'reinforce'; readonly player: PlayerId }
   | { readonly kind: 'retreat'; readonly player: PlayerId }
+  /**
+   * City (Phase 5e): recruit a 1-health unit from the DUA, or promote one unit in
+   * the controlling army -- one or the other, and "may", so both lists can offer
+   * nothing and the answer can still be "do nothing".
+   */
+  | {
+      readonly kind: 'eighth_face_city'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      /** 1-health units in the DUA that could be recruited. */
+      readonly recruits: readonly UnitId[]
+      /** Every legal one-step promotion of a unit in the controlling army. */
+      readonly promotions: readonly PromotionPair[]
+    }
+  /**
+   * Temple's first decision (Phase 5e): the holder decides *whether* to force a
+   * burial. Genuinely a decision and not a formality -- forcing an opponent whose
+   * DUA holds a Phoenix lets them roll Rise from the Ashes on the way to a burial
+   * that would otherwise not have happened yet.
+   */
+  | { readonly kind: 'eighth_face_temple'; readonly player: PlayerId; readonly slot: TerrainSlot }
+  /**
+   * Temple's second decision: the *opponent* picks which of their own DUA units is
+   * buried -- "of their choice". Not raised at all when the DUA is empty, the same
+   * rule as a damage assignment with nothing to kill.
+   */
+  | { readonly kind: 'temple_bury'; readonly player: PlayerId; readonly options: readonly UnitId[] }
 
 /** Actions answer the current `Pending`. Each `kind` matches a `Pending.kind`. */
 export type GameAction =
@@ -404,6 +439,16 @@ export type GameAction =
     }
   | { readonly kind: 'reinforce'; readonly moves: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[] }
   | { readonly kind: 'retreat'; readonly unitIds: readonly UnitId[] }
+  /** City: one or the other, or neither -- "may" both ways. */
+  | {
+      readonly kind: 'eighth_face_city'
+      readonly choice:
+        | { readonly kind: 'recruit'; readonly unitId: UnitId }
+        | { readonly kind: 'promote'; readonly pair: PromotionPair }
+        | null
+    }
+  | { readonly kind: 'eighth_face_temple'; readonly force: boolean }
+  | { readonly kind: 'temple_bury'; readonly unitId: UnitId }
 
 /**
  * One unit promoted: `unitId` is in the army and goes to the DUA, `partnerId` is in
@@ -598,6 +643,18 @@ export type LogEntry =
       readonly pairs: readonly PromotionPair[]
       /** Save results the budget bought instead. Omitted when none. */
       readonly saveResults?: number
+      /** City's own promotion (Phase 5e) reuses this entry rather than growing a
+       *  second one -- it is the same exchange, on the ordinary one-step rule
+       *  instead of Wild Growth's budget. Omitted for Wild Growth's, which is
+       *  every recorded game so far. */
+      readonly source?: 'city'
+    }
+  /** City recruiting a 1-health unit from the DUA (Phase 5e). */
+  | {
+      readonly kind: 'units_recruited'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly unitIds: readonly UnitId[]
     }
   /** A free move: Firewalking or Teleport walking part of an army off to another
    *  terrain, mid-roll. */
@@ -622,6 +679,9 @@ export type LogEntry =
       readonly kind: 'units_buried'
       readonly player: PlayerId
       readonly unitIds: readonly UnitId[]
+      /** Temple's forced burial (Phase 5e). Omitted for Flame's, Fire breath's and
+       *  every other burial so far. */
+      readonly source?: 'temple'
     }
   /**
    * An effect with a duration started.
@@ -741,14 +801,26 @@ export const DUA_RULES: RuleSet = { ...SAI_RULES, dua: 'active' }
 
 /**
  * Every SAI in the box, targeting ones included: Phase 4's rung, and what the app and
- * the CLI play from Phase 4e on.
+ * the CLI played from Phase 4e through Phase 5d.
  *
  * `magic` is still `'simplified'` -- the eighteen spells are Phase 7 -- and that is
  * not a gap in this rung. Cantrip's magic results are generated and counted, and
  * Dispel Magic's special roll cannot come up because no spell is ever announced to
  * dispel.
  */
-export const FULL_RULES: RuleSet = { ...DUA_RULES, sai: 'full' }
+const SAI_FULL_RULES: RuleSet = { ...DUA_RULES, sai: 'full' }
+
+/**
+ * Every eighth-face icon power (Tower, City, Temple) as well: Phase 5e's rung, and
+ * what the app and the CLI play from here on. Standing Stones stays inert regardless
+ * -- `resolvesIcon` gates it on `magic: 'spells'`, not on this flag, and that stays
+ * true until Phase 7.
+ *
+ * Nothing here can crash the way `sai: 'full'` could: every board carries a terrain
+ * die with an eighth-face icon, so there is no unbuilt-icon problem the way there was
+ * an unbuilt-SAI one. The flip needed the Phase 5e fuzz counters, not a refusal path.
+ */
+export const FULL_RULES: RuleSet = { ...SAI_FULL_RULES, eighthFace: 'full' }
 
 
 export interface GameState {

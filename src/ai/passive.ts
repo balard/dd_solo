@@ -101,5 +101,29 @@ function decideAction(state: GameState, pending: Pending): GameAction {
       return { kind: 'choose_direction', direction: pending.options[0] ?? 'up' }
     case 'choose_missile_target':
       return { kind: 'choose_missile_target', slot: pending.options[0] ?? 'frontier' }
+
+    // City: free, so it takes what it can get -- a promotion first (it never
+    // costs anything a passive player would rather keep), else a recruit, else
+    // there is nothing on offer and "do nothing" is the only legal answer anyway.
+    case 'eighth_face_city': {
+      const [promotion] = pending.promotions
+      if (promotion !== undefined) {
+        return { kind: 'eighth_face_city', choice: { kind: 'promote', pair: promotion } }
+      }
+      const [recruitId] = pending.recruits
+      if (recruitId !== undefined) {
+        return { kind: 'eighth_face_city', choice: { kind: 'recruit', unitId: recruitId } }
+      }
+      return { kind: 'eighth_face_city', choice: null }
+    }
+
+    // Temple: forces every time. A crude opinion, but a real one -- `GreedyAI`
+    // (Phase 9) is what should notice a Phoenix in the opponent's DUA and decline.
+    case 'eighth_face_temple':
+      return { kind: 'eighth_face_temple', force: true }
+
+    // No opinion about which of its own dice to lose, so the first offered.
+    case 'temple_bury':
+      return { kind: 'temple_bury', unitId: pending.options[0] ?? '' }
   }
 }
