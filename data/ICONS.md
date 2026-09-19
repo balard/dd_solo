@@ -71,6 +71,37 @@ v0** — capturing wins the game, but the icon grants nothing (see `docs/RULES-V
 The validator enforces the magic → missile → melee ordering and checks that all four eighth-face
 variants of each type agree on faces 1–7.
 
+## Dragon dice (`data/starter/dragons.json`)
+
+**The number is a face number here too**, as on terrain dice and unlike unit dice — a dragon face
+carries no count at all. Its numbers are in the rules, not on the die: Jaws is always 12 damage
+whichever dragon rolled it, so there is nothing per-face to record.
+
+A dragon die is an **element** plus a **form** (`drake` or `wyrm`), and the form fixes all twelve
+faces. 5 elements × 2 forms = 10 dice. Only the breath differs by element, so the generated JSON
+stores each form's faces once and lists the dice as combinations — the same shape as a terrain die,
+though for a different reason (there it is the eighth face that varies).
+
+| Form | Jaws | Breath | Claw | Belly | Wing | Tail | Treasure |
+|---|---|---|---|---|---|---|---|
+| Drake | 1 | 1 | 4 | 2 | 2 | 2 | — |
+| Wyrm | 1 | 1 | 4 | 2 | — | 3 | 1 |
+
+**The two forms are not a base layout plus one variant face.** A wyrm spends the drake's two wings
+on a third tail *and* a treasure chest. Guessing from "drakes have wings, wyrms have a treasure
+chest" (full rules p. 17 — the only structural hint either rulebook gives) would have produced a
+wyrm with two treasures, and nothing in the books would have contradicted it. These layouts are
+transcribed from real dice.
+
+Face effects are full rules p. 20: `JAWS` 12 damage, `CLAW` 6, `TAIL` 3 and roll again, `WING` 5
+and fly home if it survives, `BELLY` disables that dragon's own five automatic saves for the
+attack, `TREASURE` promotes one unit of the army it is attacking, and `BREATH` kills five
+health-worth plus the element's own effect. Breath is **five SAIs sharing one icon**, one per
+element, because a hybrid dragon applies both of its elements' effects off the one face.
+
+The validator checks exactly one Jaws and one Breath per form, that wings belong to drakes and the
+treasure chest to wyrms, and that all ten dice exist.
+
 ## Elements
 
 `air` (blue), `water` (green), `earth` (yellow), `fire` (red), `death` (black), `ivory` (none).
@@ -82,6 +113,7 @@ Unused in v0 (no spells), recorded now so the spell system can be added without 
 ```
 data/raw/<species>.faces.txt  --[ tools/import_faces.py ]-->  data/starter/units.json
 data/raw/terrains.faces.txt   --[ tools/import_terrains.py ]-->  data/starter/terrains.json
+data/raw/dragons.faces.txt    --[ tools/import_dragons.py ]-->  data/starter/dragons.json
                                                                         |
                                                       tools/validate_data.py -> pass/fail
 ```
@@ -109,8 +141,14 @@ icon names are case-insensitive.
 
 ## Reference art
 
-`python tools/fetch_faces.py` mirrors the real icon SVGs into `assets/faces/` (gitignored) for
-every face our data references. Reference only — the app ships our own glyphs.
+`python tools/fetch_faces.py` mirrors the real icon SVGs into `public/faces/` — the only directory
+Vite serves — and into `assets/faces/` as the offline copy. Both are gitignored. Reference only:
+the app ships our own glyphs and is complete without any of this.
+
+**Dragon faces are the exception to "per species".** They live under `dragons/sais/` and are keyed
+by *form*, not element: all five drakes print the same twelve images, verified by every
+`-<element>-` spelling returning 404. They are also drawn in **white**, for a dark die, where the
+unit art is black — so the UI flattens them with `brightness(0)` exactly as it does terrain art.
 
 The remote asset set is **sparse, per-species, and not derivable from (icon, count)**. It mirrors
 exactly the faces that species actually has: `treefolk/save-4.svg` and `treefolk/magic-4.svg` exist

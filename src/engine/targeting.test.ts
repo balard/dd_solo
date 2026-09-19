@@ -89,6 +89,7 @@ function stage(options: {
     rng: options.rng,
     units,
     effects: options.effects ?? [],
+    dragons: {},
     terrains: {
       p1_home: terrain('p1_home'),
       frontier: terrain('frontier'),

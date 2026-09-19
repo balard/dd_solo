@@ -8,12 +8,12 @@
  */
 import { Fragment } from 'react'
 
-import { terrainDie, terrainFaceAction, unitType } from '../../data/load'
+import { dragonName, terrainDie, terrainFaceAction, unitType } from '../../data/load'
 
-import type { TerrainFaceNumber } from '../../data/types'
+import type { ResultType, TerrainFaceNumber } from '../../data/types'
 
 import { rollOnTheTable } from '../../engine/turn'
-import { SAI_TEXT } from '../../engine/sai'
+import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../../engine/sai'
 import {
   livingUnits,
   type GameAction,
@@ -35,6 +35,7 @@ const nameOf = (state: GameState, id: UnitId): string => {
 }
 
 import {
+  breathSelection,
   damageSelection,
   moveDraft,
   promoteDraft,
@@ -58,8 +59,10 @@ export function ActionBar({
   selection,
   staged,
   pairs,
+  counters,
   onStage,
   onPair,
+  onCount,
   onClearSelection,
   onClearDraft,
   dispatch,
@@ -76,8 +79,11 @@ export function ActionBar({
    *  A second draft rather than a wider one -- they answer different questions and
    *  are never both live. */
   pairs: readonly PromotionPair[]
+  /** The dragon sheets' draft: a tally under composite keys. */
+  counters: Readonly<Record<string, number>>
   onStage: (moves: readonly ReinforceMove[]) => void
   onPair: (pair: PromotionPair) => void
+  onCount: (key: string, by: number) => void
   onClearSelection: () => void
   /** Clear is not "unselect": mid-reinforce it has to drop the staged moves too. */
   onClearDraft: () => void
@@ -163,6 +169,236 @@ export function ActionBar({
               </button>
             </>
           )}
+        </div>
+      </div>
+    )
+  }
+
+  /**
+   * A breath: five health-worth of your own army, chosen by you, maximally.
+   *
+   * The damage sheet again, and deliberately so -- it is the same rule with a
+   * different reason, so it gets the same grid and the same confirm gate rather
+   * than a second way of asking one question.
+   */
+  if (prompt.custom === 'dragon_breath' && pending.kind === 'dragon_breath') {
+    const { absorbed, required, ready, suggestion } = breathSelection(state, pending, selection)
+
+    return (
+      <div className="action-bar">
+        <p className="question">{prompt.question}</p>
+        <p className={`tally ${ready ? 'is-ready' : ''}`}>
+          absorbed <b>{absorbed}</b> / must reach <b>{required}</b>
+        </p>
+        <div className="choices">
+          <button
+            type="button"
+            className="choice"
+            disabled={!ready}
+            onClick={() => {
+              dispatch({ kind: 'dragon_breath', unitIds: [...selection] })
+              onClearSelection()
+            }}
+          >
+            Confirm losses
+          </button>
+          <button
+            type="button"
+            className="choice secondary"
+            onClick={() => {
+              dispatch({ kind: 'dragon_breath', unitIds: suggestion })
+              onClearSelection()
+            }}
+          >
+            Auto
+          </button>
+          <button type="button" className="choice secondary" onClick={onClearSelection}>
+            Clear
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  /**
+   * The combination roll's allocation: what each ID becomes, and how a Create
+   * Fireminions splits.
+   *
+   * Two pools over the same three buckets, so one counter row each. The confirm
+   * gate is "spent exactly", which is `allocateIds`' own rule -- the engine would
+   * refuse anything else, and a disabled button with the tally beside it says why
+   * before the click rather than after.
+   */
+  if (prompt.custom === 'dragon_allocate' && pending.kind === 'dragon_allocate') {
+    const pools = [
+      { key: 'ids', label: 'ID results', total: pending.ids },
+      { key: 'flexible', label: 'Create Fireminions', total: pending.flexible },
+    ].filter((pool) => pool.total > 0)
+
+    const spent = (poolKey: string) =>
+      DRAGON_ROLL_KINDS.reduce((sum, kind) => sum + (counters[`${poolKey}.${kind}`] ?? 0), 0)
+    const ready = pools.every((pool) => spent(pool.key) === pool.total)
+
+    const build = (poolKey: string) => {
+      const out: Partial<Record<ResultType, number>> = {}
+      for (const kind of DRAGON_ROLL_KINDS) {
+        const n = counters[`${poolKey}.${kind}`] ?? 0
+        if (n > 0) out[kind] = n
+      }
+      return out
+    }
+
+    const roll = rollOnTheTable(state)
+
+    return (
+      <div className="action-bar">
+        <p className="question">{prompt.question}</p>
+        {/* The roll itself, because the question cannot be answered without it: how
+            many IDs there are to spend is the decision, and which dice already gave
+            melee or saves is what decides where they should go. */}
+        {roll !== null && roll.dice.length > 0 && (
+          <div className="sai-roll">
+            <div className="roll-head">your dragon roll</div>
+            <RollStrip dice={roll.dice} />
+          </div>
+        )}
+        {pools.map((pool) => (
+          <Fragment key={pool.key}>
+            <p className={`tally ${spent(pool.key) === pool.total ? 'is-ready' : ''}`}>
+              {pool.label}: spent <b>{spent(pool.key)}</b> / <b>{pool.total}</b>
+            </p>
+            <div className="choices">
+              {DRAGON_ROLL_KINDS.map((kind) => (
+                <Fragment key={kind}>
+                  <button
+                    type="button"
+                    className="choice secondary"
+                    disabled={(counters[`${pool.key}.${kind}`] ?? 0) === 0}
+                    onClick={() => onCount(`${pool.key}.${kind}`, -1)}
+                  >
+                    −
+                  </button>
+                  <span className="tally">
+                    {kind} <b>{counters[`${pool.key}.${kind}`] ?? 0}</b>
+                  </span>
+                  <button
+                    type="button"
+                    className="choice secondary"
+                    disabled={spent(pool.key) >= pool.total}
+                    onClick={() => onCount(`${pool.key}.${kind}`, 1)}
+                  >
+                    +
+                  </button>
+                </Fragment>
+              ))}
+            </div>
+          </Fragment>
+        ))}
+        <div className="choices">
+          <button
+            type="button"
+            className="choice"
+            disabled={!ready}
+            onClick={() => {
+              dispatch({ kind: 'dragon_allocate', ids: build('ids'), flexible: build('flexible') })
+              onClearDraft()
+            }}
+          >
+            Confirm the roll
+          </button>
+          <button type="button" className="choice secondary" onClick={onClearDraft}>
+            Clear
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  /**
+   * Spending melee and missile on the attacking dragons.
+   *
+   * Never a forced maximum, unlike every damage decision before it: the rules say
+   * a player *may* allocate, and results that cannot reach a threshold buy nothing
+   * wherever they go. So the confirm button is always live and the sheet just says
+   * which dragons the current split would actually kill.
+   */
+  if (prompt.custom === 'dragon_damage_split' && pending.kind === 'dragon_damage_split') {
+    const left = (type: 'melee' | 'missile') =>
+      (type === 'melee' ? pending.melee : pending.missile) -
+      pending.targets.reduce((sum, t) => sum + (counters[`${type}.${t.dragonId}`] ?? 0), 0)
+
+    const build = (type: 'melee' | 'missile') => {
+      const out: Record<string, number> = {}
+      for (const target of pending.targets) {
+        const n = counters[`${type}.${target.dragonId}`] ?? 0
+        if (n > 0) out[target.dragonId] = n
+      }
+      return out
+    }
+
+    return (
+      <div className="action-bar">
+        <p className="question">{prompt.question}</p>
+        <p className="tally">
+          left: <b>{left('melee')}</b> melee, <b>{left('missile')}</b> missile
+        </p>
+        {pending.targets.map((target) => {
+          const dragon = state.dragons[target.dragonId]
+          const dying = (['melee', 'missile'] as const).some(
+            (type) => (counters[`${type}.${target.dragonId}`] ?? 0) >= target.threshold,
+          )
+          return (
+            <Fragment key={target.dragonId}>
+              <p className={`tally ${dying ? 'is-ready' : ''}`}>
+                {dragon === undefined ? target.dragonId : dragonName(dragon.dieId)} — needs{' '}
+                <b>{target.threshold}</b> of one type{dying ? ' — dies' : ''}
+              </p>
+              <div className="choices">
+                {(['melee', 'missile'] as const).map((type) => (
+                  <Fragment key={type}>
+                    <button
+                      type="button"
+                      className="choice secondary"
+                      disabled={(counters[`${type}.${target.dragonId}`] ?? 0) === 0}
+                      onClick={() => onCount(`${type}.${target.dragonId}`, -1)}
+                    >
+                      −
+                    </button>
+                    <span className="tally">
+                      {type} <b>{counters[`${type}.${target.dragonId}`] ?? 0}</b>
+                    </span>
+                    <button
+                      type="button"
+                      className="choice secondary"
+                      disabled={left(type) === 0}
+                      onClick={() => onCount(`${type}.${target.dragonId}`, 1)}
+                    >
+                      +
+                    </button>
+                  </Fragment>
+                ))}
+              </div>
+            </Fragment>
+          )
+        })}
+        <div className="choices">
+          <button
+            type="button"
+            className="choice"
+            onClick={() => {
+              dispatch({
+                kind: 'dragon_damage_split',
+                melee: build('melee'),
+                missile: build('missile'),
+              })
+              onClearDraft()
+            }}
+          >
+            Confirm
+          </button>
+          <button type="button" className="choice secondary" onClick={onClearDraft}>
+            Clear
+          </button>
         </div>
       </div>
     )

@@ -45,10 +45,35 @@ export type Modifier =
       readonly share: ModifierShare
     }
   | { readonly kind: 'add'; readonly resultType: ResultType; readonly amount: number }
+  /**
+   * The Death dragon's breath: "the army ignores all of its ID results until the
+   * beginning of its next turn" (full rules p. 20).
+   *
+   * A modifier of its own rather than a `multiply` by zero, for two reasons. It is
+   * not a step-9 multiplier, so it must not eat that type's one-multiplier budget --
+   * an army holding an eighth face would otherwise throw rather than roll. And it
+   * happens before step 6's subtract, because an ID result the army is ignoring was
+   * never there to be subtracted from.
+   */
+  | { readonly kind: 'ignore_ids'; readonly resultType: ResultType }
 
 /** The eighth-face holder's doubled ID results, as the step-9 modifier it is. */
 export function doubleIdsModifier(resultType: ResultType): Modifier {
   return { kind: 'multiply', resultType, by: 2, share: 'id' }
+}
+
+/** Every result type, for an effect that speaks about a roll rather than a type. */
+export const ALL_RESULT_TYPES: readonly ResultType[] = [
+  'melee',
+  'missile',
+  'magic',
+  'save',
+  'maneuver',
+]
+
+/** Death breath, as one modifier per result type -- it applies to every roll. */
+export function ignoreIdsModifiers(): readonly Modifier[] {
+  return ALL_RESULT_TYPES.map((resultType) => ({ kind: 'ignore_ids', resultType }) as const)
 }
 
 /**
@@ -246,6 +271,10 @@ export function applyModifiers(
 ): number {
   const modifiers = all.filter((m) => m.resultType === resultType)
   let value = share
+
+  // Before step 6: an ID result the army is ignoring is not there to be subtracted
+  // from, halved, or doubled by an eighth face later on.
+  if (modifiers.some((m) => m.kind === 'ignore_ids')) value = { ...value, id: 0 }
 
   for (const modifier of modifiers) {
     if (modifier.kind === 'subtract') value = subtract(value, modifier.amount)

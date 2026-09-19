@@ -5,10 +5,12 @@
  * is the cheapest bug detector available here: it finds illegal states, unreachable
  * phases, infinite loops and crashes far faster than hand-written scenarios can.
  */
+import type { ResultType } from '../data/types'
 import { damageOptions, healthsOf } from '../engine/damage'
 import { growthPartners } from '../engine/dua'
 import { isAsleep } from '../engine/effects'
 import { nextInt, type RngState } from '../engine/rng'
+import { DRAGON_ROLL_KINDS } from '../engine/sai'
 import {
   TERRAIN_SLOTS,
   army as armyRef,
@@ -268,6 +270,77 @@ export const randomAi: AiPlayer = {
         const [unitId, next] = pick(rng, pending.options)
         return [{ kind: 'temple_bury', unitId } as GameAction, next] as const
       }
+
+      // A breath is forced to its maximum like any damage assignment, so the only
+      // freedom is which maximal set -- the engine's suggestion is one of them.
+      case 'dragon_breath': {
+        const army = armyRef(state, pending.player, pending.slot)
+        return [
+          {
+            kind: 'dragon_breath',
+            unitIds: damageOptions(army, pending.health).suggestion,
+          } as GameAction,
+          rng,
+        ] as const
+      }
+
+      case 'dragon_treasure': {
+        const [pair, next] = pick(rng, [...pending.promotions, null])
+        return [{ kind: 'dragon_treasure', pair } as GameAction, next] as const
+      }
+
+      /*
+       * Spread both pools across the three kinds at random, one result at a time.
+       *
+       * Not "all into save": the split is the whole point of a combination roll, and
+       * a fuzz opponent that always answered the same way would never produce a roll
+       * that both kills a dragon and saves the army -- which is exactly the state
+       * worth finding bugs in. The same lesson as `reinforce`'s one destination.
+       */
+      case 'dragon_allocate': {
+        const [ids, afterIds] = spread(rng, pending.ids)
+        const [flexible, next] = spread(afterIds, pending.flexible)
+        return [{ kind: 'dragon_allocate', ids, flexible } as GameAction, next] as const
+      }
+
+      /*
+       * Each dragon gets a random slice of each pool, which may or may not kill it.
+       * Deliberately not the greedy "spend exactly the threshold" that `PassiveAI`
+       * plays: a fuzz that always killed what it could would never exercise a dragon
+       * surviving an attack, or a pool spent on a dragon it cannot reach.
+       */
+      case 'dragon_damage_split': {
+        let state_ = rng
+        const melee: Record<string, number> = {}
+        const missile: Record<string, number> = {}
+        let meleeLeft = pending.melee
+        let missileLeft = pending.missile
+        for (const target of pending.targets) {
+          const [m, afterM] = nextInt(state_, meleeLeft + 1)
+          const [n, afterN] = nextInt(afterM, missileLeft + 1)
+          state_ = afterN
+          melee[target.dragonId] = m
+          missile[target.dragonId] = n
+          meleeLeft -= m
+          missileLeft -= n
+        }
+        return [{ kind: 'dragon_damage_split', melee, missile } as GameAction, state_] as const
+      }
     }
   },
+}
+
+/** Scatters `total` results at random across the three kinds a dragon roll counts. */
+function spread(
+  rng: RngState,
+  total: number,
+): readonly [Readonly<Partial<Record<ResultType, number>>>, RngState] {
+  const out: Partial<Record<ResultType, number>> = {}
+  let state = rng
+  for (let n = 0; n < total; n++) {
+    const [kind, next] = pick(state, DRAGON_ROLL_KINDS)
+    state = next
+    out[kind] = (out[kind] ?? 0) + 1
+  }
+  return [out, state] as const
 }

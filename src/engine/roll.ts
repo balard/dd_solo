@@ -248,13 +248,6 @@ export interface RollOutcome {
   readonly effects: readonly RollEffect[]
 }
 
-/** The type a roll's per-die display number is counted in: the first of its kinds. */
-function primaryKind(spec: RollSpec): ResultType {
-  const primary = spec.kinds[0]
-  if (primary === undefined) throw new Error('a roll needs at least one result type')
-  return primary
-}
-
 /** One face, sorted into the pipeline steps it feeds. */
 interface Contribution {
   /** Step 5, held apart because step 6 removes ID results last. */
@@ -262,6 +255,8 @@ interface Contribution {
   readonly normals: Readonly<Partial<Record<ResultType, number>>>
   /** Step 8. */
   readonly saiResults: Readonly<Partial<Record<ResultType, number>>>
+  /** Step 8, but the roller picks the type. Only a combination roll produces any. */
+  readonly flexible: number
   readonly effects: readonly RollEffectBody[]
   /** Which SAI produced those effects, for the log. Null on a normal face. */
   readonly saiName: string | null
@@ -269,7 +264,7 @@ interface Contribution {
   readonly reroll: boolean
 }
 
-const NO_SAI = { saiResults: {}, effects: [], saiName: null, reroll: false } as const
+const NO_SAI = { saiResults: {}, flexible: 0, effects: [], saiName: null, reroll: false } as const
 
 /**
  * Sorts one rolled face into the steps it feeds.
@@ -293,6 +288,7 @@ function classify(face: Face, spec: RollSpec, ruleSet: RuleSet): Contribution {
       idPool: 0,
       normals: {},
       saiResults: outcome.results,
+      flexible: outcome.flexible ?? 0,
       effects: outcome.effects,
       saiName: face.sai,
       reroll: outcome.reroll,
@@ -306,7 +302,7 @@ function classify(face: Face, spec: RollSpec, ruleSet: RuleSet): Contribution {
 
 /**
  * The per-die number the log and the UI show: its step-5 and step-8 contribution to
- * the roll's primary type, doubled if the eighth face is doubling ID results.
+ * **everything this roll counts**, doubled if the eighth face is doubling IDs.
  *
  * The authoritative total is `RollOutcome.totals`, which the pipeline computes in
  * the aggregate. This is the same arithmetic on one die, kept because a roll strip
@@ -314,24 +310,33 @@ function classify(face: Face, spec: RollSpec, ruleSet: RuleSet): Contribution {
  * because ID doubling is the one modifier that is per-die by nature. SAI results are
  * added *undoubled*: step 8 runs after step 7 and the only multiplier in play
  * multiplies the ID share alone.
+ *
+ * **Summed across the kinds, not just the first one.** With one counted type those
+ * are the same number, which is every roll before Phase 6. A dragon roll counts
+ * melee, missile and save at once, and reading only the first meant a die that
+ * rolled four saves reported zero -- so the strip greyed it out as a blank while its
+ * saves were being counted in the total right beside it.
  */
-function perDieResults(
-  face: Face,
-  contribution: Contribution,
-  primary: ResultType,
-  spec: RollSpec,
-): number {
-  const sai = contribution.saiResults[primary] ?? 0
+function perDieResults(face: Face, contribution: Contribution, spec: RollSpec): number {
+  // `flexible` is counted too: a Create Fireminions in a dragon roll really did
+  // generate X results and the player is only choosing their *type*, so leaving it
+  // out greys the die out as a blank next to the pool it just contributed to.
+  const sai =
+    spec.kinds.reduce((sum, kind) => sum + (contribution.saiResults[kind] ?? 0), 0) +
+    contribution.flexible
 
-  if (face.icon !== 'ID') return (contribution.normals[primary] ?? 0) + sai
+  if (face.icon !== 'ID') {
+    return spec.kinds.reduce((sum, kind) => sum + (contribution.normals[kind] ?? 0), 0) + sai
+  }
   if (spec.countIds === false) return sai
 
-  for (const modifier of spec.modifiers) {
-    if (modifier.kind === 'multiply' && modifier.share === 'id' && modifier.resultType === primary) {
-      return contribution.idPool * modifier.by + sai
-    }
-  }
-  return contribution.idPool + sai
+  // The ID pool is one number however many types it can be spent on, so it is
+  // counted once -- doubled if any counted type is doubling it.
+  const doubles = spec.modifiers.find(
+    (m) => m.kind === 'multiply' && m.share === 'id' && spec.kinds.includes(m.resultType),
+  )
+  const by = doubles !== undefined && doubles.kind === 'multiply' ? doubles.by : 1
+  return contribution.idPool * by + sai
 }
 
 /**
@@ -410,6 +415,32 @@ export function rerollSweep(
 }
 
 /**
+ * What a combination roll leaves for its roller to allocate: the ID pool, and any
+ * step-8 results whose type the roller chooses (Create Fireminions).
+ *
+ * Pure, and deliberately separate from `resolveFaces` -- which cannot run at all on
+ * a multi-kind roll until the allocation exists, since `allocateIds` refuses a
+ * combination roll without one. So the dragon attack resolves in three moves:
+ * ask this what is on the table, put the question to the roller, then resolve the
+ * same faces with the answer. The middle step draws no randomness, which is the
+ * whole point of `resolveFaces` being pure.
+ */
+export function rollPools(
+  dice: readonly RawDie[],
+  spec: RollSpec,
+  ruleSet: RuleSet,
+): { readonly ids: number; readonly flexible: number } {
+  let ids = 0
+  let flexible = 0
+  for (const die of dice) {
+    const contribution = classify(faceOf(die), spec, ruleSet)
+    ids += contribution.idPool
+    flexible += contribution.flexible
+  }
+  return { ids, flexible }
+}
+
+/**
  * Steps 4 to 10: what the rules make of faces already on the table.
  *
  * **Pure.** No RNG, no `GameState`, and no dependence on anything but the dice, the
@@ -422,8 +453,6 @@ export function resolveFaces(
   spec: RollSpec,
   ruleSet: RuleSet,
 ): RollOutcome {
-  const primary = primaryKind(spec)
-
   const shown: DieRoll[] = []
   const normals = new Map<ResultType, number>(spec.kinds.map((kind) => [kind, 0]))
   // Seeded with the player's own step-8 results, which join exactly where a face's do.
@@ -451,7 +480,7 @@ export function resolveFaces(
       typeId: die.typeId,
       faceIndex: die.faceIndex,
       face,
-      results: perDieResults(face, contribution, primary, spec),
+      results: perDieResults(face, contribution, spec),
       ...(die.reroll === true ? { reroll: true as const } : {}),
       ...(contribution.effects.length > 0 ? { effects: contribution.effects } : {}),
     })

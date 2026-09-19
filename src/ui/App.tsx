@@ -70,6 +70,11 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // dead. A second list rather than a wider one -- the two questions are never asked
   // at the same time, and a pair is not a move.
   const [pairs, setPairs] = useState<readonly PromotionPair[]>([])
+  // And the third draft, for the two dragon sheets: a tally under composite keys
+  // (`ids.melee`, `missile.<dragonId>`). One counter map rather than two shaped
+  // drafts, because both questions are "spread this pool across those buckets" and
+  // neither is ever live at the same time as the other.
+  const [counters, setCounters] = useState<Readonly<Record<string, number>>>({})
 
   const [inspecting, setInspecting] = useState<UnitId | null>(null)
   const [showFallen, setShowFallen] = useState(false)
@@ -83,6 +88,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
     setSelection(new Set())
     setStaged([])
     setPairs([])
+    setCounters({})
     setInspecting(null)
   }, [key])
 
@@ -95,7 +101,11 @@ function GameView({ game }: { readonly game: PlayingGame }) {
     setSelection(new Set())
     setStaged([])
     setPairs([])
+    setCounters({})
   }
+
+  const count = (key_: string, by: number) =>
+    setCounters((current) => ({ ...current, [key_]: Math.max(0, (current[key_] ?? 0) + by) }))
 
   const toggle = (id: UnitId) =>
 
@@ -322,8 +332,10 @@ function GameView({ game }: { readonly game: PlayingGame }) {
         selection={selection}
         staged={staged}
         pairs={pairs}
+        counters={counters}
         onStage={(moves) => setStaged((current) => [...current, ...moves])}
         onPair={(pair) => setPairs((current) => [...current, pair])}
+        onCount={count}
         onClearSelection={() => setSelection(new Set())}
         onClearDraft={clearDraft}
         dispatch={dispatch}

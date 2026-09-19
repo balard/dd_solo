@@ -9,7 +9,8 @@
 import { Fragment, type ReactElement } from 'react'
 
 
-import { unitType } from '../../data/load'
+import { dragonDie, dragonName, unitType } from '../../data/load'
+import { BREATH_NAME, DRAGON_ICON_TEXT } from '../../engine/dragons'
 import { saiPhrase, saisBehind } from '../../engine/roll'
 
 
@@ -24,6 +25,7 @@ import {
 
 
 import { RollStrip } from './DiceGrid'
+import { DragonFaceArt } from './FaceArt'
 import { speciesInfo } from './Elements'
 import { slotLabel } from './prompts'
 
@@ -464,6 +466,109 @@ function Line({
         </p>
       )
     }
+    case 'dragons_drawn':
+      return (
+        <p className="log-line muted">
+          {who(entry.player)} {verb(entry.player, 'brings', 'bring')}{' '}
+          {entry.pool.map(dragonName).join(' and ')} &mdash;{' '}
+          <b>{dragonName(entry.frontier)}</b> starts at the Frontier
+        </p>
+      )
+
+    /*
+     * One line per dragon, not one per face.
+     *
+     * This read "Fire Wyrm breath, Fire Wyrm breath, Fire Wyrm tail, Fire Wyrm claw,
+     * Earth Drake tail, Earth Drake claw" -- which repeats the name six times, hides
+     * that four of those faces are one die rerolling itself, never says who was
+     * being attacked, and never says what any of it came to.
+     */
+    case 'dragon_attack':
+      return (
+        <div className="log-roll">
+          <div className="roll-head">
+            dragon attack at {where(entry.slot)} &mdash; {whoLower(entry.defender)}{' '}
+            {verb(entry.defender, 'is', 'are')} marching
+          </div>
+          {entry.dragons.map((dragon) => (
+            <div className="dragon-roll" key={dragon.dragonId}>
+              <span className={`dragon-roll-who dragon-el-${dragonDie(dragon.dieId).element}`}>
+                <b>{dragonName(dragon.dieId)}</b>
+                {' → '}
+                {dragon.target.kind === 'army'
+                  ? `${whoLower(entry.defender)}${entry.defender === human ? 'r' : ''} army`
+                  : dragonName(dragon.target.dieId)}
+              </span>
+              {/* Its faces, drawn like the army's dice rather than spelled out --
+                  and chained by arrows, because a tail rerolling into a claw is one
+                  die thrown twice, not two dragons. */}
+              <span className="roll-strip">
+                {dragon.faces.map(({ face, icon }, i) => (
+                  <Fragment key={i}>
+                    {i > 0 && (
+                      <span className="reroll-arrow" aria-hidden="true">
+                        &rarr;
+                      </span>
+                    )}
+                    <span
+                      className={`rolled dragon-face dragon-el-${dragonDie(dragon.dieId).element}`}
+                      title={`${icon.charAt(0)}${icon.slice(1).toLowerCase()} — ${
+                        DRAGON_ICON_TEXT[icon]
+                      }${i > 0 ? ' (rerolled)' : ''}`}
+                    >
+                      {/* 30px: the same floor the unit roll strip uses, and the
+                          size at which the real art starts beating a glyph. */}
+                      <DragonFaceArt dieId={dragon.dieId} face={face} icon={icon} size={30} />
+                    </span>
+                  </Fragment>
+                ))}
+              </span>
+              {dragon.damage > 0 && <span className="muted">{dragon.damage} damage</span>}
+            </div>
+          ))}
+        </div>
+      )
+
+    case 'dragon_breath':
+      return (
+        <p className="log-line">
+          <b>{BREATH_NAME[entry.element]}</b> kills{' '}
+          {entry.unitIds.map((id) => nameOf(state, id)).join(', ') || 'nothing'}
+        </p>
+      )
+
+    case 'dragon_breath_effect':
+      return (
+        <p className="log-line muted">
+          {BREATH_NAME[entry.element]} lingers on {whoLower(entry.player)}
+          {"'"}s army at {where(entry.slot)} until {whoLower(entry.player)} next{' '}
+          {verb(entry.player, 'takes', 'take')} a turn
+        </p>
+      )
+
+    // A `div` wrapper, not a `p`: `RollStrip` is a block, and a div inside a
+    // paragraph is invalid nesting that React only complains about at runtime.
+    case 'dragon_roll':
+      return (
+        <div className="log-roll">
+          <div className="roll-head">
+            {who(entry.player)} {verb(entry.player, 'answers', 'answer')} the dragons
+          </div>
+          <RollStrip dice={entry.dice} />
+          <div className="roll-sum">
+            <b>{entry.totals.melee}</b> melee, <b>{entry.totals.missile}</b> missile,{' '}
+            <b>{entry.totals.save}</b> save
+          </div>
+        </div>
+      )
+
+    case 'dragon_home':
+      return (
+        <p className="log-line">
+          {dragonName(entry.dieId)} {entry.why === 'slain' ? 'is slain' : 'flies away'} and returns
+          to its Summoning Pool
+        </p>
+      )
     case 'game_start':
     case 'terrain_placed':
       return null

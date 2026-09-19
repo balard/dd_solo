@@ -11,6 +11,7 @@ import { maxResults, resolveRoll, rollArmy, saiPhrase, saisBehind, type DieRoll 
 
 
 import {
+  DRAGON_ROLL_KINDS,
   LIVE_SAIS,
   SAI_TEXT,
   TARGETING_SAIS,
@@ -37,6 +38,7 @@ import {
 } from './types'
 
 const FULL_RULES: RuleSet = { ...V0_RULES, sai: 'full' }
+const DRAGON_RULES: RuleSet = { ...FULL_RULES, dragons: true }
 
 const sai = (name: string, count = 4): SaiFace => ({ count, icon: 'SAI', sai: name })
 
@@ -310,6 +312,23 @@ describe('the rungs of ruleSet.sai', () => {
   })
 
   /**
+   * ...until dragons, where three of them gain a sentence that does. The bound is
+   * over every roll an SAI could meet, so it has to move exactly when the ruleset
+   * makes that roll reachable -- and not before, or every game without dragons would
+   * carry a ceiling raised for one it cannot play.
+   */
+  it('gains the dragon-attack results only under dragons: true', () => {
+    for (const [name, type] of [
+      ['Bullseye', 'missile'],
+      ['Double Strike', 'melee'],
+      ['Smite', 'melee'],
+    ] as const) {
+      expect(saiMaxResults(sai(name), type, FULL_RULES), `${name} without dragons`).toBe(0)
+      expect(saiMaxResults(sai(name), type, DRAGON_RULES), `${name} with dragons`).toBe(4)
+    }
+  })
+
+  /**
    * Both of these used to throw "needs spells", and both were misfiled.
    *
    * Cantrip's *first* sentence is a plain result generator -- "during a magic action,
@@ -531,6 +550,105 @@ const DARKTREE_SURPRISE = 2
 const GUARDIAN_MELEE = 1
 const OAKLING_MELEE = 1
 
+describe('the dragon roll', () => {
+  const dragon: RollPurpose = { kind: 'dragon_attack' }
+  const inDragonRoll = (name: string, count = 4) =>
+    saiEffects(sai(name, count), { purpose: dragon, isCounter: false }, DRAGON_RULES)
+
+  /**
+   * The seven SAIs whose `Applies` column names Dragon Attack, and exactly what each
+   * one's dragon sentence says. Transcribed from the reference, not inferred from
+   * the melee sentence -- Double Strike's dragon half generates results where its
+   * melee half targets units, and Counter's generates two types at once.
+   */
+  it('gives each dragon-attack SAI the results its own sentence names', () => {
+    expect(inDragonRoll('Bullseye').results).toEqual({ missile: 4 })
+    expect(inDragonRoll('Double Strike').results).toEqual({ melee: 4 })
+    expect(inDragonRoll('Smite').results).toEqual({ melee: 4 })
+    expect(inDragonRoll('Hoof').results).toEqual({ save: 4 })
+    expect(inDragonRoll('Counter').results).toEqual({ save: 4, melee: 4 })
+    expect(inDragonRoll('Volley').results).toEqual({ save: 4, missile: 4 })
+    expect(inDragonRoll('Rend').results).toEqual({ melee: 4 })
+  })
+
+  /** Smite's melee-attack half is unsavable damage; its dragon half is not. */
+  it('turns Smite from unsavable damage into plain melee results', () => {
+    expect(saiEffects(sai('Smite'), { purpose: melee, isCounter: false }, DRAGON_RULES)).toEqual({
+      results: {},
+      effects: [{ kind: 'unsavable', damage: 4 }],
+      reroll: false,
+    })
+    expect(inDragonRoll('Smite').effects).toEqual([])
+  })
+
+  /** Rend rerolls in a dragon attack too -- its sentence covers both. */
+  it('keeps Rend reroll and drops the targeting SAIs reroll', () => {
+    expect(inDragonRoll('Rend').reroll).toBe(true)
+    expect(inDragonRoll('Bullseye').reroll).toBe(false)
+    expect(inDragonRoll('Double Strike').reroll).toBe(false)
+  })
+
+  /** Neither targets anything here: a dragon is not an army with units to pick out. */
+  it('produces no targeting effects at all', () => {
+    for (const name of ['Bullseye', 'Double Strike', 'Smite', 'Counter', 'Volley']) {
+      expect(inDragonRoll(name).effects, name).toEqual([])
+    }
+  })
+
+  /**
+   * "If a type of roll is not listed ... that SAI has no effect in that type of
+   * roll", and Dragon Attack is its own listed type. So the melee-only targeting
+   * SAIs do nothing here even though a dragon roll counts melee -- including Rise
+   * from the Ashes, whose column reads Save Special rather than Dragon Attack.
+   */
+  it('is silent for every SAI whose Applies column omits it', () => {
+    for (const name of [
+      'Flame',
+      'Seize',
+      'Sleep',
+      'Choke',
+      'Confuse',
+      'Smother',
+      'Firecloud',
+      'Surprise',
+      'Galeforce',
+      'Rise from the Ashes',
+    ]) {
+      expect(inDragonRoll(name), name).toEqual({ results: {}, effects: [], reroll: false })
+    }
+  })
+
+  /** Fly offers maneuver or save; a dragon roll counts only save, so no choice. */
+  it('resolves an or-SAI to the one type the roll counts', () => {
+    expect(inDragonRoll('Fly').results).toEqual({ save: 4 })
+    expect(inDragonRoll('Fly').flexible).toBeUndefined()
+  })
+
+  /** Trample generates both and the roll takes the one it counts -- melee here. */
+  it('lets Trample through on its melee half', () => {
+    expect(inDragonRoll('Trample').results).toEqual({ maneuver: 4, melee: 4 })
+  })
+
+  /**
+   * The only SAI in the box whose choice survives: all three of the roll's kinds are
+   * on its list, so p. 27's "the player may split those results between those
+   * required by the roll" applies and the split comes back in `RollSpec.saiResults`.
+   */
+  it('leaves Create Fireminions for the roller to split', () => {
+    const outcome = inDragonRoll('Create Fireminions')
+    expect(outcome.flexible).toBe(4)
+    expect(outcome.results).toEqual({})
+    // With one counted type there is nothing to choose and it answers directly.
+    expect(
+      saiEffects(sai('Create Fireminions'), { purpose: melee, isCounter: false }, DRAGON_RULES),
+    ).toEqual({ results: { melee: 4 }, effects: [], reroll: false })
+  })
+
+  it('counts melee, missile and save, in that order', () => {
+    expect(DRAGON_ROLL_KINDS).toEqual(['melee', 'missile', 'save'])
+  })
+})
+
 describe('SAI results reach the roll', () => {
   it('confirms the faces these tests lean on', () => {
     expect(faceOf('treefolk.strangle_vine', VINE_REND)).toEqual(sai('Rend'))
@@ -658,6 +776,7 @@ function stage(options: {
     rng: options.rng,
     units,
     effects: [],
+    dragons: {},
     terrains: {
       p1_home: terrain('p1_home'),
       frontier: terrain('frontier'),

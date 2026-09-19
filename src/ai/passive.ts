@@ -125,5 +125,49 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     // No opinion about which of its own dice to lose, so the first offered.
     case 'temple_bury':
       return { kind: 'temple_bury', unitId: pending.options[0] ?? '' }
+
+    // A breath kills five health-worth and the owner only picks which: the same
+    // maximal rule as any damage assignment, and declining is not on offer.
+    case 'dragon_breath':
+      return {
+        kind: 'dragon_breath',
+        unitIds: damageOptions(armyRef(state, pending.player, pending.slot), pending.health)
+          .suggestion,
+      }
+
+    // Free, like City's: a treasure promotion costs nothing a passive player would
+    // rather keep, so declining it would be surrender rather than passivity.
+    case 'dragon_treasure':
+      return { kind: 'dragon_treasure', pair: pending.promotions[0] ?? null }
+
+    // Everything into saves. Passive has one thing it wants from a dragon attack --
+    // to still have an army afterwards -- and melee and missile only kill dragons.
+    // `GreedyAI` is what should weigh a slaying against the casualties.
+    case 'dragon_allocate':
+      return {
+        kind: 'dragon_allocate',
+        ids: { save: pending.ids },
+        flexible: { save: pending.flexible },
+      }
+
+    // It spends what it has where it can kill, which is free: melee and missile
+    // results have no other use in a dragon attack, and holding them back would
+    // leave a dragon alive for no gain.
+    case 'dragon_damage_split': {
+      const melee: Record<string, number> = {}
+      const missile: Record<string, number> = {}
+      let meleeLeft = pending.melee
+      let missileLeft = pending.missile
+      for (const target of pending.targets) {
+        if (meleeLeft >= target.threshold) {
+          melee[target.dragonId] = target.threshold
+          meleeLeft -= target.threshold
+        } else if (missileLeft >= target.threshold) {
+          missile[target.dragonId] = target.threshold
+          missileLeft -= target.threshold
+        }
+      }
+      return { kind: 'dragon_damage_split', melee, missile }
+    }
   }
 }

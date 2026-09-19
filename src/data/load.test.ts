@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  DRAGON_DICE,
+  DRAGON_FORM_TYPES,
   SPECIES,
   TERRAIN_DICE,
   TERRAIN_TYPES,
   UNIT_TYPES,
+  dragonDie,
+  dragonFaceIcon,
+  dragonForm,
   parseFace,
   terrainType,
   unitType,
   unitsOfSpecies,
 } from './load'
-import { DataError, type Face } from './types'
+import { DataError, type DragonFaceNumber, type DragonIcon, type Face } from './types'
+
+const FACE_NUMBERS: readonly DragonFaceNumber[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 describe('parseFace', () => {
   it('parses a normal icon with its count', () => {
@@ -130,5 +137,93 @@ describe('terrain data', () => {
     expect(counts('coastland')).toEqual({ melee: 2, missile: 4, magic: 1 })
     expect(counts('feyland')).toEqual({ melee: 3, missile: 1, magic: 3 })
     expect(counts('flatland')).toEqual({ melee: 3, missile: 3, magic: 1 })
+  })
+})
+
+describe('dragon data', () => {
+  const profile = (form: 'drake' | 'wyrm') => {
+    const faces = dragonForm(form).faces
+    const list = FACE_NUMBERS.map((n) => faces[n])
+    const count = (icon: DragonIcon) => list.filter((f) => f === icon).length
+    return {
+      jaws: count('JAWS'),
+      breath: count('BREATH'),
+      claw: count('CLAW'),
+      belly: count('BELLY'),
+      wing: count('WING'),
+      tail: count('TAIL'),
+      treasure: count('TREASURE'),
+    }
+  }
+
+  it('loads 2 forms and 10 dice -- 5 elements x drake/wyrm', () => {
+    expect(DRAGON_FORM_TYPES.map((f) => f.id).sort()).toEqual(['drake', 'wyrm'])
+    expect(DRAGON_DICE).toHaveLength(10)
+    expect([...new Set(DRAGON_DICE.map((d) => d.element))].sort()).toEqual([
+      'air',
+      'death',
+      'earth',
+      'fire',
+      'water',
+    ])
+  })
+
+  it('gives every form all twelve faces', () => {
+    for (const form of DRAGON_FORM_TYPES) {
+      for (const n of FACE_NUMBERS) {
+        expect(form.faces[n], `${form.id} face ${n}`).toBeDefined()
+      }
+    }
+  })
+
+  // The layout neither rulebook prints. A wyrm is not a drake with one face
+  // swapped: it spends both wings on a third tail and a treasure chest.
+  it('reads back the transcribed face profile of each form', () => {
+    expect(profile('drake')).toEqual({
+      jaws: 1,
+      breath: 1,
+      claw: 4,
+      belly: 2,
+      wing: 2,
+      tail: 2,
+      treasure: 0,
+    })
+    expect(profile('wyrm')).toEqual({
+      jaws: 1,
+      breath: 1,
+      claw: 4,
+      belly: 2,
+      wing: 0,
+      tail: 3,
+      treasure: 1,
+    })
+  })
+
+  it('gives wings to drakes and the treasure chest to wyrms', () => {
+    expect(profile('drake').treasure).toBe(0)
+    expect(profile('wyrm').wing).toBe(0)
+  })
+
+  it('shares one layout across all five elements of a form', () => {
+    for (const form of ['drake', 'wyrm'] as const) {
+      const dice = DRAGON_DICE.filter((d) => d.form === form)
+      expect(dice).toHaveLength(5)
+      for (const die of dice) {
+        for (const n of FACE_NUMBERS) {
+          expect(dragonFaceIcon(die.id, n), `${die.id} face ${n}`).toBe(dragonForm(form).faces[n])
+        }
+      }
+    }
+  })
+
+  it('names every die after its element and form', () => {
+    for (const die of DRAGON_DICE) {
+      expect(die.id).toBe(`${die.element}_${die.form}`)
+      expect(dragonDie(die.id)).toBe(die)
+    }
+  })
+
+  it('throws a DataError for an unknown dragon die', () => {
+    expect(() => dragonDie('ivory_drake')).toThrow(DataError)
   })
 })

@@ -1393,77 +1393,349 @@ side already, rather than a `TerrainSlot` cast waiting to be found by the compil
 
 ---
 
-## Phase 6 — Dragons
+## Phase 6 — Dragons — **landed**
 
-**Deliverable.** `dragons: true`. Summoning Pool, Dragon Attack Phase, breath, and slaying.
+**Deliverable.** `dragons: true`. Summoning Pool, one dragon per player seeded on the Frontier,
+Dragon Attack Phase, the five elemental breaths, dragon-vs-dragon and dragon-vs-army combat,
+slaying.
 
-The shape, from pp. 16–20:
+**Delivered, in one pass rather than the slices Phases 4 and 5 needed.** Ten dragon dice in
+`data/` behind a new importer, schema and validator; `dragons.ts` for the pure rules (the roll, the
+targeting table, the icons, the breaths); `GameState.dragons` beside `effects`; the setup draw and
+the Frontier seed; a `RollPurpose` member for the combination roll and the seven SAIs whose
+`Applies` column names it; the Dragon Attack Phase as a five-step machine on `turn.dragonAttack`
+with four new `Pending` kinds; a board row, three sheets and log lines in both clients. The app and
+the CLI play `DRAGON_RULES` from here. **The 25 goldens replay byte-identical and unregenerated**,
+because every draw this phase adds is gated on `ruleSet.dragons` and every recorded game has it
+off. `SAVE_VERSION` is 8.
 
-- A dragon has **5 health and 5 automatic saves**, so 10 melee *or* 10 missile kills it. The two may
-  not be combined against one dragon, though they may be split across different dragons.
-- Each player brings **one dragon per 24 points of force, rounded up**, into their Summoning Pool
-  — so **one at 24 health and two at 36**, the sizes Phase 0a rolls. (The starter book's "two
-  dragons" for a 30-health force is the same rule, which is a useful check on both readings.) The
-  pool is not part of force size and is separate from the DUA and BUA.
-- The Dragon Attack Phase fires at every terrain where the **marching** player has an army. Dragons
-  attack regardless of who summoned them — including their summoner.
-- The army answers with a **combination roll** counting melee, missile and save at once, with each
-  ID allocated by its owner. This is the reason `RollOutcome.totals` is a map.
-- Damage is simultaneous: a unit killed by the dragon still contributes its results.
-- Slaying any dragon lets the army **promote as many units as possible** — including units that did
-  not roll. Phase 2.
+Five elements only — Air, Earth, Fire, Water, Death — and only the **Elemental** dragon kind (full
+rules pp. 16–21). Hybrid, Ivory, Ivory Hybrid and White dragons are all out of scope; the targeting
+table on p. 18 has rows for all six kinds, but restricted to Elemental-vs-Elemental and
+Elemental-vs-Army it collapses to one rule (below), which is the only one this phase needs.
 
-Dragon icons: Jaws 12 damage, Claws 6, Wing 5 and the dragon flies home, Tail 3 and roll again,
-Breath 5 health killed plus an elemental effect, Treasure promotes one unit, Belly disables the
-dragon's automatic saves for that attack.
+- **Health and saves.** A dragon has 5 health and 5 automatic saves. Without Belly, killing one
+  needs 10 melee results *or* 10 missile results — the two may not be combined against the same
+  dragon, though when several dragons are attacked in the same exchange, melee and missile totals
+  may be split across them separately (p. 18). Belly disables *that dragon's own* automatic saves
+  for the attack it appears in, dropping its threshold to 5 of either type.
+- **Summoning Pool.** Each player brings `ceil(forceHealth / 24)` dragons into their Summoning Pool
+  at setup — one at 24 health, two at 30 or 36, which the starter book's own "two dragons" for a
+  30-health force confirms. Color is drawn from the owning species' two elements — `speciesElements`
+  (`setup.ts`), the same fact the Frontier terrain draw already reads. That is narrower than the
+  rulebook, which lets a player bring any types at all; it is a house rule, and it is what makes the
+  allocation a draw rather than a decision nobody in a solo game is well placed to make. When the
+  count needed is 1 or 2 this is not a coin flip per dragon: a 2-dragon force gets exactly one of
+  each of its species' two elements (a Firewalkers force draws one Fire and one Air dragon), and a
+  1-dragon force draws randomly between the two (a Treefolk force draws a random Earth or Water
+  dragon). A force needing more than two — no starter or bestiary preset does — draws further
+  dragons randomly from the same pair. The pool is not part of force size and is separate from the
+  DUA and BUA.
+- **One dragon per player starts on the Frontier — a house rule, and the reason this phase is
+  playable at all.** Setup then draws one dragon at random from each player's own pool and places it
+  on the Frontier, removing it from the pool. The base rules keep every dragon in the pool and let
+  only `Summon Dragon` (Phase 7) bring one out; without a seed this phase would ship a Dragon Attack
+  Phase, five breaths and a whole combat sequence that no legal sequence of actions could reach.
+  Seeding the Frontier means the machinery is exercised by ordinary play from the first march
+  onward, and dragon-vs-dragon resolves on its own once both players have a reason to be there.
+  Record it in `RULES-V0.md` when this phase lands. It retires when Phase 7 makes summoning real,
+  and it is deliberately *not* extended to the leftover dragon of a 2-dragon force, which stays in
+  the pool where the base rules put it.
 
-Breath effects need Phase 3, because every one of them is a duration modifier: Air halves melee,
-Earth halves maneuver, Water halves missile, Death makes the army ignore its IDs, Fire buries the
-units it killed unless they save. "Halving modifiers are not cumulative" is pipeline step 7's
-one-divider-per-result-type rule, already built in Phase 0b.
+  **The trip is one-way.** A dragon that returns to its pool — killed by an army, or flying home on
+  a Wing — stays there for the rest of the game, because nothing in this phase summons. The seed
+  buys one dragon per player on the board, not a supply of them, so a dragon is a resource each side
+  spends rather than a recurring tax. That is the whole point of the house rule: it shows what
+  dragons *do* without pretending Phase 7 is here.
+- **RNG order at setup.** Both new draws go **after** the existing terrain-face loop and fire only
+  when `ruleSet.dragons` is true, so every recorded golden (all `dragons: false`) consumes exactly
+  the draws it always did and replays byte-identical: `... -> terrain faces -> p1 pool colors -> p2
+  pool colors -> p1 Frontier pick -> p2 Frontier pick`. A pool of one needs no pick and draws
+  nothing — the same "a forced choice consumes no randomness" rule that already governs pinned
+  terrain slots and named forces.
+- **The Dragon Attack Phase** (`Phase: 'dragon_attack'`, reserved since v0) fires once per turn,
+  before the active player's first March: at every terrain where the *active* player currently has
+  an army, every dragon present attacks — regardless of who owns or summoned it, including the
+  active player's own (p. 17). If the active player has dragons attacking at more than one terrain,
+  **the active player chooses the resolution order** (p. 18) — a `Pending` for the multi-terrain
+  case, auto-resolved with no prompt otherwise.
+- **Targeting.** A dragon attacks a *different-element* dragon present at the same terrain if one
+  exists; **same-element dragons never attack each other**; with no eligible dragon target present,
+  it attacks the army instead. This is p. 18's six-kind table with every out-of-scope row removed.
+  When more than one dragon-vs-dragon pairing is possible each owner declares a target and both
+  reveal at once — one atomic `Pending`/answer per declaring player, so nothing leaks one player's
+  choice into the other's.
+- **Sequence per attack, in the rulebook's own nine steps (p. 18):**
+  1. Determine, per dragon, whether it targets a dragon or the army (above).
+  2. Dragon-vs-dragon targets are declared and revealed.
+  3. Every attacking dragon rolls **one face** — not the ten-step pipeline; a dragon face is a fixed
+     named ability, not an icon count. Tail's "roll again" happens here, on the same die, and both
+     results apply.
+  4. Breath resolves immediately **against an army**: kill the 5 health-worth the defending player
+     chooses, then apply the elemental effect (below). Breath **against a dragon** is ordinary
+     damage (5) plus the same immediate reroll, deferred to step 7 like any other damage.
+  5. Treasure resolves immediately **against an army**: promote one unit. Nothing dragon-vs-dragon.
+  6. **The attacked army makes one combination roll** — melee, missile and save counted at once,
+     each ID icon's health-worth allocated by its own owner to whichever of the three it becomes,
+     freely split (p. 18's own example: a 3-health unit's ID may be 3 melee, 3 missile, 3 save, or
+     any combination). This is the **Dragon Roll**: a new `RollPurpose` member alongside
+     `attack`/`save`/`maneuver`, using the multi-`kinds` (`['melee', 'missile', 'save']`) +
+     `idAllocation` shape `RollSpec` has carried since Phase 0b for exactly this roll. Any SAI that
+     generates melee, missile or save results, or whose reference text names a dragon attack,
+     applies here too (p. 18) — the twelve `HANDLERS` results-only SAIs are purpose-agnostic and
+     need no change, while every `FULL_HANDLERS` entry that branches on `ctx.purpose` needs a check
+     against the reference's own Applies column. `ALL_PURPOSES` (`sai.ts`) needs the new member, or
+     `saiMaxResults` silently under-bounds this roll.
+  7. **Damage resolves simultaneously.** The army's incoming damage (every attacking dragon's
+     Jaws/Claws/Wing total, minus the army's own save total from step 6) is assigned with the
+     existing maximal-subset rule — invariant 4, `damage.ts`, unchanged. Separately, the army's
+     melee and missile totals are split across the attacking dragons **at the defending player's
+     free choice**: not required to be maximal, just enough of one type against one dragon (10, or 5
+     if that dragon rolled Belly). That is a new `Pending`, distinct from `assign_damage`, which
+     stays exactly the "incoming damage against one army" shape it already is — and **asked only
+     when there is a choice**: against a single dragon every result goes at the only target there
+     is and whether it dies is arithmetic, so it is worked out rather than offered. The same rule
+     that drops a damage assignment too small to kill anything. It is reachable in a mirror, where
+     two same-element dragons refuse to fight each other and both go for the army. A unit killed
+     this step still contributes the results it already rolled.
+  8. Any dragon killed lets the army **promote as many units as possible** — including units that
+     did not roll. Phase 2.
+  9. Any surviving dragon that rolled Wing returns to its owner's pool. "Surviving" is checked
+     *after* step 7: a dragon killed by the army's own melee or missile in this exchange does not
+     also fly home.
+- **Breath is five SAIs sharing one face icon**, not one SAI with an element parameter. Hybrid
+  dragons are out of scope, but the rulebook applies *both* of a Hybrid's element effects off one
+  Breath face, which a single parameterised handler could not express later. Air, Earth, Water and
+  Death are each a Phase 3 `Effect` with a duration, expiring at the start of the affected army's
+  own next turn: Air halves melee, Earth halves maneuver, Water halves missile — each a `divide`
+  modifier, so pipeline step 7's one-divider-per-result-type rule already makes two *different*
+  halving breaths stack and two of the *same* type not, with no new code — and Death makes the army
+  ignore all its ID results. **Fire breath is not a bare `killAndBury` call**, despite that
+  function's own doc comment listing it beside Flame: the 5 health-worth killed is unconditional
+  (`killUnits`, defender's choice of units, Rise from the Ashes unchanged), and only the units that
+  land in the DUA are *then* rolled individually for a save icon (`rollUnits`, `isSubRoll: true` —
+  the seam Seize and Smother already use, here looking for a `save` result the way Seize looks for
+  an `ID` face). Only those with no save result are buried (`buryUnits`); the rest stay in the DUA.
+- **Icons**, exactly (p. 20): Jaws 12 damage. Claws 6. Belly disables that dragon's own 5 automatic
+  saves for this attack. Tail 3 damage, roll again, apply both. Treasure promotes one unit if
+  attacking an army, nothing dragon-vs-dragon. Wing 5 damage, and if the dragon is still alive after
+  step 7 it flies home in step 9.
 
-> **⚠ Blocking data question.** The **dragon die face layout is in neither rulebook.** The icon
-> *effects* are documented; how many of each appear on the twelve faces is not. The rules do say
-> dragons "come in two forms: drakes, which have wings, and wyrms, which have a treasure chest",
-> which suggests the same shape as a terrain die — a base layout plus one variant face — but that is
-> a hypothesis to verify against real dice, not a fact to encode. Five elements × two forms = ten
-> dragon dice to transcribe into `data/raw/dragons.faces.txt`, with a `tools/import_dragons.py`
-> alongside the two existing importers. **Do not invent these faces.**
+> **⚠ Blocking data question, resolved.** The die face layout — in neither rulebook — is transcribed
+> below from real dice. Both forms carry 12 faces, the layout is the same across all five elements,
+> and only Breath's *effect* differs by element.
+>
+> **Drake** (12 faces): Jaws, Breath, Claw, Claw, Belly, Belly, Wing, Wing, Claw, Claw, Tail, Tail.
+> **Wyrm** (12 faces): Jaws, Breath, Claw, Claw, Belly, Belly, Claw, Claw, Tail, Tail, Tail,
+> Treasure.
+>
+> Source images (`https://commander.dragondice.com/images/faces/dragons/sais/`):
+> `dragon-jaws-1-d.svg`; `dragon-breath-d-d.svg` / `dragon-breath-w-d.svg`;
+> `dragon-claw-d-{1,2,3,4}-d.svg` / `dragon-claw-w-{1,2,3,4}-d.svg`;
+> `dragon-belly-d-{1,2}-d.svg` / `dragon-belly-w-{1,2}-d.svg`; `dragon-wing-d-{1,2}-d.svg` (Drake
+> only); `dragon-tail-d-{1,2}-d.svg` / `dragon-tail-w-{1,2,3}-d.svg`; `dragon-treasure-w-d.svg`
+> (Wyrm only).
+>
+> **The art is per *form*, not per element — checked, not assumed.** Every `-<element>-` spelling
+> 404s, and so do `wing-w-*` and `treasure-d-*`, which is the layout agreeing with itself. So all
+> five drakes share one set of twelve images and the manifest is keyed by form. One trap for a
+> future reader: `dragon-jaws-2-d.svg` *does* exist and is not ours — nothing in the base game's
+> ten dice uses it, so do not "fix" jaws to it.
+>
+> Five elements × two forms = ten dragon dice, now in `data/raw/dragons.faces.txt` behind
+> `tools/import_dragons.py`, `data/schema/dragon.schema.json` and `check_dragons` in
+> `tools/validate_data.py` — a dragon face is a fixed named ability, not `<count> <ICON>`, so
+> `FACE_RE` and `check_units` do not apply to it and the new checks are its own: one Jaws and one
+> Breath per form, wings only on drakes, the treasure chest only on wyrms, and all ten dice present.
+> `data/ICONS.md` has a "Dragon dice" section, and `Glyph.tsx` has all seven dragon icons as our
+> own fallback glyphs. `fetch_faces.py` mirrors the 23 distinct files (jaws is shared) into
+> `public/faces/` **and `assets/faces/`** — keeping the offline mirror in step is new, and it is
+> why the art ended up fetched but missing from `assets/` the first time. Manifest version 2, keyed
+> `<form>#<face>`. Nothing is committed: both directories are gitignored (invariant 8) and the app
+> still falls back to glyphs with none of it.
+>
+> **The art is used where it is big enough to read**, the measured 30px floor: 44px in the dragon
+> inspector, 30px in the log's roll strip, and a glyph at 16px on the board chip. It also needs
+> `brightness(0)` like the terrain art, and for the mirror-image reason — the dragon faces are
+> drawn in **white** for a dark die, so untinted they are white on a white panel. That shipped as
+> blank boxes in the log until a screenshot caught it.
 
-> **Decided: the Death dragon ships, and is unreachable.** A dragon leaves the Summoning Pool only
-> via `Summon Dragon`, which requires magic **of that dragon's element**. Neither species can cast
-> death magic, so **a Death dragon brought by either player can never be summoned** in this
-> matchup. Four of the five elemental dragons are reachable in play; the fifth is a die that would
-> sit in the pool all game.
+> **Decided: the Death dragon ships, and no game in this plan draws one.** Pool color comes from the
+> owning species' two elements, and Treefolk (Earth/Water) and Firewalkers (Fire/Air) between them
+> cover four. The fifth has no way into either pool, and `Summon Dragon` could not fetch one either:
+> it needs magic of the dragon's own element and neither species casts death magic.
 >
 > It goes in anyway, for completeness: all five elements are transcribed, validated and present in
 > `data/`, and the Death dragon simply has no route onto the board until a species that casts death
-> magic arrives. **This is data completeness, not a feature** — so it needs faces and a passing
-> validator, and nothing else. Do not build a house rule to make it summonable, and do not drop it
-> from the data on the grounds that nothing can reach it.
+> magic arrives. **This is data completeness, not a feature** — so it needs faces, a passing
+> validator and a breath handler, and nothing else. Do not build a house rule to reach it, and do not
+> drop it from the data on the grounds that nothing does.
 >
-> One thing follows for the engine: it must not assume a die in the pool is reachable.
-> `validateState` has to be happy with a dragon that can never leave, and the Dragon Attack Phase
-> has to be happy with a pool that never empties. Whether a *preset* should pick Death — and how a
-> player is told why it will not appear — is a Phase 9 question, not a rules one.
+> What follows for the engine: nothing may assume the pool is non-empty, since the Frontier seed
+> empties a 1-dragon pool outright, and nothing may assume it ever empties either, since the spare of
+> a 2-dragon force sits there all game. `validateState` has to be happy with both. Whether a *preset*
+> should pick Death — and how a player is told why it will not appear — is a Phase 9 question, not a
+> rules one.
 
-Ivory dragons (summonable by any single element) and White dragons (a 14-cost spell, 10 health,
-doubled damage) are **out of scope**: neither is one of the five base elements.
+Ivory dragons (summonable by any single element), Hybrid dragons (two elements, both breath effects)
+and White dragons (a 14-cost spell, 10 health, doubled damage) are **out of scope**: none is one of
+the five base elements.
 
-**Exit criterion.** A dragon can be summoned, attack, kill units, be killed, and fly away. 1000 fuzz
-games clean with `dragons: true`.
+**What ships as new state and types.** A setup step that fills each pool and seeds the Frontier.
+`GameState.dragons`, parallel to `effects` rather than folded into `units` — a dragon has no
+`owner: PlayerId` in the `UnitInstance` sense, since it belongs to no army and never visits the
+DUA, BUA or Reserves; it carries a `summonedBy` for pool bookkeeping and a location of its own
+(`{ kind: 'pool'; owner } | { kind: 'terrain'; slot }`). Three new `Pending` kinds: the multi-terrain
+attack order, the dragon-vs-dragon target, and the melee/missile split across simultaneously
+attacked dragons. A new small single-die roll primitive for a dragon's own attack — not
+`resolveRoll`, and not a reuse of `rerollSweep`, which drains a FIFO queue across many units where
+this rerolls one die. And both clients need a board surface for "a dragon is here, belonging to
+neither army": not an `ArmySide`, not reached through `armyAt`.
 
-**Tests.**
+### Where this section was wrong
 
-- 10 melee kills a dragon; 5 melee + 5 missile does not.
-- Belly cancels the 5 automatic saves for that attack only.
-- Tail rolls the dragon again and applies both results; RNG consumption is deterministic.
-- A dragon that rolls Wing inflicts its 5 damage *and then* returns to the pool — in that order.
-- Fire breath buries the units it killed unless they save; those units never enter the DUA.
-- Two breath effects halving different result types both apply; two halving the same one do not.
-- Killing a dragon promotes every promotable unit in the army simultaneously, including non-rollers.
+- **"Do not invent these faces" was right, and the hypothesis it warned about was wrong in a way
+  worth recording.** Both this section and `OVERVIEW.md` §3 guessed that drake-and-wyrm would be
+  "a base layout plus one variant face", like a terrain type and its eighth face. It is not: a wyrm
+  spends the drake's *two* wings on a third tail **and** a treasure chest. A one-face guess would
+  have produced a wyrm with two treasures and nothing in either rulebook would have contradicted it.
+- **The SAI audit was bigger than "check the Applies column", and smaller than it looked.** Seven
+  SAIs name Dragon Attack — Bullseye, Counter, Double Strike, Hoof, Rend, Smite, Volley — and each
+  has its *own* sentence rather than an inherited one: Smite stops being unsavable damage and
+  becomes plain melee results, Bullseye and Double Strike stop targeting entirely, and Counter and
+  Volley generate **two** types at once rather than the pick-one the general rule would imply. None
+  of that is derivable from the melee sentence, and this section did not mention any of it.
+- **The combination roll needed a second question, not just the ID allocation.** p. 27: "if an SAI
+  generates a choice of different results (for example, Create Fireminions) then the player may
+  split those results between those required by the roll". Create Fireminions is the only SAI in the
+  box whose choice survives a roll counting three types, so `SaiOutcome` gained `flexible` and the
+  allocation pending asks two things. Fly and Hoof look like the same problem and are not: of
+  maneuver and save, a dragon roll counts only save, so there is nothing to choose.
+- **Death breath is not a `Modifier` any of the four kinds could express.** "The army ignores all of
+  its ID results" is not a subtract (the amount is unknown until the dice land), not a divide, and
+  not a multiply by zero — that last one would eat the type's one-multiplier budget and make an
+  army holding an eighth face *throw* instead of roll. It is a fifth `Modifier` kind, `ignore_ids`,
+  applied before step 6.
+- **Fire breath is not a `killAndBury` call**, though `death.ts`'s own doc comment has named it as
+  one since Phase 2. The kill is unconditional and only the *burial* is escapable, per unit, on a
+  save roll — so it is `killUnits`, then a `rollUnits` sub-roll, then `buryUnits` on the failures.
+  The comment was describing the shape of the flow, not the call, and is now easy to misread.
+- **The phase needed no slices.** Phases 4 and 5 each took five; this one is larger in surface area
+  and landed in one, because the seam it needed (`resolveFaces` pure, so the same faces can be
+  resolved twice around a pause) was already built and paid for.
 
-**Bump `SAVE_VERSION`.**
+### What the first pass got wrong in the UI, and how it was found
+
+Five of these came from playing it rather than from a test, which is the argument for a browser
+pass in one paragraph:
+
+- **The dragon-attack log line was a flat list of faces**, so two dragons and their rerolls read as
+  "Fire Wyrm breath, Fire Wyrm breath, Fire Wyrm tail, Fire Wyrm claw, Earth Drake tail, Earth
+  Drake claw" — the name six times, nothing saying who was attacked, nothing saying what it came
+  to, and no sign that four of those faces were one die rerolling itself. The entry is now one
+  record per dragon carrying its target, its faces in order and its damage, and both clients draw
+  it as `Water Wyrm → Air Drake  [faces]  6 damage`.
+- **The dragon's own roll was words where the army's was dice.** All seven icons have glyphs now
+  and the faces are drawn in a strip, chained with the same reroll arrow a Rend gets.
+- **A dragon could not be inspected.** Tapping the chip opens all twelve faces with their counts
+  and rules text (`DRAGON_ICON_TEXT`, beside the handlers for `SAI_TEXT`'s reason), plus its
+  health, its automatic saves and its own breath.
+- **The chip drew a generic dragon glyph in one colour.** It is the Jaws face now — the die's
+  heaviest result, standing for it the way an ID face stands for a unit — tinted by element,
+  because the element is exactly what decides who a dragon will fight. The first attempt reused
+  the `el-<element>` class and came out as a solid coloured pill: that class is the element *dot*
+  and paints a background. Hence `dragon-el-`.
+- **The damage split was asked against a single dragon**, where there is one legal answer.
+- **The allocation sheet did not show the roll**, which is the one thing the question cannot be
+  answered without: how many IDs there are to spend *is* the decision, and which dice already gave
+  melee or saves is what decides where they go. `rollOnTheTable` now answers for a dragon roll too.
+  Showing it needed a fix of its own — rendering means resolving a combination roll, and
+  `allocateIds` refuses one whose allocation does not spend the pool exactly, so a display pass has
+  to supply a throwaway one. It crashed the sheet on the first try.
+- **`perDieResults` read the roll's *first* kind only**, so in a roll counting melee, missile and
+  save a die that rolled four saves reported zero and the strip greyed it out as a blank — beside a
+  total that was counting it. It sums across every counted kind now (and counts a flexible SAI's
+  results, which were invisible for the same reason). Identical for every single-kind roll, which
+  is what let the 25 goldens stay byte-identical through the change.
+- **The eighth face doubled IDs in melee only.** `armyRoll` takes one result type and builds the
+  doubling modifier for it; a combination roll needs all three, or a held terrain silently doubles
+  one share of a roll that counts three.
+
+### Two things that would have shipped silently
+
+1. **The army rolled when both dragons were duelling.** p. 18 step 6 says "skip this step if no army
+   is being attacked", and nothing did. Every test passed: the totals were computed correctly, the
+   damage split found no targets, and the state validated. What it cost was a roll's worth of
+   randomness on a step the rules do not spend it on — and it would have let an army kill a dragon
+   that never came near it, as soon as a split had somewhere to go. **Found in a browser, not by a
+   test**, and on the commonest board there is: Treefolk are water+earth and Firewalkers air+fire,
+   so the starter matchup duels on turn one *every single game*. The fuzz ran 240 clean games over
+   it without noticing, because a wasted roll is not an invalid state.
+2. **`saiMaxResults` would have raised its ceiling for every game without dragons.** The bound is
+   brute-forced over every purpose an SAI could meet, so adding the dragon roll to `ALL_PURPOSES`
+   unconditionally made Smite's melee bound 4 in a `V0_RULES` game that can never roll one. Caught
+   by three existing tests going red — which is exactly what the Phase 4 comment above
+   `saiMaxResults` predicted would happen, one phase early and in the opposite direction to the
+   under-bound it was written about. `purposesFor(ruleSet)` gates it.
+
+**Exit criterion.** ✅ A dragon attacks an army or another dragon; Jaws, Claws, Belly, Tail,
+Treasure and Wing all resolve as specified; each of the five breaths applies its own effect, with
+Fire's conditional burial; a dragon dies to 10 melee *or* 10 missile (5 under Belly) and never to a
+combination, with several attackers splittable across both pools; slaying one promotes every
+promotable unit, non-rollers included.
+
+**The fuzz reaches real combat**, which is new: both players start a dragon on the Frontier, so no
+scaffolding is needed to make the phase fire. 240 games across the starter and bestiary pairings,
+`stuck === 0`, with **trigger counters asserted `> 0`** for every one of the seven icons, all four
+reachable breaths, a dragon killed by an army, a Wing flight home, a Treasure promotion, a
+slaying promotion and a Fire burial. `RandomAI` answers all four new `Pending` kinds, and
+deliberately not the way `PassiveAI` does: it spreads the allocation at random rather than pouring
+it into saves, and gives each dragon a random slice rather than exactly the lethal amount, because
+a fuzz that always killed what it could would never exercise a dragon surviving.
+
+**Not done, and deliberately**: the 1000-game `V0_RULES` fuzz is still the only one at that size,
+and this phase did not widen it — the oldest gap in this document, now one phase wider.
+
+**Tests, as delivered.** `src/engine/dragons.test.ts` (32 cases), plus the data layer in
+`load.test.ts` (7 more) and the dragon-roll SAI block in `sai.test.ts` (9).
+
+| Case | Expected |
+|---|---|
+| Each icon's damage | Jaws 12, Claws 6, Wing 5, Tail 3, Belly 0 |
+| Breath by target | 5 damage against a dragon; 5 health-worth and an element against an army |
+| Treasure by target | promotes against an army, nothing dragon-vs-dragon |
+| Kill threshold | 10, and 5 once that dragon rolled Belly |
+| Tail | rerolls and both results apply; one draw per face shown |
+| Breath reroll | against a dragon only, never against an army |
+| Targeting | a different element is attacked over the army; the same element never is |
+| Own summoner | attacked exactly like anyone else's army |
+| Two halvings | different types both apply; same type throws |
+| Death breath | zeroes the ID share, and coexists with an eighth face's doubling |
+| Setup | 2-dragon force gets one of each element; 1-dragon force draws one |
+| Frontier seed | exactly one per player, rest pooled, homes empty |
+| Starter matchup | always a duel; a mirror reaches the same-element case |
+| Duel | the army does not roll at all |
+| Damage split | never asked against one dragon; asked when two same-element ones share a target |
+| The allocation pause | `rollOnTheTable` renders the roll rather than throwing on it |
+| A save die in a dragon roll | counts 4, so the strip does not grey it out |
+| Fuzz | 240 games, no stuck, every icon and all four reachable breaths fired |
+
+**Bumped `SAVE_VERSION` to 8**, for the reason that is actually true. `dragons` already existed on
+`RuleSet` and the new draws are gated on it, so every version-7 save (`dragons: false`) replays
+through the new `setupGame` unchanged — and all 25 goldens prove it by staying untouched. The
+version is not protecting those. It protects the configuration the app now plays: `DRAGON_RULES`
+draws pool colours, forms and two Frontier seeds at setup, and adds four `Pending` kinds behind a
+phase that stops for them.
+
+**What Phase 7 inherits.** `Summon Dragon` has a pool to summon *from* and somewhere to put the
+result: `DragonInPlay.location` already moves both ways, and the phase reads the board rather than
+any record of how a dragon got there. Two simplifications retire with it, both flagged in
+`dragons.ts` — a dragon with two eligible targets picks the first in board order rather than being
+asked, and several qualifying terrains resolve in board order rather than the marching player's
+chosen one. Neither can arise while two dragons is the maximum on the board, and both become real
+the moment a spell can crowd a terrain. `ignore_ids` is a `Modifier` kind any spell that suppresses
+a result type can reach for, and `RollSpec.saiResults` now carries a player's own split as well as
+Wild Growth's share.
 
 ---
 
@@ -1498,8 +1770,10 @@ reference sheets (full rules pp. 79, 91) filtered to `Any` plus their own:
 | Elemental | Resurrect Dead 3, Summon Dragon 7 |
 
 Fourteen of the eighteen are a Phase 3 `Effect` and nothing else. The other four are the work: Flash
-Flood moves a terrain, Path moves a unit, Resurrect Dead is a Phase 2 exchange, Summon Dragon is
-Phase 6.
+Flood moves a terrain, Path moves a unit, Resurrect Dead is a Phase 2 exchange, and Summon Dragon
+moves a dragon out of a Summoning Pool that Phase 6 already built and fills. It is also what
+retires Phase 6's Frontier seed, and what first makes two of that phase's simplifications real —
+a dragon with more than one eligible target, and more than one terrain with dragons at it.
 
 Out of scope and worth writing down: **Summon Dragonkin** needs Dragonkin dice (advanced rules);
 **Summon White Dragon** at cost 14 is castable but a White Dragon is not a base-element dragon;
@@ -1610,8 +1884,8 @@ on a phone, and the log explains every number in it.
 | Elements are stored but ignored | Phase 7 |
 | No magic from Reserves, so a Reserve Army cannot march | Phase 7 |
 | SAI faces produce zero results | Phases 1 ✅ and 4 |
-| Eighth face grants only the two standard advantages | Phase 5 |
-| No dragons | Phase 6 |
+| Eighth face grants only the two standard advantages | Phase 5 ✅ |
+| No dragons | Phase 6 ✅ (with an interim house rule of its own — see below) |
 | No spells | Phase 7 |
 | No promotion | Phase 2 ✅ (machinery; first in-game caller is Phase 5's City) |
 | No burying | Phase 2 ✅ (machinery; first in-game caller is Phase 4's Flame) |
@@ -1620,12 +1894,19 @@ on a phone, and the log explains every number in it.
 | Two hand-authored 30-health forces, fixed race per player | Phase 0a |
 | The Frontier is a constant, and both forces must propose the same die | Phase 0a |
 
-**One of these is replaced by another house rule, not by the real rule.** The Frontier stops being
-a constant in Phase 0a, but the rulebook's actual step 4 — the roll-off winner choosing between the
-first turn and the Frontier — needs an opponent capable of wanting a particular terrain. Until
-`GreedyAI` exists in Phase 9, v1 splits the two prizes one each: winner marches first, loser sets
-the Frontier. So §7 of `RULES-V0.md` gains a house rule in v1 and loses it again in Phase 9, which
-is the only entry in this table that moves twice.
+**Two of these are replaced by another house rule, not by the real rule** — the only entries in this
+table that move twice.
+
+The Frontier stops being a constant in Phase 0a, but the rulebook's actual step 4 — the roll-off
+winner choosing between the first turn and the Frontier — needs an opponent capable of wanting a
+particular terrain. Until `GreedyAI` exists in Phase 9, v1 splits the two prizes one each: winner
+marches first, loser sets the Frontier. So §7 of `RULES-V0.md` gains a house rule in v1 and loses it
+again in Phase 9.
+
+"No dragons" does the same thing over Phases 6 and 7. The real rule is that a dragon leaves the
+Summoning Pool only via `Summon Dragon`, which is a spell — so Phase 6 on its own would build the
+Dragon Attack Phase and have nothing able to reach it. Phase 6 therefore seeds one dragon per player
+on the Frontier at setup, and that house rule retires when Phase 7 makes summoning real.
 
 **Do not delete `RULES-V0.md`, and do not delete the flags.** `V0_RULES` stays a valid, playable
 configuration — it is the regression baseline for every phase above, and the reason each of these is
@@ -1653,11 +1934,12 @@ export const V1_RULES: RuleSet = {
 cheaper for it. If it gets cut short, the symptom is Phase 6 discovering that combination rolls need
 `rollArmy` rewritten anyway — with SAIs and spells already built on top of the old shape.
 
-**Two blocking data gaps, and they are not code.** Terrain faces for Coastland, Flatland and
-Feyland; face layouts for ten dragon dice. Both need transcription from physical dice, both are
-invariant-6 territory, and Phase 5 and Phase 6 cannot start without them. **Start sourcing these
-now** — they are the long pole, and not something to do at the last minute against a half-built
-phase.
+**Two blocking data gaps, and they were not code — both are now closed.** Terrain faces for
+Coastland, Flatland and Feyland were transcribed in Phase 5a; the face layouts for the ten dragon
+dice are transcribed in Phase 6 above. Both were invariant-6 territory and neither phase could start
+without them, which is why this entry said "start sourcing these now" for the whole of v1 up to
+here. The lesson survives the gaps closing: **the data is the long pole, not the engine.** Phase 7's
+eighteen spells are the next thing of this shape, and they are already written down.
 
 **The fuzz gets slower and more valuable — and there is now only one of it.** Dragons and spells
 make each game longer. `advance` throws after 1000 steps, which is a generous bound for v0 and may

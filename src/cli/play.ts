@@ -17,21 +17,22 @@ import { stdin, stdout } from 'node:process'
 import { passiveAi } from '../ai/passive'
 import { randomAi } from '../ai/random'
 import type { AiPlayer } from '../ai/types'
-import { SPECIES, terrainDie, terrainFaceAction, unitType } from '../data/load'
-import type { TerrainFaceNumber } from '../data/types'
+import { SPECIES, dragonName, terrainDie, terrainFaceAction, unitType } from '../data/load'
+import type { ResultType, TerrainFaceNumber } from '../data/types'
 import { damageOptions } from '../engine/damage'
+import { BREATH_NAME } from '../engine/dragons'
 import { growthPartners, promotionGain } from '../engine/dua'
 import { isAsleep } from '../engine/effects'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
 import { saiPhrase, type DieRoll } from '../engine/roll'
-import { SAI_TEXT } from '../engine/sai'
+import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../engine/sai'
 import { rollOnTheTable } from '../engine/turn'
 
 
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
 import {
-  FULL_RULES,
+  DRAGON_RULES,
   TERRAIN_SLOTS,
   armyAt,
   army as armyRef,
@@ -68,6 +69,13 @@ const SLOT_LABEL: Record<ArmyRef, string> = {
   frontier: 'Frontier',
   p2_home: 'P2 home',
   reserve: 'Reserves',
+}
+
+/** What earned a promotion, when it was not an SAI. */
+const PROMOTION_SOURCE: Record<'city' | 'dragon_treasure' | 'dragon_slain', string> = {
+  city: 'City',
+  dragon_treasure: 'Treasure',
+  dragon_slain: 'Dragon slain',
 }
 
 /** "melee" -> "Melee": the action reads as a name in a sentence, not a keyword. */
@@ -115,7 +123,9 @@ function effectsOn(state: GameState, player: PlayerId, slot: TerrainSlot): reado
             ? `+${m.amount} ${m.resultType}`
             : m.kind === 'divide'
               ? `${m.resultType} ÷ ${m.by}`
-              : `${m.resultType} × ${m.by}`,
+              : m.kind === 'ignore_ids'
+                ? `no ${m.resultType} from IDs`
+                : `${m.resultType} × ${m.by}`,
       )
       .join(', ')
     out.push(`${effect.source} ${what} ${dim(`(until ${effect.expiresAtStartOfTurnOf}'s turn)`)}`)
@@ -294,9 +304,8 @@ function describe(entry: LogEntry, state: GameState): string | null {
         .map((pair) => `${nameOf(state, pair.unitId)} -> ${nameOf(state, pair.partnerId)}`)
         .join(', ')
       const saves = entry.saveResults === undefined ? '' : `${entry.saveResults} save results`
-      return green(
-        `  ${bold(entry.sai)}: ${[grown, saves].filter(Boolean).join(' and ') || 'nothing'}`,
-      )
+      const why = entry.sai ?? PROMOTION_SOURCE[entry.source ?? 'city']
+      return green(`  ${bold(why)}: ${[grown, saves].filter(Boolean).join(' and ') || 'nothing'}`)
     }
 
     case 'units_moved':
@@ -344,6 +353,52 @@ function describe(entry: LogEntry, state: GameState): string | null {
           groups.map((g) => `${SLOT_LABEL[g.slot]} with ${g.names.join(', ')}`).join('; '),
       )
     }
+    case 'dragons_drawn':
+      return dim(
+        `${entry.player} brings ${entry.pool.map(dragonName).join(' and ')} — ` +
+          `${dragonName(entry.frontier)} starts at the Frontier`,
+      )
+
+    // One line per dragon: a flat list of faces never said who was attacked, hid
+    // the rerolls inside one die, and never totalled anything.
+    case 'dragon_attack':
+      return [
+        magenta(`dragon attack at ${SLOT_LABEL[entry.slot]} — ${entry.defender} is marching`),
+        ...entry.dragons.map((dragon) => {
+          const at =
+            dragon.target.kind === 'army'
+              ? `${entry.defender}'s army`
+              : dragonName(dragon.target.dieId)
+          const faces = dragon.faces.map(({ icon }) => icon.toLowerCase()).join(' → ')
+          const damage = dragon.damage > 0 ? dim(` · ${dragon.damage} damage`) : ''
+          return `  ${bold(dragonName(dragon.dieId))} → ${at}: ${faces}${damage}`
+        }),
+      ].join('\n')
+
+    case 'dragon_breath':
+      return red(
+        `  ${bold(BREATH_NAME[entry.element])} kills ` +
+          (entry.unitIds.map((id) => nameOf(state, id)).join(', ') || 'nothing'),
+      )
+
+    case 'dragon_breath_effect':
+      return dim(
+        `  ${BREATH_NAME[entry.element]} lingers on ${entry.player}'s army ` +
+          `at ${SLOT_LABEL[entry.slot]}`,
+      )
+
+    case 'dragon_roll':
+      return (
+        `  ${entry.player} answers: ${bold(String(entry.totals.melee))} melee, ` +
+        `${bold(String(entry.totals.missile))} missile, ${bold(String(entry.totals.save))} save` +
+        (entry.dice.length > 0 ? dim(`\n    ${entry.dice.map(shown).join('  ')}`) : '')
+      )
+
+    case 'dragon_home':
+      return magenta(
+        `  ${dragonName(entry.dieId)} ${entry.why === 'slain' ? 'is slain' : 'flies away'} ` +
+          `and returns to its Summoning Pool`,
+      )
     case 'turn_end':
     case 'game_start':
     case 'terrain_placed':
@@ -421,6 +476,17 @@ function choicesFor(pending: Pending): Choice[] {
         { key: '0', label: 'let it go', action: { kind: 'eighth_face_temple', force: false } },
       ]
 
+    // One unit, one step, and declining is legal -- so a menu is the right shape.
+    case 'dragon_treasure':
+      return [
+        ...pending.promotions.map((pair, i) => ({
+          key: String(i + 1),
+          label: `promote ${pair.unitId} -> ${pair.partnerId}`,
+          action: { kind: 'dragon_treasure', pair } as GameAction,
+        })),
+        { key: '0', label: 'decline', action: { kind: 'dragon_treasure', pair: null } },
+      ]
+
     case 'reinforce':
     case 'retreat':
     case 'assign_damage':
@@ -431,6 +497,9 @@ function choicesFor(pending: Pending): Choice[] {
     case 'sai_move':
     case 'eighth_face_city':
     case 'temple_bury':
+    case 'dragon_breath':
+    case 'dragon_allocate':
+    case 'dragon_damage_split':
       return [] // handled separately
   }
 }
@@ -541,6 +610,82 @@ async function askDamage(state: GameState, pending: Pending): Promise<GameAction
     `Assign ${pending.damage} damage — you must lose`,
     `${pending.damage} damage cannot kill anything — no die has few enough health`,
   )
+}
+
+/** A breath picks from your own army, maximally -- the damage sheet again. */
+async function askDragonBreath(state: GameState, pending: Pending): Promise<GameAction> {
+  if (pending.kind !== 'dragon_breath') throw new Error('not a breath')
+  const dragon = state.dragons[pending.dragonId]
+  const name = dragon === undefined ? 'A dragon' : dragonName(dragon.dieId)
+  const action = await askBudget(
+    state,
+    'assign_damage',
+    armyRef(state, pending.player, pending.slot),
+    pending.health,
+    `${name} breathes — ${pending.health} health-worth of your army dies; you must lose`,
+    `${pending.health} health-worth cannot be taken from this army`,
+  )
+  return { kind: 'dragon_breath', unitIds: action.kind === 'assign_damage' ? action.unitIds : [] }
+}
+
+/** Splitting the combination roll: how many of each go to melee, missile and save. */
+async function askDragonAllocate(pending: Pending): Promise<GameAction> {
+  if (pending.kind !== 'dragon_allocate') throw new Error('not a dragon allocation')
+
+  const split = async (total: number, what: string) => {
+    const out: Partial<Record<ResultType, number>> = {}
+    let left = total
+    for (const kind of DRAGON_ROLL_KINDS) {
+      if (left === 0) break
+      const last = DRAGON_ROLL_KINDS[DRAGON_ROLL_KINDS.length - 1]
+      if (kind === last) {
+        out[kind] = left
+        break
+      }
+      console.log(dim(`  ${left} ${what} left — how many as ${kind}?`))
+      const n = Math.max(0, Math.min(left, Number((await ask('> ')).trim()) || 0))
+      if (n > 0) out[kind] = n
+      left -= n
+    }
+    return out
+  }
+
+  console.log()
+  console.log(bold('  Your dragon roll counts melee, missile and save at once.'))
+  const ids = await split(pending.ids, 'ID results')
+  const flexible = await split(pending.flexible, 'Create Fireminions results')
+  return { kind: 'dragon_allocate', ids, flexible }
+}
+
+/** Which dragons the melee and missile go to. Ten kills one, or five past a belly. */
+async function askDragonDamageSplit(state: GameState, pending: Pending): Promise<GameAction> {
+  if (pending.kind !== 'dragon_damage_split') throw new Error('not a damage split')
+
+  const melee: Record<string, number> = {}
+  const missile: Record<string, number> = {}
+  let meleeLeft = pending.melee
+  let missileLeft = pending.missile
+
+  console.log()
+  console.log(bold('  Spend your results on the dragons. One type each — they never combine.'))
+  for (const target of pending.targets) {
+    const dragon = state.dragons[target.dragonId]
+    const name = dragon === undefined ? target.dragonId : dragonName(dragon.dieId)
+    console.log(dim(`  ${name} needs ${target.threshold} of one type to die`))
+    if (meleeLeft > 0) {
+      console.log(dim(`    ${meleeLeft} melee left — how many at it?`))
+      const n = Math.max(0, Math.min(meleeLeft, Number((await ask('> ')).trim()) || 0))
+      melee[target.dragonId] = n
+      meleeLeft -= n
+    }
+    if (missileLeft > 0) {
+      console.log(dim(`    ${missileLeft} missile left — how many at it?`))
+      const n = Math.max(0, Math.min(missileLeft, Number((await ask('> ')).trim()) || 0))
+      missile[target.dragonId] = n
+      missileLeft -= n
+    }
+  }
+  return { kind: 'dragon_damage_split', melee, missile }
 }
 
 /**
@@ -856,6 +1001,9 @@ async function askReinforce(state: GameState, player: PlayerId): Promise<GameAct
 
 async function askHuman(state: GameState, pending: Pending): Promise<GameAction> {
   if (pending.kind === 'assign_damage') return askDamage(state, pending)
+  if (pending.kind === 'dragon_breath') return askDragonBreath(state, pending)
+  if (pending.kind === 'dragon_allocate') return askDragonAllocate(pending)
+  if (pending.kind === 'dragon_damage_split') return askDragonDamageSplit(state, pending)
   if (pending.kind === 'sai_target') return askSaiTarget(state, pending)
   if (pending.kind === 'sai_target_army') return askSaiTargetArmy(state, pending)
   if (pending.kind === 'sai_promote') return askSaiPromote(state, pending)
@@ -916,7 +1064,7 @@ async function main() {
   const { seed, ai, forces }: { seed: number; ai: AiPlayer; forces: ForceSpec } = parseArgs()
   const human: PlayerId = 'p1'
 
-  let state = begin(setupGame({ seed, forces, ruleSet: FULL_RULES }))
+  let state = begin(setupGame({ seed, forces, ruleSet: DRAGON_RULES }))
 
   // Which species you are is a roll now, so the banner reads it off the board
   // rather than stating it.

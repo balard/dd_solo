@@ -16,6 +16,7 @@ from species import KNOWN_SAIS  # noqa: E402
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 UNITS = ROOT / "data" / "starter" / "units.json"
 TERRAINS = ROOT / "data" / "starter" / "terrains.json"
+DRAGONS = ROOT / "data" / "starter" / "dragons.json"
 
 FACE_RE = re.compile(r"^(\d+) (ID|MELEE|MISSILE|MAGIC|SAVE|MANEUVER|SAI:[A-Za-z][A-Za-z ]*)$")
 FACES_FOR = {"d6": 6, "d10": 10}
@@ -150,9 +151,64 @@ def check_terrains():
             warn(f"terrain type {tid}: no die for eighth face(s) {', '.join(sorted(missing))}")
 
 
+def check_dragons():
+    if not DRAGONS.exists():
+        todo_dice.append("dragons.json (not generated yet)")
+        return
+    doc = json.loads(DRAGONS.read_text(encoding="utf-8"))
+    forms = doc["dragonForms"]
+
+    icons = {"JAWS", "BREATH", "CLAW", "BELLY", "WING", "TAIL", "TREASURE"}
+    numbers = [str(n) for n in range(1, 13)]
+
+    for fid, f in forms.items():
+        faces = f["faces"]
+        missing = [k for k in numbers if k not in faces]
+        if missing:
+            err(f"dragon form {fid}: missing faces {missing}")
+        for k, v in faces.items():
+            if v not in icons:
+                err(f"dragon form {fid}: face {k} is {v!r}, not a dragon icon")
+
+        profile = [faces.get(k) for k in numbers]
+
+        # Exactly one Jaws and exactly one Breath on every dragon die. Both are the
+        # die's rare faces -- Jaws is its 12 damage and Breath its whole elemental
+        # identity -- so a second of either is a transcription slip, not a variant.
+        for icon in ("JAWS", "BREATH"):
+            n = profile.count(icon)
+            if n != 1:
+                err(f"dragon form {fid}: {n} {icon} faces, expected exactly 1")
+
+        # Wings belong to drakes, the treasure chest to wyrms (full rules p. 17).
+        # This is the only structural fact about the forms either rulebook states.
+        if (profile.count("WING") > 0) != (fid == "drake"):
+            err(f"dragon form {fid}: wings belong to drakes and only drakes")
+        if (profile.count("TREASURE") > 0) != (fid == "wyrm"):
+            err(f"dragon form {fid}: the treasure chest belongs to wyrms and only wyrms")
+
+    seen = set()
+    for d in doc["dragons"]:
+        if d["form"] not in forms:
+            err(f"dragon {d['id']}: unknown form {d['form']!r}")
+        if d["id"] in seen:
+            err(f"dragon {d['id']}: duplicate id")
+        seen.add(d["id"])
+        if d["id"] != f"{d['element']}_{d['form']}":
+            err(f"dragon {d['id']}: id does not match element + form")
+
+    # Five elements x two forms. A missing die is an error rather than a warning:
+    # unlike a terrain eighth-face variant, force setup can draw any of these.
+    for element in ("air", "death", "earth", "fire", "water"):
+        for form in ("drake", "wyrm"):
+            if f"{element}_{form}" not in seen:
+                err(f"missing dragon die {element}_{form}")
+
+
 def main():
     check_units()
     check_terrains()
+    check_dragons()
 
     for w in warnings:
         print(f"  warn: {w}")

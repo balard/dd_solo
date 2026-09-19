@@ -16,7 +16,7 @@
  * promotion that picked the wrong partner would be silent -- `speciesOf` reads the
  * species off whichever unit it finds first. Hence the species check below.
  */
-import { UNIT_TYPES, terrainDie, unitType } from '../data/load'
+import { UNIT_TYPES, dragonDie, terrainDie, unitType } from '../data/load'
 
 import { pruneEffects } from './effects'
 import { MID_EXCHANGE_STEPS } from './turn'
@@ -30,6 +30,7 @@ import {
 } from './types'
 
 const LOCATION_KINDS: readonly string[] = ['terrain', 'reserve', 'dua', 'bua']
+const DRAGON_LOCATION_KINDS: readonly string[] = ['terrain', 'pool']
 
 
 const PLAYERS: readonly PlayerId[] = ['p1', 'p2']
@@ -96,6 +97,37 @@ export function validateState(state: GameState): string[] {
     if (terrain.face !== 8 && terrain.capturedBy !== null) {
       problems.push(`terrain ${slot}: captured by ${terrain.capturedBy} but on face ${terrain.face}`)
     }
+  }
+
+  // Dragons. A pool that never empties is legal (a 2-dragon force keeps its spare
+  // all game, and nothing summons before Phase 7), and so is a pool that is empty
+  // from setup on (a 1-dragon force sends its only dragon to the Frontier). Neither
+  // is worth checking; what is, is a dragon that is nowhere real.
+  for (const [key, dragon] of Object.entries(state.dragons)) {
+    if (dragon.id !== key) {
+      problems.push(`dragon ${key}: keyed as ${key} but its id is ${dragon.id}`)
+    }
+    try {
+      dragonDie(dragon.dieId)
+    } catch {
+      problems.push(`dragon ${dragon.id}: unknown dragon die ${dragon.dieId}`)
+    }
+    if (dragon.owner !== 'p1' && dragon.owner !== 'p2') {
+      problems.push(`dragon ${dragon.id}: unknown owner ${String(dragon.owner)}`)
+    }
+    if (!DRAGON_LOCATION_KINDS.includes(dragon.location.kind)) {
+      problems.push(`dragon ${dragon.id}: unknown location ${String(dragon.location.kind)}`)
+    }
+    if (dragon.location.kind === 'terrain' && !TERRAIN_SLOTS.includes(dragon.location.slot)) {
+      problems.push(`dragon ${dragon.id}: unknown terrain slot ${String(dragon.location.slot)}`)
+    }
+  }
+
+  // Nothing creates a dragon unless the rules being played have them, so one here
+  // under `dragons: false` means a state was assembled by hand and would play a
+  // game its own ruleset says is impossible.
+  if (!state.ruleSet.dragons && Object.keys(state.dragons).length > 0) {
+    problems.push(`dragons: ${Object.keys(state.dragons).length} in play under dragons: false`)
   }
 
   for (const player of PLAYERS) {

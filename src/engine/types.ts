@@ -5,7 +5,9 @@
  * a pure reducer over these values; see `docs/OVERVIEW.md` section 2.
  */
 import { unitType } from '../data/load'
+import type { DragonElement, DragonIcon, ResultType } from '../data/types'
 
+import type { DragonRoll, DragonTarget } from './dragons'
 import type { Effect } from './effects'
 import type { DieRoll, RawDie } from './roll'
 import type { TargetTask } from './targeting'
@@ -47,6 +49,39 @@ export interface UnitInstance {
   readonly typeId: string
   readonly owner: PlayerId
   readonly location: Location
+}
+
+export type DragonId = string
+
+/**
+ * Where a dragon is.
+ *
+ * Not a `Location`: a dragon is never in Reserves, the DUA or the BUA, and a unit is
+ * never in a Summoning Pool. Two small unions rather than one wide one, so neither
+ * side has members the other has to keep remembering are impossible.
+ */
+export type DragonLocation =
+  | { readonly kind: 'pool' }
+  | { readonly kind: 'terrain'; readonly slot: TerrainSlot }
+
+/**
+ * A dragon in the game -- in its owner's Summoning Pool or at a terrain.
+ *
+ * **`owner` is not "whose side it fights on".** A dragon attacks the marching
+ * player's army whoever brought it, its own summoner included (full rules p. 17), so
+ * this says whose pool it came from and who rolls it, and nothing else. It is
+ * deliberately not the `owner` of an army.
+ *
+ * There is no health field, for the same reason a unit has none: damage does not
+ * accumulate between attacks. A dragon takes 10 melee or 10 missile *in one attack*
+ * or it is untouched, and when it dies it goes back to the pool.
+ */
+export interface DragonInPlay {
+  readonly id: DragonId
+  /** Key into the dragon die data, e.g. `fire_drake`. */
+  readonly dieId: string
+  readonly owner: PlayerId
+  readonly location: DragonLocation
 }
 
 export type TerrainFace = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
@@ -219,6 +254,54 @@ export interface TurnState {
    * like every optional `TurnState` field near the digest.
    */
   readonly eighthFaceStep?: 'temple_bury'
+  /**
+   * The Dragon Attack Phase's own working state (Phase 6). Non-null only while one
+   * is being resolved, exactly like `combat`, and omitted rather than nulled the
+   * rest of the time -- `digestState` renders `state.turn`.
+   */
+  readonly dragonAttack?: DragonAttackState
+}
+
+/**
+ * Where a dragon attack has got to.
+ *
+ * The rulebook's nine steps (p. 18) collapse to five the machine can rest on, since
+ * four of them take no decision from anybody. Breath and treasure each resolve one
+ * dragon at a time, which is what `resolved` counts.
+ */
+export type DragonAttackStep =
+  /** Step 4: this attack's breaths, one at a time, the defender choosing the dead. */
+  | 'breath'
+  /** Fire only: the units it just killed roll for their lives before burial. */
+  | 'breath_bury'
+  /** Step 5: one promotion per treasure rolled. */
+  | 'treasure'
+  /** Step 6: the army's combination roll, and the allocation the roller owes. */
+  | 'army_roll'
+  /** Step 7, outgoing: which dragons the army's melee and missile go to. */
+  | 'damage'
+  /** Step 7, incoming: the army assigning what the dragons did to it. */
+  | 'assign'
+
+export interface DragonAttackState {
+  readonly slot: TerrainSlot
+  readonly step: DragonAttackStep
+  /** Whose army is under attack: the marching player. */
+  readonly defender: PlayerId
+  /** Every attacking dragon's roll, in board order, rerolls appended. */
+  readonly rolls: readonly DragonRoll[]
+  /** What each dragon is attacking, by dragon id. */
+  readonly targets: Readonly<Record<DragonId, DragonTarget>>
+  /** How many of this step's one-at-a-time items are already done. */
+  readonly resolved: number
+  /** The army's stashed combination roll, between the question and the answer. */
+  readonly armyDice?: readonly RawDie[]
+  /** Units a Fire breath just killed and must now roll to avoid burial. */
+  readonly burning?: readonly UnitId[]
+  /** What the army's combination roll came to, once its allocation is in. */
+  readonly totals?: { readonly melee: number; readonly missile: number; readonly save: number }
+  /** What the dragons did to the army, once the saves are subtracted. */
+  readonly armyDamage?: number
 }
 
 export type Direction = 'up' | 'down'
@@ -408,11 +491,101 @@ export type Pending =
    */
   | { readonly kind: 'eighth_face_temple'; readonly player: PlayerId; readonly slot: TerrainSlot }
   /**
+   * A dragon's breath: five health-worth of the attacked army, chosen by its owner
+   * (p. 20). The same maximal-subset rule as any damage assignment -- it is the
+   * §6 rule again, with a budget that came from a breath rather than a total.
+   */
+  | {
+      readonly kind: 'dragon_breath'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly dragonId: DragonId
+      /** Five, or what is left of the army if it is smaller. */
+      readonly health: number
+    }
+  /**
+   * A treasure icon: "that army may promote any one unit" (p. 20). *May*, so an
+   * empty answer is legal -- and unlike Wild Growth's budget this is one unit and
+   * one step, so the pairs are `promotionMatching`'s and nothing else.
+   */
+  | {
+      readonly kind: 'dragon_treasure'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly promotions: readonly PromotionPair[]
+    }
+  /**
+   * The army's answer to the attack: one combination roll counting melee, missile
+   * and save, with the roller saying what each ID becomes (p. 18).
+   *
+   * `flexible` is the other half of the same question -- Create Fireminions'
+   * "the player may split those results between those required by the roll" -- and
+   * is zero in almost every roll, since it is the only SAI in the box that offers a
+   * choice all three kinds can satisfy.
+   */
+  | {
+      readonly kind: 'dragon_allocate'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      /** ID results to spend across melee, missile and save. */
+      readonly ids: number
+      /** Step-8 results whose type the roller picks. */
+      readonly flexible: number
+    }
+  /**
+   * Which dragons the army's melee and missile go to (p. 18).
+   *
+   * Two separate pools, because "the damage to slay a dragon must come from either
+   * melee or missile results -- they may not be combined". A free choice, not a
+   * maximal one: the rules say *may* allocate, and nothing obliges a player to
+   * spread results they cannot make lethal anyway.
+   */
+  | {
+      readonly kind: 'dragon_damage_split'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly melee: number
+      readonly missile: number
+      /** The dragons that can be hit, and what each needs to die this attack. */
+      readonly targets: readonly DragonDamageTarget[]
+    }
+  /**
    * Temple's second decision: the *opponent* picks which of their own DUA units is
    * buried -- "of their choice". Not raised at all when the DUA is empty, the same
    * rule as a damage assignment with nothing to kill.
    */
   | { readonly kind: 'temple_bury'; readonly player: PlayerId; readonly options: readonly UnitId[] }
+
+/**
+ * One dragon's whole roll, as the log renders it. Display only, like `DieRoll`.
+ *
+ * Grouped per dragon rather than per face, and carrying what the roll *came to*:
+ * "Fire Wyrm breath, Fire Wyrm breath, Fire Wyrm tail, Fire Wyrm claw" is six words
+ * of repetition that never says who was being attacked or what it added up to.
+ */
+export interface DragonAttackEntry {
+  readonly dragonId: DragonId
+  readonly dieId: string
+  /** What it went for. A dragon target is named by its die, for the log's words. */
+  readonly target: { readonly kind: 'army' } | { readonly kind: 'dragon'; readonly dieId: string }
+  /**
+   * Every face it showed, in throwing order, rerolls included.
+   *
+   * The face *number* travels with the icon because the art is keyed by it -- four
+   * claws are four different pictures, and a strip that drew the first one four
+   * times would be quietly wrong about which face landed.
+   */
+  readonly faces: readonly { readonly face: number; readonly icon: DragonIcon }[]
+  /** Jaws, claws, wing and tail summed -- breath against an army is not damage. */
+  readonly damage: number
+}
+
+/** One attacking dragon, as a target for the army's results. */
+export interface DragonDamageTarget {
+  readonly dragonId: DragonId
+  /** Ten, or five if this dragon rolled Belly (p. 20). */
+  readonly threshold: number
+}
 
 /** Actions answer the current `Pending`. Each `kind` matches a `Pending.kind`. */
 export type GameAction =
@@ -449,6 +622,20 @@ export type GameAction =
     }
   | { readonly kind: 'eighth_face_temple'; readonly force: boolean }
   | { readonly kind: 'temple_bury'; readonly unitId: UnitId }
+  | { readonly kind: 'dragon_breath'; readonly unitIds: readonly UnitId[] }
+  /** `null` declines: the rules say the army *may* promote. */
+  | { readonly kind: 'dragon_treasure'; readonly pair: PromotionPair | null }
+  | {
+      readonly kind: 'dragon_allocate'
+      readonly ids: Readonly<Partial<Record<ResultType, number>>>
+      readonly flexible: Readonly<Partial<Record<ResultType, number>>>
+    }
+  | {
+      readonly kind: 'dragon_damage_split'
+      /** Melee results sent to each dragon, by dragon id. Need not spend the pool. */
+      readonly melee: Readonly<Record<DragonId, number>>
+      readonly missile: Readonly<Record<DragonId, number>>
+    }
 
 /**
  * One unit promoted: `unitId` is in the army and goes to the DUA, `partnerId` is in
@@ -486,6 +673,55 @@ export type LogEntry =
       readonly slot: TerrainSlot
       readonly dieId: string
       readonly face: TerrainFace
+    }
+  | {
+      /** Only under `dragons: true`. One dragon per 24 points of force, drawn from
+       *  the player's own species' elements, and one of them seeded at the Frontier. */
+      readonly kind: 'dragons_drawn'
+      readonly player: PlayerId
+      /** Every dragon die drawn, in pool order, by die id. */
+      readonly pool: readonly string[]
+      /** The one that starts on the Frontier -- the Phase 6 house rule. */
+      readonly frontier: string
+    }
+  | {
+      /** Every dragon at one terrain rolls (p. 18 step 3). */
+      readonly kind: 'dragon_attack'
+      readonly slot: TerrainSlot
+      /** The marching player, whose army is under attack. */
+      readonly defender: PlayerId
+      /** One entry per dragon, not one per face: a flat list of faces reads as
+       *  noise once two dragons and their rerolls are in it. */
+      readonly dragons: readonly DragonAttackEntry[]
+    }
+  | {
+      readonly kind: 'dragon_breath'
+      readonly player: PlayerId
+      readonly dragonId: DragonId
+      readonly element: DragonElement
+      readonly unitIds: readonly UnitId[]
+    }
+  | {
+      /** The four breaths that leave something behind until the army's next turn. */
+      readonly kind: 'dragon_breath_effect'
+      readonly player: PlayerId
+      readonly element: DragonElement
+      readonly slot: TerrainSlot
+    }
+  | {
+      /** The army's combination roll: melee, missile and save at once. */
+      readonly kind: 'dragon_roll'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly dice: readonly DieRoll[]
+      readonly totals: { readonly melee: number; readonly missile: number; readonly save: number }
+    }
+  | {
+      /** Back to the pool, the only two ways a dragon leaves a terrain. */
+      readonly kind: 'dragon_home'
+      readonly dragonId: DragonId
+      readonly dieId: string
+      readonly why: 'slain' | 'flew'
     }
   | { readonly kind: 'march_begin'; readonly player: PlayerId; readonly army: ArmyRef; readonly index: 0 | 1 }
   | { readonly kind: 'march_skipped'; readonly player: PlayerId; readonly index: 0 | 1 }
@@ -639,15 +875,15 @@ export type LogEntry =
   | {
       readonly kind: 'units_promoted'
       readonly player: PlayerId
-      readonly sai: string
+      readonly sai?: string
       readonly pairs: readonly PromotionPair[]
       /** Save results the budget bought instead. Omitted when none. */
       readonly saveResults?: number
       /** City's own promotion (Phase 5e) reuses this entry rather than growing a
        *  second one -- it is the same exchange, on the ordinary one-step rule
-       *  instead of Wild Growth's budget. Omitted for Wild Growth's, which is
-       *  every recorded game so far. */
-      readonly source?: 'city'
+       *  instead of Wild Growth's budget. Phase 6 adds the two a dragon attack can
+       *  earn. Omitted for Wild Growth's, which is every recorded game so far. */
+      readonly source?: 'city' | 'dragon_treasure' | 'dragon_slain'
     }
   /** City recruiting a 1-health unit from the DUA (Phase 5e). */
   | {
@@ -679,9 +915,9 @@ export type LogEntry =
       readonly kind: 'units_buried'
       readonly player: PlayerId
       readonly unitIds: readonly UnitId[]
-      /** Temple's forced burial (Phase 5e). Omitted for Flame's, Fire breath's and
-       *  every other burial so far. */
-      readonly source?: 'temple'
+      /** Temple's forced burial (Phase 5e) and Fire breath's (Phase 6). Omitted for
+       *  Flame's, which is every recorded burial before those. */
+      readonly source?: 'temple' | 'dragon_fire'
     }
   /**
    * An effect with a duration started.
@@ -822,6 +1058,17 @@ const SAI_FULL_RULES: RuleSet = { ...DUA_RULES, sai: 'full' }
  */
 export const FULL_RULES: RuleSet = { ...SAI_FULL_RULES, eighthFace: 'full' }
 
+/**
+ * Dragons as well: Phase 6's rung, and what the app and the CLI play from here on.
+ *
+ * `magic` is still `'simplified'`, which matters more here than it did for
+ * `FULL_RULES`: `Summon Dragon` is a spell, so without Phase 7 the only dragons that
+ * ever reach a terrain are the two this rung seeds there at setup, and a dragon that
+ * goes back to a pool stays in it. That is a house rule and not a gap -- see
+ * `PLAN-V1.md` Phase 6.
+ */
+export const DRAGON_RULES: RuleSet = { ...FULL_RULES, dragons: true }
+
 
 export interface GameState {
   readonly ruleSet: RuleSet
@@ -838,6 +1085,14 @@ export interface GameState {
    * gates it.
    */
   readonly effects: readonly Effect[]
+  /**
+   * Every dragon in the game, pooled or on the board. Empty unless `dragons` is on.
+   *
+   * Keyed like `units` rather than listed like `effects`, because a dragon has an
+   * identity that decisions refer to by id -- which dragon a dragon is attacking,
+   * which dragon a player is spending melee results on.
+   */
+  readonly dragons: Readonly<Record<DragonId, DragonInPlay>>
   readonly turn: TurnState
   readonly pending: Pending | null
   readonly log: readonly LogEntry[]
@@ -919,4 +1174,24 @@ export function army(state: GameState, player: PlayerId, ref: ArmyRef): readonly
 
 export function capturedCount(state: GameState, player: PlayerId): number {
   return TERRAIN_SLOTS.filter((slot) => state.terrains[slot].capturedBy === player).length
+}
+
+/**
+ * Every dragon at a terrain, both players' -- because every dragon present attacks,
+ * regardless of who owns it, so "whose dragon" is never the question being asked.
+ *
+ * In board order, like `death.ts`'s roll order: two dragons resolving in the order
+ * a player happened to name them would be a replay difference nothing would catch.
+ */
+export function dragonsAt(state: GameState, slot: TerrainSlot): readonly DragonInPlay[] {
+  return Object.values(state.dragons).filter(
+    (d) => d.location.kind === 'terrain' && d.location.slot === slot,
+  )
+}
+
+/** A player's un-summoned dragons. Nothing in Phase 6 takes one out again. */
+export function pooledDragons(state: GameState, player: PlayerId): readonly DragonInPlay[] {
+  return Object.values(state.dragons).filter(
+    (d) => d.owner === player && d.location.kind === 'pool',
+  )
 }

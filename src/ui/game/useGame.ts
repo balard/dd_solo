@@ -24,7 +24,7 @@ import {
   type ForceSpec,
   type SetupOptions,
 } from '../../engine/setup'
-import { FULL_RULES, type GameAction, type GameState, type PlayerId } from '../../engine/types'
+import { DRAGON_RULES, type GameAction, type GameState, type PlayerId } from '../../engine/types'
 
 import { clearSave } from './storage'
 
@@ -102,7 +102,7 @@ export function parseGameRequest(
     }
   }
 
-  const setup: SetupOptions = { seed, forces, ruleSet: FULL_RULES }
+  const setup: SetupOptions = { seed, forces, ruleSet: DRAGON_RULES }
   return problem === null
     ? { setup, origin: { kind: 'requested', forces: name, seed } }
     : { setup, origin: { kind: 'recovered', reason: problem } }

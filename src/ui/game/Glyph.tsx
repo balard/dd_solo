@@ -13,7 +13,21 @@ import type { RuleSet } from '../../engine/types'
 
 import { useRuleSet } from './useRuleSet'
 
-export type GlyphName = NormalIcon | 'SAI'
+/**
+ * The seven dragon icons are faces too, just not of a unit die -- and `JAWS`
+ * doubles as the mark for a dragon standing at a terrain, the way an ID face is a
+ * unit's portrait.
+ */
+export type DragonGlyphName =
+  | 'JAWS'
+  | 'BREATH'
+  | 'CLAW'
+  | 'BELLY'
+  | 'WING'
+  | 'TAIL'
+  | 'TREASURE'
+
+export type GlyphName = NormalIcon | 'SAI' | DragonGlyphName
 
 const PATHS: Record<GlyphName, JSX.Element> = {
   // A ring around a dot: this die, being itself.
@@ -61,6 +75,64 @@ const PATHS: Record<GlyphName, JSX.Element> = {
   SAI: (
     <>
       <path d="M12 3 L14.4 9.3 L21 9.8 L16 14.1 L17.6 20.5 L12 17 L6.4 20.5 L8 14.1 L3 9.8 L9.6 9.3 Z" />
+    </>
+  ),
+  // Open jaws seen side-on, with two fangs. The dragon's heaviest face (12
+  // damage), and so the one that stands for a dragon on the board.
+  JAWS: (
+    <>
+      <path d="M3 7.5 C7 5 14 5 20.5 8.5" />
+      <path d="M3 16.5 C7 19 14 19 20.5 15.5" />
+      <path d="M7 6.6 L8.6 10" />
+      <path d="M12 6.2 L13.6 9.6" />
+      <path d="M7 17.4 L8.6 14" />
+      <path d="M12 17.8 L13.6 14.4" />
+    </>
+  ),
+  // A plume, widening as it leaves the mouth.
+  BREATH: (
+    <>
+      <path d="M3.5 12 C7 9.5 9 9.5 12 11" />
+      <path d="M3.5 12 C7 14.5 9 14.5 12 13" />
+      <path d="M14 7.5 C18 9 20 10.5 21 12 C20 13.5 18 15 14 16.5" />
+    </>
+  ),
+  // Three raking claw marks.
+  CLAW: (
+    <>
+      <path d="M6 4 C8.5 8.5 9.5 14 9 20" />
+      <path d="M11.5 3.5 C14 8 15 13.5 14.5 19.5" />
+      <path d="M17 4.5 C19 8.5 19.8 13 19.4 18" />
+    </>
+  ),
+  // A soft underside, exposed: the belly the automatic saves stop covering.
+  BELLY: (
+    <>
+      <path d="M4 6.5 C4 14 7.5 19.5 12 19.5 C16.5 19.5 20 14 20 6.5" />
+      <path d="M8 10.5 C9.5 12.5 14.5 12.5 16 10.5" />
+    </>
+  ),
+  // A single spread wing, with two spars.
+  WING: (
+    <>
+      <path d="M3.5 6 C10 6.5 17 10 21 17 C15.5 17.5 9 15 4.5 10.5 Z" />
+      <path d="M7 7.5 L10.5 15.5" />
+      <path d="M12 9.5 L14.5 16.6" />
+    </>
+  ),
+  // A tapering tail with a spade tip.
+  TAIL: (
+    <>
+      <path d="M3.5 19.5 C9 18.5 13.5 15 15.5 10" />
+      <path d="M15.5 10 L19.5 4.5 L20.5 11 Z" />
+    </>
+  ),
+  // A chest with a lid and a clasp.
+  TREASURE: (
+    <>
+      <path d="M3.5 10.5 H20.5 V19 H3.5 Z" />
+      <path d="M3.5 10.5 C4.5 6.5 7.5 5 12 5 C16.5 5 19.5 6.5 20.5 10.5" />
+      <path d="M12 9.5 V15" />
     </>
   ),
 }

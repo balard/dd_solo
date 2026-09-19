@@ -40,7 +40,7 @@ below together with the phase that retires it. **This document stays normative r
 | Cut | Rationale | Comes back in |
 |---|---|---|
 | **Spells / elements** | The entire spell list is the single biggest chunk of rules. Replaced by §4. | v1 |
-| **Dragons, Summoning Pool, Dragon Attack phase** | Needs the spell system (Summon Dragon) to even enter play. Phase 6 builds the dragon machinery and Phase 7 supplies the only way to summon one, so dragons are not actually reachable in a game until spells land. | v1 |
+| ~~**Dragons, Summoning Pool, Dragon Attack phase**~~ | **Now in, §14** — under `dragons: true`, which is what the app plays since Phase 6. `V0_RULES` has no dragons and its Dragon Attack Phase stays a no-op. | — |
 | **SAIs** | **25** distinct icons, many with delayed effects and targeting. Faces are *recorded* in the data as `<count> SAI:<Name>` but produce **zero results** under `sai: 'inert'` — that is 58 of the 280 faces, so roughly one die in five rolls a blank. **Twelve of the 25 are live under `sai: 'results'`** (§8), which is what the app now plays; `V0_RULES` keeps all 25 inert. | v1 (partly landed) |
 | ~~**Eighth-face icon powers**~~ (City, Temple, Standing Stones, Tower) | **Now in, §13** — Tower, City and Temple under `eighthFace: 'full'`, which is what the app plays since Phase 5e. Standing Stones stays inert until spells land in Phase 7; `V0_RULES` stays on `standard`, where all four icons still behave identically. | — |
 | ~~Eighth-face combat bonuses~~ | **Now in.** ID doubling and the melee-only restriction are implemented; see §5. | — |
@@ -57,7 +57,7 @@ Per turn, for the **marching player**:
 
 1. **Effects Expire** — no longer a no-op: effects with a duration end here, at the beginning of their caster's next turn (§10). Nothing produces one yet, so in practice it still does nothing.
 2. **Eighth Face** — no longer a no-op under `eighthFace: 'full'` (§13): a held City may recruit or promote, and a held Temple may force a burial. `V0_RULES` still sees a no-op, since the holder's advantages are passive (§5) and its rung never rises past `standard`.
-3. **Dragon Attack** — no-op in v0 (no dragons).
+3. **Dragon Attack** — no longer a no-op under `dragons: true` (§14): every dragon at a terrain where the marching player has an army attacks, whoever owns it. `V0_RULES` still sees a no-op, since it has no dragons at all.
 4. **First March** — pick one army, then: Maneuver step (optional) → Action step (optional).
 5. **Second March** — pick a *different* army, same two steps.
 6. **Reserves Phase** — Reinforce step, then Retreat step.
@@ -469,8 +469,10 @@ Answered by `PLAN-V1.md` rather than here:
 Resolved so far:
 
 - **All unit and terrain die data is transcribed** — 40 unit dice and 24 terrain dice (all six basic
-  types, Phase 5a), passing validation. **One data gap remains**: the dragon die face layouts, which
-  are in neither rulebook and block Phase 6 until transcribed (`PLAN-V1.md` §6).
+  types, Phase 5a), passing validation. **The dragon die face layouts are no longer an open
+  question**: they are in neither rulebook, but both forms are now recorded in `PLAN-V1.md` Phase 6
+  (Drake and Wyrm, twelve faces each, the same layout for all five elements). They still have to be
+  imported into `data/` before that phase can run, which is work rather than an unknown.
 - **Which terrain dice each species brings** — resolved by Phase 5b, and not by a per-species rule:
   each Home Terrain is drawn uniformly from all 24 dice, and the Frontier is drawn from a terrain
   sharing an element with the roll-off loser's species. There is no "should the Frontier go on being
@@ -488,11 +490,13 @@ Resolved so far:
   Flaming Shields for Firewalkers, plus the Species Abilities Phase that `Phase` does not yet
   model. The starter book grants none, so this is the one place v1 deliberately follows the full
   rules over the release target (`PLAN-V1.md` Phase 8).
-- **The Death dragon ships and is unreachable, deliberately.** `Summon Dragon` needs magic of the
-  dragon's own element and neither species casts death magic, so it has no route onto the board in
-  this matchup. All five elements are transcribed anyway, for data completeness — it becomes
-  playable when a death-casting species arrives, and no house rule is added to reach it sooner
-  (`PLAN-V1.md` Phase 6).
+- **The Death dragon ships and is unreachable, deliberately.** Phase 6 draws each player's pool
+  colors from their own species' two elements, and Treefolk (water, earth) and Firewalkers (air,
+  fire) cover four of the five between them; `Summon Dragon` could not fetch the fifth either, since
+  it needs magic of the dragon's own element and neither species casts death magic. All five
+  elements are transcribed anyway, for data completeness — Death becomes playable when a
+  death-casting species arrives, and no house rule is added to reach it sooner (`PLAN-V1.md`
+  Phase 6).
 
 ## 13. Eighth-face icons under `eighthFace: 'full'` (v1 Phase 5)
 
@@ -540,3 +544,57 @@ revoke when it changes.
 House rule, alongside the Frontier draw (§7): both Home Terrains and the Frontier are drawn from all
 24 dice rather than chosen by species, so which icon a board's terrains carry is chance rather than
 a decision either side made.
+
+## 14. Dragons under `dragons: true` (v1 Phase 6)
+
+Five elements — Air, Earth, Fire, Water, Death — and only the **Elemental** dragon kind. Hybrid,
+Ivory, Ivory Hybrid and White dragons are out of scope, which is what collapses the six-row
+targeting table on p. 18 to the single rule below. Ten dice: 5 elements × drake and wyrm.
+
+A dragon has **5 health and 5 automatic saves**, so an army needs **10 melee results or 10 missile
+results** to kill one — never a combination of the two against the same dragon. Belly drops that to
+5 for the attack it appears in.
+
+**Three house rules**, all narrower than the rulebook and all recorded here:
+
+1. **One dragon per player starts on the Frontier.** The rules keep every dragon in the Summoning
+   Pool until `Summon Dragon` brings it out, and that is a spell (Phase 7) — so without a seed the
+   whole phase would be unreachable. Setup draws one dragon at random from each player's own pool
+   and places it at the Frontier. **The trip is one-way**: a dragon that goes back to its pool,
+   killed or flown, stays there, because nothing in this phase summons. Retires in Phase 7.
+2. **Pool colour is drawn from the player's own species elements**, not chosen freely as the rules
+   allow. A force brings `ceil(health / 24)` dragons: a 2-dragon force gets exactly one of each of
+   its species' two elements, a 1-dragon force draws between them, and the form (drake or wyrm) is
+   drawn per dragon. This is why no game of Treefolk against Firewalkers ever fields the Death
+   dragon — between them they cover the other four.
+3. **Two orderings are fixed rather than chosen.** A dragon with more than one eligible dragon
+   target takes the first in board order, and several qualifying terrains resolve in board order.
+   The rules make both a decision for the owner; neither can arise while at most two dragons are on
+   the board, so neither is raised as a pending. Both become real in Phase 7.
+
+**Targeting.** A dragon attacks a *different-element* dragon at its terrain if one is there;
+**same-element dragons never attack each other**; with no eligible dragon it attacks the marching
+player's army — including the army of whoever summoned it.
+
+**The attack**, in the rulebook's nine steps: targets, declarations, the dragons roll, breaths
+resolve, treasures resolve, the army answers, damage lands both ways at once, a slaying promotes,
+and the wings go home. **The army does not roll at all when every dragon is busy with another
+dragon.**
+
+**The Dragon Roll** is the army's answer: one **combination roll** counting melee, missile and save
+at once, with the owner choosing what each ID result becomes and splitting it freely between the
+three. It is its own listed roll type, so an SAI whose `Applies` column omits Dragon Attack does
+nothing in it — Flame and Seize included. Seven SAIs name it and each has its own sentence: Smite
+generates melee results here instead of unsavable damage, Bullseye and Double Strike generate
+results instead of targeting, and Counter and Volley generate two types at once.
+
+**Icons** (p. 20): Jaws 12 damage, Claws 6, Tail 3 and roll again, Wing 5 and fly home if it
+survives, Belly disables that dragon's own automatic saves, Treasure promotes one unit of the army
+it is attacking, Breath kills five health-worth plus its element's effect.
+
+**The five breaths.** Air halves the army's melee, Earth its maneuver, Water its missile — each
+until the beginning of that army's next turn, and each a `divide`, so two *different* halvings both
+apply and two of a kind do not (§10, and pipeline step 7). Death makes the army ignore all its ID
+results. **Fire is the odd one**: the five health-worth it kills die unconditionally, and only then
+does each of them roll for a save icon — those that fail are buried, those that succeed stay in the
+DUA. A Phoenix therefore gets its Rise from the Ashes roll on the way, exactly as §9 requires.

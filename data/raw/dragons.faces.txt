@@ -1,0 +1,158 @@
+# Dragon dice -- 5 elements x 2 forms (drake, wyrm) = 10 dice, 12 faces each.
+#
+# Format:  header line  = "<element> <form>"
+#          face lines   = "<face number 1-12> <Icon>"
+#
+# As in terrains.faces.txt, and UNLIKE the unit files, the leading number is the
+# FACE NUMBER, not an icon count. A dragon face carries a fixed named ability
+# rather than a count of result icons, so there is no count to record.
+#
+# Vocabulary: Jaws, Breath, Claw, Belly, Wing, Tail, Treasure. See data/ICONS.md.
+#
+# The layout is the same for all five elements of a form -- only Breath's effect
+# differs by element, and the importer checks that the ten transcriptions agree.
+# The two forms differ by more than one face: a wyrm spends the drake's two Wings
+# on a third Tail and a Treasure.
+#
+# Source: full rules p. 20 for the icon effects; the layouts are transcribed from
+# real dice (neither rulebook prints them).
+
+air drake
+1 Jaws
+2 Breath
+3 Claw
+4 Claw
+5 Belly
+6 Belly
+7 Wing
+8 Wing
+9 Claw
+10 Claw
+11 Tail
+12 Tail
+
+air wyrm
+1 Jaws
+2 Breath
+3 Claw
+4 Claw
+5 Belly
+6 Belly
+7 Claw
+8 Claw
+9 Tail
+10 Tail
+11 Tail
+12 Treasure
+
+death drake
+1 Jaws
+2 Breath
+3 Claw
+4 Claw
+5 Belly
+6 Belly
+7 Wing
+8 Wing
+9 Claw
+10 Claw
+11 Tail
+12 Tail
+
+death wyrm
+1 Jaws
+2 Breath
+3 Claw
+4 Claw
+5 Belly
+6 Belly
+7 Claw
+8 Claw
+9 Tail
+10 Tail
+11 Tail
+12 Treasure
+
+earth drake
+1 Jaws
+2 Breath
+3 Claw
+4 Claw
+5 Belly
+6 Belly
+7 Wing
+8 Wing
+9 Claw
+10 Claw
+11 Tail
+12 Tail
+
+earth wyrm
+1 Jaws
+2 Breath
+3 Claw
+4 Claw
+5 Belly
+6 Belly
+7 Claw
+8 Claw
+9 Tail
+10 Tail
+11 Tail
+12 Treasure
+
+fire drake
+1 Jaws
+2 Breath
+3 Claw
+4 Claw
+5 Belly
+6 Belly
+7 Wing
+8 Wing
+9 Claw
+10 Claw
+11 Tail
+12 Tail
+
+fire wyrm
+1 Jaws
+2 Breath
+3 Claw
+4 Claw
+5 Belly
+6 Belly
+7 Claw
+8 Claw
+9 Tail
+10 Tail
+11 Tail
+12 Treasure
+
+water drake
+1 Jaws
+2 Breath
+3 Claw
+4 Claw
+5 Belly
+6 Belly
+7 Wing
+8 Wing
+9 Claw
+10 Claw
+11 Tail
+12 Tail
+
+water wyrm
+1 Jaws
+2 Breath
+3 Claw
+4 Claw
+5 Belly
+6 Belly
+7 Claw
+8 Claw
+9 Tail
+10 Tail
+11 Tail
+12 Treasure

@@ -45,6 +45,16 @@ export type RollPurpose =
   /** `against: null` is any save roll that is not against an attack. */
   | { readonly kind: 'save'; readonly against: ActionKind | null }
   | { readonly kind: 'maneuver' }
+  /**
+   * An army answering a dragon attack (Phase 6). The combination roll this file has
+   * been promising since Phase 0b: it counts melee, missile and save at once, so it
+   * is one purpose over three kinds.
+   *
+   * It is its own listed roll type in the reference's `Applies` column, not a melee
+   * attack that happens to count saves -- which is why seven SAIs name it explicitly
+   * and the rest, Flame and Seize included, do nothing here at all.
+   */
+  | { readonly kind: 'dragon_attack' }
 
 export interface RollContext {
   readonly purpose: RollPurpose
@@ -72,6 +82,17 @@ export interface SaiOutcome {
   readonly effects: readonly RollEffectBody[]
   /** Step 3: "Roll this unit again and apply the new result as well." */
   readonly reroll: boolean
+  /**
+   * Step 8 results whose *type* is the roller's to choose, when the roll counts more
+   * than one and the SAI offers more than one (Create Fireminions, p. 27: "if an SAI
+   * generates a choice of different results then the player may split those results
+   * between those required by the roll").
+   *
+   * Only a combination roll can produce this -- with one counted kind there is one
+   * legal answer and the handler gives it directly. The roller's split comes back in
+   * `RollSpec.saiResults`, which is the seam Wild Growth already uses.
+   */
+  readonly flexible?: number
 }
 
 const NOTHING: SaiOutcome = { results: {}, effects: [], reroll: false }
@@ -97,20 +118,49 @@ const freeMove = (x: number, ctx: RollContext, rung: RuleSet['sai']): SaiOutcome
 }
 
 /**
- * The single result type this roll counts.
+ * Which result types this roll counts.
  *
- * Phase 6's combination roll has no single answer, which is why `RollPurpose` gains
- * a member for it there rather than this gaining a fallback.
+ * A list rather than the single type this used to return, because Phase 6's dragon
+ * roll counts three at once. An SAI that offers a choice ("X maneuver *or* X save")
+ * intersects its own set with this one; if exactly one survives there is no decision
+ * to make, which is the case for every such SAI in the box but Create Fireminions.
  */
-function countedType(purpose: RollPurpose): ResultType {
+function countedTypes(purpose: RollPurpose): readonly ResultType[] {
   switch (purpose.kind) {
     case 'attack':
-      return purpose.action
+      return [purpose.action]
     case 'save':
-      return 'save'
+      return ['save']
     case 'maneuver':
-      return 'maneuver'
+      return ['maneuver']
+    case 'dragon_attack':
+      return DRAGON_ROLL_KINDS
   }
+}
+
+/**
+ * What an army's answer to a dragon attack counts, in the order the rules list it:
+ * "the army makes a combination roll, counting any melee, missile, or save results"
+ * (full rules p. 18). Exported because the roll's `RollSpec.kinds` must agree with
+ * what the SAIs here think is being counted, and two copies of that would drift.
+ */
+export const DRAGON_ROLL_KINDS: readonly ResultType[] = ['melee', 'missile', 'save']
+
+/** The types this roll counts that the SAI is allowed to generate. */
+function offered(purpose: RollPurpose, choices: readonly ResultType[]): readonly ResultType[] {
+  return countedTypes(purpose).filter((kind) => choices.includes(kind))
+}
+
+/**
+ * An SAI offering a choice of result types: one type if only one is counted, the
+ * roller's split if more than one is.
+ */
+function choiceOf(x: number, purpose: RollPurpose, choices: readonly ResultType[]): SaiOutcome {
+  const legal = offered(purpose, choices)
+  const only = legal[0]
+  if (only === undefined) return NOTHING
+  if (legal.length === 1) return gives(only, x)
+  return { results: {}, effects: [], reroll: false, flexible: x }
 }
 
 const isAttack = (ctx: RollContext, action: ActionKind): boolean =>
@@ -151,6 +201,11 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
     }
     if (ctx.purpose.kind === 'save') return gives('save', x)
     if (isAttack(ctx, 'melee')) return gives('melee', x)
+    // "During a dragon attack, Counter generates X save and X melee results" -- both,
+    // and not the p. 27 pick-one rule, because the reference spells this case out.
+    if (ctx.purpose.kind === 'dragon_attack') {
+      return { results: { save: x, melee: x }, effects: [], reroll: false }
+    }
     return NOTHING
   },
 
@@ -161,6 +216,9 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
     }
     if (ctx.purpose.kind === 'save') return gives('save', x)
     if (isAttack(ctx, 'missile')) return gives('missile', x)
+    if (ctx.purpose.kind === 'dragon_attack') {
+      return { results: { save: x, missile: x }, effects: [], reroll: false }
+    }
     return NOTHING
   },
 
@@ -171,17 +229,17 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
    * The distinction is invisible while every roll counts one type, and becomes real
    * at Phase 6.
    */
-  Fly: (x, ctx) => {
-    const type = countedType(ctx.purpose)
-    return type === 'maneuver' || type === 'save' ? gives(type, x) : NOTHING
-  },
+  Fly: (x, ctx) => choiceOf(x, ctx.purpose, ['maneuver', 'save']),
 
-  /** "During a maneuver roll, Hoof generates X maneuver results. During a save roll
-   *  ... X save results." */
-  Hoof: (x, ctx) => {
-    const type = countedType(ctx.purpose)
-    return type === 'maneuver' || type === 'save' ? gives(type, x) : NOTHING
-  },
+  /**
+   * "During a maneuver roll, Hoof generates X maneuver results. During a save roll
+   * ... X save results. During a dragon attack, Hoof generates X save results."
+   *
+   * The same two types Fly offers, and the dragon-attack sentence agrees with what
+   * `choiceOf` works out on its own: of maneuver and save a dragon roll counts only
+   * save, so there is nothing to choose.
+   */
+  Hoof: (x, ctx) => choiceOf(x, ctx.purpose, ['maneuver', 'save']),
 
   /**
    * "During any roll, Trample generates X maneuver **and** X melee results."
@@ -192,21 +250,31 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
    */
   Trample: (x) => ({ results: { maneuver: x, melee: x }, effects: [], reroll: false }),
 
-  /** "During any army roll, Create Fireminions generates X magic, maneuver, melee,
-   *  missile or save results" -- every type, so always the one being counted. */
-  'Create Fireminions': (x, ctx) => gives(countedType(ctx.purpose), x),
+  /**
+   * "During any army roll, Create Fireminions generates X magic, maneuver, melee,
+   * missile or save results" -- every type, so always the one being counted.
+   *
+   * The one SAI in the box whose choice survives a dragon roll: all three of that
+   * roll's kinds are on its list, so the roller splits X between them (p. 27).
+   */
+  'Create Fireminions': (x, ctx) =>
+    choiceOf(x, ctx.purpose, ['magic', 'maneuver', 'melee', 'missile', 'save']),
 
   /**
    * "During a melee attack, Smite inflicts X points of damage to the defending army
-   * with no save possible."
+   * with no save possible. During a dragon attack, Smite generates X melee results."
    *
    * Damage, not melee results -- so a Smite-only attack rolls a zero total and still
-   * kills. Its dragon-attack half does generate melee results, and arrives in Phase 6.
+   * kills. The dragon-attack half is the other way round: ordinary melee results,
+   * because there is no "defending army" to inflict unsavable damage on.
    */
-  Smite: (x, ctx) =>
-    isAttack(ctx, 'melee')
-      ? { results: {}, effects: [{ kind: 'unsavable', damage: x }], reroll: false }
-      : NOTHING,
+  Smite: (x, ctx) => {
+    if (isAttack(ctx, 'melee')) {
+      return { results: {}, effects: [{ kind: 'unsavable', damage: x }], reroll: false }
+    }
+    if (ctx.purpose.kind === 'dragon_attack') return gives('melee', x)
+    return NOTHING
+  },
 
   /** "During a melee attack, the defending army cannot counter-attack ... Surprise
    *  has no effect during a counter-attack." */
@@ -224,7 +292,9 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
    * it, and reading it as though it did would consume a die roll the rules do not.
    */
   Rend: (x, ctx) => {
-    if (isAttack(ctx, 'melee')) return { results: { melee: x }, effects: [], reroll: true }
+    if (isAttack(ctx, 'melee') || ctx.purpose.kind === 'dragon_attack') {
+      return { results: { melee: x }, effects: [], reroll: true }
+    }
     if (ctx.purpose.kind === 'maneuver') return gives('maneuver', x)
     return NOTHING
   },
@@ -355,18 +425,23 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
    *
    * The reroll is of **this** die -- the roller's own, the way Rend's is -- so it is
    * `reroll: true` and step 3 handles it; a reroll showing Bullseye again adds its
-   * budget to the same task, because `targetTasks` combines by name. Its dragon-attack
-   * half ("generates X missile results") is Phase 6, like every other dragon sentence
-   * in this file.
+   * budget to the same task, because `targetTasks` combines by name.
+   *
+   * "During a dragon attack, Bullseye generates X missile results" -- plain results
+   * and no targeting, since a dragon is not an army with units to pick out. The
+   * reroll goes with the missile-attack sentence only, the way Rend's does.
    */
-  Bullseye: (x, ctx) =>
-    isAttack(ctx, 'missile')
-      ? {
-          results: {},
-          effects: [{ kind: 'target_enemy', health: x, escape: 'save', fate: 'kill' }],
-          reroll: true,
-        }
-      : NOTHING,
+  Bullseye: (x, ctx) => {
+    if (isAttack(ctx, 'missile')) {
+      return {
+        results: {},
+        effects: [{ kind: 'target_enemy', health: x, escape: 'save', fate: 'kill' }],
+        reroll: true,
+      }
+    }
+    if (ctx.purpose.kind === 'dragon_attack') return gives('missile', x)
+    return NOTHING
+  },
 
   /**
    * "During a melee attack, target four health-worth of units in the defending army.
@@ -379,14 +454,19 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
    * printed on the face is the answer, and hardcoding it would disagree with the data
    * the day another face is transcribed.
    */
-  'Double Strike': (x, ctx) =>
-    isAttack(ctx, 'melee')
-      ? {
-          results: {},
-          effects: [{ kind: 'target_enemy', health: x, escape: 'save', fate: 'kill' }],
-          reroll: true,
-        }
-      : NOTHING,
+  'Double Strike': (x, ctx) => {
+    if (isAttack(ctx, 'melee')) {
+      return {
+        results: {},
+        effects: [{ kind: 'target_enemy', health: x, escape: 'save', fate: 'kill' }],
+        reroll: true,
+      }
+    }
+    // "During a dragon attack, Double Strike generates four melee results." Four is
+    // what the face prints, so `x` is that four and invariant 7 holds here too.
+    if (ctx.purpose.kind === 'dragon_attack') return gives('melee', x)
+    return NOTHING
+  },
 
   /**
    * "During a melee attack, target up to X health-worth of units in the defending
@@ -624,9 +704,22 @@ const ALL_PURPOSES: readonly RollPurpose[] = [
   { kind: 'attack', action: 'magic' },
   { kind: 'save', against: 'melee' },
   { kind: 'save', against: 'missile' },
-  { kind: 'save', against: 'magic' },
   { kind: 'save', against: null },
+  { kind: 'save', against: 'magic' },
 ]
+
+/**
+ * The same list, plus the dragon roll when the rules have dragons.
+ *
+ * Gated rather than unconditional, because the dragon-attack sentences are where
+ * Smite and Bullseye stop being result-free: asking about a roll that cannot happen
+ * would raise the ceiling of every game that has no dragons in it. An over-bound is
+ * survivable where an under-bound is not -- `maxArmyResults` is a ceiling -- but a
+ * ceiling that moves for rules nobody is playing is a worse answer than the true one.
+ */
+function purposesFor(ruleSet: RuleSet): readonly RollPurpose[] {
+  return ruleSet.dragons ? [...ALL_PURPOSES, { kind: 'dragon_attack' }] : ALL_PURPOSES
+}
 
 /**
  * The most this SAI face could ever generate of a result type, over every roll it
@@ -648,7 +741,7 @@ export function saiMaxResults(face: SaiFace, resultType: ResultType, ruleSet: Ru
   if (handlerFor(face.sai, ruleSet) === undefined) return 0
 
   let best = 0
-  for (const purpose of ALL_PURPOSES) {
+  for (const purpose of purposesFor(ruleSet)) {
     for (const isCounter of [false, true]) {
       const outcome = saiEffects(face, { purpose, isCounter }, ruleSet)
       best = Math.max(best, outcome.results[resultType] ?? 0)

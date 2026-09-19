@@ -3,8 +3,8 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: v0 alpha complete; v1 Phases 0–5 landed. The app plays every SAI and every eighth-face
-> icon power in the box.**
+> **Status: v0 alpha complete; v1 Phases 0–6 landed. The app plays every SAI, every eighth-face
+> icon power and all five elemental dragons.**
 > All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > and installable as a PWA. It opens on a screen that picks the two forces and the seed; saving is
@@ -51,7 +51,8 @@ the dice and the opponent.
 > crashed every force but four. The `'full'` refusal survives as the guard against a **new** SAI
 > arriving with a new species.
 >
-> The ladder after this is eighth-face **icon** powers (Phase 5), dragons (6), then spells (7).
+> The ladder after this was eighth-face **icon** powers (Phase 5) and dragons (6), both landed
+> below; spells (7) are next.
 
 > **Phase 5 landed in five slices.** 5a transcribed Coastland, Feyland and Flatland, so all six
 > basic terrain types (24 dice) are in the data. 5b replaced the species terrain profile with a
@@ -67,6 +68,24 @@ the dice and the opponent.
 > Face Phase from a no-op into a single decision with no queue (at most one terrain can fire --
 > two captures already win), and flipped `FULL_RULES` to `eighthFace: 'full'`. The 25 goldens
 > replay byte-identical and unregenerated through all five slices.
+
+> **Phase 6 landed in one pass** -- the first phase since Phase 3 that needed no slices, because
+> the seam it wanted (`resolveFaces` pure, so the same faces resolve twice around a pause) was
+> already built. Ten dragon dice are in `data/` behind `import_dragons.py`; `dragons.ts` holds the
+> pure rules; `GameState.dragons` sits beside `effects`; `RollPurpose` gained the combination-roll
+> member it has been promising since Phase 0b; and the Dragon Attack Phase is a five-step machine
+> on `turn.dragonAttack` with four new `Pending` kinds. The app and the CLI play `DRAGON_RULES`,
+> `SAVE_VERSION` is 8, and the 25 goldens are still byte-identical and unregenerated -- every draw
+> the phase adds is gated on `ruleSet.dragons`, which every recorded game has off.
+>
+> **Only elemental dragons, and only two on the board.** Five elements, drake and wyrm, no Hybrid,
+> Ivory or White -- which is what collapses p. 18's six-row targeting table to one rule: attack a
+> different-element dragon if one is here, never your own element, otherwise the marching army.
+> **Each player seeds one dragon at the Frontier at setup** (a house rule, `RULES-V0.md` §14),
+> because `Summon Dragon` is a Phase 7 spell and without a seed nothing could ever reach the board.
+> The trip is one-way: a dragon that goes home stays home.
+>
+> The ladder after this is spells (Phase 7), species abilities (8), then the greedy AI (9).
 
 ## Read these first
 
@@ -93,7 +112,7 @@ npm test            # vitest run
 npm run typecheck   # tsc --noEmit
 npm run build       # typecheck + production build
 npm run data        # regenerate and validate data/starter/ from data/raw/
-npm run art         # optional: mirror real face art into public/faces/ (gitignored)
+npm run art         # optional: mirror real face art into public/faces/ + assets/faces/ (both gitignored)
 npm run play        # play a game in the terminal (--seed N, --ai random, --forces starter|bestiary)
 npm run goldens     # re-record the golden corpus -- see below before you do
 ```
@@ -143,8 +162,9 @@ These are the things that break the project if violated:
 5. **Scope is controlled by the `RuleSet` config**, not by scattered `if`s. `V0_RULES` is
    `magic: 'simplified'`, `sai: 'inert'`, `eighthFace: 'standard'`, `dua: 'inert'`,
    `dragons: false`, and stays exactly that -- it is what the golden corpus is recorded against.
-   What the app plays is `FULL_RULES` = `DUA_RULES` + `sai: 'full'` + `eighthFace: 'full'`
-   (Phase 5e), and `DUA_RULES` is `V0_RULES` + `sai: 'results'` + `dua: 'active'`. Adding a cut feature means implementing behind its flag,
+   What the app plays is `DRAGON_RULES` = `FULL_RULES` + `dragons: true` (Phase 6); `FULL_RULES`
+   is `DUA_RULES` + `sai: 'full'` + `eighthFace: 'full'` (Phase 5e), and `DUA_RULES` is `V0_RULES`
+   + `sai: 'results'` + `dua: 'active'`. Adding a cut feature means implementing behind its flag,
    not deleting a condition -- and adding a key to `V0_RULES` is safe for the goldens, because
    `digestState` excludes `ruleSet` and `setupGame` pins an absent one to `V0_RULES`.
 
@@ -158,7 +178,7 @@ These are the things that break the project if violated:
    the 2-health Treefolk `Oak` has a `4 SAVE` face. Treating a face as a single result makes every
    damage number in the game wrong.
 8. **Never commit SFR's icon or dice art, and never let the app depend on it.** `npm run art`
-   mirrors it into the gitignored `public/faces/`; every face falls back to our own glyphs when
+   mirrors it into the gitignored `public/faces/` and `assets/faces/`; every face falls back to our own glyphs when
    that is missing, so a fresh clone is a complete game. Note that `npm run build` copies
    `public/faces/` into `dist/` — delete it before publishing a build. See `OVERVIEW.md` §5.
 
@@ -219,8 +239,10 @@ These are the things that break the project if violated:
   terrain is restricted to melee. **Now in, under `eighthFace: 'full'`** (Phase 5e, `RULES-V0.md`
   §13): Tower, City and Temple. Standing Stones stays inert until spells land in Phase 7.
   `V0_RULES` stays on `standard`, where the four icons still behave identically.
-- **No dragons and no spells.** Promotion and burying exist as machinery from v1 Phase 2, but
-  `V0_RULES` still reaches neither.
+- **Dragons are in, spells are not.** Under `dragons: true` (v1 Phase 6, `RULES-V0.md` §14) each
+  player seeds one elemental dragon at the Frontier and the Dragon Attack Phase is real.
+  `V0_RULES` has no dragons at all, and promotion and burying -- machinery since v1 Phase 2 --
+  stay out of its reach.
 
 
 ## Die data
@@ -239,7 +261,8 @@ importer is always safe. Format and vocabulary: `data/ICONS.md`.
 
 **Status: complete.** 40 unit dice (280 faces) and 24 terrain dice (6 basic types × 4 eighth-face
 variants -- Coastland, Feyland and Flatland joined Swampland, Highland and Wasteland in Phase 5a),
-all passing validation. Nothing is `TODO` except the dragon dice (Phase 6).
+all passing validation, plus **10 dragon dice** (5 elements × drake/wyrm, 12 faces each, Phase 6).
+Nothing is `TODO`: every die in scope is transcribed.
 
 **A terrain die is a type plus an eighth-face icon.** Faces 1–7 come from the type, face 8 from the
 icon. Every type runs magic → missile → melee as the face number rises, but the split points differ
@@ -337,6 +360,17 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   rest of the engine uses. **The running value is a triple per result type — `{ id, normal, sai }`
   — and that is forced, not stylistic**: step 6 removes ID results *last* and step 8 adds SAI
   results *after* step 7's divide, and neither survives a single subtotal.
+  - **`perDieResults` sums across every kind the roll counts, not just the first.** With one
+    counted type those are the same number, which is every roll before Phase 6 — so this looked
+    right for five phases. In a dragon roll counting melee, missile and save, reading only the
+    first meant a die showing `4 SAVE` reported zero, and the roll strip greys on that number:
+    a blank die beside a total that was counting it. An ID die's pool is counted *once* however
+    many types it could be spent on, which is also what lets a display pass fake the allocation.
+- **A `Modifier` that is not arithmetic gets its own kind.** `ignore_ids` (the Death breath,
+  Phase 6) zeroes the ID share before step 6. It is deliberately not a `multiply` by zero: that
+  would eat the type's one-multiplier budget and make an army holding an eighth face *throw*
+  rather than roll. Riding the modifier list is what gets it to every army roll without a single
+  call site learning about it.
 - **An SAI is a pure function of its face and what the roll is for** (`sai.ts`). No `GameState`, no
   unit, no RNG, so every one is testable from a face literal the way `faceResults` is; `resolveRoll`
   stamps the die onto whatever effects come back. Two rules do most of the work:
@@ -458,6 +492,26 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   holding two has already won before the phase could ask about the second. That is what lets
   `eighthFacePending` be a single decision with no queue -- a future rule that changes what wins
   the game is the one thing that would turn this into one.
+- **A dragon's own roll is not the ten-step pipeline** (`dragons.ts`, Phase 6). A dragon face is a
+  fixed named ability, not a count of result icons: Jaws is 12 damage whoever rolled it. So there
+  is no subtotal, no divide and no modifier -- `rollDragon` picks one of twelve faces and follows
+  its rerolls, and `resolveFaces` has nothing to contribute. The army's *answer* is an ordinary
+  roll and does go through the pipeline.
+  - **Breath rerolls against a dragon and not against an army**, which is why the target has to be
+    known before the dice are thrown -- and is exactly why the rulebook designates targets at step
+    2 and rolls at step 3.
+  - **`turn.dragonAttack` is the phase's `CombatState`**: it holds the rolled faces between the
+    throw and the arithmetic, for the same reason an exchange does. Built field by field by
+    `withDragonAttack`, so optional fields drop by omission near the digest.
+  - **The army does not roll when every dragon is duelling** (p. 18 step 6, "skip this step if no
+    army is being attacked"). Missed on the first pass and found in a browser rather than a test:
+    the totals were right, the state validated, and the only symptom was a roll's worth of
+    randomness spent where the rules spend none. The starter matchup duels on turn one every game.
+- **Dragons are `state.dragons`, keyed like units and owned like nothing else.** `DragonInPlay.owner`
+  says whose pool it came from and who rolls it -- **not whose side it fights on**, since a dragon
+  attacks the marching player's army whoever brought it, its own summoner included. It has no
+  health field, because damage does not accumulate between attacks: 10 of one type in one attack
+  (5 past a Belly) or it is untouched.
 - **Effects with a duration are `state.effects` and `effects.ts`, and Sleep and Galeforce are what
   produce them** (v1 Phase 4c).
   An effect targets an army *at a place* (it does not follow the units) or a unit (it does),
@@ -573,9 +627,11 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     terrains -- and the bug that made the UI unable to do it lived on for exactly as long. When a
     decision gains a dimension, the fuzz opponent has to gain it too or the fuzz quietly narrows.
 
-  - **It runs `V0_RULES` only**, which is no longer the configuration anyone plays. Phase 1 turned
-    the app over to `SAI_RULES` and deliberately did not add a second fuzz, so the live rules have
-    no standing deadlock net — only unit tests. Worth knowing before trusting a green suite.
+  - **The 1000-game fuzz runs `V0_RULES` only**, which is no longer the configuration anyone
+    plays. Phase 1 turned the app over to `SAI_RULES` and deliberately did not add a second fuzz of
+    that size, and every phase since has widened the gap. There are now two smaller ones -- Phase
+    5e's eighth-face fuzz and Phase 6's 240-game dragon fuzz -- but the *big* net still guards the
+    one config that least needs it. Worth knowing before trusting a green suite.
 - **A game record is `{ setup, actions }` and nothing else.** Replaying it reproduces the game die
   for die. `replayTo(record, n)` is undo.
 - **The golden corpus is the guard on "this changed no outcome".** `src/engine/__golden__/` holds
@@ -654,8 +710,14 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   ever being shown the roll that offered the choice.
   - **`rollOnTheTable(state)` is the engine query behind it**, not a log entry: a `dice_rolled`
     entry would appear in every roll of every game and rewrite all 25 golden digests to show
-    something `CombatState` already holds. It returns the *save* dice at the delayed pause and the
-    *attack* dice at the targeting one, which is what each decision is actually about.
+    something `CombatState` already holds. It returns the *save* dice at the delayed pause, the
+    *attack* dice at the targeting one and the army's own dice at Phase 6's dragon allocation,
+    which is what each decision is actually about.
+    - **The dragon case has to fake an allocation to render at all.** A combination roll cannot be
+      resolved without one that spends the ID pool exactly (`allocateIds` refuses), and a display
+      pass by definition has no answer yet -- so it puts the whole pool on one kind. Safe only
+      because `perDieResults` counts an ID die's pool once and never asks which type it became.
+      Getting this wrong crashed the very sheet that exists to show the roll.
   - **The rule text is `SAI_TEXT` in `sai.ts`**, beside the handlers rather than in either client,
     because both need it and because a handler that changes beside a sentence that does not is the
     drift this file has been bitten by twice. `X` stays `X`: the sheet's own line says what the
@@ -686,6 +748,18 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **Real face art is used where it is big enough to read**, via `FaceArt` / `useFaceArt`: the die
   inspector and the terrain sheet at 44px, the roll strip at 30px, terrain chips at 28px. Below
   about 30px it is worse than a glyph — measured, not assumed — so small sizes stay glyphs.
+  - **`DragonFaceArt` is `FaceArt`'s sibling, not a branch inside it**: a dragon face is an icon
+    with no count, so it shares neither `Face` nor `faceLabel`, and folding them together would
+    mean a union at every call site to say which kind of die this is. Its manifest key is the
+    dragon *form*, since the art carries no element — all five drakes print the same twelve
+    images, checked against the live set rather than assumed.
+  - **Its 30px floor is a default, and the board chip overrides it with `floor={0}`.** At 18px the
+    Jaws mark there is a *label* saying which die is standing at the terrain, not a face to read —
+    the same job an ID face does for a unit tile.
+  - **Dragon art is white line work and must be tinted**, unlike the black unit art: it is drawn
+    for a dark die, so untinted it is white on a white panel. `.dragon-face-art` takes the same
+    `brightness(0)` the terrain art does, for the mirror-image reason. It shipped once as blank
+    boxes in the log, which is what "the art loaded fine, it was just invisible" looks like.
 - **The UI never computes an art filename.** The remote set is sparse and not derivable from
   (icon, count), so `tools/fetch_faces.py` resolves it and writes a manifest keyed by
   `<unitTypeId>#<faceIndex>`. Add a face, re-run `npm run art`.
@@ -719,6 +793,20 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     not a general channel for game state -- everything else still renders from `state.pending` and
     props. `null` means nobody said, and then the label claims nothing at all.
 
+- **A dragon is drawn on its terrain, on neither side** (`.dragon-row`, between the terrain head
+  and the two `ArmySide`s). It attacks the marching player's army whoever brought it, so rendering
+  it inside an army would say the opposite. The chip is tinted by element, because the element is
+  the one thing that decides who it will fight; tapping it opens all twelve faces with their
+  counts and rules text, the same gesture a unit tile uses.
+- **A dragon roll is one log line per dragon, never one per face.** It began as a flat list and
+  read "Fire Wyrm breath, Fire Wyrm breath, Fire Wyrm tail, Fire Wyrm claw, Earth Drake tail,
+  Earth Drake claw" — the name six times, no target, no total, and no sign that four of those
+  faces were one die rerolling itself. `DragonAttackEntry` carries the target, the faces in
+  throwing order and the damage, so the line reads `Water Wyrm → Air Drake  [faces]  6 damage`.
+- **A decision sheet shows the roll that caused it**, and the dragon allocation is the case that
+  proves why: how many IDs there are to spend *is* the question, and which dice already gave melee
+  or saves is what decides where they go. Without it the player is splitting a pool they cannot
+  see.
 - **A die that cannot be picked says why.** A sleeping unit is dimmed and dashed (`.die-asleep`),
   tapping it inspects rather than selects, and its `aria-label` ends "— asleep". The engine refuses
   it as a retreat either way; this is what stops the choice being offered, and `sleepingIds` in
@@ -833,9 +921,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     the type says cannot exist — the new flag reading `undefined`, behaving as its off value by
     accident rather than by decision. That is the reason `storage.ts` records for version 5, beside
     the version-4 one.
-- **A record written by the app names its ruleset.** `useGame` passes `ruleSet: FULL_RULES`
+- **A record written by the app names its ruleset.** `useGame` passes `ruleSet: DRAGON_RULES`
   explicitly rather than leaning on the default, so a save says which rules it was played under and
   goes on replaying under them -- which is also why Phase 4e's flip needed no `SAVE_VERSION` bump.
+  Phase 6's bump to 8 is for the setup draws and the new pendings, not for the flip.
 
 - **Wrap every `localStorage` access.** It throws in private windows, with site data blocked, and
   on a full quota. A game that cannot be saved must still be playable.

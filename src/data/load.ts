@@ -8,10 +8,17 @@
  */
 import rawUnits from '../../data/starter/units.json'
 import rawTerrains from '../../data/starter/terrains.json'
+import rawDragons from '../../data/starter/dragons.json'
 
 import {
   DataError,
   type ActionIcon,
+  type DragonDie,
+  type DragonElement,
+  type DragonFaceNumber,
+  type DragonForm,
+  type DragonFormType,
+  type DragonIcon,
   type EighthFaceIcon,
   type Element,
   type Face,
@@ -31,6 +38,17 @@ const ELEMENTS: readonly string[] = ['air', 'water', 'earth', 'fire', 'death', '
 const UNIT_CLASSES: readonly string[] = ['heavy_melee', 'light_melee', 'cavalry', 'missile', 'magic']
 const UNIT_SIZES: readonly string[] = ['small', 'medium', 'large', 'monster']
 const EIGHTH_FACES: readonly string[] = ['city', 'standing_stones', 'temple', 'tower']
+const DRAGON_ELEMENTS: readonly string[] = ['air', 'water', 'earth', 'fire', 'death']
+const DRAGON_FORMS: readonly string[] = ['drake', 'wyrm']
+const DRAGON_ICONS: readonly string[] = [
+  'JAWS',
+  'BREATH',
+  'CLAW',
+  'BELLY',
+  'WING',
+  'TAIL',
+  'TREASURE',
+]
 
 const FACES_PER_DIE = { d6: 6, d10: 10 } as const
 
@@ -181,17 +199,61 @@ function loadTerrains(): { types: readonly TerrainType[]; dice: readonly Terrain
   return { types, dice }
 }
 
+function loadDragons(): { forms: readonly DragonFormType[]; dice: readonly DragonDie[] } {
+  const forms = Object.entries(rawDragons.dragonForms).map(([id, f]): DragonFormType => {
+    const context = `dragon form ${id}`
+    const faces = {} as Record<DragonFaceNumber, DragonIcon>
+
+    for (let n = 1; n <= 12; n++) {
+      const value = (f.faces as Record<string, string | undefined>)[String(n)]
+      if (value === undefined) {
+        throw new DataError(`${context}: missing face ${n}`)
+      }
+      if (!DRAGON_ICONS.includes(value)) {
+        throw new DataError(`${context}: face ${n} is ${JSON.stringify(value)}, not a dragon icon`)
+      }
+      faces[n as DragonFaceNumber] = value as DragonIcon
+    }
+
+    return {
+      id: oneOf<DragonForm>(id, DRAGON_FORMS, 'dragon form', context),
+      name: f.name,
+      faces,
+    }
+  })
+
+  const formIds = new Set(forms.map((f) => f.id))
+  const dice = rawDragons.dragons.map((d): DragonDie => {
+    const context = `dragon die ${d.id}`
+    if (!formIds.has(d.form as DragonForm)) {
+      throw new DataError(`${context}: unknown dragon form ${JSON.stringify(d.form)}`)
+    }
+    return {
+      id: d.id,
+      element: oneOf<DragonElement>(d.element, DRAGON_ELEMENTS, 'dragon element', context),
+      form: d.form as DragonForm,
+    }
+  })
+
+  return { forms, dice }
+}
+
 const loadedUnits = loadUnits()
 const loadedTerrains = loadTerrains()
+const loadedDragons = loadDragons()
 
 export const SPECIES: readonly Species[] = loadedUnits.species
 export const UNIT_TYPES: readonly UnitType[] = loadedUnits.units
 export const TERRAIN_TYPES: readonly TerrainType[] = loadedTerrains.types
 export const TERRAIN_DICE: readonly TerrainDie[] = loadedTerrains.dice
+export const DRAGON_FORM_TYPES: readonly DragonFormType[] = loadedDragons.forms
+export const DRAGON_DICE: readonly DragonDie[] = loadedDragons.dice
 
 const unitsById = new Map(UNIT_TYPES.map((u) => [u.id, u]))
 const terrainTypesById = new Map(TERRAIN_TYPES.map((t) => [t.id, t]))
 const terrainDiceById = new Map(TERRAIN_DICE.map((d) => [d.id, d]))
+const dragonFormsById = new Map(DRAGON_FORM_TYPES.map((f) => [f.id, f]))
+const dragonDiceById = new Map(DRAGON_DICE.map((d) => [d.id, d]))
 
 export function unitType(id: string): UnitType {
   const found = unitsById.get(id)
@@ -215,6 +277,29 @@ export function terrainDie(id: string): TerrainDie {
  *  carries no action, so it is not addressable here. */
 export function terrainFaceAction(dieId: string, face: TerrainFaceNumber): ActionIcon {
   return terrainType(terrainDie(dieId).type).faces[face]
+}
+
+export function dragonForm(id: DragonForm): DragonFormType {
+  const found = dragonFormsById.get(id)
+  if (!found) throw new DataError(`no such dragon form: ${id}`)
+  return found
+}
+
+export function dragonDie(id: string): DragonDie {
+  const found = dragonDiceById.get(id)
+  if (!found) throw new DataError(`no such dragon die: ${id}`)
+  return found
+}
+
+/** The icon on a dragon die's numbered face. The form fixes all twelve. */
+export function dragonFaceIcon(dieId: string, face: DragonFaceNumber): DragonIcon {
+  return dragonForm(dragonDie(dieId).form).faces[face]
+}
+
+/** "Fire Drake". Both clients need it, and it is a fact about the data. */
+export function dragonName(dieId: string): string {
+  const die = dragonDie(dieId)
+  return `${die.element[0]?.toUpperCase() ?? ''}${die.element.slice(1)} ${dragonForm(die.form).name}`
 }
 
 /** Units of one species, in the data's order (by class, then size). */

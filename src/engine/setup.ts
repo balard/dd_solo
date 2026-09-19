@@ -20,7 +20,7 @@
  * it consumes no draw either, not "the same draw" -- so the goldens' three pins leave
  * the whole terrain-draw stream skipped.
  */
-import { SPECIES, TERRAIN_DICE, terrainDie, terrainType, unitType } from '../data/load'
+import { DRAGON_DICE, SPECIES, TERRAIN_DICE, terrainDie, terrainType, unitType } from '../data/load'
 import type { Element } from '../data/types'
 import { preset, PRESET_ARMY_NAMES, type PresetArmyName } from '../data/presets'
 
@@ -31,6 +31,7 @@ import type { RollContext } from './sai'
 import {
   V0_RULES,
   opponentOf,
+  type DragonInPlay,
   type GameState,
   type LogEntry,
   type PlayerId,
@@ -174,6 +175,65 @@ function drawFrontierDie(loserSpecies: string, rng: RngState): readonly [string,
   const dieId = eligible[dieIndex]
   if (dieId === undefined) throw new Error(`drew frontier die ${dieIndex} of ${eligible.length}`)
   return [dieId, afterDie] as const
+}
+
+/**
+ * How many dragons a force brings: one per 24 points, or part thereof (full rules
+ * p. 12). One at 24 health, two at 30 or 36.
+ */
+export function dragonCount(health: number): number {
+  return Math.max(1, Math.ceil(health / 24))
+}
+
+/**
+ * The dragon dice a player brings, by element (Phase 6 house rule).
+ *
+ * The rules let a player bring any types at all. Drawing from the player's own two
+ * species elements instead makes this a draw rather than a decision, which is what a
+ * solo game needs -- and it is why no game of Treefolk against Firewalkers ever
+ * fields the Death dragon.
+ *
+ * Distinct elements first and **with no draw at all** when the count uses up the
+ * pair: a 2-dragon force gets one of each, which is a forced choice, and a forced
+ * choice consumes no randomness (the same rule as a pinned terrain). Only a 1-dragon
+ * force draws, and only a force needing more than two draws twice.
+ *
+ * The form -- drake or wyrm -- is drawn per dragon. It is the one thing about a
+ * dragon nothing else fixes: the two forms differ by a third tail and a treasure
+ * chest against two wings.
+ */
+function drawDragonDice(
+  speciesId: string,
+  count: number,
+  rng: RngState,
+): readonly [readonly string[], RngState] {
+  const elements = [...speciesElements(speciesId)].sort()
+  let state = rng
+  const drawn: string[] = []
+
+  for (let i = 0; i < count; i++) {
+    let element: Element | undefined
+    if (count >= elements.length && i < elements.length) {
+      element = elements[i] // one of each, forced, no draw
+    } else {
+      const [index, next] = nextInt(state, elements.length)
+      state = next
+      element = elements[index]
+    }
+    if (element === undefined) throw new Error(`${speciesId} has no elements to draw a dragon from`)
+
+    const [formIndex, afterForm] = nextInt(state, 2)
+    state = afterForm
+    const form = formIndex === 0 ? 'drake' : 'wyrm'
+
+    const dieId = `${element}_${form}`
+    if (!DRAGON_DICE.some((d) => d.id === dieId)) {
+      throw new Error(`no dragon die ${dieId} in the data`)
+    }
+    drawn.push(dieId)
+  }
+
+  return [drawn, state] as const
 }
 
 /**
@@ -399,12 +459,61 @@ export function setupGame(options: SetupOptions): GameState {
     log.push({ kind: 'terrain_placed', slot, dieId, face })
   }
 
+  // Step 7: the dragons, last of all and **only under `dragons: true`**, so every
+  // game recorded without them draws exactly what it always drew and the goldens
+  // replay byte-identical. Each player's pool first, then the Frontier seeds.
+  const dragons: Record<string, DragonInPlay> = {}
+  if (ruleSet.dragons) {
+    const pools = {} as Record<PlayerId, readonly DragonInPlay[]>
+
+    for (const player of ['p1', 'p2'] as const) {
+      const count = dragonCount(forceHealth(forces[player]))
+      const [dieIds, next] = drawDragonDice(forces[player].species, count, rng)
+      rng = next
+      pools[player] = dieIds.map((dieId, ordinal) => ({
+        id: `${player}:${dieId}#${ordinal}`,
+        dieId,
+        owner: player,
+        location: { kind: 'pool' } as const,
+      }))
+    }
+
+    // The Phase 6 house rule: one dragon each, drawn from that player's own pool,
+    // starts at the Frontier. Without it nothing could ever leave a pool before
+    // Phase 7's `Summon Dragon`, and the whole Dragon Attack Phase would be
+    // unreachable. A pool of one is a forced choice and draws nothing.
+    for (const player of ['p1', 'p2'] as const) {
+      const pool = pools[player]
+      let index = 0
+      if (pool.length > 1) {
+        const [drawn, next] = nextInt(rng, pool.length)
+        rng = next
+        index = drawn
+      }
+
+      for (const [i, dragon] of pool.entries()) {
+        dragons[dragon.id] =
+          i === index ? { ...dragon, location: { kind: 'terrain', slot: 'frontier' } } : dragon
+      }
+
+      const seeded = pool[index]
+      if (seeded === undefined) throw new Error(`${player} drew no dragons at all`)
+      log.push({
+        kind: 'dragons_drawn',
+        player,
+        pool: pool.map((d) => d.dieId),
+        frontier: seeded.dieId,
+      })
+    }
+  }
+
   return {
     ruleSet,
     rng,
     units,
     terrains,
     effects: [],
+    dragons,
     turn: {
       marching: firstPlayer,
       phase: 'effects_expire',

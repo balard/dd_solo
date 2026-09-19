@@ -5,7 +5,7 @@
  * bar renders whatever this returns, so no component ever tracks its own wizard
  * state or decides what is legal -- the engine already did both.
  */
-import { terrainDie, terrainFaceAction, unitType } from '../../data/load'
+import { dragonName, terrainDie, terrainFaceAction, unitType } from '../../data/load'
 import type { TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
 import { growthPartners, promotionGain } from '../../engine/dua'
@@ -103,6 +103,9 @@ export interface Prompt {
     | 'reinforce'
     | 'retreat'
     | 'eighth_face_city'
+    | 'dragon_breath'
+    | 'dragon_allocate'
+    | 'dragon_damage_split'
 }
 
 const stepFace = (face: TerrainFace, direction: Direction): TerrainFace =>
@@ -328,7 +331,61 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
           }
         }),
       }
+
+    // The same grid as a damage assignment, for the same reason: five health-worth
+    // of your own army, chosen by you, maximally.
+    case 'dragon_breath':
+      return {
+        question: `${dragonBreathName(state, pending.dragonId)}: lose ${pending.health} health-worth`,
+        choices: [],
+        custom: 'dragon_breath',
+      }
+
+    // One unit, one step, and the army *may* decline -- so a button each rather
+    // than the staged pairs Wild Growth needs for a budget.
+    case 'dragon_treasure':
+      return {
+        question: 'Treasure! Promote one unit',
+        choices: [
+          ...pending.promotions.map((pair) => ({
+            label: `${unitName(state, pair.unitId)} → ${unitName(state, pair.partnerId)}`,
+            action: { kind: 'dragon_treasure', pair } as GameAction,
+          })),
+          { label: 'Decline', action: { kind: 'dragon_treasure', pair: null }, passive: true },
+        ],
+      }
+
+    case 'dragon_allocate':
+      return {
+        question:
+          `Your dragon roll counts melee, missile and save at once — split ` +
+          [
+            pending.ids > 0 ? `${pending.ids} ID` : '',
+            pending.flexible > 0 ? `${pending.flexible} Create Fireminions` : '',
+          ]
+            .filter(Boolean)
+            .join(' and '),
+        choices: [],
+        custom: 'dragon_allocate',
+      }
+
+    case 'dragon_damage_split':
+      return {
+        question: `Spend ${pending.melee} melee and ${pending.missile} missile on the dragons`,
+        choices: [],
+        custom: 'dragon_damage_split',
+      }
   }
+}
+
+const unitName = (state: GameState, unitId: UnitId): string => {
+  const unit = state.units[unitId]
+  return unit === undefined ? unitId : unitType(unit.typeId).name
+}
+
+const dragonBreathName = (state: GameState, dragonId: string): string => {
+  const dragon = state.dragons[dragonId]
+  return dragon === undefined ? 'Dragon breath' : dragonName(dragon.dieId)
 }
 
 /**
@@ -370,6 +427,21 @@ export function damageSelection(
  * (p. 29) arrives with Wild Growth and the free moves, and it will need `ready` to
  * relax from `===` to `<=`.
  */
+/**
+ * A dragon breath: five health-worth of your own army, maximally.
+ *
+ * The damage sheet's arithmetic with the budget coming from a breath instead of a
+ * total -- the same §6 rule, so the same function underneath rather than a second
+ * tally that could disagree with it.
+ */
+export function breathSelection(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'dragon_breath' }>,
+  selection: ReadonlySet<UnitId>,
+): DamageSelection {
+  return budgetSelection(state, pending.player, pending.slot, pending.health, selection)
+}
+
 export function saiTargetSelection(
   state: GameState,
   pending: Extract<Pending, { kind: 'sai_target' }>,
@@ -624,6 +696,9 @@ export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): Sele
   if (pending === null || pending.player !== human) return null
   switch (pending.kind) {
     case 'assign_damage':
+      return { side: 'mine', slot: pending.slot }
+    // A breath picks from your own army, exactly as a damage assignment does.
+    case 'dragon_breath':
       return { side: 'mine', slot: pending.slot }
     // Answered by the roller, about the army they are rolling against -- so the side
     // that is selectable is not the side the question was addressed to.

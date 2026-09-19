@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "data": "python tools/import_faces.py && python tools/import_terrains.py && python tools/validate_data.py",
+    "data": "python tools/import_faces.py && python tools/import_terrains.py && python tools/import_dragons.py && python tools/validate_data.py",
     "play": "vite-node src/cli/play.ts",
     "goldens": "vite-node src/cli/goldens.ts",
     "art": "python tools/fetch_faces.py"

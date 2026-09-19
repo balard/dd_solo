@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { FULL_RULES } from '../../engine/types'
+import { DRAGON_RULES } from '../../engine/types'
 
 import { choiceGroups, newGameSetup, presetChoices, randomGameSetup, readSeed } from './newGame'
 
@@ -66,7 +66,7 @@ describe('newGameSetup', () => {
       setup: {
         seed: 7,
         forces: { kind: 'named', forces: { p1: 'treefolk_satyr', p2: 'firewalkers_gorgon' } },
-        ruleSet: FULL_RULES,
+        ruleSet: DRAGON_RULES,
       },
     })
   })
@@ -98,7 +98,7 @@ describe('randomGameSetup', () => {
   it('rolls both sides from the seed', () => {
     expect(randomGameSetup('42', 0)).toEqual({
       kind: 'ok',
-      setup: { seed: 42, forces: { kind: 'random' }, ruleSet: FULL_RULES },
+      setup: { seed: 42, forces: { kind: 'random' }, ruleSet: DRAGON_RULES },
     })
   })
 

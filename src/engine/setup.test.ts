@@ -7,19 +7,23 @@ import { reduce } from './reduce'
 import { rngFrom } from './rng'
 import {
   BESTIARY_FORCES,
+  dragonCount,
   rollStartingFace,
   setupGame,
   STARTER_FORCES,
   type SetupOptions,
 } from './setup'
 import {
+  DRAGON_RULES,
   IllegalActionError,
   TERRAIN_SLOTS,
   armyAt,
   capturedCount,
   deadUnits,
+  dragonsAt,
   livingUnits,
   opponentOf,
+  pooledDragons,
   reserveArmy,
   speciesOf,
   unitsOf,
@@ -378,6 +382,124 @@ describe('the Phase 5b terrain draw', () => {
       }
     }
     expect(seenIn).toEqual({ p1_home: true, frontier: true, p2_home: true })
+  })
+})
+
+describe('the Phase 6 dragon draw', () => {
+  const withDragons = (seed: number, forces = STARTER_FORCES) =>
+    setupGame({ seed, forces, ruleSet: DRAGON_RULES })
+
+  it('brings one dragon per 24 points of force, or part thereof', () => {
+    expect(dragonCount(24)).toBe(1)
+    expect(dragonCount(30)).toBe(2)
+    expect(dragonCount(35)).toBe(2)
+    expect(dragonCount(36)).toBe(2)
+    expect(dragonCount(48)).toBe(2)
+    expect(dragonCount(49)).toBe(3)
+  })
+
+  it('gives each 30-health starter force two dragons', () => {
+    const state = withDragons(7)
+    for (const player of ['p1', 'p2'] as const) {
+      const mine = Object.values(state.dragons).filter((d) => d.owner === player)
+      expect(mine, player).toHaveLength(2)
+    }
+  })
+
+  it('draws colours from the force own species elements, so Death never appears', () => {
+    // Treefolk are water+earth and Firewalkers air+fire, which covers four of the
+    // five. The fifth is in the data and no game of these two can reach it.
+    for (let seed = 1; seed <= 200; seed++) {
+      for (const dragon of Object.values(withDragons(seed).dragons)) {
+        const element = dragon.dieId.split('_')[0]
+        const expected = dragon.owner === 'p1' ? ['earth', 'water'] : ['air', 'fire']
+        expect(expected, `seed ${seed} ${dragon.id}`).toContain(element)
+      }
+    }
+  })
+
+  it('gives a two-dragon force exactly one of each of its elements', () => {
+    for (let seed = 1; seed <= 100; seed++) {
+      const state = withDragons(seed)
+      for (const player of ['p1', 'p2'] as const) {
+        const elements = Object.values(state.dragons)
+          .filter((d) => d.owner === player)
+          .map((d) => d.dieId.split('_')[0])
+          .sort()
+        expect(elements, `seed ${seed} ${player}`).toEqual(
+          player === 'p1' ? ['earth', 'water'] : ['air', 'fire'],
+        )
+      }
+    }
+  })
+
+  it('draws both forms across enough seeds -- the form is not fixed by the element', () => {
+    const forms = new Set<string>()
+    for (let seed = 1; seed <= 50; seed++) {
+      for (const dragon of Object.values(withDragons(seed).dragons)) {
+        forms.add(dragon.dieId.split('_')[1] as string)
+      }
+    }
+    expect([...forms].sort()).toEqual(['drake', 'wyrm'])
+  })
+
+  it('seeds exactly one dragon per player at the Frontier and pools the rest', () => {
+    for (let seed = 1; seed <= 100; seed++) {
+      const state = withDragons(seed)
+      const atFrontier = dragonsAt(state, 'frontier')
+      expect(atFrontier, `seed ${seed}`).toHaveLength(2)
+      expect(atFrontier.map((d) => d.owner).sort()).toEqual(['p1', 'p2'])
+      for (const player of ['p1', 'p2'] as const) {
+        expect(pooledDragons(state, player), `seed ${seed} ${player}`).toHaveLength(1)
+      }
+      // No dragon starts at either home terrain.
+      expect(dragonsAt(state, 'p1_home')).toEqual([])
+      expect(dragonsAt(state, 'p2_home')).toEqual([])
+    }
+  })
+
+  it('empties the pool of a one-dragon force, and draws nothing to pick from it', () => {
+    // Every monster fixture is 24 health, so each side brings exactly one dragon.
+    const forces = { kind: 'named', forces: { p1: 'treefolk_darktree', p2: 'treefolk_darktree' } } as const
+    const state = setupGame({ seed: 5, forces, ruleSet: DRAGON_RULES })
+    expect(dragonsAt(state, 'frontier')).toHaveLength(2)
+    for (const player of ['p1', 'p2'] as const) {
+      expect(pooledDragons(state, player), player).toEqual([])
+    }
+  })
+
+  it('draws no dragons at all, and no randomness, when the rules have none', () => {
+    const without = setupGame({ seed: 7, forces: STARTER_FORCES })
+    expect(without.dragons).toEqual({})
+    // The load-bearing half: the dragon draws sit last and behind the flag, so a
+    // game without them consumes exactly the randomness it always did. This is what
+    // keeps all 25 goldens replaying byte-identical.
+    expect(without.rng).toEqual(setupGame({ seed: 7, forces: STARTER_FORCES }).rng)
+    expect(withDragons(7).rng.counter).toBeGreaterThan(without.rng.counter)
+    expect(without.terrains).toEqual(withDragons(7).terrains)
+  })
+
+  it('logs what each player brought and which one took the Frontier', () => {
+    const state = withDragons(7)
+    const entries = state.log.filter((e) => e.kind === 'dragons_drawn')
+    expect(entries).toHaveLength(2)
+    for (const entry of entries) {
+      if (entry.kind !== 'dragons_drawn') throw new Error('narrowing')
+      expect(entry.pool).toContain(entry.frontier)
+      expect(entry.pool).toHaveLength(2)
+    }
+  })
+
+  it('leaves a dragon state validateState is happy with', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      expect(validateState(withDragons(seed)), `seed ${seed}`).toEqual([])
+    }
+  })
+
+  it('refuses a dragon in play under dragons: false', () => {
+    const state = withDragons(7)
+    const smuggled: GameState = { ...state, ruleSet: { ...state.ruleSet, dragons: false } }
+    expect(validateState(smuggled)).toContain('dragons: 4 in play under dragons: false')
   })
 })
 

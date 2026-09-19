@@ -155,6 +155,103 @@ body {
   padding-left: 6px;
 }
 
+/* --- dragons at a terrain ------------------------------------------------- */
+
+/* Between the terrain head and the two armies, because a dragon is on neither
+   side: it attacks the marching player whoever brought it. */
+.dragon-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 2px;
+}
+
+.dragon-wrap {
+  position: relative;
+}
+
+/* Tinted by the dragon's element, because that is the one thing about a dragon
+   that decides who it will fight -- it never attacks its own colour. */
+.dragon-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: .74rem;
+  line-height: 1.6;
+  cursor: pointer;
+  color: var(--el-death);
+}
+
+.dragon-chip.dragon-el-air { color: var(--el-air); }
+.dragon-chip.dragon-el-water { color: var(--el-water); }
+.dragon-chip.dragon-el-earth { color: var(--el-earth); }
+.dragon-chip.dragon-el-fire { color: var(--el-fire); }
+.dragon-chip.dragon-el-death { color: var(--el-death); }
+
+.dragon-chip:hover,
+.dragon-chip.is-open {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.dragon-chip .glyph {
+  width: 16px;
+  height: 16px;
+}
+
+.dragon-chip .muted {
+  color: inherit;
+  opacity: .65;
+}
+
+/* One row per dragon in the log: who it went for, the faces it showed, the total. */
+.dragon-roll {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 3px 0;
+  font-size: .8rem;
+}
+
+.dragon-roll-who { color: var(--el-death); }
+.dragon-roll .roll-strip { margin: 0; }
+
+.dragon-face {
+  color: var(--el-death);
+  border-color: currentColor;
+}
+
+.dragon-el-air { color: var(--el-air); }
+.dragon-el-water { color: var(--el-water); }
+.dragon-el-earth { color: var(--el-earth); }
+.dragon-el-fire { color: var(--el-fire); }
+.dragon-el-death { color: var(--el-death); }
+
+/* Twelve faces, listed by icon with the repeats counted rather than drawn twelve
+   times -- a dragon has four claws and they all do the same thing. */
+.dragon-faces {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  font-size: .76rem;
+  line-height: 1.5;
+}
+
+/* `start`, not `baseline`: the rule text wraps to two lines on a narrow column and
+   a baselined glyph then floats into the middle of the row. */
+.dragon-faces li {
+  display: grid;
+  grid-template-columns: 30px auto 1fr;
+  gap: 6px;
+  align-items: start;
+  padding: 3px 0;
+}
+
 /* --- focused terrain ------------------------------------------------------ */
 
 .page {
@@ -654,13 +751,19 @@ body {
  * inverts that to white, the same move the unit art makes.
  */
 .chip-art,
-.terrain-face-art {
+.terrain-face-art,
+/* Dragon art needs it for the opposite reason to the terrain's pink: it is drawn
+   in white for a dark die, so untinted it is white on a white panel -- blank boxes
+   where the faces should be. `brightness(0)` lands it in the same ink as
+   everything else. */
+.dragon-face-art {
   display: block;
   filter: brightness(0);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .chip-art,
-  :root:not([data-theme='light']) .terrain-face-art {
+  :root:not([data-theme='light']) .terrain-face-art,
+  :root:not([data-theme='light']) .dragon-face-art {
     filter: brightness(0) invert(1);
   }
 }

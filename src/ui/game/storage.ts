@@ -68,8 +68,18 @@ const KEY = 'dd_solo.save'
  *    else. And decision order -- the Eighth Face Phase gains two `Pending` kinds
  *    (City, Temple), so a version-6 log's next answer can land on a question that
  *    did not exist when it was recorded, the same shape as version 6's own reason.
+ *
+ * 8: dragons, Phase 6, and the reason is dice consumption again -- but note which
+ *    half is *not* the reason. `dragons` already existed on `RuleSet` and the new
+ *    setup draws are gated on it, so a version-7 record (`dragons: false`) replays
+ *    through the new `setupGame` byte for byte; the version is not protecting those,
+ *    and all 25 goldens prove it by staying untouched. What it protects is the
+ *    configuration the app now plays: `DRAGON_RULES` draws pool colours, forms and
+ *    two Frontier seeds at setup, and adds four `Pending` kinds plus a phase that
+ *    stops for them. A log recorded a moment before this lands would diverge on both
+ *    counts at once.
  */
-export const SAVE_VERSION = 7
+export const SAVE_VERSION = 8
 
 
 export interface SavedGame {

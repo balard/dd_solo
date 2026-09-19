@@ -163,8 +163,8 @@ a die header, then one `<count> <Icon>` line per face.
 | Firewalkers | **complete** — 20/20 dice, 140 faces |
 | Treefolk | **complete** — 20/20 dice, 140 faces |
 | Terrains (v0) | **complete** — 3 types × 4 eighth-face variants = 12 dice |
-| Terrains (v1) | **missing** — Coastland, Flatland, Feyland: 3 types × 4 variants = 12 dice |
-| Dragons (v1) | **missing** — 5 elements × 2 forms (drake/wyrm) = 10 dice, 12 faces each |
+| Terrains (v1) | **complete** — Coastland, Flatland, Feyland transcribed in Phase 5a; 24 terrain dice in all |
+| Dragons (v1) | **transcribed, not yet imported** — 5 elements × 2 forms (drake/wyrm) = 10 dice, 12 faces each; the layout is in `PLAN-V1.md` Phase 6 and needs `data/raw/dragons.faces.txt` and an importer |
 
 Both species pass validation. A useful independent check fell out of having both: the data uses
 exactly 25 distinct SAIs, and the starter rulebook documents exactly those 25 — no unknown names,
@@ -178,22 +178,30 @@ number rises, **the split points differ per type**: Wasteland has one magic face
 three. That difference is most of what distinguishes the dice, and no amount of reasoning from the
 rulebooks would have produced it.
 
-**The two v1 gaps are the same lesson, not yet learned twice.** Nothing about the three known
-terrain types predicts where Coastland's magic/missile split falls, so the three new types must be
-transcribed like the first three. Dragons are worse: the rulebook documents what each icon *does*
-(Jaws 12 damage, Claws 6, Wing 5 and fly home, Tail 3 and roll again, Breath, Treasure, Belly) but
-never how many of each appear on the twelve faces. The one structural hint is that dragons "come in
-two forms: drakes, which have wings, and wyrms, which have a treasure chest" — which looks like the
-same base-plus-variant shape as a terrain die, and which is therefore exactly the kind of plausible
-inference that the terrain split points already proved unsafe. Treat it as a hypothesis to check
-against real dice. These block v1 Phases 5 and 6 and are the long pole in that plan.
+**The two v1 gaps were the same lesson, and both are now closed the same way — by transcription,
+not by inference.** Nothing about the three original terrain types predicted where Coastland's
+magic/missile split falls, so the three new types were transcribed like the first three (Phase 5a).
+Dragons were worse: the rulebook documents what each icon *does* (Jaws 12 damage, Claws 6, Wing 5
+and fly home, Tail 3 and roll again, Breath, Treasure, Belly) but never how many of each appear on
+the twelve faces. The one structural hint was that dragons "come in two forms: drakes, which have
+wings, and wyrms, which have a treasure chest" — which looks like the same base-plus-variant shape
+as a terrain die, and was therefore exactly the kind of plausible inference the terrain split points
+had already proved unsafe.
+
+**It was a bad hypothesis, and the real layout says so.** A Drake is Jaws, Breath, 4 × Claw,
+2 × Belly, 2 × Wing, 2 × Tail; a Wyrm is Jaws, Breath, 4 × Claw, 2 × Belly, **3** × Tail, Treasure.
+The two forms do not differ by one variant face: the Wyrm spends the Drake's two Wings on a third
+Tail and a Treasure. Guessing would have produced a Wyrm with two Tails and two Treasures, and
+nothing in either rulebook would have contradicted it.
 
 ### Reference art
 
 `tools/fetch_faces.py` mirrors the real SVGs for every face our data references into
 `public/faces/` (gitignored) — that is the only directory Vite serves, so art anywhere else is
-invisible to the browser. `--offline` re-mirrors from a local copy (`assets/faces/` by default,
-or `--source=DIR`) instead of the network. The remote asset set is **sparse, per-species, and not derivable from (icon, count)**. It mirrors
+invisible to the browser. A network fetch now also writes each file to `assets/faces/`, the
+offline copy, so the two cannot drift; `--offline` re-mirrors from there (or `--source=DIR`)
+instead of the network. Letting them drift is how the Phase 6 dragon art ended up served but
+absent from `assets/`. The remote asset set is **sparse, per-species, and not derivable from (icon, count)**. It mirrors
 exactly the faces that species actually has: `treefolk/save-4.svg` and `treefolk/magic-4.svg` exist
 because Treefolk dice carry those faces, while the same paths under `firewalkers/` are 404 because
 no Firewalker die does. Some icons also carry a variant index (`maneuver-1-4`, `cantrip-1-3`,

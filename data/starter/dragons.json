@@ -1,0 +1,93 @@
+{
+  "$schema": "../schema/dragon.schema.json",
+  "_generated": "by tools/import_dragons.py from data/raw/dragons.faces.txt -- DO NOT EDIT BY HAND",
+  "_comment": "All twelve faces live on the dragon form; a die is an element plus a form. Only the breath effect differs by element (full rules p. 20).",
+  "dragonForms": {
+    "drake": {
+      "name": "Drake",
+      "faces": {
+        "1": "JAWS",
+        "2": "BREATH",
+        "3": "CLAW",
+        "4": "CLAW",
+        "5": "BELLY",
+        "6": "BELLY",
+        "7": "WING",
+        "8": "WING",
+        "9": "CLAW",
+        "10": "CLAW",
+        "11": "TAIL",
+        "12": "TAIL"
+      }
+    },
+    "wyrm": {
+      "name": "Wyrm",
+      "faces": {
+        "1": "JAWS",
+        "2": "BREATH",
+        "3": "CLAW",
+        "4": "CLAW",
+        "5": "BELLY",
+        "6": "BELLY",
+        "7": "CLAW",
+        "8": "CLAW",
+        "9": "TAIL",
+        "10": "TAIL",
+        "11": "TAIL",
+        "12": "TREASURE"
+      }
+    }
+  },
+  "dragons": [
+    {
+      "id": "air_drake",
+      "element": "air",
+      "form": "drake"
+    },
+    {
+      "id": "air_wyrm",
+      "element": "air",
+      "form": "wyrm"
+    },
+    {
+      "id": "death_drake",
+      "element": "death",
+      "form": "drake"
+    },
+    {
+      "id": "death_wyrm",
+      "element": "death",
+      "form": "wyrm"
+    },
+    {
+      "id": "earth_drake",
+      "element": "earth",
+      "form": "drake"
+    },
+    {
+      "id": "earth_wyrm",
+      "element": "earth",
+      "form": "wyrm"
+    },
+    {
+      "id": "fire_drake",
+      "element": "fire",
+      "form": "drake"
+    },
+    {
+      "id": "fire_wyrm",
+      "element": "fire",
+      "form": "wyrm"
+    },
+    {
+      "id": "water_drake",
+      "element": "water",
+      "form": "drake"
+    },
+    {
+      "id": "water_wyrm",
+      "element": "water",
+      "form": "wyrm"
+    }
+  ]
+}

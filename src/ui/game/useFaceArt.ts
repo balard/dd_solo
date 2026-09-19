@@ -17,6 +17,9 @@ interface Manifest {
   readonly version: number
   readonly units: Readonly<Record<string, string>>
   readonly terrains: Readonly<Record<string, string>>
+  /** Keyed by dragon *form*, since the art carries no element -- all five drakes
+   *  share one set of twelve. Absent from a version-1 manifest. */
+  readonly dragons?: Readonly<Record<string, string>>
 }
 
 const base = import.meta.env.BASE_URL
@@ -37,6 +40,8 @@ export interface FaceArtLookup {
   /** Art for a numbered terrain face, which has its number drawn into it. */
   readonly terrainFace: (terrainTypeId: string, face: number) => string | null
   readonly eighthFace: (icon: string) => string | null
+  /** Art for one face of a dragon die, by form and face number (1-12). */
+  readonly dragonFace: (form: string, face: number) => string | null
   /** False until the manifest has been fetched, so callers can avoid a flash. */
   readonly ready: boolean
 }
@@ -45,6 +50,7 @@ const NONE: FaceArtLookup = {
   unitFace: () => null,
   terrainFace: () => null,
   eighthFace: () => null,
+  dragonFace: () => null,
   ready: false,
 }
 
@@ -72,6 +78,7 @@ export function useFaceArt(): FaceArtLookup {
     unitFace: (typeId, faceIndex) => url(manifest.units[`${typeId}#${faceIndex}`]),
     terrainFace: (terrainTypeId, face) => url(manifest.terrains[`${terrainTypeId}#${face}`]),
     eighthFace: (icon) => url(manifest.terrains[`eighth#${icon}`]),
+    dragonFace: (form, face) => url(manifest.dragons?.[`${form}#${face}`]),
     ready: true,
   }
 }

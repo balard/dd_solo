@@ -73,6 +73,44 @@ export interface TerrainDie {
   readonly eighthFace: EighthFaceIcon
 }
 
+/**
+ * The five elements a dragon in this plan can be. Ivory and White dragons are out
+ * of scope (full rules p. 17): neither is a single base element, and both change
+ * the rules rather than just the breath.
+ */
+export type DragonElement = Exclude<Element, 'ivory'>
+
+export type DragonForm = 'drake' | 'wyrm'
+
+/**
+ * One face of a dragon die.
+ *
+ * Unlike a unit face this carries no count: a dragon face is a fixed named ability
+ * whose numbers live in the rules, not on the die (Jaws is always 12 damage). The
+ * ten-step roll pipeline therefore does not apply to a dragon's own roll.
+ */
+export type DragonIcon = 'JAWS' | 'BREATH' | 'CLAW' | 'BELLY' | 'WING' | 'TAIL' | 'TREASURE'
+
+/** Faces of a dragon die, numbered as printed. */
+export type DragonFaceNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12
+
+/**
+ * A dragon *form* fixes all twelve faces. A dragon *die* is an element plus a form,
+ * so the five elements of a form share these faces exactly and differ only in what
+ * their breath does.
+ */
+export interface DragonFormType {
+  readonly id: DragonForm
+  readonly name: string
+  readonly faces: Readonly<Record<DragonFaceNumber, DragonIcon>>
+}
+
+export interface DragonDie {
+  readonly id: string
+  readonly element: DragonElement
+  readonly form: DragonForm
+}
+
 /** Thrown when the data files contain something the loader cannot make sense of. */
 export class DataError extends Error {
   constructor(message: string) {

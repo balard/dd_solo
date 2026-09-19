@@ -37,9 +37,55 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 UNITS = ROOT / "data" / "starter" / "units.json"
 TERRAINS = ROOT / "data" / "starter" / "terrains.json"
+DRAGONS = ROOT / "data" / "starter" / "dragons.json"
 OUT = ROOT / "public" / "faces"
 LOCAL = ROOT / "assets" / "faces"
 BASE = "https://commander.dragondice.com/images/faces"
+
+# The twelve dragon faces of each form, in face order, by remote filename.
+#
+# **A literal table, not a rule.** The names are almost regular -- icon, form letter,
+# occurrence index -- and three of them are not: jaws carries no form letter and is
+# shared by both forms, breath and treasure carry no index. Deriving the regular ones
+# and special-casing the rest would be more code than this and would invent a rule
+# the remote never promised. `dragon_paths` checks each list against the transcribed
+# faces, so a table that drifts from the data is an error rather than a wrong picture.
+#
+# **The art is per form, not per element**, verified against the live set: every
+# `-<element>-` spelling 404s, and so do `wing-w-*` and `treasure-d-*`, which is the
+# layout agreeing with itself. So all five drakes share one set of twelve images.
+# (`dragon-jaws-2-d.svg` does exist and is *not* ours -- nothing in the base game's
+# ten dice uses it. Do not "fix" jaws to it.)
+DRAGON_FACE_ART = {
+    "drake": [
+        "dragon-jaws-1-d.svg",
+        "dragon-breath-d-d.svg",
+        "dragon-claw-d-1-d.svg",
+        "dragon-claw-d-2-d.svg",
+        "dragon-belly-d-1-d.svg",
+        "dragon-belly-d-2-d.svg",
+        "dragon-wing-d-1-d.svg",
+        "dragon-wing-d-2-d.svg",
+        "dragon-claw-d-3-d.svg",
+        "dragon-claw-d-4-d.svg",
+        "dragon-tail-d-1-d.svg",
+        "dragon-tail-d-2-d.svg",
+    ],
+    "wyrm": [
+        "dragon-jaws-1-d.svg",
+        "dragon-breath-w-d.svg",
+        "dragon-claw-w-1-d.svg",
+        "dragon-claw-w-2-d.svg",
+        "dragon-belly-w-1-d.svg",
+        "dragon-belly-w-2-d.svg",
+        "dragon-claw-w-3-d.svg",
+        "dragon-claw-w-4-d.svg",
+        "dragon-tail-w-1-d.svg",
+        "dragon-tail-w-2-d.svg",
+        "dragon-tail-w-3-d.svg",
+        "dragon-treasure-w-d.svg",
+    ],
+}
 
 CLASS_SHORT = {
     "heavy_melee": "heavy",
@@ -137,6 +183,30 @@ def unit_candidates(unit, face):
     ]
 
 
+def dragon_paths(form_id, faces):
+    """Remote paths for one form's twelve faces, checked against the transcription.
+
+    The table above is in face order, so an entry whose icon disagrees with the data
+    means one of the two has moved -- which is exactly the failure that would
+    otherwise show up as a claw drawn where a tail was rolled.
+    """
+    names = DRAGON_FACE_ART.get(form_id)
+    if names is None:
+        raise SystemExit(f"no face art table for dragon form {form_id!r}")
+    if len(names) != 12:
+        raise SystemExit(f"{form_id}: {len(names)} art names for 12 faces")
+
+    for index, name in enumerate(names, start=1):
+        icon = faces[str(index)].lower()
+        # `dragon-<icon>-...`: the icon is the second word of every filename.
+        if name.split("-")[1] != icon:
+            raise SystemExit(
+                f"{form_id} face {index} is {icon.upper()} but its art is {name} -- "
+                f"the table and data/starter/dragons.json disagree"
+            )
+    return [f"dragons/sais/{name}" for name in names]
+
+
 def fetch(path, dry_run, source=None):
     """Put one file in OUT, from `source` if given else the network. True if present."""
     dest = OUT / path
@@ -165,6 +235,17 @@ def fetch(path, dry_run, source=None):
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(body)
+
+    # Keep the offline mirror in step with what we just pulled. Without this the two
+    # directories drift the moment new art is added -- `public/faces/` gets it and
+    # `--offline` silently cannot, which is how the dragon faces ended up fetched but
+    # missing from `assets/faces/`. Both are gitignored, so this puts nothing in the
+    # repository (invariant 8).
+    local = LOCAL / path
+    if not local.exists():
+        local.parent.mkdir(parents=True, exist_ok=True)
+        local.write_bytes(body)
+
     time.sleep(0.12)  # be polite to their server
     return True
 
@@ -263,19 +344,42 @@ def main() -> int:
                 manifest_terrains[f"eighth#{die['eighthFace']}"] = path
                 fetch(path, dry_run, source)
 
+    # Keyed by *form*, not by die: the art carries no element, so all five drakes
+    # share one set of twelve. The UI resolves a die's form before looking up.
+    manifest_dragons: dict[str, str] = {}
+    if DRAGONS.exists():
+        dragons_doc = json.loads(DRAGONS.read_text(encoding="utf-8"))
+        for form_id, form in dragons_doc["dragonForms"].items():
+            for index, path in enumerate(dragon_paths(form_id, form["faces"]), start=1):
+                if resolve([path], dry_run, cache, source):
+                    manifest_dragons[f"{form_id}#{index}"] = path
+                    fetch(path, dry_run, source)
+                else:
+                    missing.append(f"dragon {form_id}#{index}")
+
     if not dry_run:
         OUT.mkdir(parents=True, exist_ok=True)
         (OUT / "manifest.json").write_text(
             json.dumps(
-                {"version": 1, "units": manifest_units, "terrains": manifest_terrains},
+                {
+                    "version": 2,
+                    "units": manifest_units,
+                    "terrains": manifest_terrains,
+                    "dragons": manifest_dragons,
+                },
                 indent=1,
             )
             + "\n",
             encoding="utf-8",
         )
 
-    used = len(set(manifest_units.values()) | set(manifest_terrains.values()))
-    print(f"{len(manifest_units)} unit faces and {len(manifest_terrains)} terrain faces mapped")
+    used = len(
+        set(manifest_units.values()) | set(manifest_terrains.values()) | set(manifest_dragons.values())
+    )
+    print(
+        f"{len(manifest_units)} unit faces, {len(manifest_terrains)} terrain faces "
+        f"and {len(manifest_dragons)} dragon faces mapped"
+    )
     print(f"{used} distinct files in {OUT.relative_to(ROOT)}/ (gitignored)")
     if missing:
         print(f"\n{len(missing)} could not be resolved (they fall back to our glyphs):")

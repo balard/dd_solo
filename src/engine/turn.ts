@@ -27,33 +27,60 @@ import {
   terrainAction,
   type AttackSpec,
 } from './combat'
-import { damageAssignmentProblem, damageOptions, healthsOf } from './damage'
+import { damageAssignmentProblem, damageOptions, healthsOf, maxAbsorbable } from './damage'
+import {
+  BREATH_EFFECT,
+  BREATH_KILL_HEALTH,
+  BREATH_NAME,
+  dragonAttackSlots,
+  dragonTargets,
+  dragonTotals,
+  elementOf,
+  killThreshold,
+  rollDragon,
+  rolledIcon,
+  type DragonRoll,
+} from './dragons'
 import {
   exchangeWithDua,
   growthPartners,
   promote,
   promotionBudgetProblem,
   promotionGain,
+  promotionMatching,
   promotionPartners,
   recruit,
 } from './dua'
 import { buryUnits, killAndBury, killUnits } from './death'
-import { armyRoll, expireEffects, iconAt, isAsleep, pruneEffects, unitRoll, type Effect } from './effects'
+import {
+  armyRoll,
+  doublesIds,
+  expireEffects,
+  iconAt,
+  isAsleep,
+  pruneEffects,
+  unitRoll,
+  type Effect,
+} from './effects'
 
 import {
   defaultContextFor,
   expectNoEffects,
   faceOf,
+  resolveFaces,
   rollArmy,
   rollFaces,
+  rollPools,
   rollUnits,
   type DieRoll,
   type RawDie,
+  type RollSpec,
 } from './roll'
-import type { Modifier } from './pipeline'
-import type { RollContext } from './sai'
+import { doubleIdsModifier, ignoreIdsModifiers, type Modifier } from './pipeline'
+import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
 import { delayedTasks, targetTasks, type TargetTask } from './targeting'
 import { unitType } from '../data/load'
+import type { DragonElement, ResultType } from '../data/types'
 import {
   IllegalActionError,
   TERRAIN_SLOTS,
@@ -61,12 +88,16 @@ import {
   army as armyRef,
   capturedCount,
   deadUnits,
+  dragonsAt,
   livingUnits,
   opponentOf,
   type ActionKind,
   type ArmyRef,
   type CombatState,
   type Direction,
+  type DragonAttackState,
+  type DragonDamageTarget,
+  type DragonId,
   type GameAction,
   type GameState,
   type LogEntry,
@@ -1495,7 +1526,28 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
  */
 export function rollOnTheTable(
   state: GameState,
-): { readonly dice: readonly DieRoll[]; readonly kind: 'attack' | 'save' } | null {
+): { readonly dice: readonly DieRoll[]; readonly kind: 'attack' | 'save' | 'dragon' } | null {
+  // A dragon roll pauses for its allocation, and the player cannot choose sensibly
+  // without seeing what landed: how many IDs there are to spend is the whole
+  // question, and which dice already gave melee or saves is what decides where they
+  // should go. Resolved with an empty allocation purely to render -- `resolveFaces`
+  // draws nothing, which is what lets the same faces be read twice.
+  const dragon = state.turn.dragonAttack
+  if (dragon?.armyDice !== undefined && dragon.step === 'army_roll') {
+    // A combination roll cannot be resolved at all without an allocation that spends
+    // the ID pool exactly -- `allocateIds` refuses, which crashed the sheet that was
+    // trying to *show* the roll so the player could allocate it. The pool goes on one
+    // kind purely to satisfy that: `perDieResults` counts an ID die's pool once and
+    // never asks which type it became, so the strip is identical whichever is picked,
+    // and no total from this pass is ever used.
+    const { ids } = rollPools(dragon.armyDice, dragonRollSpec(state, dragon), state.ruleSet)
+    const spec: RollSpec = {
+      ...dragonRollSpec(state, dragon),
+      idAllocation: { melee: ids, missile: 0, save: 0 },
+    }
+    return { dice: resolveFaces(dragon.armyDice, spec, state.ruleSet).dice, kind: 'dragon' }
+  }
+
   const combat = state.turn.combat
   if (combat === null) return null
 
@@ -1666,6 +1718,673 @@ function applyTempleBury(state: GameState, unitId: UnitId): GameState {
   }
 }
 
+// --- the Dragon Attack Phase (Phase 6) ---------------------------------------
+//
+// The rulebook's nine steps (p. 18) with the four that take no decision folded
+// into their neighbours. `turn.dragonAttack` is this phase's `CombatState`: it
+// holds the dragons' rolled faces between the throw and the arithmetic, exactly
+// as an exchange holds the attacker's, and for the same reason -- a pause has to
+// happen between a step that consumes randomness and one that is pure.
+
+/** Sets or clears the phase's working state, field by field, as `finishExchange` does. */
+function withDragonAttack(state: GameState, attack: DragonAttackState | null): GameState {
+  const turn = state.turn
+  const rest = {
+    marching: turn.marching,
+    phase: turn.phase,
+    marchIndex: turn.marchIndex,
+    marchStep: turn.marchStep,
+    marchingArmy: turn.marchingArmy,
+    armiesMarched: turn.armiesMarched,
+    combat: turn.combat,
+    ...(turn.eighthFaceStep !== undefined ? { eighthFaceStep: turn.eighthFaceStep } : {}),
+  }
+  return { ...state, turn: attack === null ? rest : { ...rest, dragonAttack: attack } }
+}
+
+const dragonAttackOf = (state: GameState): DragonAttackState => {
+  const attack = state.turn.dragonAttack
+  if (attack === undefined) throw new Error('no dragon attack is being resolved')
+  return attack
+}
+
+/** The rolls belonging to one dragon, first throw and every reroll after it. */
+const rollsOf = (attack: DragonAttackState, dragonId: DragonId): readonly DragonRoll[] =>
+  attack.rolls.filter((roll) => roll.dragonId === dragonId)
+
+/** The dragons attacking the army, in board order -- breath and treasure order. */
+function armyAttackers(state: GameState, attack: DragonAttackState): readonly DragonId[] {
+  return dragonsAt(state, attack.slot)
+    .filter((dragon) => attack.targets[dragon.id]?.kind === 'army')
+    .map((dragon) => dragon.id)
+}
+
+/** One entry per breath rolled against the army, in board order. */
+function breathsOwed(state: GameState, attack: DragonAttackState): readonly DragonId[] {
+  return armyAttackers(state, attack).flatMap((id) =>
+    Array.from<DragonId>({ length: dragonTotals(state, rollsOf(attack, id), false).breaths }).fill(
+      id,
+    ),
+  )
+}
+
+/** One entry per treasure rolled against the army. */
+function treasuresOwed(state: GameState, attack: DragonAttackState): number {
+  return armyAttackers(state, attack).reduce(
+    (sum, id) => sum + dragonTotals(state, rollsOf(attack, id), false).treasures,
+    0,
+  )
+}
+
+/**
+ * Rolls every dragon at a terrain and opens the attack: steps 1 to 3 in one move,
+ * since the targets follow from the board and the rolls take no decision.
+ */
+function beginDragonAttack(state: GameState, slot: TerrainSlot): GameState {
+  const marching = state.turn.marching
+  const targets = dragonTargets(state, slot, marching)
+
+  let rng = state.rng
+  const rolls: DragonRoll[] = []
+  for (const dragon of dragonsAt(state, slot)) {
+    const target = targets.get(dragon.id)
+    if (target === undefined) continue
+    const [rolled, next] = rollDragon(dragon.id, dragon.dieId, target.kind === 'dragon', rng)
+    rng = next
+    rolls.push(...rolled)
+  }
+
+  const entries = dragonsAt(state, slot).flatMap((dragon) => {
+    const target = targets.get(dragon.id)
+    if (target === undefined) return []
+    const mine = rolls.filter((roll) => roll.dragonId === dragon.id)
+    const victim = target.kind === 'dragon' ? state.dragons[target.dragonId] : undefined
+    return [
+      {
+        dragonId: dragon.id,
+        dieId: dragon.dieId,
+        target:
+          victim === undefined
+            ? ({ kind: 'army' } as const)
+            : ({ kind: 'dragon', dieId: victim.dieId } as const),
+        faces: mine.map((roll) => ({ face: roll.faceIndex, icon: rolledIcon(state, roll) })),
+        damage: dragonTotals(state, mine, target.kind === 'dragon').damage,
+      },
+    ]
+  })
+
+  const logged = withLog(
+    { ...state, rng },
+    { kind: 'dragon_attack', slot, defender: marching, dragons: entries },
+  )
+
+  return withDragonAttack(logged, {
+    slot,
+    step: 'breath',
+    defender: marching,
+    rolls,
+    targets: Object.fromEntries(targets),
+    resolved: 0,
+  })
+}
+
+/**
+ * Step 4: one breath, resolved against the army.
+ *
+ * "Each dragon breath is resolved one at a time, by killing the required
+ * health-worth of units. After units have been killed, apply all elemental breath
+ * effects" -- so the kill comes first and the element second, which is what makes
+ * Fire's "roll the units killed by this breath" answerable at all.
+ */
+function breathPending(state: GameState, attack: DragonAttackState): Pending | null {
+  const owed = breathsOwed(state, attack)
+  const dragonId = owed[attack.resolved]
+  if (dragonId === undefined) return null
+
+  const army = armyAt(state, attack.defender, attack.slot)
+  const health = Math.min(BREATH_KILL_HEALTH, healthsOf(army).reduce((a, b) => a + b, 0))
+  if (health === 0) return null
+
+  return { kind: 'dragon_breath', player: attack.defender, slot: attack.slot, dragonId, health }
+}
+
+function applyDragonBreath(state: GameState, unitIds: readonly UnitId[]): GameState {
+  const attack = dragonAttackOf(state)
+  const pending = breathPending(state, attack)
+  if (pending?.kind !== 'dragon_breath') {
+    throw new IllegalActionError('no dragon breath is waiting for its victims')
+  }
+
+  const army = armyAt(state, attack.defender, attack.slot)
+  const problem = damageAssignmentProblem(army, pending.health, unitIds)
+  if (problem !== null) throw new IllegalActionError(problem)
+
+  const dragon = state.dragons[pending.dragonId]
+  if (dragon === undefined) throw new Error(`no such dragon ${pending.dragonId}`)
+  const element = elementOf(dragon)
+
+  const { state: killed } = killUnits(state, unitIds)
+  const logged = withLog(killed, {
+    kind: 'dragon_breath',
+    player: attack.defender,
+    dragonId: pending.dragonId,
+    element,
+    unitIds,
+  })
+
+  // Fire alone needs the dead to roll again; the other four are a duration effect
+  // on the army and take no decision at all.
+  if (BREATH_EFFECT[element] === 'bury_killed') {
+    return withDragonAttack(logged, { ...attack, step: 'breath_bury', burning: unitIds })
+  }
+
+  return withDragonAttack(withBreathEffect(logged, attack, element), {
+    ...attack,
+    resolved: attack.resolved + 1,
+  })
+}
+
+/**
+ * The four breaths that are a duration effect (p. 20).
+ *
+ * Each is a `Modifier` on the army where it stands, expiring at the start of that
+ * army's own next turn -- which is the marching player's, since the army under
+ * attack is theirs. Halving is a `divide`, so pipeline step 7's one-divider-per-type
+ * rule makes two different breaths stack and two of a kind not, with no new code.
+ */
+function withBreathEffect(
+  state: GameState,
+  attack: DragonAttackState,
+  element: DragonElement,
+): GameState {
+  const effect = BREATH_EFFECT[element]
+  if (effect === 'bury_killed') return state
+
+  const modifiers: readonly Modifier[] =
+    effect === 'halve_melee'
+      ? [{ kind: 'divide', resultType: 'melee', by: 2 }]
+      : effect === 'halve_missile'
+        ? [{ kind: 'divide', resultType: 'missile', by: 2 }]
+        : effect === 'halve_maneuver'
+          ? [{ kind: 'divide', resultType: 'maneuver', by: 2 }]
+          : ignoreIdsModifiers()
+
+  const added: Effect = {
+    source: BREATH_NAME[element],
+    target: { kind: 'army', player: attack.defender, army: attack.slot },
+    modifiers,
+    expiresAtStartOfTurnOf: attack.defender,
+  }
+
+  return withLog({ ...state, effects: [...state.effects, added] }, {
+    kind: 'dragon_breath_effect',
+    player: attack.defender,
+    element,
+    slot: attack.slot,
+  })
+}
+
+/**
+ * Fire's second half: "roll the units killed by this dragon's breath attack. Those
+ * that do not generate a save result are buried."
+ *
+ * A sub-roll, the seam Seize and Smother already use -- and **not** `killAndBury`,
+ * despite that function's doc comment naming Fire breath. The kill above was
+ * unconditional; only the burial is escapable, and only per unit.
+ */
+function resolveBreathBury(state: GameState): GameState {
+  const attack = dragonAttackOf(state)
+  const burning = attack.burning ?? []
+
+  // Rise from the Ashes may already have taken some of them out of the DUA.
+  const inDua = burning.filter((id) => state.units[id]?.location.kind === 'dua')
+  const inputs = inDua.map((id) => unitRoll(state, id))
+  const [rolls, rng] = rollUnits(inputs, 'save', SAVE_SUB_ROLL, state.rng, state.ruleSet)
+
+  const doomed = rolls.filter((sub) => (sub.roll?.total ?? 0) === 0).map((sub) => sub.unitId)
+  const { state: buried } = doomed.length > 0 ? buryUnits({ ...state, rng }, doomed) : { state: { ...state, rng } }
+
+  const logged =
+    doomed.length > 0
+      ? withLog(buried, {
+          kind: 'units_buried',
+          player: attack.defender,
+          unitIds: doomed,
+          source: 'dragon_fire',
+        })
+      : buried
+
+  const withEffect = withBreathEffect(logged, attack, 'fire')
+  const next = withDragonAttack(withEffect, { ...attack, step: 'breath', resolved: attack.resolved + 1 })
+  // `burning` is dropped by omission, the way `combat.attack` is.
+  return next
+}
+
+/** A sub-roll looking for a save icon: Fire breath's burial check. */
+const SAVE_SUB_ROLL: RollContext = {
+  purpose: { kind: 'save', against: null },
+  isCounter: false,
+  isSubRoll: true,
+}
+
+/** Step 5: one treasure, one promotion, and the army may decline it. */
+function treasurePending(state: GameState, attack: DragonAttackState): Pending | null {
+  if (attack.resolved >= treasuresOwed(state, attack)) return null
+
+  const promotions: PromotionPair[] = []
+  for (const unit of armyAt(state, attack.defender, attack.slot)) {
+    for (const partner of promotionPartners(state, unit.id)) {
+      promotions.push({ unitId: unit.id, partnerId: partner.id })
+    }
+  }
+  if (promotions.length === 0) return null
+
+  return { kind: 'dragon_treasure', player: attack.defender, slot: attack.slot, promotions }
+}
+
+function applyDragonTreasure(state: GameState, pair: PromotionPair | null): GameState {
+  const attack = dragonAttackOf(state)
+  const pending = treasurePending(state, attack)
+  if (pending?.kind !== 'dragon_treasure') {
+    throw new IllegalActionError('no treasure is offering a promotion')
+  }
+
+  const advanced = withDragonAttack(state, { ...attack, resolved: attack.resolved + 1 })
+  if (pair === null) return advanced
+
+  if (!pending.promotions.some((p) => p.unitId === pair.unitId && p.partnerId === pair.partnerId)) {
+    throw new IllegalActionError(`${pair.unitId} cannot promote into ${pair.partnerId}`)
+  }
+  const promoted = promote(advanced, [pair])
+  return withLog(promoted, {
+    kind: 'units_promoted',
+    player: attack.defender,
+    pairs: [pair],
+    source: 'dragon_treasure',
+  })
+}
+
+/** Step 6: the army's one combination roll, and the allocation it owes. */
+function armyRollPending(state: GameState, attack: DragonAttackState): Pending | null {
+  const dice = attack.armyDice
+  if (dice === undefined) throw new Error('the army has not rolled yet')
+
+  const { ids, flexible } = rollPools(dice, dragonRollSpec(state, attack), state.ruleSet)
+  if (ids === 0 && flexible === 0) return null
+
+  return { kind: 'dragon_allocate', player: attack.defender, slot: attack.slot, ids, flexible }
+}
+
+/**
+ * The army's combination roll (p. 18): melee, missile and save at once.
+ *
+ * It is an army roll like any other, so it goes through `armyRoll` for its
+ * modifiers -- the eighth face's ID doubling and any breath already applied this
+ * very attack, which is why the breaths resolve first.
+ */
+function dragonRollSpec(
+  state: GameState,
+  attack: DragonAttackState,
+  answer?: Extract<GameAction, { kind: 'dragon_allocate' }>,
+): RollSpec {
+  const { modifiers } = armyRoll(state, attack.defender, attack.slot, 'melee')
+
+  // `armyRoll` takes one result type and doubles IDs in that one. The eighth face
+  // doubles them "when rolling anything there", so a combination roll needs the
+  // other two as well -- without this a held terrain would double the melee share
+  // and quietly not the missile or save ones.
+  const alsoDoubled = doublesIds(state, attack.defender, attack.slot)
+    ? DRAGON_ROLL_KINDS.filter((kind) => kind !== 'melee').map(doubleIdsModifier)
+    : []
+
+  return {
+    kinds: DRAGON_ROLL_KINDS,
+    modifiers: [...modifiers, ...alsoDoubled],
+    context: { purpose: { kind: 'dragon_attack' }, isCounter: false },
+    idAllocation: answer?.ids ?? { melee: 0, missile: 0, save: 0 },
+    ...(answer?.flexible !== undefined ? { saiResults: answer.flexible } : {}),
+  }
+}
+
+function applyDragonAllocate(
+  state: GameState,
+  action: Extract<GameAction, { kind: 'dragon_allocate' }>,
+): GameState {
+  const attack = dragonAttackOf(state)
+  const pending = armyRollPending(state, attack)
+  if (pending?.kind !== 'dragon_allocate') {
+    throw new IllegalActionError('no dragon roll is waiting to be allocated')
+  }
+
+  const spent = (record: Readonly<Partial<Record<ResultType, number>>>) =>
+    DRAGON_ROLL_KINDS.reduce((sum, kind) => sum + (record[kind] ?? 0), 0)
+
+  if (spent(action.flexible) !== pending.flexible) {
+    throw new IllegalActionError(
+      `the split spends ${spent(action.flexible)} of ${pending.flexible} flexible results`,
+    )
+  }
+  // `allocateIds` enforces the ID pool being spent exactly, and says so better.
+
+  return resolveArmyRoll(state, attack, action)
+}
+
+/** Steps 6 and 7 meeting: the totals, then the damage both ways. */
+function resolveArmyRoll(
+  state: GameState,
+  attack: DragonAttackState,
+  answer?: Extract<GameAction, { kind: 'dragon_allocate' }>,
+): GameState {
+  const dice = attack.armyDice
+  if (dice === undefined) throw new Error('the army has not rolled yet')
+
+  const outcome = resolveFaces(dice, dragonRollSpec(state, attack, answer), state.ruleSet)
+  const totals = {
+    melee: outcome.totals.melee ?? 0,
+    missile: outcome.totals.missile ?? 0,
+    save: outcome.totals.save ?? 0,
+  }
+
+  const logged = withLog(state, {
+    kind: 'dragon_roll',
+    player: attack.defender,
+    slot: attack.slot,
+    dice: outcome.dice,
+    totals,
+  })
+
+  return withDragonAttack(logged, { ...attack, step: 'damage', totals })
+}
+
+/** The dragons the army's results could be spent on, and what each needs to die. */
+function splitTargets(state: GameState, attack: DragonAttackState): readonly DragonDamageTarget[] {
+  return armyAttackers(state, attack).map((dragonId) => ({
+    dragonId,
+    threshold: killThreshold(dragonTotals(state, rollsOf(attack, dragonId), false).bellyUp),
+  }))
+}
+
+/**
+ * Step 7, outgoing: which dragons the army's melee and missile are spent on.
+ *
+ * **Only asked when there is a choice.** Against a single dragon there is nothing to
+ * decide -- results have no other use, so every one of them goes at the only target
+ * there is and whether it dies is arithmetic. Asking anyway would be the same
+ * mistake as offering a damage assignment too small to kill anything: a decision
+ * with one legal answer is not a decision. `stepDragonAttack` resolves that case
+ * itself.
+ */
+function damageSplitPending(state: GameState, attack: DragonAttackState): Pending | null {
+  const totals = attack.totals
+  if (totals === undefined) throw new Error('the army roll has not been totalled')
+  if (totals.melee === 0 && totals.missile === 0) return null
+
+  const targets = splitTargets(state, attack)
+  if (targets.length < 2) return null
+
+  return {
+    kind: 'dragon_damage_split',
+    player: attack.defender,
+    slot: attack.slot,
+    melee: totals.melee,
+    missile: totals.missile,
+    targets,
+  }
+}
+
+/**
+ * The one-dragon case, worked out rather than asked: everything the army rolled
+ * goes at the only dragon present, and the two types are still never combined.
+ */
+function loneDragonSlain(state: GameState, attack: DragonAttackState): readonly DragonId[] {
+  const totals = attack.totals
+  const [only] = splitTargets(state, attack)
+  if (only === undefined || totals === undefined) return []
+  return totals.melee >= only.threshold || totals.missile >= only.threshold ? [only.dragonId] : []
+}
+
+function applyDragonDamageSplit(
+  state: GameState,
+  action: Extract<GameAction, { kind: 'dragon_damage_split' }>,
+): GameState {
+  const attack = dragonAttackOf(state)
+  const pending = damageSplitPending(state, attack)
+  if (pending?.kind !== 'dragon_damage_split') {
+    throw new IllegalActionError('no dragon damage is waiting to be split')
+  }
+
+  const ids = new Set(pending.targets.map((t) => t.dragonId))
+  for (const record of [action.melee, action.missile]) {
+    for (const [dragonId, amount] of Object.entries(record)) {
+      if (!ids.has(dragonId)) {
+        throw new IllegalActionError(`${dragonId} is not attacking this army`)
+      }
+      if (!Number.isInteger(amount) || amount < 0) {
+        throw new IllegalActionError(`${dragonId} is given ${amount}, which is not a count`)
+      }
+    }
+  }
+  const spent = (record: Readonly<Record<DragonId, number>>) =>
+    Object.values(record).reduce((a, b) => a + b, 0)
+  if (spent(action.melee) > pending.melee) {
+    throw new IllegalActionError(`the split spends ${spent(action.melee)} of ${pending.melee} melee`)
+  }
+  if (spent(action.missile) > pending.missile) {
+    throw new IllegalActionError(
+      `the split spends ${spent(action.missile)} of ${pending.missile} missile`,
+    )
+  }
+
+  // "The damage to slay a dragon must come from either melee or missile results --
+  // they may not be combined", so each type is compared to the threshold on its own.
+  const slain = pending.targets
+    .filter(
+      (target) =>
+        (action.melee[target.dragonId] ?? 0) >= target.threshold ||
+        (action.missile[target.dragonId] ?? 0) >= target.threshold,
+    )
+    .map((target) => target.dragonId)
+
+  return finishDragonDamage(state, attack, slain)
+}
+
+/**
+ * Step 7's other half and steps 8 and 9: dragon-vs-dragon damage, the army's
+ * casualties, the promotion a slaying earns, and the wings home.
+ *
+ * Dragons and armies inflict damage simultaneously, so the dragons killed here
+ * still did what they rolled -- their damage is already in `armyDamage` before any
+ * of them is sent home.
+ */
+function finishDragonDamage(
+  state: GameState,
+  attack: DragonAttackState,
+  slainByArmy: readonly DragonId[],
+): GameState {
+  const totals = attack.totals
+  const save = totals?.save ?? 0
+
+  // Incoming: every dragon attacking the army, less the army's own saves.
+  const inflicted = armyAttackers(state, attack).reduce(
+    (sum, id) => sum + dragonTotals(state, rollsOf(attack, id), false).damage,
+    0,
+  )
+  const armyDamage = Math.max(0, inflicted - save)
+
+  // Dragon against dragon: each one's damage against the other's threshold.
+  const slainByDragon: DragonId[] = []
+  for (const dragon of dragonsAt(state, attack.slot)) {
+    const target = attack.targets[dragon.id]
+    if (target?.kind !== 'dragon') continue
+    const victim = state.dragons[target.dragonId]
+    if (victim === undefined) continue
+    const damage = dragonTotals(state, rollsOf(attack, dragon.id), true).damage
+    const threshold = killThreshold(dragonTotals(state, rollsOf(attack, victim.id), true).bellyUp)
+    if (damage >= threshold) slainByDragon.push(victim.id)
+  }
+
+  const slain = [...new Set([...slainByArmy, ...slainByDragon])]
+  let next = state
+  for (const dragonId of slain) {
+    next = sendDragonHome(next, dragonId, 'slain')
+  }
+
+  // Step 8: "if an army kills one or more dragons, it may promote as many units as
+  // possible" -- a maximal matching, which is Phase 2's machinery and no decision.
+  if (slainByArmy.length > 0) {
+    const survivors = armyAt(next, attack.defender, attack.slot).map((unit) => unit.id)
+    const pairs = promotionMatching(next, attack.defender, survivors)
+    if (pairs.length > 0) {
+      next = withLog(promote(next, pairs), {
+        kind: 'units_promoted',
+        player: attack.defender,
+        pairs,
+        source: 'dragon_slain',
+      })
+    }
+  }
+
+  // Step 9: any dragon that rolled Wing and is still here flies home.
+  for (const dragon of dragonsAt(next, attack.slot)) {
+    if (dragonTotals(next, rollsOf(attack, dragon.id), attack.targets[dragon.id]?.kind === 'dragon')
+      .flies) {
+      next = sendDragonHome(next, dragon.id, 'flew')
+    }
+  }
+
+  return withDragonAttack(next, { ...attack, step: 'assign', armyDamage })
+}
+
+/** A dragon leaves the board the only two ways it can, and the pool is one-way. */
+function sendDragonHome(state: GameState, dragonId: DragonId, why: 'slain' | 'flew'): GameState {
+  const dragon = state.dragons[dragonId]
+  if (dragon === undefined || dragon.location.kind !== 'terrain') return state
+  return withLog(
+    {
+      ...state,
+      dragons: { ...state.dragons, [dragonId]: { ...dragon, location: { kind: 'pool' } } },
+    },
+    { kind: 'dragon_home', dragonId, dieId: dragon.dieId, why },
+  )
+}
+
+function applyDragonAssign(state: GameState, unitIds: readonly UnitId[]): GameState {
+  const attack = dragonAttackOf(state)
+  const pending = dragonAssignPending(state, attack)
+  if (pending?.kind !== 'assign_damage') {
+    throw new IllegalActionError('no dragon damage is waiting to be assigned')
+  }
+
+  const army = armyAt(state, attack.defender, attack.slot)
+  const problem = damageAssignmentProblem(army, pending.damage, unitIds)
+  if (problem !== null) throw new IllegalActionError(problem)
+
+  const { state: dead, risen } = killUnits(state, unitIds)
+  const killed = withLog(
+    dead,
+    { kind: 'units_killed', player: attack.defender, slot: attack.slot, unitIds },
+    ...(risen.length > 0
+      ? [{ kind: 'units_risen', player: attack.defender, unitIds: risen } as const]
+      : []),
+  )
+
+  return endDragonAttack(killed, attack)
+}
+
+/** Step 7, incoming: the army assigning what the dragons did to it. */
+function dragonAssignPending(state: GameState, attack: DragonAttackState): Pending | null {
+  const damage = attack.armyDamage ?? 0
+  if (damage === 0) return null
+  const army = armyAt(state, attack.defender, attack.slot)
+  if (maxAbsorbable(healthsOf(army), damage) === 0) return null
+  return { kind: 'assign_damage', player: attack.defender, slot: attack.slot, damage }
+}
+
+/**
+ * One step of the Dragon Attack Phase, or the same state when it needs an answer.
+ *
+ * Each branch either does something that takes no decision and returns a changed
+ * state, or hands back a pending. The loop in `stepGame` keeps calling until one of
+ * those is a pending or the phase is over.
+ */
+function stepDragonAttack(state: GameState): GameState {
+  const marching = state.turn.marching
+  const attack = state.turn.dragonAttack
+
+  if (attack === undefined) {
+    const slot = dragonAttackSlots(state, marching)[0]
+    if (slot === undefined) {
+      return withTurn(state, { phase: 'march', marchIndex: 0, marchStep: 'select_army' })
+    }
+    return beginDragonAttack(state, slot)
+  }
+
+  switch (attack.step) {
+    case 'breath': {
+      const pending = breathPending(state, attack)
+      if (pending !== null) return { ...state, pending }
+      return withDragonAttack(state, { ...attack, step: 'treasure', resolved: 0 })
+    }
+
+    case 'breath_bury':
+      return resolveBreathBury(state)
+
+    case 'treasure': {
+      const pending = treasurePending(state, attack)
+      if (pending !== null) return { ...state, pending }
+      return withDragonAttack(state, { ...attack, step: 'army_roll', resolved: 0 })
+    }
+
+    case 'army_roll': {
+      // "Skip this step if no army is being attacked" (p. 18 step 6). Two dragons
+      // that found each other fight alone: the army does not get to join in, and --
+      // the half a browser caught -- it must not *roll*, or it burns randomness the
+      // rules never spend and hands its melee to a damage split it has no part in.
+      if (armyAttackers(state, attack).length === 0) {
+        return withDragonAttack(state, {
+          ...attack,
+          step: 'damage',
+          totals: { melee: 0, missile: 0, save: 0 },
+        })
+      }
+      if (attack.armyDice === undefined) {
+        const { units } = armyRoll(state, attack.defender, attack.slot, 'melee')
+        const [dice, rng] = rollFaces(units, state.rng)
+        return withDragonAttack({ ...state, rng }, { ...attack, armyDice: dice })
+      }
+      const pending = armyRollPending(state, attack)
+      if (pending !== null) return { ...state, pending }
+      // Nothing to allocate: resolve the same faces straight through.
+      return resolveArmyRoll(state, attack)
+    }
+
+    case 'damage': {
+      const pending = damageSplitPending(state, attack)
+      if (pending !== null) return { ...state, pending }
+      return finishDragonDamage(state, attack, loneDragonSlain(state, attack))
+    }
+
+    case 'assign': {
+      const pending = dragonAssignPending(state, attack)
+      if (pending !== null) return { ...state, pending }
+      return endDragonAttack(state, attack)
+    }
+  }
+}
+
+/** This terrain is done: drop the working state and look for the next one. */
+function endDragonAttack(state: GameState, attack: DragonAttackState): GameState {
+  const done = withDragonAttack(state, null)
+  const remaining = dragonAttackSlots(done, done.turn.marching).filter(
+    (slot) => TERRAIN_SLOTS.indexOf(slot) > TERRAIN_SLOTS.indexOf(attack.slot),
+  )
+  const next = remaining[0]
+  if (next === undefined) {
+    return withTurn(done, { phase: 'march', marchIndex: 0, marchStep: 'select_army' })
+  }
+  return beginDragonAttack(done, next)
+}
+
 /**
  * One step of the game. Returns the same object when nothing can happen without a
  * decision, which is how the advance loop knows to stop.
@@ -1715,8 +2434,13 @@ export function stepGame(state: GameState): GameState {
       if (pending !== null) return { ...state, pending }
       return withTurn(state, { phase: 'dragon_attack' })
     }
+    // Real since Phase 6, and still a no-op when the rules have no dragons -- which
+    // is every `V0_RULES` game, so the 25 goldens never enter it.
     case 'dragon_attack':
-      return withTurn(state, { phase: 'march', marchIndex: 0, marchStep: 'select_army' })
+      if (!state.ruleSet.dragons) {
+        return withTurn(state, { phase: 'march', marchIndex: 0, marchStep: 'select_army' })
+      }
+      return stepDragonAttack(state)
 
     case 'march':
       return stepMarch(state)
@@ -1946,6 +2670,13 @@ function applyCounterAttack(state: GameState, counter: boolean): GameState {
 }
 
 function applyAssignDamage(state: GameState, unitIds: readonly UnitId[]): GameState {
+  // A dragon attack assigns damage too, and it is the same decision in every
+  // respect -- one army, one number, the maximal-subset rule -- so it reuses this
+  // pending rather than growing a second one that both clients would have to learn.
+  // What differs is only where the state goes next, which is why the branch is here
+  // and not in the `Pending`.
+  if (state.turn.dragonAttack !== undefined) return applyDragonAssign(state, unitIds)
+
   const step = state.turn.marchStep
   if (!isAssignStep(step)) {
     throw new IllegalActionError(`no damage is waiting to be assigned (march step ${step})`)
@@ -2069,5 +2800,13 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyEighthFaceTemple(cleared, action.force)
     case 'temple_bury':
       return applyTempleBury(cleared, action.unitId)
+    case 'dragon_breath':
+      return applyDragonBreath(cleared, action.unitIds)
+    case 'dragon_treasure':
+      return applyDragonTreasure(cleared, action.pair)
+    case 'dragon_allocate':
+      return applyDragonAllocate(cleared, action)
+    case 'dragon_damage_split':
+      return applyDragonDamageSplit(cleared, action)
   }
 }

@@ -10,12 +10,29 @@
  * Because everything is visible, there is no "look elsewhere" any more: `focused` is
  * now only a highlight marking where the current decision applies.
  */
-import { terrainDie, terrainFaceAction, terrainType, unitType } from '../../data/load'
-import type { TerrainFaceNumber } from '../../data/types'
+import {
+  dragonDie,
+  dragonFaceIcon,
+  dragonName,
+  terrainDie,
+  terrainFaceAction,
+  terrainType,
+  unitType,
+} from '../../data/load'
+import type { DragonFaceNumber, DragonIcon, TerrainFaceNumber } from '../../data/types'
+import {
+  BREATH_NAME,
+  BREATH_TEXT,
+  DRAGON_AUTOMATIC_SAVES,
+  DRAGON_HEALTH,
+  DRAGON_ICON_TEXT,
+} from '../../engine/dragons'
 import { eighthFaceLabel } from '../../engine/effects'
 import {
   TERRAIN_SLOTS,
   armyAt,
+  dragonsAt,
+  type DragonInPlay,
   type GameState,
   type PlayerId,
   type TerrainInPlay,
@@ -25,6 +42,7 @@ import {
 } from '../../engine/types'
 
 import { DiceGrid } from './DiceGrid'
+import { DragonFaceArt } from './FaceArt'
 import { ElementDots, speciesInfo } from './Elements'
 import { Glyph, type GlyphName } from './Glyph'
 import {
@@ -161,6 +179,128 @@ export function TerrainDetail({ terrain }: { terrain: TerrainInPlay }) {
 
 function strength(units: readonly { typeId: string }[]) {
   return { dice: units.length, health: units.reduce((n, u) => n + unitType(u.typeId).health, 0) }
+}
+
+/**
+ * The dragons at a terrain.
+ *
+ * Its own row between the terrain head and the two armies, because a dragon belongs
+ * to neither: it attacks the marching player's army whoever brought it, its own
+ * summoner included. Rendering it inside an `ArmySide` would say the opposite.
+ *
+ * Whose pool it came from is still worth showing -- it decides who rolls it, and it
+ * is the only thing distinguishing two dragons standing in the same place.
+ */
+function DragonRow({
+  dragons,
+  human,
+  inspecting,
+  onInspect,
+}: {
+  dragons: readonly DragonInPlay[]
+  human: PlayerId
+  inspecting: string | null
+  onInspect: (id: string | null) => void
+}) {
+  if (dragons.length === 0) return null
+  return (
+    <div className="dragon-row">
+      {dragons.map((dragon) => {
+        const die = dragonDie(dragon.dieId)
+        const isOpen = inspecting === dragon.id
+        const label = `${dragonName(dragon.dieId)} — ${
+          dragon.owner === human ? 'yours' : "the enemy's"
+        }, and it attacks whoever is marching`
+        return (
+          <div className={`dragon-wrap ${isOpen ? 'is-open' : ''}`} key={dragon.id}>
+            <button
+              type="button"
+              // `dragon-el-`, not `el-`: `.el-<element>` is the element *dot*, and
+              // it paints a background.
+              className={`dragon-chip dragon-el-${die.element} ${isOpen ? 'is-open' : ''}`}
+              onClick={() => onInspect(isOpen ? null : dragon.id)}
+              title={`${label} — tap to see every face`}
+              aria-label={label}
+              aria-expanded={isOpen}
+            >
+              {/* Its Jaws face -- the real one, the heaviest thing a dragon can
+                  roll, standing for the die the way an ID face stands for a unit.
+                  `floor={0}` because this is a label rather than a face to read,
+                  and it falls back to our glyph with no art fetched. */}
+              <DragonFaceArt
+                dieId={dragon.dieId}
+                face={jawsFace(dragon.dieId)}
+                icon="JAWS"
+                size={18}
+                floor={0}
+              />
+              {dragonName(dragon.dieId)}
+              <span className="muted">{dragon.owner === human ? ' (yours)' : ' (enemy)'}</span>
+            </button>
+
+            {isOpen && (
+              <div className="die-detail">
+                <p className="detail-head">
+                  <b>{dragonName(dragon.dieId)}</b>
+                  <span className="muted">
+                    {DRAGON_HEALTH} health · {DRAGON_AUTOMATIC_SAVES} automatic saves · d12
+                  </span>
+                  <ElementDots elements={[die.element]} />
+                </p>
+                <p className="sai-text">
+                  Ten of one type kills it — melee <em>or</em> missile, never both. Five if it
+                  rolls its belly. Its breath is <b>{BREATH_NAME[die.element]}</b>:{' '}
+                  {BREATH_TEXT[die.element]}
+                </p>
+                <DragonFaceSheet dieId={dragon.dieId} />
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * All twelve faces of a dragon die, with the repeats counted rather than listed --
+ * four claws all do the same thing, and drawing them four times says nothing.
+ *
+ * At 44px, the same size the unit inspector and the terrain sheet use: this is one
+ * of the two places a dragon face is big enough for the real art to beat a glyph.
+ */
+function DragonFaceSheet({ dieId }: { dieId: string }) {
+  const counts = new Map<DragonIcon, { face: DragonFaceNumber; count: number }>()
+  for (const n of FACE_NUMBERS) {
+    const icon = dragonFaceIcon(dieId, n)
+    const seen = counts.get(icon)
+    // The first face showing this icon is the one whose art we draw.
+    counts.set(icon, { face: seen?.face ?? n, count: (seen?.count ?? 0) + 1 })
+  }
+
+  return (
+    <ul className="dragon-faces">
+      {[...counts].map(([icon, { face, count }]) => (
+        <li key={icon}>
+          <DragonFaceArt dieId={dieId} face={face} icon={icon} size={30} />
+          <b>
+            {icon.charAt(0) + icon.slice(1).toLowerCase()}
+            {count > 1 && <span className="muted"> ×{count}</span>}
+          </b>
+          <span className="muted">{DRAGON_ICON_TEXT[icon]}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+const FACE_NUMBERS: readonly DragonFaceNumber[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+/** Which face carries Jaws. Asked of the data rather than assumed to be face 1. */
+function jawsFace(dieId: string): DragonFaceNumber {
+  const found = FACE_NUMBERS.find((n) => dragonFaceIcon(dieId, n) === 'JAWS')
+  if (found === undefined) throw new Error(`${dieId} has no Jaws face`)
+  return found
 }
 
 type Species = ReturnType<typeof speciesInfo>
@@ -338,6 +478,12 @@ export function Board({
 
             {facesOpen && <TerrainDetail terrain={terrain} />}
 
+            <DragonRow
+              dragons={dragonsAt(state, slot)}
+              human={human}
+              inspecting={inspecting}
+              onInspect={onInspect}
+            />
             <ArmySide
               title="Enemy"
               species={theirSpecies}
