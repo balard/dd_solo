@@ -47,6 +47,7 @@ import { ElementDots, speciesInfo } from './Elements'
 import { Glyph, type GlyphName } from './Glyph'
 import {
   effectsOnArmy,
+  effectsOnTerrain,
   selectableAt,
   sleepingIds,
   slotLabel,
@@ -420,6 +421,7 @@ export function Board({
           : (terrainFaceAction(terrain.dieId, terrain.face as TerrainFaceNumber) as GlyphName)
         const type = terrainType(terrainDie(terrain.dieId).type)
         const facesOpen = openTerrain === slot
+        const terrainEffects = effectsOnTerrain(state, slot, human)
 
         const selectableHere = selectableAt(selectMode, slot, 'mine')
         // New with the targeting SAIs, and the first decision that picks from the
@@ -477,6 +479,22 @@ export function Board({
             )}
 
             {facesOpen && <TerrainDetail terrain={terrain} />}
+
+            {/* A terrain effect sits on the *place*, not on either army: Ash Storm
+                subtracts from both sides' rolls here and Wall of Fog wards the place
+                against missile fire from anywhere. Drawing it inside an `ArmySide`
+                would say it belonged to that army, which is the opposite of the rule. */}
+            {terrainEffects.length > 0 && (
+              <ul className="army-effects terrain-effects">
+                {terrainEffects.map((effect, i) => (
+                  <li key={`${effect.source}-${i}`}>
+                    <b>{effect.source}</b>
+                    {effect.what !== '' && <> {effect.what}</>}
+                    <span className="muted"> &middot; until {effect.until}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
 
             <DragonRow
               dragons={dragonsAt(state, slot)}

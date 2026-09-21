@@ -14,10 +14,11 @@ import { runGame } from '../ai/run'
 import { SPELLS, spell, spellAcceptsElement, spellAllowsSpecies } from '../data/spells'
 
 import { legalActions } from './combat'
+import { armyRoll, pruneEffects, type Effect } from './effects'
 import { castableSpells, castingElements, magicPool, magicRolled, type MagicPool } from './magic'
 import { begin, reduce } from './reduce'
-import { STARTER_FORCES, setupGame } from './setup'
-import { resolvesSpell } from './spells'
+import { BESTIARY_FORCES, STARTER_FORCES, setupGame } from './setup'
+import { resolvesSpell, spellEffect, type SpellContext } from './spells'
 import {
   DRAGON_RULES,
   SPELL_RULES,
@@ -103,12 +104,23 @@ describe('resolvesSpell', () => {
     for (const s of SPELLS) expect(resolvesSpell(s.id, V0_RULES)).toBe(false)
   })
 
-  // 7a builds the seam and resolves nothing. This assertion is the slice's own
-  // definition, and every later slice moves names out of it -- by 7f it is empty and
-  // this test inverts.
-  it('is false for every spell in 7a, because none has an effect or a handler yet', () => {
-    const unbuilt = SPELLS.filter((s) => !resolvesSpell(s.id, SPELL_RULES)).map((s) => s.id)
-    expect(unbuilt).toHaveLength(18)
+  // Every slice moves names out of this list; by 7f it is empty and the test inverts.
+  // Naming them rather than counting means a spell that quietly stops resolving shows
+  // up here instead of passing on a number that happens to match.
+  it('resolves exactly the eight declarative spells, and nothing else yet', () => {
+    const unbuilt = SPELLS.filter((s) => !resolvesSpell(s.id, SPELL_RULES)).map((s) => s.id).sort()
+    expect(unbuilt).toEqual([
+      'accelerated_growth',
+      'flash_flood',
+      'flashfire',
+      'hailstorm',
+      'lightning_strike',
+      'mirage',
+      'path',
+      'resurrect_dead',
+      'summon_dragon',
+      'wall_of_thorns',
+    ])
   })
 })
 
@@ -128,12 +140,19 @@ describe('the magic pool', () => {
   })
 
   it('offers a Treefolk army no air spell, however much magic it rolls', () => {
-    const castable = castableSpells(pool({ points: 99 }), 'treefolk', SPELL_RULES)
-    // Nothing is castable in 7a at all, so the real assertion is on the filter rather
-    // than the result: a Treefolk pool accepts no air-element spell.
-    expect(castable).toHaveLength(0)
-    expect(SPELLS.filter((s) => s.element === 'air').every((s) => !spellAcceptsElement(s, 'water')))
-      .toBe(true)
+    // The plan's headline test: "a Treefolk army cannot cast Hailstorm -- it generates
+    // no Air magic". Treefolk are water and earth, so every air spell is filtered out
+    // by element before species or cost is even consulted.
+    const state = gameAt('p1')
+    const castable = castableSpells(state, 'p1', magicPool(state, 'p1', 'p1_home', 99), SPELL_RULES)
+    expect(castable.map((c) => c.spell.element)).not.toContain('air')
+    // Water and earth only: the four declarative spells of those two elements.
+    expect(castable.map((c) => c.spell.id).sort()).toEqual([
+      'stone_skin',
+      'transmute_rock_to_mud',
+      'wall_of_fog',
+      'watery_double',
+    ])
   })
 
   it('says what it is in one sentence, for both clients', () => {
@@ -191,34 +210,169 @@ describe('the magic action', () => {
   })
 })
 
+describe('the eight declarative spells', () => {
+  it('turns a cumulative spell into one effect with its number multiplied', () => {
+    // "Combine three castings of Wind Walk and the spell would add twelve results,
+    // rather than four." One effect, not three -- which matters beyond tidiness: the
+    // pipeline caps dividers and multipliers at one per result type, so three separate
+    // effects would throw where one scaled effect does not.
+    const effect = spellEffect(spell('wind_walk'), ctx({ count: 3 }))
+    expect(effect.modifiers).toEqual([{ kind: 'add', resultType: 'maneuver', amount: 12 }])
+  })
+
+  it('leaves a non-cumulative spell alone however many times it is announced', () => {
+    // Accelerated Growth and Lightning Strike are the only two, and neither is
+    // declarative yet -- so this pins the rule on the flag rather than on a spell,
+    // which is what stops it rotting when 7e adds the first one that uses it.
+    const flat = { ...spell('wind_walk'), cumulative: false }
+    expect(spellEffect(flat, ctx({ count: 3 }))).toEqual(
+      expect.objectContaining({
+        modifiers: [{ kind: 'add', resultType: 'maneuver', amount: 4 }],
+      }),
+    )
+  })
+
+  it('expands Ash Storm to every result type', () => {
+    // "Subtract one result from all army rolls" -- untyped. Five rows in the data
+    // would be five places to get it wrong, so `*` expands at cast time.
+    const effect = spellEffect(spell('ash_storm'), ctx({ target: { kind: 'terrain', slot: 'frontier' } }))
+    expect(effect.modifiers).toHaveLength(5)
+    expect(effect.modifiers.map((m) => m.resultType).sort()).toEqual([
+      'magic',
+      'maneuver',
+      'melee',
+      'missile',
+      'save',
+    ])
+    expect(effect.target).toEqual({ kind: 'terrain', slot: 'frontier', scope: 'all_armies' })
+  })
+
+  it('gives Fiery Weapon both halves of "melee or missile"', () => {
+    // Every roll in the game counts one result type, so exactly one of these can ever
+    // apply -- except a dragon combination roll, which is the house rule in
+    // RULES-V0.md section 15.
+    expect(spellEffect(spell('fiery_weapon'), ctx()).modifiers).toEqual([
+      { kind: 'add', resultType: 'melee', amount: 2 },
+      { kind: 'add', resultType: 'missile', amount: 2 },
+    ])
+  })
+})
+
+describe('where a spell effect reaches', () => {
+  it('applies an army spell to that army at that place, and nowhere else', () => {
+    const base = gameAt('p1')
+    const state = withEffect(base, spellEffect(spell('stone_skin'), ctx({
+      target: { kind: 'army', player: 'p1', army: 'p1_home' },
+    })))
+
+    expect(armyRoll(state, 'p1', 'p1_home', 'save').modifiers).toEqual([
+      { kind: 'add', resultType: 'save', amount: 1 },
+    ])
+    // Not the same army somewhere else, and not the other player's army here.
+    expect(armyRoll(state, 'p1', 'frontier', 'save').modifiers).toEqual([])
+    expect(armyRoll(state, 'p2', 'p1_home', 'save').modifiers).toEqual([])
+  })
+
+  it('applies Ash Storm to both players at that terrain', () => {
+    const state = withEffect(gameAt('p1'), spellEffect(spell('ash_storm'), ctx({
+      target: { kind: 'terrain', slot: 'frontier' },
+    })))
+
+    for (const player of ['p1', 'p2'] as const) {
+      expect(armyRoll(state, player, 'frontier', 'melee').modifiers).toContainEqual({
+        kind: 'subtract',
+        resultType: 'melee',
+        amount: 1,
+      })
+    }
+    expect(armyRoll(state, 'p1', 'p1_home', 'melee').modifiers).toEqual([])
+  })
+
+  it('applies Wall of Fog to the attacker, keyed by the terrain it wards', () => {
+    // The one effect that reaches a roll made somewhere else: "subtract six missile
+    // results from any missile attack targeting an army at that terrain".
+    const state = withEffect(gameAt('p1'), spellEffect(spell('wall_of_fog'), ctx({
+      target: { kind: 'terrain', slot: 'p2_home' },
+    })))
+    const ward = { kind: 'subtract', resultType: 'missile', amount: 6 }
+
+    // Shooting *into* the warded terrain from elsewhere: warded.
+    expect(armyRoll(state, 'p1', 'frontier', 'missile', 'p2_home').modifiers).toContainEqual(ward)
+    // Shooting somewhere else: not.
+    expect(armyRoll(state, 'p1', 'frontier', 'missile', 'p1_home').modifiers).toEqual([])
+    // Standing *at* the warded terrain and rolling for yourself: not. It wards the
+    // place against incoming fire, it does not weaken the army holding it.
+    expect(armyRoll(state, 'p2', 'p2_home', 'missile').modifiers).toEqual([])
+  })
+
+  it('never prunes a terrain effect, because a terrain cannot empty', () => {
+    const state = withEffect(gameAt('p1'), spellEffect(spell('ash_storm'), ctx({
+      target: { kind: 'terrain', slot: 'frontier' },
+    })))
+    // Same object back, or `advance` never settles.
+    expect(pruneEffects(state)).toBe(state)
+  })
+})
+
 describe('the fuzz', () => {
-  it('plays 200 SPELL_RULES games without getting stuck', () => {
+  it('plays 200 SPELL_RULES games, casting every declarative spell at least once', () => {
+    const cast = new Map<string, number>()
     let magicActions = 0
     let announcements = 0
     let stuck = 0
 
-    for (let seed = 1; seed <= 200; seed += 1) {
-      const result = runGame({
-        setup: { seed, forces: STARTER_FORCES, ruleSet: SPELL_RULES },
-        players: { p1: randomAi, p2: randomAi },
-        aiSeed: seed,
-      })
-      if (result.stoppedBecause === 'stuck') stuck += 1
-      magicActions += result.state.log.filter((e) => e.kind === 'magic_rolled').length
-      announcements += result.record.actions.filter((a) => a.kind === 'announce_spells').length
+    // Both force sets, because the two species reach different spell lists: Treefolk
+    // can never cast an air or fire spell and Firewalkers never a water or earth one,
+    // so a one-sided fuzz could only ever fire half the table.
+    for (const forces of [STARTER_FORCES, BESTIARY_FORCES]) {
+      for (let seed = 1; seed <= 100; seed += 1) {
+        const result = runGame({
+          setup: { seed, forces, ruleSet: SPELL_RULES },
+          players: { p1: randomAi, p2: randomAi },
+          aiSeed: seed,
+        })
+        if (result.stoppedBecause === 'stuck') stuck += 1
+        announcements += result.record.actions.filter((a) => a.kind === 'announce_spells').length
+        for (const entry of result.state.log) {
+          if (entry.kind === 'magic_rolled') magicActions += 1
+          if (entry.kind === 'spell_cast') cast.set(entry.spell, (cast.get(entry.spell) ?? 0) + 1)
+        }
+      }
     }
 
     expect(stuck).toBe(0)
-    // The counter that makes the run mean something: a clean fuzz over a rule nothing
-    // reached would prove nothing at all.
-    expect(magicActions).toBeGreaterThan(0)
-    // Every magic roll asks for an announcement, and every announcement is empty --
-    // which is 7a's whole claim.
     expect(announcements).toBe(magicActions)
+
+    // The counters are what make a clean run mean something: a fuzz over rules nothing
+    // reached would be green and prove nothing. Every declarative spell fires.
+    const declarative = SPELLS.filter((s) => s.effect !== undefined).map((s) => s.id)
+    expect(declarative).toHaveLength(8)
+    for (const id of declarative) expect(cast.get(id) ?? 0).toBeGreaterThan(0)
+
+    // And nothing else does: an unbuilt spell is never offered, so it can never be
+    // announced, so it can never reach resolution and throw.
+    for (const id of cast.keys()) expect(declarative).toContain(id)
   })
 })
 
 // --- helpers -----------------------------------------------------------------
+
+/** A `SpellContext` for the pure effect builder. */
+function ctx(over: Partial<SpellContext> = {}): SpellContext {
+  return {
+    caster: 'p1',
+    army: 'p1_home',
+    element: 'earth',
+    count: 1,
+    target: { kind: 'army', player: 'p1', army: 'p1_home' },
+    ...over,
+  }
+}
+
+const withEffect = (state: GameState, effect: Effect): GameState => ({
+  ...state,
+  effects: [...state.effects, effect],
+})
 
 /** A started game under the spell rules, for the pure pool queries. */
 function gameAt(_player: 'p1'): GameState {

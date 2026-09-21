@@ -49,15 +49,31 @@ import {
 } from './types'
 
 /**
- * What an effect is attached to.
+ * Where an effect sits: on an army at a place, on one unit, or on a terrain.
  *
- * Two members, not the three `PLAN-V1.md` sketched: the p. 28 rule above has an army
- * side and a unit side, and a `terrain` member would be a branch nothing gathers.
- * The phase that needs one adds it along with the code that reads it.
+ * The `terrain` member is Phase 7b's, added with the code that reads it -- the rules
+ * name five target kinds for a spell (army, unit(s), terrain, DUA, BUA) and three of
+ * the eighteen target a terrain. It carries a **scope**, because "targets a terrain"
+ * is not one rule: Ash Storm reaches every army standing there and Wall of Fog reaches
+ * an army attacking *into* there from somewhere else. Without the scope one kind would
+ * wear two unrelated meanings and every gatherer would have to guess which.
  */
 export type EffectTarget =
   | { readonly kind: 'army'; readonly player: PlayerId; readonly army: ArmyRef }
   | { readonly kind: 'unit'; readonly unitId: UnitId }
+  | { readonly kind: 'terrain'; readonly slot: TerrainSlot; readonly scope: TerrainScope }
+
+/**
+ * Who a terrain-scoped effect reaches.
+ *
+ * `'maneuverers'` is Phase 7d's (Wall of Thorns) and is deliberately absent until
+ * something gathers it -- the same rule that kept `terrain` itself out until now.
+ */
+export type TerrainScope =
+  /** Ash Storm: every army at the terrain, both players'. */
+  | 'all_armies'
+  /** Wall of Fog: a roll aimed *at* this terrain, made from somewhere else. */
+  | 'attackers'
 
 export interface Effect {
   /** Spell name, SAI name, breath element -- what the log names it by. */
@@ -84,6 +100,12 @@ const targetsArmy = (effect: Effect, player: PlayerId, ref: ArmyRef): boolean =>
 
 const targetsUnit = (effect: Effect, unitId: UnitId): boolean =>
   effect.target.kind === 'unit' && effect.target.unitId === unitId
+
+const targetsTerrain = (effect: Effect, ref: ArmyRef, scope: TerrainScope): boolean =>
+  effect.target.kind === 'terrain' &&
+  effect.target.scope === scope &&
+  ref !== 'reserve' &&
+  effect.target.slot === ref
 
 /** Sleep, and anything later that stops a die being rolled. */
 export function isAsleep(state: GameState, unitId: UnitId): boolean {
@@ -182,10 +204,28 @@ export function armyRoll(
   player: PlayerId,
   ref: ArmyRef,
   resultType: ResultType,
+  /**
+   * The army this roll is aimed at, when it is aimed at one.
+   *
+   * Wall of Fog is the only thing that reads it and the reason it exists: "subtract
+   * six missile results from any missile attack targeting an army at that terrain"
+   * puts a modifier on the *attacker's* roll, keyed by the *defender's* terrain, and
+   * the other four arguments describe only the roller.
+   *
+   * **`attackRollSpec` in `combat.ts` is its only caller.** Gathering it anywhere
+   * else would be a second door onto an army roll, which is precisely the bug this
+   * function exists to make impossible -- a call site that answers "who rolls" and
+   * forgets "what modifies it" has no symptom at all.
+   */
+  against?: ArmyRef,
 ): ArmyRollInput {
   const modifiers: Modifier[] = []
   for (const effect of state.effects) {
     if (targetsArmy(effect, player, ref)) modifiers.push(...effect.modifiers)
+    else if (targetsTerrain(effect, ref, 'all_armies')) modifiers.push(...effect.modifiers)
+    else if (against !== undefined && targetsTerrain(effect, against, 'attackers')) {
+      modifiers.push(...effect.modifiers)
+    }
   }
   if (doublesIds(state, player, ref)) modifiers.push(doubleIdsModifier(resultType))
 
@@ -277,11 +317,24 @@ export function expireEffects(state: GameState): GameState {
  */
 export function pruneEffects(state: GameState): GameState {
   const kept = state.effects.filter((effect) => {
-    if (effect.target.kind === 'army') {
-      return armyOf(state, effect.target.player, effect.target.army).length > 0
+    // Exhaustive on purpose: a fifth `EffectTarget` member is a compile error here
+    // rather than a silently immortal effect.
+    switch (effect.target.kind) {
+      case 'army':
+        return armyOf(state, effect.target.player, effect.target.army).length > 0
+      // A terrain cannot empty, move or cease to exist, so a terrain effect only ever
+      // ends by expiring. "If an army is destroyed ... any spells affecting that army
+      // end" is a rule about armies, and this is not one.
+      case 'terrain':
+        return true
+      case 'unit': {
+        const unit = state.units[effect.target.unitId]
+        return (
+          unit !== undefined &&
+          (unit.location.kind === 'terrain' || unit.location.kind === 'reserve')
+        )
+      }
     }
-    const unit = state.units[effect.target.unitId]
-    return unit !== undefined && (unit.location.kind === 'terrain' || unit.location.kind === 'reserve')
   })
 
   return kept.length === state.effects.length ? state : { ...state, effects: kept }

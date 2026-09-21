@@ -24,7 +24,18 @@
       "cumulative": true,
       "reserves": true,
       "cantrip": false,
-      "text": "Target any army. Add four maneuver results to the target's rolls until the beginning of your next turn."
+      "text": "Target any army. Add four maneuver results to the target's rolls until the beginning of your next turn.",
+      "effect": {
+        "scope": "army",
+        "modifiers": [
+          {
+            "kind": "add",
+            "resultType": "maneuver",
+            "amount": 4
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
     },
     {
       "id": "mirage",
@@ -60,7 +71,18 @@
       "cumulative": true,
       "reserves": false,
       "cantrip": true,
-      "text": "Target any terrain. Subtract one result from all army rolls at that terrain until the beginning of your next turn."
+      "text": "Target any terrain. Subtract one result from all army rolls at that terrain until the beginning of your next turn.",
+      "effect": {
+        "scope": "all_armies",
+        "modifiers": [
+          {
+            "kind": "subtract",
+            "resultType": "*",
+            "amount": 1
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
     },
     {
       "id": "flashfire",
@@ -84,7 +106,23 @@
       "cumulative": true,
       "reserves": true,
       "cantrip": false,
-      "text": "Target any army. Add two melee or missile results to any roll the target makes until the beginning of your next turn."
+      "text": "Target any army. Add two melee or missile results to any roll the target makes until the beginning of your next turn.",
+      "effect": {
+        "scope": "army",
+        "modifiers": [
+          {
+            "kind": "add",
+            "resultType": "melee",
+            "amount": 2
+          },
+          {
+            "kind": "add",
+            "resultType": "missile",
+            "amount": 2
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
     },
     {
       "id": "dancing_lights",
@@ -96,7 +134,18 @@
       "cumulative": true,
       "reserves": false,
       "cantrip": false,
-      "text": "Target any opposing army. Subtract six melee results from the target's rolls until the beginning of your next turn."
+      "text": "Target any opposing army. Subtract six melee results from the target's rolls until the beginning of your next turn.",
+      "effect": {
+        "scope": "army",
+        "modifiers": [
+          {
+            "kind": "subtract",
+            "resultType": "melee",
+            "amount": 6
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
     },
     {
       "id": "watery_double",
@@ -108,7 +157,18 @@
       "cumulative": true,
       "reserves": true,
       "cantrip": true,
-      "text": "Target any army. Add one save result to the target's rolls until the beginning of your next turn."
+      "text": "Target any army. Add one save result to the target's rolls until the beginning of your next turn.",
+      "effect": {
+        "scope": "army",
+        "modifiers": [
+          {
+            "kind": "add",
+            "resultType": "save",
+            "amount": 1
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
     },
     {
       "id": "accelerated_growth",
@@ -144,7 +204,18 @@
       "cumulative": true,
       "reserves": false,
       "cantrip": false,
-      "text": "Target any terrain. Subtract six missile results from any missile attack targeting an army at that terrain until the beginning of your next turn."
+      "text": "Target any terrain. Subtract six missile results from any missile attack targeting an army at that terrain until the beginning of your next turn.",
+      "effect": {
+        "scope": "attackers",
+        "modifiers": [
+          {
+            "kind": "subtract",
+            "resultType": "missile",
+            "amount": 6
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
     },
     {
       "id": "stone_skin",
@@ -156,7 +227,18 @@
       "cumulative": true,
       "reserves": true,
       "cantrip": true,
-      "text": "Target any army. Add one save result to the target's rolls until the beginning of your next turn."
+      "text": "Target any army. Add one save result to the target's rolls until the beginning of your next turn.",
+      "effect": {
+        "scope": "army",
+        "modifiers": [
+          {
+            "kind": "add",
+            "resultType": "save",
+            "amount": 1
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
     },
     {
       "id": "path",
@@ -192,7 +274,18 @@
       "cumulative": true,
       "reserves": false,
       "cantrip": false,
-      "text": "Target any opposing army. Subtract six maneuver results from the target's rolls until the beginning of your next turn."
+      "text": "Target any opposing army. Subtract six maneuver results from the target's rolls until the beginning of your next turn.",
+      "effect": {
+        "scope": "army",
+        "modifiers": [
+          {
+            "kind": "subtract",
+            "resultType": "maneuver",
+            "amount": 6
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
     },
     {
       "id": "resurrect_dead",

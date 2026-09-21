@@ -14,6 +14,7 @@ import { DRAGON_ROLL_KINDS } from '../engine/sai'
 import {
   TERRAIN_SLOTS,
   army as armyRef,
+  type AnnouncedSpell,
   type GameAction,
   type GameState,
   type Pending,
@@ -85,13 +86,47 @@ export const randomAi: AiPlayer = {
         return [{ kind: 'choose_action', action } as GameAction, next] as const
       }
 
-      // 7a offers nothing: no spell resolves yet, so `castable` is provably empty and
-      // the empty announcement is the only legal answer rather than a narrowing of the
-      // fuzz. **7b must replace this in the same slice that makes a spell castable** --
-      // an opponent that always announces nothing would never execute a spell across a
-      // thousand games, which is exactly how `reinforce` lost its second dimension.
-      case 'announce_spells':
-        return [{ kind: 'announce_spells', casts: [] } as GameAction, rng] as const
+      /**
+       * Announces a random affordable subset.
+       *
+       * It has to gain every dimension the decision has, or the fuzz quietly narrows
+       * the way `reinforce`'s did -- an opponent that always announced nothing would
+       * never execute a spell across a thousand games. So it spends a random slice of
+       * the pool, picks the element and the target at random, and **combines castings
+       * at random** rather than always casting one at a time, which is the only way
+       * the cumulative arithmetic is ever exercised.
+       *
+       * Announcing nothing stays in the pool of answers: it is legal, it is what a
+       * pool too small for anything does, and a fuzz that always spent would never
+       * reach the empty-announcement path.
+       */
+      case 'announce_spells': {
+        const casts: AnnouncedSpell[] = []
+        let budget = pending.pool.points
+        let state = rng
+
+        const [order, afterShuffle] = shuffle(state, pending.castable)
+        state = afterShuffle
+
+        for (const offer of order) {
+          const affordable = Math.min(offer.maxCount, Math.floor(budget / offer.spell.cost))
+          // 0 is in the pool deliberately: "skip this one" has to be reachable, or
+          // every castable spell is always cast and the partial-spend path is dead.
+          const [count, afterCount] = nextInt(state, affordable + 1)
+          state = afterCount
+          if (count === 0) continue
+
+          const [element, afterElement] = pick(state, offer.elements)
+          state = afterElement
+          const [target, afterTarget] = pick(state, offer.targets)
+          state = afterTarget
+
+          casts.push({ spell: offer.spell.id, element, count, target })
+          budget -= offer.spell.cost * count
+        }
+
+        return [{ kind: 'announce_spells', casts } as GameAction, state] as const
+      }
 
       case 'choose_missile_target': {
         const [slot, next] = pick(rng, pending.options)

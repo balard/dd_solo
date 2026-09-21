@@ -82,8 +82,8 @@ import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
 import { delayedTasks, targetTasks, type TargetTask } from './targeting'
 import { unitType } from '../data/load'
 import { spell } from '../data/spells'
-import { castableSpells, magicPool } from './magic'
-import { castSpell } from './spells'
+import { castableSpells, magicPool, sameSpellTarget } from './magic'
+import { castSpell, spellEffect } from './spells'
 import type { DragonElement, ResultType } from '../data/types'
 import {
   IllegalActionError,
@@ -95,7 +95,6 @@ import {
   dragonsAt,
   livingUnits,
   opponentOf,
-  speciesOf,
   type ActionKind,
   type AnnouncedSpell,
   type ArmyRef,
@@ -353,7 +352,7 @@ function stepMarch(state: GameState): GameState {
           player,
           slot: magic.army,
           pool: magic.pool,
-          castable: castableSpells(magic.pool, speciesOf(state, player), state.ruleSet),
+          castable: castableSpells(state, player, magic.pool, state.ruleSet),
         },
       }
     }
@@ -954,7 +953,12 @@ function castEffect(
   state: GameState,
   caster: PlayerId,
   effect: Effect,
-  where: { readonly target: PlayerId; readonly slot: TerrainSlot; readonly unitId?: UnitId },
+  where: {
+    /** Omitted for a terrain effect, which belongs to nobody. */
+    readonly target?: PlayerId
+    readonly slot: ArmyRef
+    readonly unitId?: UnitId
+  },
 ): GameState {
   return withLog(
     { ...state, effects: [...state.effects, effect] },
@@ -962,11 +966,29 @@ function castEffect(
       kind: 'effect_cast',
       player: caster,
       source: effect.source,
-      target: where.target,
+      ...(where.target !== undefined ? { target: where.target } : {}),
       slot: where.slot,
       ...(where.unitId !== undefined ? { unitId: where.unitId } : {}),
     },
   )
+}
+
+/** Where a spell's `effect_cast` line points, from what the caster named. */
+function castSite(target: SpellTarget): {
+  readonly target?: PlayerId
+  readonly slot: ArmyRef
+  readonly unitId?: UnitId
+} {
+  switch (target.kind) {
+    case 'army':
+      return { target: target.player, slot: target.army }
+    case 'terrain':
+      return { slot: target.slot }
+    case 'units':
+      return { slot: 'reserve', ...(target.unitIds[0] !== undefined ? { unitId: target.unitIds[0] } : {}) }
+    case 'none':
+      return { slot: 'reserve' }
+  }
 }
 
 /** Galeforce's arithmetic: "subtracts four save and four maneuver results from all
@@ -1537,13 +1559,20 @@ function resolveNextSpell(state: GameState): GameState {
     return withLog(next, { kind: 'spell_fizzled', player, spell: head.spell })
   }
 
-  const cast = castSpell(next, s, {
+  const ctx = {
     caster: player,
     army: magic.army,
     element: head.element,
     count: head.count,
     target: head.target,
-  })
+  }
+
+  // A declarative spell is a `Modifier` plus a place, so it needs no handler: it goes
+  // straight into `state.effects` through the same door Sleep and Galeforce use.
+  const cast =
+    s.effect === undefined
+      ? castSpell(next, s, ctx)
+      : castEffect(next, player, spellEffect(s, ctx), castSite(head.target))
 
   return withLog(cast, {
     kind: 'spell_cast',
@@ -2900,7 +2929,7 @@ function applyReinforce(
 function applyAnnounceSpells(state: GameState, casts: readonly AnnouncedSpell[]): GameState {
   const magic = magicOf(state)
   const player = state.turn.marching
-  const castable = castableSpells(magic.pool, speciesOf(state, player), state.ruleSet)
+  const castable = castableSpells(state, player, magic.pool, state.ruleSet)
 
   let spent = 0
   for (const cast of casts) {
@@ -2916,6 +2945,11 @@ function applyAnnounceSpells(state: GameState, casts: readonly AnnouncedSpell[])
     }
     if (!offer.elements.includes(cast.element)) {
       throw new IllegalActionError(`${cast.spell} cannot be cast with ${cast.element} magic`)
+    }
+    // Checked against exactly what was offered rather than re-derived: one list, so
+    // the client cannot be shown a target the engine will then refuse.
+    if (!offer.targets.some((t) => sameSpellTarget(t, cast.target))) {
+      throw new IllegalActionError(`${cast.spell} cannot be aimed there`)
     }
     spent += offer.spell.cost * cast.count
   }

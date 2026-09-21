@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { unitType } from '../../data/load'
 import type { UnitType } from '../../data/types'
+import { ALL_RESULT_TYPES } from '../../engine/pipeline'
 import { begin } from '../../engine/reduce'
 import { BESTIARY_FORCES, setupGame, STARTER_FORCES } from '../../engine/setup'
 import {
@@ -16,6 +17,7 @@ import {
 import {
   damageSelection,
   effectsOnArmy,
+  effectsOnTerrain,
   focusedSlot,
   orderedForDisplay,
   describeFace,
@@ -713,5 +715,80 @@ describe('effectsOnArmy', () => {
         until: 'your next turn',
       },
     ])
+  })
+})
+
+describe('effectsOnTerrain', () => {
+  /**
+   * A terrain effect belongs to the place, not to either army, so it is drawn on the
+   * terrain card rather than inside an `ArmySide`. Filing Ash Storm under one army
+   * would say it hurt only that army, which is the opposite of the rule.
+   */
+  it('collapses an every-result effect into one clause', () => {
+    // Ash Storm subtracts one from *all* results. Five clauses -- "-1 melee, -1
+    // missile, -1 magic, -1 save, -1 maneuver" -- read as noise rather than as a rule.
+    const state: GameState = {
+      ...fresh(),
+      effects: [
+        {
+          source: 'Ash Storm',
+          target: { kind: 'terrain', slot: 'frontier', scope: 'all_armies' },
+          modifiers: ALL_RESULT_TYPES.map((resultType) => ({
+            kind: 'subtract' as const,
+            resultType,
+            amount: 1,
+          })),
+          expiresAtStartOfTurnOf: 'p1',
+        },
+      ],
+    }
+
+    expect(effectsOnTerrain(state, 'frontier', 'p1')).toEqual([
+      { source: 'Ash Storm', what: '−1 to every result', until: 'your next turn' },
+    ])
+    expect(effectsOnTerrain(state, 'p1_home', 'p1')).toEqual([])
+    // It is not on either army, so neither army header claims it.
+    expect(effectsOnArmy(state, 'p1', 'frontier', 'p1')).toEqual([])
+  })
+
+  it('says who a ward reaches, because a terrain effect need not reach the people on it', () => {
+    const state: GameState = {
+      ...fresh(),
+      effects: [
+        {
+          source: 'Wall of Fog',
+          target: { kind: 'terrain', slot: 'frontier', scope: 'attackers' },
+          modifiers: [{ kind: 'subtract', resultType: 'missile', amount: 6 }],
+          expiresAtStartOfTurnOf: 'p2',
+        },
+      ],
+    }
+
+    expect(effectsOnTerrain(state, 'frontier', 'p1')).toEqual([
+      {
+        source: 'Wall of Fog',
+        what: '−6 missile for anyone attacking here',
+        until: "the enemy's next turn",
+      },
+    ])
+  })
+
+  it('renders ignore_ids, which had no case at all until Phase 7b', () => {
+    // The Death breath. It is unreachable in this plan's scope, so nothing ever drew
+    // it -- and without a `case` the callback returned `undefined` and the header
+    // printed a source name and an empty half-sentence.
+    const state: GameState = {
+      ...fresh(),
+      effects: [
+        {
+          source: 'Death breath',
+          target: { kind: 'army', player: 'p1', army: 'frontier' },
+          modifiers: [{ kind: 'ignore_ids', resultType: 'melee' }],
+          expiresAtStartOfTurnOf: 'p1',
+        },
+      ],
+    }
+
+    expect(effectsOnArmy(state, 'p1', 'frontier', 'p1')[0]?.what).toBe('no melee from IDs')
   })
 })

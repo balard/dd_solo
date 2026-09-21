@@ -19,7 +19,7 @@ import { randomAi } from '../ai/random'
 import type { AiPlayer } from '../ai/types'
 import { SPECIES, dragonName, terrainDie, terrainFaceAction, unitType } from '../data/load'
 import { spell } from '../data/spells'
-import type { ResultType, TerrainFaceNumber } from '../data/types'
+import type { Element, ResultType, TerrainFaceNumber } from '../data/types'
 import { damageOptions } from '../engine/damage'
 import { BREATH_NAME } from '../engine/dragons'
 import { growthPartners, promotionGain } from '../engine/dua'
@@ -29,6 +29,7 @@ import { rngFrom, type RngState } from '../engine/rng'
 import { saiPhrase, type DieRoll } from '../engine/roll'
 import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../engine/sai'
 import { rollOnTheTable } from '../engine/turn'
+import { sameSpellTarget, spellPlan, spellTargetLabel } from '../engine/magic'
 
 
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
@@ -42,12 +43,14 @@ import {
 
   livingUnits,
   speciesOf,
+  type AnnouncedSpell,
   type ArmyRef,
   type GameAction,
   type GameState,
   type LogEntry,
   type Pending,
   type PlayerId,
+  type SpellTarget,
   type TerrainSlot,
   type UnitId,
   type UnitInstance,
@@ -297,9 +300,14 @@ function describe(entry: LogEntry, state: GameState): string | null {
     // thing in the log that is still true on the next line.
     case 'effect_cast': {
       const unit = entry.unitId === undefined ? undefined : state.units[entry.unitId]
-      const what = unit ? name(unit) : `${entry.target}'s army at ${SLOT_LABEL[entry.slot]}`
+      const what = unit
+        ? name(unit)
+        : entry.target === undefined
+          ? (SLOT_LABEL[entry.slot as TerrainSlot] ?? String(entry.slot))
+          : `${entry.target}'s army at ${SLOT_LABEL[entry.slot as TerrainSlot] ?? entry.slot}`
+      // "settles on", not "catches": half the spells are cast on your own army.
       return cyan(
-        `  ${bold(entry.source)} catches ${what}` +
+        `  ${bold(entry.source)} settles on ${what}` +
           dim(` — until the start of ${entry.player}'s next turn`),
       )
     }
@@ -521,17 +529,7 @@ function choicesFor(pending: Pending): Choice[] {
     case 'eighth_face_city':
       return []
 
-    // 7a has nothing castable, so the empty announcement is the only legal answer and
-    // a menu of one is honest. 7b gives it a sheet, like the promotion draft.
     case 'announce_spells':
-      return [
-        {
-          key: '0',
-          label: 'cast nothing',
-          action: { kind: 'announce_spells', casts: [] } as GameAction,
-        },
-      ]
-
     case 'temple_bury':
     case 'dragon_breath':
     case 'dragon_allocate':
@@ -539,6 +537,86 @@ function choicesFor(pending: Pending): Choice[] {
       return [] // handled separately
   }
 }
+
+/**
+ * The spell picker, one spell at a time.
+ *
+ * Staged rather than dispatched per spell, exactly as the Reinforce Step is: the rules
+ * announce every spell at once and pick the resolution order afterwards, so asking
+ * spell by spell and resolving as you go would answer a question nobody was asked.
+ * Enter with nothing staged casts nothing, which is always legal.
+ */
+async function askSpells(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'announce_spells' }>,
+): Promise<GameAction> {
+  const casts: AnnouncedSpell[] = []
+
+  for (;;) {
+    const plan = spellPlan(pending.castable, pending.pool, casts)
+    const affordable = plan.offers.filter((o) => o.affordable >= 1)
+
+    console.log(`
+${bold('Magic')} ${dim(`— ${plan.remaining} of ${pending.pool.points} left`)}`)
+    if (casts.length > 0) {
+      console.log(
+        dim(
+          '  staged: ' +
+            casts
+              .map(
+                (c) =>
+                  `${spell(c.spell).name}${c.count > 1 ? ` x${c.count}` : ''} -> ` +
+                  spellName(state, c.target),
+              )
+              .join(', '),
+        ),
+      )
+    }
+
+    affordable.forEach((offer, i) => {
+      const s = offer.castable.spell
+      console.log(`  ${i + 1}) ${s.name} ${dim(`(${s.cost} ${offer.castable.elements.join('/')})`)}`)
+      console.log(dim(`     ${s.text}`))
+    })
+    console.log(`  0) ${casts.length > 0 ? `cast ${casts.length}` : 'cast nothing'}`)
+
+    const reply = (await ask('> ')).trim()
+    if (reply === '0' || reply === '') return { kind: 'announce_spells', casts }
+
+    const offer = affordable[Number(reply) - 1]
+    if (offer === undefined) {
+      console.log(red('  pick one of the listed spells, or 0 to finish'))
+      continue
+    }
+
+    console.log(dim(`  aim ${offer.castable.spell.name} where?`))
+    offer.castable.targets.forEach((target, i) => {
+      console.log(`    ${i + 1}) ${spellName(state, target)}`)
+    })
+    const which = offer.castable.targets[Number((await ask('> ')).trim()) - 1]
+    if (which === undefined) {
+      console.log(red('  no target chosen; nothing staged'))
+      continue
+    }
+
+    // Two castings of one spell at one target are one combined spell with its number
+    // multiplied, not two spells -- so this merges rather than appending.
+    const at = casts.findIndex((c) => c.spell === offer.castable.spell.id && sameSpellTarget(c.target, which))
+    const element = offer.castable.elements[0] as Element
+    if (at === -1) casts.push({ spell: offer.castable.spell.id, element, count: 1, target: which })
+    else casts[at] = { ...(casts[at] as AnnouncedSpell), count: (casts[at] as AnnouncedSpell).count + 1 }
+  }
+}
+
+/** A spell target in the terminal's own vocabulary. The join lives in `magic.ts`, so
+ *  the browser and the terminal cannot start describing one target two ways. */
+const spellName = (state: GameState, target: SpellTarget): string =>
+  spellTargetLabel(
+    target,
+    state.turn.marching,
+    (ref) => SLOT_LABEL[ref as TerrainSlot] ?? 'reserve',
+    (id) => (state.units[id] ? name(state.units[id]!) : id),
+  )
 
 const rl = createInterface({ input: stdin, output: stdout })
 
@@ -1047,6 +1125,7 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
   if (pending.kind === 'reinforce' || pending.kind === 'retreat') return askUnits(state, pending)
   if (pending.kind === 'eighth_face_city') return askEighthFaceCity(state, pending)
   if (pending.kind === 'temple_bury') return askTempleBury(state, pending)
+  if (pending.kind === 'announce_spells') return askSpells(state, pending)
 
   const choices = choicesFor(pending)
   for (;;) {

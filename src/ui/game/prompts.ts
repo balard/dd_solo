@@ -8,9 +8,12 @@
 import { dragonName, terrainDie, terrainFaceAction, unitType } from '../../data/load'
 import type { TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
-import { magicRolled } from '../../engine/magic'
+import {
+  magicRolled,
+  spellTargetLabel as engineSpellTargetLabel,
+} from '../../engine/magic'
 import { growthPartners, promotionGain } from '../../engine/dua'
-import type { Modifier } from '../../engine/pipeline'
+import { ALL_RESULT_TYPES, type Modifier } from '../../engine/pipeline'
 import { isAsleep } from '../../engine/effects'
 import { legalDirections } from '../../engine/turn'
 import {
@@ -26,6 +29,7 @@ import {
   type Pending,
   type PlayerId,
   type PromotionPair,
+  type SpellTarget,
   type TerrainFace,
   type TerrainSlot,
   type UnitId,
@@ -830,9 +834,18 @@ export function effectsOnArmy(
   return out
 }
 
-/** `-4 save, -4 maneuver`, or "no arithmetic" for a status like Sleep. */
+/**
+ * `-4 save, -4 maneuver`, or "no arithmetic" for a status like Sleep.
+ *
+ * **The callback is annotated `: string`, and that is load-bearing** -- the same rule
+ * `effectSummary` in `roll.ts` carries, and for the same reason. Without it a missing
+ * `case` returns `undefined`, `join` renders it as nothing, and the army header prints
+ * a source name followed by an empty half-sentence. `ignore_ids` had been missing here
+ * since Phase 6 for exactly that reason: the Death breath is out of this plan's reach,
+ * so nothing ever drew it. Annotated, a new `Modifier` kind is a build error here.
+ */
 function describeModifiers(modifiers: readonly Modifier[]): string {
-  const parts = modifiers.map((modifier) => {
+  const parts = modifiers.map((modifier): string => {
     switch (modifier.kind) {
       case 'subtract':
         return `\u2212${modifier.amount} ${modifier.resultType}`
@@ -842,9 +855,73 @@ function describeModifiers(modifiers: readonly Modifier[]): string {
         return `${modifier.resultType} \u00f7 ${modifier.by}`
       case 'multiply':
         return `${modifier.resultType} \u00d7 ${modifier.by}`
+      case 'ignore_ids':
+        return `no ${modifier.resultType} from IDs`
     }
   })
-  return parts.join(', ')
+  return collapseEveryType(parts, modifiers)
+}
+
+/** "-1 to every result" rather than five copies of "-1 melee". Ash Storm is the only
+ *  spell in scope that speaks about a roll rather than a result type. */
+function collapseEveryType(parts: readonly string[], modifiers: readonly Modifier[]): string {
+  if (modifiers.length !== ALL_RESULT_TYPES.length) return parts.join(', ')
+  if (new Set(modifiers.map((m) => m.resultType)).size !== ALL_RESULT_TYPES.length) {
+    return parts.join(', ')
+  }
+
+  const head = (part: string) => part.slice(0, part.lastIndexOf(' '))
+  const first = head(parts[0] ?? '')
+  return parts.every((part) => head(part) === first) ? `${first} to every result` : parts.join(', ')
+}
+
+/**
+ * A spell target in the browser's vocabulary.
+ *
+ * The join lives in `magic.ts` because the terminal needs it too; what differs is how
+ * each client names a terrain, which is what `slotLabel` is for.
+ */
+export function spellTargetLabel(
+  target: SpellTarget,
+  human: 'p1' | 'p2',
+  state: GameState,
+): string {
+  return engineSpellTargetLabel(
+    target,
+    human,
+    (ref) => slotLabel(ref, human),
+    (id) => unitName(state, id),
+  )
+}
+
+/**
+ * Effects sitting on a terrain rather than on either army (Phase 7b).
+ *
+ * Drawn on the terrain card head and not inside an `ArmySide`, because that is what
+ * they are: Ash Storm subtracts from *both* players' rolls there, and Wall of Fog
+ * wards the place against missile fire from anywhere. Filing either under one army
+ * would say the opposite of what the rule does.
+ */
+export function effectsOnTerrain(
+  state: GameState,
+  slot: TerrainSlot,
+  human: PlayerId,
+): readonly ArmyEffect[] {
+  const out: ArmyEffect[] = []
+
+  for (const effect of state.effects) {
+    if (effect.target.kind !== 'terrain' || effect.target.slot !== slot) continue
+    out.push({
+      source: effect.source,
+      what:
+        effect.target.scope === 'attackers'
+          ? `${describeModifiers(effect.modifiers)} for anyone attacking here`
+          : describeModifiers(effect.modifiers),
+      until: effect.expiresAtStartOfTurnOf === human ? 'your next turn' : "the enemy's next turn",
+    })
+  }
+
+  return out
 }
 
 /**

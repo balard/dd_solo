@@ -334,14 +334,19 @@ function Line({
         </div>
       )
     }
+    // "settles on", not "catches": the verb was written for Sleep and Galeforce, and
+    // read as an ambush. Half the spells in Phase 7 are cast on your *own* army, where
+    // "Stone Skin catches your army" says the opposite of what happened.
     case 'effect_cast': {
       const unit = entry.unitId === undefined ? undefined : state.units[entry.unitId]
       return (
         <p className="log-line">
-          <strong>{entry.source}</strong> catches{' '}
+          <strong>{entry.source}</strong> settles on{' '}
           {unit
             ? unitType(unit.typeId).name
-            : `${entry.target === human ? 'your' : 'the enemy'} army at ${slotLabel(entry.slot, human)}`}
+            : entry.target === undefined
+              ? slotLabel(entry.slot, human)
+              : `${entry.target === human ? 'your' : 'the enemy'} army at ${slotLabel(entry.slot, human)}`}
           <span className="muted">
             {' '}
             — until the start of {entry.player === human ? 'your' : "the enemy's"} next turn

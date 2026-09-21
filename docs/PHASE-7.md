@@ -11,7 +11,7 @@ Standing Stones, and retires Phase 6's Frontier dragon seed.
 | | Scope | State |
 |---|---|---|
 | **7a** | The data and the seam: `data/spells.json`, `magic.ts`, `MagicState`, the march steps. No spell resolves. | **landed** |
-| **7b** | The eight declarative spells, `EffectTarget.terrain`, and the whole client surface | |
+| **7b** | The eight declarative spells, `EffectTarget.terrain`, and the whole client surface | **landed** |
 | **7c** | The board spells: Hailstorm, Path, Resurrect Dead, Summon Dragon | |
 | **7d** | The sub-roll spells: Mirage, Lightning Strike, Flash Flood, Wall of Thorns | |
 | **7e** | The two triggers: Flashfire and Accelerated Growth | |
@@ -124,17 +124,98 @@ spells transcribed and unimplemented. Fuzz: 200 `SPELL_RULES` games, `stuck === 
 
 ---
 
-## 7b -- the eight declarative spells
+## 7b -- the eight declarative spells -- **landed**
+
+**Delivered.** `effect` blocks in `data/spells.json` for the eight spells that are a `Modifier` plus
+a target; `EffectTarget` gained `terrain` with a `TerrainScope`; `armyRoll` gained `against` so Wall
+of Fog can reach an attacker's roll; `spellEffect` folds combined castings into one scaled effect;
+the whole client surface -- a two-tap spell picker in both clients, terrain effects on the terrain
+card, three log lines. `RandomAI` announces a real random subset. 641 tests (was 630), goldens
+byte-identical and unregenerated, `magic: 'simplified'` unchanged.
+
+Ten spells remain transcribed-but-unbuilt, which the validator prints on every `npm run data`.
+
+### Where the plan was wrong
+
+- **`spellPlan` does not belong in `prompts.ts`.** The plan put the picker draft there, beside
+  `reinforcePlan`. But `src/cli` has never imported from `src/ui`, and the terminal needs the same
+  draft -- so `spellPlan`, `sameSpellTarget` and the `spellTargetLabel` join live in `magic.ts`
+  instead, which is `saiPhrase`'s precedent exactly. What stayed in each client is only how it
+  *names* a terrain, which is the one thing the two genuinely disagree about.
+- **`TerrainScope` has two members, not three.** `'maneuverers'` is Wall of Thorns' and waits for
+  7d with the code that gathers it -- the same rule that kept `terrain` itself out of `EffectTarget`
+  until this slice.
+- **Cumulative scaling is not "several effects".** Three Wind Walks are **one** `add` of 12, folded
+  at cast time. Three separate effects would be arithmetically identical for `add` and `subtract`
+  and would *throw* for a `divide` or `multiply`, which the pipeline caps at one per result type.
+  Nothing in scope divides, so only the shape is load-bearing -- but it is the shape that stays
+  right when something does.
+
+### Two things that would have shipped silently
+
+1. **`describeModifiers` had no `ignore_ids` case and an unannotated callback.** A missing `case`
+   returned `undefined`, `join` rendered it as nothing, and the army header printed a source name
+   followed by an empty half-sentence -- the exact bug `CLAUDE.md` records against `effectSummary`,
+   repeated in the function next door. It has been wrong since Phase 6 and never showed, because the
+   Death breath is unreachable in this plan's scope. The callback is annotated `: string` now, so a
+   new `Modifier` kind is a build error there, and there is a test.
+2. **`armyRoll`'s new `against` argument had four call sites and needed one.** All four attack rolls
+   in `combat.ts` built the same `armyRoll(...)` call by hand; adding a fifth argument to four
+   copies is three chances to forget it, and forgetting has no symptom -- the ward simply does not
+   apply. They go through `attackerRoll(state, spec)` now, which is the only thing in the codebase
+   that passes `against`.
+
+### What the browser caught that no test did
+
+- **"Stone Skin catches your army at Frontier".** The `effect_cast` verb was written for Sleep and
+  Galeforce and reads as an ambush. Half the spells in Phase 7 are cast on your *own* army, so it
+  says "settles on" now, in both clients.
+- **"Cast 1" beside a staged "Stone Skin x2"** read as though the second casting had been dropped.
+  It is "Cast 1 spell" now, which is the rules' own arithmetic: combined castings are one spell with
+  a bigger number.
+- **A stale `data/spells.json` in Vite's module graph.** Adding `effect` blocks to the JSON did not
+  invalidate the transformed module, so the running app kept serving the version with none and the
+  picker was empty while every test passed. Worth knowing in a project whose dice, terrains, dragons
+  and now spells are all JSON: **a data-only edit may not reach the dev server.** Touching the
+  importing `.ts` file forces it.
+
+### Deliberately not done
+
+- **Element is not yet a choice.** Every castable spell on this rung accepts exactly one of the
+  caster's elements, so the picker takes `elements[0]`. The two Elemental spells that can offer a
+  choice are 7c's, and the element picker lands with them.
+- No `SAVE_VERSION` bump: the app still plays `DRAGON_RULES`.
+
+### Verification
+
+`npm test` 641 passed (25 files). `npm run typecheck` clean. `git diff --stat src/engine/__golden__/`
+empty. `python tools/validate_data.py` OK, 10 spells still unbuilt. Fuzz: 200 `SPELL_RULES` games
+across **both** force sets -- Treefolk can never cast an air or fire spell and Firewalkers never a
+water or earth one, so a one-sided fuzz could only ever fire half the table -- `stuck === 0`, and a
+per-spell counter `> 0` for every one of the eight, with nothing else ever cast.
+
+Browser pass at `?forces=bestiary&seed=11` with `useGame.ts` flipped to `SPELL_RULES`: cast Stone
+Skin twice at one army (combined to `+2 save` on the army header) and Wall of Fog at a terrain (drawn
+on the terrain card as "-6 missile for anyone attacking here"). Console clean. The flip was reverted
+before the commit.
+
+---
+
+## 7c -- the board spells
+
+**Hailstorm, Path, Resurrect Dead, Summon Dragon** -- the four that touch existing subsystems rather
+than adding one.
 
 ### Checklist
 
-- [ ] `effect` blocks in `data/spells.json` for the eight declarative spells
-- [ ] `EffectTarget` gains `terrain` + `TerrainScope`, and `player` waits for 7e
-- [ ] `armyRoll` gathers `all_armies`, and gains `against` for Wall of Fog
-- [ ] `pruneEffects` switches exhaustively on the new kinds
-- [ ] cumulative combining: three Wind Walks are one `add` of 12
-- [ ] the spell picker as a pure draft in `prompts.ts` (the `reinforcePlan` pattern)
-- [ ] `ActionBar` and CLI sheets; terrain effects drawn on the terrain card
-- [ ] `describeModifiers` gains a case per new `Modifier`
-- [ ] **`RandomAI` announces a real random subset** -- see 7a's "deliberately not done"
-- [ ] tests + fuzz with a per-spell cast counter > 0
+- [ ] the element picker: Resurrect Dead and Summon Dragon are the first spells with a choice of
+      element, which 7b deliberately deferred
+- [ ] Hailstorm: `assign_spell_damage`, reusing `assign_damage` and `applyAssignDamage`
+- [ ] Path: `applySaiMove`'s movement shape, and the `own_unit` target
+- [ ] Resurrect Dead: `recruit` is 1-health-only and the spell is cumulative -- a health-budget
+      sibling, **not** a relaxed guard
+- [ ] Summon Dragon: pool **or terrain** -> terrain, element must match; retires Phase 6's Frontier
+      seed and the two `dragons.ts` simplifications (`:135`, `:171`)
+- [ ] a vanished target is **dropped, not thrown on** -- first reachable here, when Hailstorm can
+      empty the army a later cast named
+- [ ] tests + fuzz with a per-spell counter > 0

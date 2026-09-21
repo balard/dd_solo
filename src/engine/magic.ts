@@ -28,7 +28,17 @@ import type { Element } from '../data/types'
 
 import { iconAt } from './effects'
 import { resolvesSpell } from './spells'
-import { speciesOf, type ArmyRef, type GameState, type PlayerId, type RuleSet } from './types'
+import {
+  army as armyOf,
+  opponentOf,
+  speciesOf,
+  TERRAIN_SLOTS,
+  type ArmyRef,
+  type GameState,
+  type PlayerId,
+  type RuleSet,
+  type SpellTarget,
+} from './types'
 
 /**
  * Magic results a caster may spend, and the two permissions that narrow what they buy.
@@ -101,6 +111,46 @@ export interface Castable {
   /** How many combined castings the pool could afford. 1 for a non-cumulative spell,
    *  which gains nothing from a second casting on the same target. */
   readonly maxCount: number
+  /** Every legal target, so the client offers a list rather than computing one and
+   *  the engine validates against exactly what it offered. */
+  readonly targets: readonly SpellTarget[]
+}
+
+/**
+ * Every target this spell could legally be aimed at right now.
+ *
+ * "The target of a spell, or the conditions for a spell's effect to occur, must exist
+ * at the time the target is selected" (p. 13) -- so an empty army is not a target, and
+ * a spell with no target at all is not offered.
+ *
+ * A Reserve Army is an army: "target any army" names it, and Wind Walk on a Reserve
+ * Army is legal and useless, which is the player's business rather than the engine's.
+ */
+export function spellTargets(
+  state: GameState,
+  caster: PlayerId,
+  s: Spell,
+): readonly SpellTarget[] {
+  const armies = (player: PlayerId): SpellTarget[] =>
+    ([...TERRAIN_SLOTS, 'reserve'] as readonly ArmyRef[])
+      .filter((ref) => armyOf(state, player, ref).length > 0)
+      .map((ref) => ({ kind: 'army', player, army: ref }) as const)
+
+  switch (s.target) {
+    case 'army':
+      return [...armies(caster), ...armies(opponentOf(caster))]
+    case 'opposing_army':
+      return armies(opponentOf(caster))
+    case 'terrain':
+      return TERRAIN_SLOTS.map((slot) => ({ kind: 'terrain', slot }) as const)
+    // 7c and 7d. Nothing with these targets has an effect or a handler yet, so
+    // `castableSpells` filters them out before this is ever asked.
+    case 'own_unit':
+    case 'opposing_unit':
+    case 'units':
+    case 'own_dua':
+      return []
+  }
 }
 
 /**
@@ -115,10 +165,12 @@ export interface Castable {
  * it guards only against a spell added to `data/` with no code behind it.
  */
 export function castableSpells(
+  state: GameState,
+  caster: PlayerId,
   pool: MagicPool,
-  speciesId: string,
   ruleSet: RuleSet,
 ): readonly Castable[] {
+  const speciesId = speciesOf(state, caster)
   const out: Castable[] = []
 
   for (const s of SPELLS) {
@@ -131,10 +183,16 @@ export function castableSpells(
     const elements = pool.elements.filter((e) => spellAcceptsElement(s, e))
     if (elements.length === 0) continue
 
+    // A spell with nowhere to land is dropped rather than offered -- the same rule
+    // that drops a targeting SAI whose army holds nothing small enough to take.
+    const targets = spellTargets(state, caster, s)
+    if (targets.length === 0) continue
+
     out.push({
       spell: s,
       elements,
       maxCount: s.cumulative ? Math.floor(pool.points / s.cost) : 1,
+      targets,
     })
   }
 
@@ -168,4 +226,131 @@ export function magicRolled(pool: MagicPool): string {
         : ''
 
   return `${pool.points} magic (${which}${limit})`
+}
+
+/**
+ * Two announced targets naming the same thing.
+ *
+ * One copy, in the engine, because three things ask it: the applier validating an
+ * announcement, and both clients' drafts merging a repeat casting into a combined
+ * one. Three copies of "are these the same army" is how two of them end up
+ * disagreeing about a Reserve Army.
+ */
+export function sameSpellTarget(a: SpellTarget, b: SpellTarget): boolean {
+  if (a.kind !== b.kind) return false
+  switch (a.kind) {
+    case 'none':
+      return true
+    case 'army':
+      return b.kind === 'army' && a.player === b.player && a.army === b.army
+    case 'terrain':
+      return b.kind === 'terrain' && a.slot === b.slot
+    case 'units':
+      return (
+        b.kind === 'units' &&
+        a.unitIds.length === b.unitIds.length &&
+        a.unitIds.every((id) => b.unitIds.includes(id))
+      )
+  }
+}
+
+/** One staged cast in a client's announcement draft. */
+export interface SpellDraftCast {
+  readonly spell: string
+  readonly element: Element
+  readonly count: number
+  readonly target: SpellTarget
+}
+
+/** A spell the picker can offer, with its price against what is left unspent. */
+export interface SpellOffer {
+  readonly castable: Castable
+  /** How many more castings the remaining budget could buy. 0 means "greyed out". */
+  readonly affordable: number
+}
+
+export interface SpellPlan {
+  readonly spent: number
+  readonly remaining: number
+  /** Every castable spell, affordable or not -- a picker that hides what you cannot
+   *  afford cannot tell you what you were short of. */
+  readonly offers: readonly SpellOffer[]
+  /** The answer, once the player is done. */
+  readonly casts: readonly SpellDraftCast[]
+}
+
+/**
+ * The spell picker, as a pure function over a staged draft.
+ *
+ * The Reinforce Step's pattern (`reinforcePlan`): the sheet stages casts and **one**
+ * action reaches the engine, rather than a component holding wizard state or
+ * dispatching per spell. The rules announce every spell at once and choose the
+ * resolution order afterwards, so a per-spell dispatch would answer a question nobody
+ * asked.
+ *
+ * In the engine rather than in `prompts.ts` because the terminal needs it too, and
+ * `src/cli` has never depended on `src/ui`. Same reason `saiPhrase` sits in `roll.ts`.
+ *
+ * Staged casts are filtered against the live offer rather than trusted: a draft
+ * outlives nothing, and it costs one line to make that true instead of assumed.
+ */
+export function spellPlan(
+  castable: readonly Castable[],
+  pool: MagicPool,
+  staged: readonly SpellDraftCast[],
+): SpellPlan {
+  const offered = new Map(castable.map((c) => [c.spell.id, c]))
+
+  const casts = staged.filter((cast) => {
+    const offer = offered.get(cast.spell)
+    return (
+      offer !== undefined &&
+      cast.count >= 1 &&
+      offer.elements.includes(cast.element) &&
+      offer.targets.some((t) => sameSpellTarget(t, cast.target))
+    )
+  })
+
+  const spent = casts.reduce(
+    (sum, cast) => sum + (offered.get(cast.spell)?.spell.cost ?? 0) * cast.count,
+    0,
+  )
+  const remaining = pool.points - spent
+
+  return {
+    spent,
+    remaining,
+    offers: castable.map((c) => ({
+      castable: c,
+      affordable: c.spell.cumulative
+        ? Math.floor(remaining / c.spell.cost)
+        : Math.min(1, Math.floor(remaining / c.spell.cost)),
+    })),
+    casts,
+  }
+}
+
+/**
+ * "your army at the Frontier" -- what a target reads as on a button.
+ *
+ * `name` is passed in because the two clients name a terrain differently: the browser
+ * says "Your home" from the human's point of view, the terminal has its own table.
+ * The *join* is here, so they cannot drift into describing one target two ways.
+ */
+export function spellTargetLabel(
+  target: SpellTarget,
+  human: PlayerId,
+  name: (ref: ArmyRef) => string,
+  unitName: (id: string) => string,
+): string {
+  switch (target.kind) {
+    case 'none':
+      return 'no target'
+    case 'terrain':
+      return name(target.slot)
+    case 'army':
+      return `${target.player === human ? 'your' : "the enemy's"} army at ${name(target.army)}`
+    case 'units':
+      return target.unitIds.map(unitName).join(', ')
+  }
 }

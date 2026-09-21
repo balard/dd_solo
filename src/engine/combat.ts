@@ -7,7 +7,7 @@
 import { terrainFaceAction } from '../data/load'
 import type { TerrainFaceNumber } from '../data/types'
 
-import { armyRoll, iconAt } from './effects'
+import { armyRoll, iconAt, type ArmyRollInput } from './effects'
 import type { Modifier, RollEffect } from './pipeline'
 import {
   asResult,
@@ -217,6 +217,20 @@ export interface AttackRollState {
   readonly dice: readonly RawDie[]
 }
 
+/**
+ * The attacking army's dice and everything modifying them.
+ *
+ * One helper rather than four copies of the same `armyRoll` call, because it is the
+ * only place `against` is ever passed: Wall of Fog subtracts from a missile attack
+ * aimed at the terrain it wards, so the roll has to name the army it is aimed at as
+ * well as the army throwing the dice. Four call sites each remembering a fifth
+ * argument is three chances to forget it, and forgetting has no symptom -- the ward
+ * simply does not apply.
+ */
+function attackerRoll(state: GameState, spec: AttackSpec): ArmyRollInput {
+  return armyRoll(state, spec.attacker, spec.attackerSlot, spec.action, spec.defenderSlot)
+}
+
 /** The spec the attack roll is resolved under. Built in one place because
  *  `rollAttack` and `resolveSaves` must agree on it exactly. */
 function attackRollSpec(spec: AttackSpec, modifiers: readonly Modifier[]): RollSpec {
@@ -245,7 +259,7 @@ function attackRollSpec(spec: AttackSpec, modifiers: readonly Modifier[]): RollS
 export function rollAttack(state: GameState, spec: AttackSpec): readonly [AttackRollState, RngState] {
   // Both halves from one call: which dice may be rolled, and what modifies the
   // result. A sleeping die is not in `units` and the eighth face is in `modifiers`.
-  const attackers = armyRoll(state, spec.attacker, spec.attackerSlot, spec.action)
+  const attackers = attackerRoll(state, spec)
   const rollSpec = attackRollSpec(spec, attackers.modifiers)
 
   const [rolled, afterRoll] = rollFaces(attackers.units, state.rng)
@@ -266,7 +280,7 @@ export function attackEffects(
   spec: AttackSpec,
   attack: AttackRollState,
 ): readonly RollEffect[] {
-  const attackers = armyRoll(state, spec.attacker, spec.attackerSlot, spec.action)
+  const attackers = attackerRoll(state, spec)
   const rollSpec = attackRollSpec(spec, attackers.modifiers)
   return resolveFaces(attack.dice, rollSpec, state.ruleSet).effects
 }
@@ -310,7 +324,7 @@ export interface AttackFacts {
  * Phase 4a nearly dropped a Galeforce on a magic action.
  */
 export function attackFacts(state: GameState, spec: AttackSpec, attack: AttackRollState): AttackFacts {
-  const attackers = armyRoll(state, spec.attacker, spec.attackerSlot, spec.action)
+  const attackers = attackerRoll(state, spec)
   const rollSpec = attackRollSpec(spec, attackers.modifiers)
   const attackRoll = asResult(resolveFaces(attack.dice, rollSpec, state.ruleSet), spec.action)
 
@@ -391,7 +405,7 @@ export function attackRollDice(
   spec: AttackSpec,
   attack: AttackRollState,
 ): readonly DieRoll[] {
-  const attackers = armyRoll(state, spec.attacker, spec.attackerSlot, spec.action)
+  const attackers = attackerRoll(state, spec)
   return resolveFaces(attack.dice, attackRollSpec(spec, attackers.modifiers), state.ruleSet).dice
 }
 

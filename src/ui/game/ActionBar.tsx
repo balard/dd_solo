@@ -9,8 +9,9 @@
 import { Fragment } from 'react'
 
 import { dragonName, terrainDie, terrainFaceAction, unitType } from '../../data/load'
+import { spell } from '../../data/spells'
 
-import type { ResultType, TerrainFaceNumber } from '../../data/types'
+import type { Element, ResultType, TerrainFaceNumber } from '../../data/types'
 
 import { rollOnTheTable } from '../../engine/turn'
 import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../../engine/sai'
@@ -45,9 +46,11 @@ import {
   promptFor,
   reinforcePlan,
   slotLabel,
+  spellTargetLabel,
   type FaceHint,
   type ReinforceMove,
 } from './prompts'
+import { spellPlan, type SpellDraftCast } from '../../engine/magic'
 
 import { useFaceArt } from './useFaceArt'
 
@@ -60,6 +63,10 @@ export function ActionBar({
   staged,
   pairs,
   counters,
+  casts,
+  aiming,
+  onAim,
+  onCast,
   onStage,
   onPair,
   onCount,
@@ -81,6 +88,12 @@ export function ActionBar({
   pairs: readonly PromotionPair[]
   /** The dragon sheets' draft: a tally under composite keys. */
   counters: Readonly<Record<string, number>>
+  /** The spell picker's draft: every cast staged so far. */
+  casts: readonly SpellDraftCast[]
+  /** Which spell is being aimed, between the two taps an announcement takes. */
+  aiming: string | null
+  onAim: (spell: string | null) => void
+  onCast: (cast: SpellDraftCast) => void
   onStage: (moves: readonly ReinforceMove[]) => void
   onPair: (pair: PromotionPair) => void
   onCount: (key: string, by: number) => void
@@ -715,6 +728,113 @@ function SaiHeader({ state, sai }: { state: GameState; sai: string }) {
             <button type="button" className="choice secondary" onClick={onClearDraft}>
               Clear
             </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (prompt.custom === 'announce_spells' && pending.kind === 'announce_spells') {
+    // "Once you have decided which spells to cast, announce all of the spells you are
+    // casting and each of their targets" (p. 13). So every button stages and one
+    // action reaches the engine -- the Reinforce Step's shape, for the Reinforce
+    // Step's reason: dispatching per spell would leak the resolution order into the
+    // announcement, which the rules choose separately and afterwards.
+    const plan = spellPlan(pending.castable, pending.pool, casts)
+    const aimed = plan.offers.find((o) => o.castable.spell.id === aiming)
+
+    return (
+      <div className="action-bar">
+        <p className="question">
+          {prompt.question}
+          <span className="muted">
+            {aimed !== undefined
+              ? ` — aim ${aimed.castable.spell.name} where?`
+              : plan.spent > 0
+                ? ` — ${plan.remaining} left`
+                : ' — pick a spell'}
+          </span>
+        </p>
+
+        {plan.casts.length > 0 && (
+          <p className="staged muted">
+            {plan.casts.map((cast, i) => (
+              <Fragment key={`${cast.spell}:${i}`}>
+                {i > 0 && ' · '}
+                <b>{spell(cast.spell).name}</b>
+                {cast.count > 1 ? ` ×${cast.count}` : ''} at{' '}
+                {spellTargetLabel(cast.target, human, state)}
+              </Fragment>
+            ))}
+          </p>
+        )}
+
+        {aimed !== undefined && <p className="rule-text muted">{aimed.castable.spell.text}</p>}
+
+        <div className="choices">
+          {aimed !== undefined ? (
+            <>
+              {aimed.castable.targets.map((target, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className="choice"
+                  onClick={() => {
+                    onCast({
+                      spell: aimed.castable.spell.id,
+                      // Exactly one element per spell on this rung: a single-element
+                      // spell takes only its own, and the two Elemental spells that
+                      // could offer a choice arrive in 7c with the picker for it.
+                      element: aimed.castable.elements[0] as Element,
+                      count: 1,
+                      target,
+                    })
+                    onAim(null)
+                  }}
+                >
+                  {spellTargetLabel(target, human, state)}
+                </button>
+              ))}
+              <button type="button" className="choice secondary" onClick={() => onAim(null)}>
+                Back
+              </button>
+            </>
+          ) : (
+            <>
+              {plan.offers.map((offer) => (
+                <button
+                  key={offer.castable.spell.id}
+                  type="button"
+                  className="choice"
+                  disabled={offer.affordable < 1}
+                  title={offer.castable.spell.text}
+                  onClick={() => onAim(offer.castable.spell.id)}
+                >
+                  {offer.castable.spell.name}{' '}
+                  <span className="muted">
+                    {offer.castable.spell.cost} {offer.castable.elements.join('/')}
+                  </span>
+                </button>
+              ))}
+              <button
+                type="button"
+                className={plan.casts.length > 0 ? 'choice' : 'choice secondary'}
+                onClick={() => dispatch({ kind: 'announce_spells', casts: plan.casts })}
+              >
+                {/* "1 spell" beside a staged "Stone Skin x2" is the rules' own
+                    arithmetic: combined castings are one spell with a bigger number,
+                    not two spells. A bare "Cast 1" read as though the second casting
+                    had been dropped. */}
+                {plan.casts.length > 0
+                  ? `Cast ${plan.casts.length} spell${plan.casts.length === 1 ? '' : 's'}`
+                  : 'Cast nothing'}
+              </button>
+              {plan.casts.length > 0 && (
+                <button type="button" className="choice secondary" onClick={onClearDraft}>
+                  Clear
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

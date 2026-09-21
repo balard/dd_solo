@@ -1023,9 +1023,13 @@ export type LogEntry =
       readonly player: PlayerId
       /** `Effect.source`: an SAI name today, a spell name from Phase 7. */
       readonly source: string
-      /** Whose unit or army it sits on. */
-      readonly target: PlayerId
-      readonly slot: TerrainSlot
+      /**
+       * Whose unit or army it sits on. **Omitted for a terrain effect**, which sits on
+       * a place and belongs to nobody -- Ash Storm subtracts from both sides' rolls.
+       */
+      readonly target?: PlayerId
+      /** `ArmyRef`, not `TerrainSlot`: a spell may be cast on a Reserve Army. */
+      readonly slot: ArmyRef
       /** Omitted when the effect sits on the whole army rather than one die. */
       readonly unitId?: UnitId
     }

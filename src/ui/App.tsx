@@ -36,6 +36,7 @@ import {
   selectModeFor,
   type ReinforceMove,
 } from './game/prompts'
+import { sameSpellTarget, type SpellDraftCast } from '../engine/magic'
 
 import { NewGameScreen } from './game/NewGameScreen'
 import { useGame, type PlayingGame } from './game/useGame'
@@ -75,6 +76,12 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // drafts, because both questions are "spread this pool across those buckets" and
   // neither is ever live at the same time as the other.
   const [counters, setCounters] = useState<Readonly<Record<string, number>>>({})
+  // And the fourth, for the spell picker: every cast staged so far, plus which spell
+  // is currently being aimed. Two fields because announcing is two taps -- pick the
+  // spell, then pick its target -- and `aiming` is selection-shaped rather than
+  // draft-shaped: it is "what am I pointing at", not "what have I decided".
+  const [casts, setCasts] = useState<readonly SpellDraftCast[]>([])
+  const [aiming, setAiming] = useState<string | null>(null)
 
   const [inspecting, setInspecting] = useState<UnitId | null>(null)
   const [showFallen, setShowFallen] = useState(false)
@@ -89,6 +96,8 @@ function GameView({ game }: { readonly game: PlayingGame }) {
     setStaged([])
     setPairs([])
     setCounters({})
+    setCasts([])
+    setAiming(null)
     setInspecting(null)
   }, [key])
 
@@ -102,6 +111,8 @@ function GameView({ game }: { readonly game: PlayingGame }) {
     setStaged([])
     setPairs([])
     setCounters({})
+    setCasts([])
+    setAiming(null)
   }
 
   const count = (key_: string, by: number) =>
@@ -333,6 +344,22 @@ function GameView({ game }: { readonly game: PlayingGame }) {
         staged={staged}
         pairs={pairs}
         counters={counters}
+        casts={casts}
+        aiming={aiming}
+        onAim={setAiming}
+        // Two castings of one spell at one target are *one* combined spell with its
+        // number multiplied, not two spells -- so staging merges rather than appends.
+        onCast={(cast) =>
+          setCasts((current) => {
+            const at = current.findIndex(
+              (c) => c.spell === cast.spell && sameSpellTarget(c.target, cast.target),
+            )
+            if (at === -1) return [...current, cast]
+            const merged = [...current]
+            merged[at] = { ...cast, count: (current[at]?.count ?? 0) + cast.count }
+            return merged
+          })
+        }
         onStage={(moves) => setStaged((current) => [...current, ...moves])}
         onPair={(pair) => setPairs((current) => [...current, pair])}
         onCount={count}

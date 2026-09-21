@@ -155,6 +155,21 @@ body {
   padding-left: 6px;
 }
 
+/* A terrain effect belongs to the place rather than to either army, so it sits
+   between the terrain head and the dragons -- above both sides, not inside one. */
+.terrain-effects {
+  margin: 6px 0 2px;
+}
+
+/* The spell being aimed says what it does, because a cost and a name are not
+   enough to choose between eighteen of them. */
+.rule-text {
+  margin: -2px 0 8px;
+  font-size: .78rem;
+  line-height: 1.45;
+  max-width: 62ch;
+}
+
 /* --- dragons at a terrain ------------------------------------------------- */
 
 /* Between the terrain head and the two armies, because a dragon is on neither

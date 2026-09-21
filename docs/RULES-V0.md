@@ -598,3 +598,51 @@ apply and two of a kind do not (§10, and pipeline step 7). Death makes the army
 results. **Fire is the odd one**: the five health-worth it kills die unconditionally, and only then
 does each of them roll for a save icon — those that fail are buried, those that succeed stay in the
 DUA. A Phoenix therefore gets its Rise from the Ashes roll on the way, exactly as §9 requires.
+
+## 15. Spells under `magic: 'spells'` (v1 Phase 7)
+
+`V0_RULES` never sees this rung; §4's magic house rule is what it still plays, and §4 is
+**superseded rather than deleted** for exactly that reason -- it is the configuration the golden
+corpus is recorded against.
+
+A magic action is now: roll the army for magic, **announce every spell and every target at once**,
+then resolve them one at a time in the order announced (full rules p. 13). Announcement and
+resolution are separate steps because the rulebook makes them separate, and the gap between them is
+where Dispel Magic will live.
+
+**An army's magic is one number, not a per-element tally.** Each unit's magic results "may be
+divided between that unit's elements", and a force is one species -- so the whole army's total is a
+single pool the caster splits freely between its species' two elements. A single-element spell needs
+magic of its own element; an Elemental spell takes any one element. That is the rule as written, not
+a simplification of it, and it is what keeps the element out of the roll and in the casting decision.
+
+**A spell no rung can resolve is never offered.** `resolvesSpell` answers for the rules being
+played, the way `resolvesSai` and `resolvesIcon` do, and `castableSpells` filters on it -- so a
+spell transcribed into `data/spells.json` without code behind it is silently uncastable rather than
+a throw. That is the `sai: 'results'` lesson, not the `'full'` one.
+
+**Combined castings are one spell with a bigger number**, not several spells: three Wind Walks add
+twelve maneuver results as a single effect. Sixteen of the eighteen spells are cumulative; Lightning
+Strike and Accelerated Growth are not, and a second casting of either on the same target does
+nothing.
+
+### House rules this rung adds
+
+- **Fiery Weapon gives both halves of "melee or missile" on a combination roll.** "Add two melee or
+  missile results to any roll the target makes" is a choice, and every roll in the game counts
+  exactly one result type -- so on a melee, missile, save or maneuver roll exactly one of the two
+  can apply and the choice is made for you by the roll. The one exception is Phase 6's dragon
+  combination roll, which counts melee, missile and save at once: there the army gets **both**
+  additions rather than picking one. Expressing the real rule would need a fourth thing the roller
+  allocates at `dragon_allocate`, for a case the rulebook does not call out.
+- **A spell may be cast on a Reserve Army.** "Target any army" names it, and the Reserve Army is an
+  army. Wind Walk on one is legal and useless, which is the player's business.
+
+### What is not a house rule, and is easy to misread as one
+
+- **An announced target that is gone by the time the spell resolves is dropped, not re-aimed.** "If
+  for any reason the announced target of a spell is no longer present, then you may not select a new
+  target" (p. 13). The same shape as damage too small to kill anything.
+- **A terrain effect never ends early.** "If an army is destroyed ... any spells affecting that army
+  end" is a rule about armies. A terrain cannot empty, so Ash Storm and Wall of Fog run their full
+  duration whoever is standing there.
