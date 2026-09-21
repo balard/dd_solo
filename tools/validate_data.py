@@ -17,12 +17,14 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 UNITS = ROOT / "data" / "starter" / "units.json"
 TERRAINS = ROOT / "data" / "starter" / "terrains.json"
 DRAGONS = ROOT / "data" / "starter" / "dragons.json"
+SPELLS = ROOT / "data" / "spells.json"
 
 FACE_RE = re.compile(r"^(\d+) (ID|MELEE|MISSILE|MAGIC|SAVE|MANEUVER|SAI:[A-Za-z][A-Za-z ]*)$")
 FACES_FOR = {"d6": 6, "d10": 10}
 
 errors, warnings, todo_dice = [], [], []
 sais_used = set()
+spells_unbuilt = []
 
 
 def err(msg):
@@ -205,10 +207,78 @@ def check_dragons():
                 err(f"missing dragon die {element}_{form}")
 
 
+# The eighteen spells Treefolk and Firewalkers can cast, full rules pp. 46-51. Unlike
+# everything else here `data/spells.json` is hand-authored rather than generated, so
+# these checks guard a transcription rather than an importer.
+SPELL_ELEMENTS = {"air", "water", "earth", "fire", "death", "elemental"}
+SPELL_TARGETS = {
+    "army", "opposing_army", "own_unit", "opposing_unit", "units", "terrain", "own_dua",
+}
+RESULT_TYPES = {"melee", "missile", "magic", "save", "maneuver", "*"}
+MODIFIER_KINDS = {"add", "subtract", "divide", "multiply", "ignore_ids"}
+SPELL_ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def check_spells():
+    doc = json.loads(SPELLS.read_text(encoding="utf-8"))
+    species_ids = set(json.loads(UNITS.read_text(encoding="utf-8"))["species"]) | {"any"}
+    ids = set()
+
+    for s in doc["spells"]:
+        sid = s.get("id", "?")
+        if not SPELL_ID_RE.match(sid):
+            err(f"spell {sid}: id is not a lower_snake_case key")
+        if sid in ids:
+            err(f"spell {sid}: duplicate id")
+        ids.add(sid)
+
+        if s["element"] not in SPELL_ELEMENTS:
+            err(f"spell {sid}: unknown element {s['element']}")
+        if s["species"] not in species_ids:
+            err(f"spell {sid}: unknown species {s['species']}")
+        if s["target"] not in SPELL_TARGETS:
+            err(f"spell {sid}: unknown target {s['target']}")
+        if not isinstance(s["cost"], int) or s["cost"] < 1:
+            err(f"spell {sid}: cost must be a positive integer")
+        for flag in ("cumulative", "reserves", "cantrip"):
+            if not isinstance(s[flag], bool):
+                err(f"spell {sid}: {flag} must be a boolean")
+        if not s["text"].strip():
+            err(f"spell {sid}: empty rules text")
+
+        # A spell carries at most one of these. Neither means transcribed but not yet
+        # implemented, which is a real state until Phase 7f -- reported, not an error.
+        if "effect" in s and "handler" in s:
+            err(f"spell {sid}: has both an effect and a handler")
+        if "effect" not in s and "handler" not in s:
+            spells_unbuilt.append(sid)
+
+        effect = s.get("effect")
+        if effect is not None:
+            if effect["duration"] != "caster_next_turn":
+                err(f"spell {sid}: unknown duration {effect['duration']}")
+            if not effect["modifiers"]:
+                err(f"spell {sid}: effect with no modifiers")
+            for m in effect["modifiers"]:
+                if m["kind"] not in MODIFIER_KINDS:
+                    err(f"spell {sid}: unknown modifier kind {m['kind']}")
+                if m["resultType"] not in RESULT_TYPES:
+                    err(f"spell {sid}: unknown result type {m['resultType']}")
+
+    # Scope is two species; a spell for anyone else is a transcription slip.
+    for s in doc["spells"]:
+        if s["species"] not in ("any", "treefolk", "firewalkers"):
+            err(f"spell {s['id']}: {s['species']} is outside this project's scope")
+
+    if len(doc["spells"]) != 18:
+        err(f"expected 18 spells in scope, found {len(doc['spells'])}")
+
+
 def main():
     check_units()
     check_terrains()
     check_dragons()
+    check_spells()
 
     for w in warnings:
         print(f"  warn: {w}")
@@ -228,6 +298,9 @@ def main():
     print(f"OK: {len(warnings)} warning(s), {len(todo_dice)} die(ce) awaiting transcription")
     print(f"    {len(sais_used)}/{len(KNOWN_SAIS)} rulebook SAIs appear in the data"
           + (f"; unused: {', '.join(sorted(unused))}" if unused else ""))
+    if spells_unbuilt:
+        print(f"    {len(spells_unbuilt)} spell(s) transcribed but not implemented: "
+              + ", ".join(sorted(spells_unbuilt)))
     return 0
 
 

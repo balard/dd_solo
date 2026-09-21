@@ -97,11 +97,15 @@ export function legalActions(
   // What the terrain offers, before checking there is anything to hit.
   const offered = eighthFaceActions(state, player, slot) ?? faceActions(state, slot)
 
-  return offered.filter((action) =>
-    action === 'missile'
-      ? missileTargets(state, player, slot).length > 0
-      : armyAt(state, defender, slot).length > 0,
-  )
+  return offered.filter((action) => {
+    if (action === 'missile') return missileTargets(state, player, slot).length > 0
+    // Real magic needs nothing to hit. Most spells target your *own* army -- Stone
+    // Skin or Wind Walk on an army standing alone is one of the commonest plays --
+    // so the v0 filter here, which exists because v0 magic is a melee variant, would
+    // quietly refuse a legal action at every terrain with nobody standing opposite.
+    if (action === 'magic' && state.ruleSet.magic === 'spells') return true
+    return armyAt(state, defender, slot).length > 0
+  })
 }
 
 /** The single action the terrain's numbered face dictates, or none. */
@@ -440,8 +444,13 @@ export function finishSaves(
     return {
       attackTotal: attackRoll.total,
       saveTotal: null,
+      // Under `magic: 'spells'` a magic roll inflicts nothing: its total is a pool of
+      // casting points, and `finishExchange` hands it to `turn.magic` instead. The
+      // v0 house rule is reached only by the rung it belongs to.
       damage:
-        (spec.action === 'magic' ? magicDamage(attackRoll.total, state.ruleSet) : 0) + unsavable,
+        (spec.action === 'magic' && state.ruleSet.magic === 'simplified'
+          ? magicDamage(attackRoll.total, state.ruleSet)
+          : 0) + unsavable,
       unsavable,
       riposte: 0,
       counterSuppressed,

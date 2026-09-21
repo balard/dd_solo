@@ -10,6 +10,7 @@ import { Fragment, type ReactElement } from 'react'
 
 
 import { dragonDie, dragonName, unitType } from '../../data/load'
+import { spell } from '../../data/spells'
 import { BREATH_NAME, DRAGON_ICON_TEXT } from '../../engine/dragons'
 import { saiPhrase, saisBehind } from '../../engine/roll'
 
@@ -158,10 +159,15 @@ function Line({
       // "at <terrain>" when the attack lands where it stands, "from X to Y" when it
       // crosses. Never a bare "at" on a missile: that is the shape that read as the
       // target while naming the origin.
+      //
+      // "action" rather than "attack" for magic, and in every ruleset: under
+      // `magic: 'spells'` a magic action attacks nothing at all, and under the v0
+      // house rule it is still the magic *action* that is being taken. Calling it an
+      // attack was right only while magic was a melee variant.
       return (
         <p className="log-line">
           {who(entry.player)} {verb(entry.player, 'does', 'do')} a <b>{actionName(entry.action)}</b>{' '}
-          attack{' '}
+          {entry.action === 'magic' ? 'action' : 'attack'}{' '}
           {entry.fromSlot === entry.toSlot ? (
             <>at {where(entry.fromSlot)}</>
           ) : (
@@ -407,6 +413,37 @@ function Line({
           {entry.player === human ? 'your' : "the enemy's"} turn
         </p>
       )
+    // A magic roll under `magic: 'spells'` hits nothing -- its total is a pool of
+    // casting points -- so it gets the roll strip an attack gets and none of the
+    // damage arithmetic.
+    case 'magic_rolled':
+      return (
+        <div className="log-roll">
+          <div className="roll-head">magic at {where(entry.slot)}</div>
+          <RollStrip dice={entry.dice} />
+          <div className="roll-sum">
+            <b>{entry.total}</b> magic <span className="muted">({entry.elements.join(' or ')})</span>
+          </div>
+        </div>
+      )
+
+    case 'spell_cast':
+      return (
+        <p className="log-line">
+          {who(entry.player)} {verb(entry.player, 'casts', 'cast')}{' '}
+          <b>{spell(entry.spell).name}</b>
+          {entry.count > 1 ? ` ×${entry.count}` : ''}{' '}
+          <span className="muted">({entry.element})</span>
+        </p>
+      )
+
+    case 'spell_fizzled':
+      return (
+        <p className="log-line muted">
+          {spell(entry.spell).name} fizzles — its target is gone
+        </p>
+      )
+
     case 'counter_declined':
       return (
         <p className="log-line muted">

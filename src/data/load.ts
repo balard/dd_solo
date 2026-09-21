@@ -302,6 +302,19 @@ export function dragonName(dieId: string): string {
   return `${die.element[0]?.toUpperCase() ?? ''}${die.element.slice(1)} ${dragonForm(die.form).name}`
 }
 
+/**
+ * A species' two elements -- the one copy of this fact.
+ *
+ * It lives here rather than in `setup.ts`, where it started, because it is a fact
+ * about the data and setup is no longer its only reader: Phase 7's magic pool asks
+ * which elements an army's magic may be spent as, and that is the same question.
+ */
+export function speciesElements(speciesId: string): readonly Element[] {
+  const found = SPECIES.find((s) => s.id === speciesId)
+  if (!found) throw new DataError(`no such species: ${speciesId}`)
+  return found.elements
+}
+
 /** Units of one species, in the data's order (by class, then size). */
 export function unitsOfSpecies(speciesId: string): readonly UnitType[] {
   return UNIT_TYPES.filter((u) => u.species === speciesId)

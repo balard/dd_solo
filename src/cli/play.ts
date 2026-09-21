@@ -18,6 +18,7 @@ import { passiveAi } from '../ai/passive'
 import { randomAi } from '../ai/random'
 import type { AiPlayer } from '../ai/types'
 import { SPECIES, dragonName, terrainDie, terrainFaceAction, unitType } from '../data/load'
+import { spell } from '../data/spells'
 import type { ResultType, TerrainFaceNumber } from '../data/types'
 import { damageOptions } from '../engine/damage'
 import { BREATH_NAME } from '../engine/dragons'
@@ -213,8 +214,12 @@ function describe(entry: LogEntry, state: GameState): string | null {
       return cyan(`${SLOT_LABEL[entry.slot]} captured by ${entry.by}!`)
     case 'terrain_lost':
       return yellow(`${entry.from} loses ${SLOT_LABEL[entry.slot]} (${entry.reason})`)
+    // "action" rather than "attack" for magic: under `magic: 'spells'` it attacks
+    // nothing, and under the v0 house rule it is still the magic action.
     case 'action_chosen':
-      return `${entry.player} does a ${bold(actionName(entry.action))} attack ${
+      return `${entry.player} does a ${bold(actionName(entry.action))} ${
+        entry.action === 'magic' ? 'action' : 'attack'
+      } ${
         entry.fromSlot === entry.toSlot
           ? `at ${SLOT_LABEL[entry.fromSlot]}`
           : `from ${SLOT_LABEL[entry.fromSlot]} to ${SLOT_LABEL[entry.toSlot]}`
@@ -332,6 +337,24 @@ function describe(entry: LogEntry, state: GameState): string | null {
 
     case 'counter_declined':
       return dim(`${entry.player} declines to counter-attack`)
+
+    // No dice strip: the terminal log prints totals, not faces.
+    case 'magic_rolled':
+      return (
+        `  ${entry.player} rolls ${bold(String(entry.total))} magic at ` +
+        `${SLOT_LABEL[entry.slot as TerrainSlot] ?? entry.slot} ` +
+        dim(`(${entry.elements.join(' or ')})`)
+      )
+
+    case 'spell_cast':
+      return (
+        `  ${entry.player} casts ` +
+        `${spell(entry.spell).name}${entry.count > 1 ? ` x${entry.count}` : ''} ` +
+        dim(`(${entry.element})`)
+      )
+
+    case 'spell_fizzled':
+      return dim(`  ${spell(entry.spell).name} fizzles -- its target is gone`)
 
     case 'counter_suppressed':
       return yellow(`  ${entry.player} is taken by Surprise and cannot counter-attack`)
@@ -496,6 +519,19 @@ function choicesFor(pending: Pending): Choice[] {
     case 'sai_promote':
     case 'sai_move':
     case 'eighth_face_city':
+      return []
+
+    // 7a has nothing castable, so the empty announcement is the only legal answer and
+    // a menu of one is honest. 7b gives it a sheet, like the promotion draft.
+    case 'announce_spells':
+      return [
+        {
+          key: '0',
+          label: 'cast nothing',
+          action: { kind: 'announce_spells', casts: [] } as GameAction,
+        },
+      ]
+
     case 'temple_bury':
     case 'dragon_breath':
     case 'dragon_allocate':

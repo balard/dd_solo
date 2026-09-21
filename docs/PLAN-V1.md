@@ -1754,9 +1754,18 @@ element**. A magic result is elemental according to the species of the unit that
 Treefolk generate Water and Earth magic, Firewalkers Air and Fire. A spell of a single element may
 only be cast with magic of that element; an Elemental spell with magic of any one element.
 
-So `rollArmy`'s magic total becomes a per-element tally, and a magic action becomes: roll, then
-spend, casting any number of spells up to the results generated, resolved one at a time in the order
-cast. Unused results are lost.
+> **Corrected in 7a: `rollArmy`'s magic total does *not* become a per-element tally.** The rules say
+> each unit's magic results "may be divided between that unit's elements" (p. 13), and `validateState`
+> enforces that every unit of a player shares one species — so an army's magic is **one number the
+> caster splits freely between its species' two elements**. The starter book says it outright: "Each
+> result rolled by the army counts as one point of magic of EITHER of the species' elements." Nothing
+> needs per-die element attribution, **`resolveFaces` stays pure and `GameState`-free**, and
+> validating an announcement is a sum rather than a knapsack. It collapses only when two units in one
+> army carry different elements, which nothing in this plan's scope does.
+
+A magic action becomes: roll, announce every spell and target at once, then resolve them one at a
+time in the order cast. Unused results are lost. Announcement and resolution are separate steps
+because the rulebook makes them separate (p. 13), which is also the gap Dispel Magic lives in.
 
 **The eighteen spells in scope.** Exactly the spells castable by these two species — the species
 reference sheets (full rules pp. 79, 91) filtered to `Any` plus their own:
@@ -1769,9 +1778,21 @@ reference sheets (full rules pp. 79, 91) filtered to `Any` plus their own:
 | Earth | Stone Skin 2, Path 4, Wall of Thorns 5 *(Treefolk)*, Transmute Rock to Mud 6 |
 | Elemental | Resurrect Dead 3, Summon Dragon 7 |
 
-Fourteen of the eighteen are a Phase 3 `Effect` and nothing else. The other four are the work: Flash
-Flood moves a terrain, Path moves a unit, Resurrect Dead is a Phase 2 exchange, and Summon Dragon
-moves a dragon out of a Summoning Pool that Phase 6 already built and fills. It is also what
+> **Corrected in 7a: it is seven, not fourteen.** Wind Walk, Fiery Weapon, Dancing Lights, Watery
+> Double, Stone Skin, Transmute Rock to Mud and Ash Storm are a `Modifier` plus a target. The other
+> **eleven** each need machinery that does not exist: two sub-rolls (Mirage, Lightning Strike), an
+> opposed roll (Flash Flood), a modifier that reaches an *attacker's* roll (Wall of Fog), a maneuver
+> trigger (Wall of Thorns), a death trigger (Accelerated Growth), a reroll that replaces a face
+> (Flashfire), a DUA return (Resurrect Dead), a unit move (Path), instant damage (Hailstorm) and a
+> dragon summon. That is why the phase takes six slices rather than one.
+>
+> **And cumulative spells do not collide with the one-multiplier-per-result-type cap**, which
+> `pipeline.ts` predicted they would. Combining castings multiplies the *spell's* number, not the
+> roll — three Wind Walks are one `add` of 12 — and no spell in scope multiplies or divides a roll at
+> all, so `atMostOne` is never reached.
+
+Flash Flood moves a terrain, Path moves a unit, Resurrect Dead is a Phase 2 exchange, and Summon
+Dragon moves a dragon out of a Summoning Pool that Phase 6 already built and fills. It is also what
 retires Phase 6's Frontier seed, and what first makes two of that phase's simplifications real —
 a dragon with more than one eligible target, and more than one terrain with dragons at it.
 

@@ -25,6 +25,7 @@ import {
   saveEffects,
   saveRollDice,
   terrainAction,
+  type AttackOutcome,
   type AttackSpec,
 } from './combat'
 import { damageAssignmentProblem, damageOptions, healthsOf, maxAbsorbable } from './damage'
@@ -80,6 +81,9 @@ import { doubleIdsModifier, ignoreIdsModifiers, type Modifier } from './pipeline
 import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
 import { delayedTasks, targetTasks, type TargetTask } from './targeting'
 import { unitType } from '../data/load'
+import { spell } from '../data/spells'
+import { castableSpells, magicPool } from './magic'
+import { castSpell } from './spells'
 import type { DragonElement, ResultType } from '../data/types'
 import {
   IllegalActionError,
@@ -91,7 +95,9 @@ import {
   dragonsAt,
   livingUnits,
   opponentOf,
+  speciesOf,
   type ActionKind,
+  type AnnouncedSpell,
   type ArmyRef,
   type CombatState,
   type Direction,
@@ -101,12 +107,14 @@ import {
   type GameAction,
   type GameState,
   type LogEntry,
+  type MagicState,
   type MarchStep,
   type Pending,
   type PendingAttack,
   type PendingSaves,
   type PromotionPair,
   type PlayerId,
+  type SpellTarget,
   type TerrainFace,
   type TerrainSlot,
   type TurnState,
@@ -335,6 +343,23 @@ function stepMarch(state: GameState): GameState {
         },
       }
     }
+
+    case 'announce_spells': {
+      const magic = magicOf(state)
+      return {
+        ...state,
+        pending: {
+          kind: 'announce_spells',
+          player,
+          slot: magic.army,
+          pool: magic.pool,
+          castable: castableSpells(magic.pool, speciesOf(state, player), state.ruleSet),
+        },
+      }
+    }
+
+    case 'resolve_spell':
+      return resolveNextSpell(state)
 
     case 'offer_counter': {
       const combat = requireCombat(state)
@@ -1452,6 +1477,97 @@ function moveEscapees(
  * effect during a counter-attack" is the rulebook's way of saying counters do not
  * themselves get countered.
  */
+/**
+ * Where a magic roll stops being an attack and starts being a spell.
+ *
+ * `combat` is cleared here by the same field-by-field rebuild `finishExchange` uses,
+ * so the parked attack dice are dropped by omission and `validateState`'s
+ * `combat.attack` lifetime check still means what it says.
+ */
+function beginSpellcasting(
+  state: GameState,
+  army: ArmyRef,
+  outcome: AttackOutcome,
+): GameState {
+  const player = state.turn.marching
+  const pool = magicPool(state, player, army, outcome.attackTotal)
+
+  const logged = withLog({ ...state, rng: outcome.rng }, {
+    kind: 'magic_rolled',
+    player,
+    slot: army,
+    total: pool.points,
+    elements: pool.elements,
+    dice: outcome.attackRoll.dice,
+  })
+
+  return withTurn(withMagic(logged, { army, pool }), {
+    combat: null,
+    marchStep: 'announce_spells',
+  })
+}
+
+/**
+ * Resolves the head of the announced list, one spell per step.
+ *
+ * "Cast and resolve the spells one at a time in any order you wish" (p. 13) -- the
+ * order is the order they were announced in, which is the caster's own list, so the
+ * freedom the rule grants is already spent at announcement.
+ *
+ * A cast whose target has vanished is **dropped**, not retargeted and not thrown on:
+ * "if for any reason the announced target of a spell is no longer present, then you
+ * may not select a new target". Same shape as damage too small to kill anything.
+ */
+function resolveNextSpell(state: GameState): GameState {
+  const magic = magicOf(state)
+  const [head, ...rest] = magic.announced ?? []
+
+  if (head === undefined) return endMarch(withMagic(state, null))
+
+  const remaining: MagicState = {
+    army: magic.army,
+    pool: magic.pool,
+    ...(rest.length > 0 ? { announced: rest } : {}),
+  }
+  const next = withMagic(state, remaining)
+  const player = state.turn.marching
+  const s = spell(head.spell)
+
+  if (!spellTargetPresent(state, head.target)) {
+    return withLog(next, { kind: 'spell_fizzled', player, spell: head.spell })
+  }
+
+  const cast = castSpell(next, s, {
+    caster: player,
+    army: magic.army,
+    element: head.element,
+    count: head.count,
+    target: head.target,
+  })
+
+  return withLog(cast, {
+    kind: 'spell_cast',
+    player,
+    spell: head.spell,
+    element: head.element,
+    count: head.count,
+  })
+}
+
+/** Whether an announced target still exists. */
+function spellTargetPresent(state: GameState, target: SpellTarget): boolean {
+  switch (target.kind) {
+    case 'none':
+      return true
+    case 'terrain':
+      return true
+    case 'army':
+      return armyRef(state, target.player, target.army).length > 0
+    case 'units':
+      return target.unitIds.some((id: UnitId) => state.units[id] !== undefined)
+  }
+}
+
 function finishExchange(state: GameState, isCounter: boolean): GameState {
   const combat = requireCombat(state)
   const pending = requireAttack(state, combat)
@@ -1460,6 +1576,15 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
   // The save dice were rolled two steps ago and have been through the delayed effects
   // since: a Choke may have taken one out of the list and a Confuse replaced another.
   const outcome = finishSaves(state, spec, pending, combat.saves ?? null, state.rng)
+
+  // A magic action under `magic: 'spells'` inflicts nothing. Its total is a pool of
+  // casting points, so the exchange ends here and `turn.magic` takes over. The roll
+  // itself was an ordinary attack roll, which is exactly what a magic action is to the
+  // SAI reference -- so a Galeforce or a Wild Growth on it has already resolved at the
+  // pauses above, with no second copy of that machinery.
+  if (combat.action === 'magic' && state.ruleSet.magic === 'spells') {
+    return beginSpellcasting(state, spec.attackerSlot, outcome)
+  }
 
   const entries: LogEntry[] = [
     {
@@ -1738,8 +1863,37 @@ function withDragonAttack(state: GameState, attack: DragonAttackState | null): G
     armiesMarched: turn.armiesMarched,
     combat: turn.combat,
     ...(turn.eighthFaceStep !== undefined ? { eighthFaceStep: turn.eighthFaceStep } : {}),
+    ...(turn.magic !== undefined ? { magic: turn.magic } : {}),
   }
   return { ...state, turn: attack === null ? rest : { ...rest, dragonAttack: attack } }
+}
+
+/**
+ * Sets or clears the magic action's working state -- `withDragonAttack`'s twin, and
+ * field by field for the same reason: clearing has to drop the key by **omission**,
+ * or `digestState`'s `stableJson(state.turn)` grows a `"magic": null` in all
+ * twenty-five recorded games.
+ */
+function withMagic(state: GameState, magic: MagicState | null): GameState {
+  const turn = state.turn
+  const rest = {
+    marching: turn.marching,
+    phase: turn.phase,
+    marchIndex: turn.marchIndex,
+    marchStep: turn.marchStep,
+    marchingArmy: turn.marchingArmy,
+    armiesMarched: turn.armiesMarched,
+    combat: turn.combat,
+    ...(turn.eighthFaceStep !== undefined ? { eighthFaceStep: turn.eighthFaceStep } : {}),
+    ...(turn.dragonAttack !== undefined ? { dragonAttack: turn.dragonAttack } : {}),
+  }
+  return { ...state, turn: magic === null ? rest : { ...rest, magic } }
+}
+
+const magicOf = (state: GameState): MagicState => {
+  const magic = state.turn.magic
+  if (magic === undefined) throw new Error('no magic action is being cast')
+  return magic
 }
 
 const dragonAttackOf = (state: GameState): DragonAttackState => {
@@ -2732,6 +2886,54 @@ function applyReinforce(
   return withTurn(logged, { phase: 'reserves_retreat' })
 }
 
+/**
+ * Announces every spell and every target at once.
+ *
+ * Validated **as a whole**, which is not fussiness: the pool is one number and the
+ * casts spend it jointly, so "can I afford this" is a question about the list rather
+ * than about any one cast. (Lightning Strike's "a unit may not be targeted by more
+ * than one Lightning Strike per magic action" is the same shape, and arrives in 7d.)
+ *
+ * An empty list is legal and common -- "any number of spells can be cast up to the
+ * number of magic results generated", and unused results are simply lost.
+ */
+function applyAnnounceSpells(state: GameState, casts: readonly AnnouncedSpell[]): GameState {
+  const magic = magicOf(state)
+  const player = state.turn.marching
+  const castable = castableSpells(magic.pool, speciesOf(state, player), state.ruleSet)
+
+  let spent = 0
+  for (const cast of casts) {
+    const offer = castable.find((c) => c.spell.id === cast.spell)
+    if (offer === undefined) {
+      throw new IllegalActionError(`${cast.spell} is not castable by this army right now`)
+    }
+    if (!Number.isInteger(cast.count) || cast.count < 1) {
+      throw new IllegalActionError(`${cast.spell}: count must be a positive integer`)
+    }
+    if (cast.count > 1 && !offer.spell.cumulative) {
+      throw new IllegalActionError(`${cast.spell} is not cumulative and cannot be combined`)
+    }
+    if (!offer.elements.includes(cast.element)) {
+      throw new IllegalActionError(`${cast.spell} cannot be cast with ${cast.element} magic`)
+    }
+    spent += offer.spell.cost * cast.count
+  }
+
+  if (spent > magic.pool.points) {
+    throw new IllegalActionError(
+      `announced ${spent} magic worth of spells with only ${magic.pool.points} rolled`,
+    )
+  }
+
+  const announced: MagicState = {
+    army: magic.army,
+    pool: magic.pool,
+    ...(casts.length > 0 ? { announced: casts } : {}),
+  }
+  return withTurn(withMagic(state, announced), { marchStep: 'resolve_spell' })
+}
+
 function applyRetreat(state: GameState, unitIds: readonly UnitId[]): GameState {
   const player = state.turn.marching
   const units = { ...state.units }
@@ -2808,5 +3010,7 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyDragonAllocate(cleared, action)
     case 'dragon_damage_split':
       return applyDragonDamageSplit(cleared, action)
+    case 'announce_spells':
+      return applyAnnounceSpells(cleared, action.casts)
   }
 }

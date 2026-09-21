@@ -44,6 +44,12 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     case 'choose_action':
       return { kind: 'choose_action', action: null }
 
+    // It casts nothing, which is honest while it also attacks nothing -- and stops
+    // being honest the moment it is declining eighteen spells. `GreedyAI` (Phase 9)
+    // is where that is answered; see OVERVIEW.md section 4.
+    case 'announce_spells':
+      return { kind: 'announce_spells', casts: [] }
+
     // It counters: free, and it keeps the counter-attack path live under test.
     case 'choose_counter_attack':
       return { kind: 'choose_counter_attack', counter: true }

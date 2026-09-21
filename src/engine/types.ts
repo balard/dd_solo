@@ -5,10 +5,11 @@
  * a pure reducer over these values; see `docs/OVERVIEW.md` section 2.
  */
 import { unitType } from '../data/load'
-import type { DragonElement, DragonIcon, ResultType } from '../data/types'
+import type { DragonElement, DragonIcon, Element, ResultType } from '../data/types'
 
 import type { DragonRoll, DragonTarget } from './dragons'
 import type { Effect } from './effects'
+import type { Castable, MagicPool } from './magic'
 import type { DieRoll, RawDie } from './roll'
 import type { TargetTask } from './targeting'
 import type { RngState } from './rng'
@@ -153,6 +154,18 @@ export type MarchStep =
   | 'resolve_counter_damage'
   | 'assign_counter_damage'
   | 'assign_counter_riposte'
+  // A magic action under `magic: 'spells'` (Phase 7). The *roll* is an ordinary
+  // attack roll and reuses the steps above -- "during a magic action" is what the SAI
+  // reference calls it, so a Galeforce or a Wild Growth on it must resolve exactly the
+  // way it does on any other attack. What differs begins where the damage used to:
+  // `resolve_attack_damage` hands off to these instead of assigning any.
+  //
+  // Announcement and resolution are separate steps because the rulebook makes them
+  // separate (p. 13): "announce all of the spells you are casting and each of their
+  // targets", and only then "cast and resolve the spells one at a time". It is the one
+  // place in the game where those come apart, and Dispel Magic lives in the gap.
+  | 'announce_spells'
+  | 'resolve_spell'
 
 /**
  * An attack roll that has landed, held while the exchange is paused between the
@@ -234,6 +247,57 @@ export interface CombatState {
   readonly saves?: PendingSaves
 }
 
+/**
+ * A magic action being cast under `magic: 'spells'`: `CombatState`'s opposite number.
+ *
+ * It begins where the roll ends. The roll itself is a `CombatState` like any other
+ * attack roll -- which is what applies every targeting SAI to it for free -- and
+ * `finishExchange` hands over to this once the magic total is known.
+ *
+ * Every optional field is **omitted rather than written as 0, [] or false**:
+ * `digestState` renders `stableJson(state.turn)` and four recorded games end
+ * mid-march.
+ */
+export interface MagicState {
+  /** Where the casting army stands. `'reserve'` once Reserve magic returns (7f). */
+  readonly army: ArmyRef
+  /** What the roll came to, and what it may be spent as. */
+  readonly pool: MagicPool
+  /** Announced and still unresolved, in the order the caster listed them -- which is
+   *  the order they resolve in. Omitted once empty. */
+  readonly announced?: readonly AnnouncedSpell[]
+}
+
+/**
+ * One announced cast.
+ *
+ * `count` because combining castings is a single spell with one number multiplied,
+ * not several spells -- "three castings of Wind Walk add twelve results". `element`
+ * because Resurrect Dead ("multiple castings targeting a single unit must all use the
+ * same element") and Summon Dragon (summons a dragon of the element that paid) are the
+ * two spells that read which element bought them.
+ */
+export interface AnnouncedSpell {
+  /** A `Spell.id` from `data/spells.json`. */
+  readonly spell: string
+  readonly element: Element
+  readonly count: number
+  readonly target: SpellTarget
+}
+
+/**
+ * What a cast was aimed at, fixed at announcement.
+ *
+ * A target that is gone by the time the spell resolves is **dropped** -- "if for any
+ * reason the announced target of a spell is no longer present, then you may not select
+ * a new target" (p. 13). Same rule as damage too small to kill anything.
+ */
+export type SpellTarget =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'army'; readonly player: PlayerId; readonly army: ArmyRef }
+  | { readonly kind: 'units'; readonly unitIds: readonly UnitId[] }
+  | { readonly kind: 'terrain'; readonly slot: TerrainSlot }
+
 export interface TurnState {
   readonly marching: PlayerId
   readonly phase: Phase
@@ -260,6 +324,11 @@ export interface TurnState {
    * rest of the time -- `digestState` renders `state.turn`.
    */
   readonly dragonAttack?: DragonAttackState
+  /**
+   * A magic action being cast (Phase 7). Non-null only between the magic roll and the
+   * end of the march, and omitted the rest of the time for `dragonAttack`'s reason.
+   */
+  readonly magic?: MagicState
 }
 
 /**
@@ -555,6 +624,27 @@ export type Pending =
    * rule as a damage assignment with nothing to kill.
    */
   | { readonly kind: 'temple_bury'; readonly player: PlayerId; readonly options: readonly UnitId[] }
+  /**
+   * Every spell and every target, in one decision (Phase 7).
+   *
+   * One pending rather than one per spell, because the rules announce them all at
+   * once and only then choose a resolution order -- asking spell by spell would leak
+   * that order into the announcement. It is the `reinforce` shape: a list the client
+   * stages as a draft and sends once.
+   *
+   * **An empty answer is always legal.** "Any number of spells can be cast up to the
+   * number of magic results generated"; unused results are simply lost.
+   */
+  | {
+      readonly kind: 'announce_spells'
+      readonly player: PlayerId
+      readonly slot: ArmyRef
+      readonly pool: MagicPool
+      /** Every spell this pool could buy, with the elements each accepts and how many
+       *  combined castings it could afford. Empty is possible and means "no spell you
+       *  can afford", not an error. */
+      readonly castable: readonly Castable[]
+    }
 
 /**
  * One dragon's whole roll, as the log renders it. Display only, like `DieRoll`.
@@ -622,6 +712,7 @@ export type GameAction =
     }
   | { readonly kind: 'eighth_face_temple'; readonly force: boolean }
   | { readonly kind: 'temple_bury'; readonly unitId: UnitId }
+  | { readonly kind: 'announce_spells'; readonly casts: readonly AnnouncedSpell[] }
   | { readonly kind: 'dragon_breath'; readonly unitIds: readonly UnitId[] }
   /** `null` declines: the rules say the army *may* promote. */
   | { readonly kind: 'dragon_treasure'; readonly pair: PromotionPair | null }
@@ -950,6 +1041,31 @@ export type LogEntry =
   | { readonly kind: 'units_risen'; readonly player: PlayerId; readonly unitIds: readonly UnitId[] }
   | { readonly kind: 'counter_declined'; readonly player: PlayerId }
   /**
+   * A magic roll under `magic: 'spells'`, which inflicts nothing and buys spells
+   * instead. A separate entry rather than a `combat_resolved` with `damage: 0`:
+   * there is no defender, no save roll and no damage to explain, and the line the
+   * player wants is "you have this much magic, in these elements".
+   */
+  | {
+      readonly kind: 'magic_rolled'
+      readonly player: PlayerId
+      readonly slot: ArmyRef
+      readonly total: number
+      readonly elements: readonly Element[]
+      readonly dice: readonly DieRoll[]
+    }
+  /** One announced cast resolving. `count` is combined castings folded into one. */
+  | {
+      readonly kind: 'spell_cast'
+      readonly player: PlayerId
+      readonly spell: string
+      readonly element: Element
+      readonly count: number
+    }
+  /** An announced cast whose target was gone by the time it resolved. "You may not
+   *  select a new target" (p. 13), so it is dropped and said so. */
+  | { readonly kind: 'spell_fizzled'; readonly player: PlayerId; readonly spell: string }
+  /**
    * The Effects Expire Phase actually removing something.
    *
    * Named by `source` rather than by any identity, because that is what a player
@@ -1068,6 +1184,20 @@ export const FULL_RULES: RuleSet = { ...SAI_FULL_RULES, eighthFace: 'full' }
  * `PLAN-V1.md` Phase 6.
  */
 export const DRAGON_RULES: RuleSet = { ...FULL_RULES, dragons: true }
+
+/**
+ * Spells as well: Phase 7's rung.
+ *
+ * The v0 magic house rule retires here -- `floor(M / 2)`, same terrain only, no save
+ * roll, no counter-attack and no Reserve magic are all replaced by the real system.
+ * `magic: 'simplified'` survives as the `V0_RULES` regression baseline and nothing
+ * else; it is not a configuration anyone plays or balances after this.
+ *
+ * Standing Stones comes live with this flag rather than with `eighthFace`, which is
+ * what `resolvesIcon` has said since Phase 5c: converting magic results to an element
+ * is meaningless until results have elements to convert to.
+ */
+export const SPELL_RULES: RuleSet = { ...DRAGON_RULES, magic: 'spells' }
 
 
 export interface GameState {

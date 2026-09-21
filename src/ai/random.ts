@@ -85,6 +85,14 @@ export const randomAi: AiPlayer = {
         return [{ kind: 'choose_action', action } as GameAction, next] as const
       }
 
+      // 7a offers nothing: no spell resolves yet, so `castable` is provably empty and
+      // the empty announcement is the only legal answer rather than a narrowing of the
+      // fuzz. **7b must replace this in the same slice that makes a spell castable** --
+      // an opponent that always announces nothing would never execute a spell across a
+      // thousand games, which is exactly how `reinforce` lost its second dimension.
+      case 'announce_spells':
+        return [{ kind: 'announce_spells', casts: [] } as GameAction, rng] as const
+
       case 'choose_missile_target': {
         const [slot, next] = pick(rng, pending.options)
         return [{ kind: 'choose_missile_target', slot } as GameAction, next] as const

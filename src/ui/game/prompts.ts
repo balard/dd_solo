@@ -8,6 +8,7 @@
 import { dragonName, terrainDie, terrainFaceAction, unitType } from '../../data/load'
 import type { TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
+import { magicRolled } from '../../engine/magic'
 import { growthPartners, promotionGain } from '../../engine/dua'
 import type { Modifier } from '../../engine/pipeline'
 import { isAsleep } from '../../engine/effects'
@@ -106,6 +107,7 @@ export interface Prompt {
     | 'dragon_breath'
     | 'dragon_allocate'
     | 'dragon_damage_split'
+    | 'announce_spells'
 }
 
 const stepFace = (face: TerrainFace, direction: Direction): TerrainFace =>
@@ -375,8 +377,31 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         choices: [],
         custom: 'dragon_damage_split',
       }
+
+    // Nothing castable is the ordinary case until 7b, and it is not an error: the
+    // results are simply lost. A sheet with no options would be a dead end, so the
+    // no-spell case falls back to a plain button rather than `custom`.
+    case 'announce_spells':
+      return pending.castable.length === 0
+        ? {
+            question: magicRolled(pending.pool),
+            choices: [
+              {
+                label: 'Cast nothing',
+                action: { kind: 'announce_spells', casts: [] },
+                passive: true,
+              },
+            ],
+          }
+        : {
+            question: magicRolled(pending.pool),
+            choices: [],
+            custom: 'announce_spells',
+          }
   }
 }
+
+
 
 const unitName = (state: GameState, unitId: UnitId): string => {
   const unit = state.units[unitId]

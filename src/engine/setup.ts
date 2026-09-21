@@ -20,7 +20,14 @@
  * it consumes no draw either, not "the same draw" -- so the goldens' three pins leave
  * the whole terrain-draw stream skipped.
  */
-import { DRAGON_DICE, SPECIES, TERRAIN_DICE, terrainDie, terrainType, unitType } from '../data/load'
+import {
+  DRAGON_DICE,
+  speciesElements,
+  TERRAIN_DICE,
+  terrainDie,
+  terrainType,
+  unitType,
+} from '../data/load'
 import type { Element } from '../data/types'
 import { preset, PRESET_ARMY_NAMES, type PresetArmyName } from '../data/presets'
 
@@ -139,13 +146,6 @@ function startingSlot(armyName: PresetArmyName, player: PlayerId): TerrainSlot {
  * rather than `TERRAIN_DICE`'s raw-file order.
  */
 const SORTED_TERRAIN_DICE: readonly string[] = [...TERRAIN_DICE].map((d) => d.id).sort()
-
-/** A species' two elements, from the unit data -- the one copy of this fact. */
-function speciesElements(speciesId: string): readonly Element[] {
-  const species = SPECIES.find((s) => s.id === speciesId)
-  if (!species) throw new Error(`unknown species ${speciesId}`)
-  return species.elements
-}
 
 /** Draws a Home Terrain die uniformly from all 24 (Phase 5b house rule). */
 function drawHomeDie(rng: RngState): readonly [string, RngState] {
