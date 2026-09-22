@@ -14,7 +14,7 @@ Standing Stones, and retires Phase 6's Frontier dragon seed.
 | **7b** | The eight declarative spells, `EffectTarget.terrain`, and the whole client surface | **landed** |
 | **7c** | The board spells: Hailstorm, Path, Resurrect Dead, Summon Dragon | **landed** |
 | **7d** | The sub-roll spells: Mirage, Lightning Strike, Flash Flood, Wall of Thorns | **landed** |
-| **7e** | The two triggers: Flashfire and Accelerated Growth | |
+| **7e** | The two triggers: Flashfire and Accelerated Growth | **landed** |
 | **7f** | Cantrip, Dispel Magic, Standing Stones, Reserve magic, and the flip | |
 
 ## Standing rules for every slice
@@ -346,22 +346,88 @@ game on a different ruleset", which is that test doing its job.
 
 ---
 
-## 7e -- the two triggers
+## 7e -- the two triggers -- **landed**
 
-**Flashfire and Accelerated Growth**, and then 7f flips the app.
+**Delivered.** Flashfire re-rolls a parked die at four pauses; Accelerated Growth exchanges a dying
+Treefolk die for a small one at the `killUnits` seam. **All eighteen spells resolve** -- the
+assertion 7a wrote down as "false for every spell" is inverted now and stays as a guard. 682 tests
+(was 669), goldens byte-identical and unregenerated.
+
+### Where the plan was wrong
+
+- **Flashfire is not spent when used.** The plan had `applyFlashfire` drop the effect from
+  `state.effects`, so "used this roll" would need no flag. But the rule reads "may re-roll any one
+  unit in the target army **once** ... this effect **lasts until the beginning of your next turn**":
+  the "once" governs the reroll inside a roll and the duration governs how many rolls it reaches.
+  Dropping it would have made a spell that lasts a turn last a single roll. No flag is needed
+  anyway, for a better reason: the pause is **a step**, entered once per roll by construction.
+- **The four pauses cost four march steps, and the targeting queue had to move.**
+  `beginExchange` and `rollSaves` used to build the queue where they rolled. Flashfire is a step-3
+  reroll and SAIs are step 4, so a queue built before the reroll describes faces that are gone. Both
+  functions now park the dice and stop; `afterFlashfire` builds the queue on the far side. That is
+  the same "stash, ask, recompute" seam Phase 4a built, used for the first time by something that is
+  not an SAI.
+- **Accelerated Growth cannot be a decision.** The plan called it a "may" and therefore a pending.
+  `killUnits` is a pure transform called from eight places -- damage assignment, a breath, a Flame, a
+  Temple -- and not one of them can stop to ask. It is taken automatically, recorded as the one house
+  rule this spell needs, and the "may" is exercised by choosing to cast it.
+- **The open question the plan flagged dissolves.** Accelerated Growth and Rise from the Ashes both
+  fire on a death and the rules do not order them -- but Rise from the Ashes is on the **Phoenix and
+  nowhere else**, the Phoenix is Firewalkers, Accelerated Growth is Treefolk-only, and a force is one
+  species. They can never meet. There is a test that asserts this against `data/` rather than
+  trusting the reasoning.
+
+### Two things that would have shipped silently
+
+1. **`MID_EXCHANGE_STEPS` did not know the new steps**, so `validateState` called a parked attack
+   roll a breach the moment an exchange rested on one. The fuzz found it on seed 24 of 200 -- which
+   is the list doing exactly the job it was added for.
+2. **`rollOnTheTable` returned `null` at all four Flashfire pauses**, so the sheet would have asked
+   which dice to throw away **without showing what they came up as**. That is not a decision, and it
+   is the same bug the dragon allocation sheet shipped with in Phase 6. Caught by reading the
+   function rather than by playing it, and now pinned by a test.
+
+### What the browser could not reach, and why
+
+Flashfire is **Firewalkers-only and the human always plays p1**, which the bestiary pairing makes
+Treefolk -- so it cannot be cast from the browser at all as things stand. A temporary swapped force
+set got it cast, but the pause needs the warded army to make a non-maneuver roll *before the caster's
+next turn*, and against a `PassiveAI` that declines every attack the reachable window is one second
+march. Several attempts ended in a capture instead.
+
+Both scaffolds -- the `SPELL_RULES` flip and the swapped pairing -- were reverted before the commit.
+The sheet's engine side has six named tests and the fuzz fires it; its JSX is the retreat sheet's
+shape (grid selection, one button) and **7f's flip is where it will first be exercised in ordinary
+play**, since both sides cast from then on. That is the honest state of it.
+
+### Verification
+
+`npm test` 682 passed (25 files). `npm run typecheck` clean. `git diff --stat src/engine/__golden__/`
+empty. `python tools/validate_data.py` OK, **no spell left unbuilt**. Fuzz: 200 `SPELL_RULES` games
+across both force sets, `stuck === 0`, a counter `> 0` for **all eighteen spells**, plus a Flashfire
+taken, a Flashfire declined, and an Accelerated Growth exchange.
+
+---
+
+## 7f -- Cantrip, Dispel Magic, Standing Stones, Reserve magic, and the flip
 
 ### Checklist
 
-- [ ] Flashfire: the reroll **replaces** a parked face, `applyConfuse`'s mechanism pointed at the
-      roller's own dice -- and it needs a pause wherever an army roll is parked (`combat.attack`,
-      the save roll's delayed pause, `dragonAttack.armyDice`, and the magic roll)
-- [ ] the effect is **spent**: `applyFlashfire` drops it from `state.effects`, so "used this roll"
-      needs no flag on four parked objects
-- [ ] the house rule: a Flashfire reroll does not restart the reroll sweep
-- [ ] Accelerated Growth: a death trigger at `killUnits`, beside Rise from the Ashes;
-      `exchangeWithDua` used *downward*, which `promote` forbids and the primitive allows
-- [ ] it is **not a death**: no `units_killed`, no second trigger
-- [ ] **open question:** it and Rise from the Ashes both fire on the same death, and the rules do
-      not order them
-- [ ] `EffectTarget` gains `player` (Accelerated Growth targets "your DUA")
-- [ ] tests + fuzz with a per-spell counter > 0
+- [ ] Cantrip's second sentence: magic results that buy only `C`-marked spells, resolved immediately,
+      from a non-magic non-maneuver roll -- `cantripPool` exists and has no caller
+- [ ] `expectOnly`'s whitelist in **both** `attackFacts` and `finishSaves` gains the new effect kind,
+      in the same edit that adds it
+- [ ] **`resolveArmyRoll` (the dragon combination roll) has no `expectOnly` at all** -- a Cantrip
+      face there would be silently dropped. Add the guard, or generate no cantrip on
+      `purpose.kind === 'dragon_attack'` as a stated house rule. Doing neither is the failure mode
+      CLAUDE.md warns about
+- [ ] Dispel Magic: a window after every spell is announced and before any resolves, draining a queue
+      of its own (`dispelQueue` / `dropHeadDispel`) -- **not** folded into `TargetTask`
+- [ ] the Unicorn is the only die carrying it, and Firewalkers carry none: `treefolk_unicorn` is the
+      only board that can queue several
+- [ ] Standing Stones: mostly free already through `castingElements`; needs a test that a Treefolk
+      army holding a Wasteland one can cast the `Any` air and fire spells
+- [ ] Reserve magic: `marchingSlot` throws on `'reserve'` at 13 call sites; `Pending.choose_action.slot`,
+      `LogEntry.action_chosen.fromSlot` and `combat_resolved.attackerSlot` widen to `ArmyRef`
+- [ ] the flip: four lines (`cli/play.ts`, `newGame.ts` x2, `useGame.ts`), `SAVE_VERSION` -> 9
+- [ ] delete `docs/PHASE-7.md`, write `PLAN-V1.md`'s Phase 7 section from it, update `CLAUDE.md`

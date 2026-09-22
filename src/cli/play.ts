@@ -374,6 +374,20 @@ function describe(entry: LogEntry, state: GameState): string | null {
           dim(entry.from === 'pool' ? ' from the Summoning Pool' : ` from ${SLOT_LABEL[entry.from]}`),
       )
 
+    case 'flashfire':
+      return cyan(
+        `  ${bold('Flashfire')}: ${entry.unitIds.map((id) => nameOf(state, id)).join(', ')} ` +
+          dim('thrown again'),
+      )
+
+    case 'units_regrown':
+      return green(
+        `  ${bold('Accelerated Growth')}: ` +
+          entry.pairs
+            .map((pair) => `${nameOf(state, pair.unitId)} -> ${nameOf(state, pair.partnerId)}`)
+            .join(', '),
+      )
+
     case 'flash_flood':
       return cyan(
         `  ${bold('Flash Flood')} at ${SLOT_LABEL[entry.slot]} — ` +
@@ -604,6 +618,7 @@ function choicesFor(state: GameState, pending: Pending): Choice[] {
         action: { kind: 'spell_summon', dragonId } as GameAction,
       }))
 
+    case 'flashfire':
     case 'announce_spells':
     case 'temple_bury':
     case 'dragon_breath':
@@ -706,6 +721,26 @@ ${bold('Magic')} ${dim(`— ${plan.remaining} of ${pending.pool.points} left`)}`
       casts[at] = { ...(casts[at] as AnnouncedSpell), count: (casts[at] as AnnouncedSpell).count + 1 }
     }
   }
+}
+
+/** Flashfire: which of your own dice to throw again, or none. */
+async function askFlashfire(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'flashfire' }>,
+): Promise<GameAction> {
+  const units = pending.options
+    .map((id) => state.units[id])
+    .filter((u): u is UnitInstance => u !== undefined)
+
+  console.log(
+    `\n${bold('Flashfire')} ${dim(
+      `— up to ${pending.budget}, space-separated numbers, or enter to keep them`,
+    )}`,
+  )
+  units.forEach((unit, i) => console.log(`  ${i + 1}) ${name(unit)}`))
+
+  const picked = pick(units, (await ask('> ')).trim()).slice(0, pending.budget)
+  return { kind: 'flashfire', unitIds: picked.map((u) => u.id) }
 }
 
 /** A spell target in the terminal's own vocabulary. The join lives in `magic.ts`, so
@@ -1226,6 +1261,7 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
   if (pending.kind === 'eighth_face_city') return askEighthFaceCity(state, pending)
   if (pending.kind === 'temple_bury') return askTempleBury(state, pending)
   if (pending.kind === 'announce_spells') return askSpells(state, pending)
+  if (pending.kind === 'flashfire') return askFlashfire(state, pending)
 
   const choices = choicesFor(state, pending)
   for (;;) {

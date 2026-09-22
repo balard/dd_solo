@@ -135,6 +135,11 @@ export type MarchStep =
   // the save roll that follows and Galeforce subtracts from it -- so the seam has to
   // be a real state the machine can rest on, not a local variable.
   | 'resolve_attack'
+  // Flashfire, step 3: "the target's owner may re-roll any one unit in the target
+  // army once, ignoring the previous result". Before the SAIs rather than after,
+  // because the rulebook applies rerolls at step 3 and SAIs at step 4 -- and because
+  // a die that changes after the targeting queue was built would leave it stale.
+  | 'flashfire_attack'
   | 'sai_target_attack'
   // And the save roll is two steps for the same reason the attack was: the rulebook's
   // step 2 is "when rolling for saves against an attack, Delayed Effects are applied
@@ -142,14 +147,17 @@ export type MarchStep =
   // cannot be asked until the save dice are on the table and must be answered before
   // anything is counted.
   | 'resolve_attack_saves'
+  | 'flashfire_attack_saves'
   | 'sai_delayed_attack'
   | 'resolve_attack_damage'
   | 'assign_attack_damage'
   | 'assign_attack_riposte'
   | 'offer_counter'
   | 'resolve_counter'
+  | 'flashfire_counter'
   | 'sai_target_counter'
   | 'resolve_counter_saves'
+  | 'flashfire_counter_saves'
   | 'sai_delayed_counter'
   | 'resolve_counter_damage'
   | 'assign_counter_damage'
@@ -427,6 +435,9 @@ export type DragonAttackStep =
   | 'treasure'
   /** Step 6: the army's combination roll, and the allocation the roller owes. */
   | 'army_roll'
+  /** Flashfire on the combination roll, between the dice landing and the allocation
+   *  that spends them. */
+  | 'army_flashfire'
   /** Step 7, outgoing: which dragons the army's melee and missile go to. */
   | 'damage'
   /** Step 7, incoming: the army assigning what the dragons did to it. */
@@ -726,6 +737,20 @@ export type Pending =
    * rules give them the order because it is their turn, not because the dragons are
    * theirs.
    */
+  /**
+   * Flashfire: which of your own dice to throw again, ignoring what they showed.
+   *
+   * Answered by the owner of the army that rolled -- which on a save roll is the
+   * defender and on a counter-attack the marching player's opponent. An empty answer
+   * is always legal: "may re-roll".
+   */
+  | {
+      readonly kind: 'flashfire'
+      readonly player: PlayerId
+      readonly slot: ArmyRef
+      readonly budget: number
+      readonly options: readonly UnitId[]
+    }
   | {
       readonly kind: 'dragon_order'
       readonly player: PlayerId
@@ -840,6 +865,7 @@ export type GameAction =
   | { readonly kind: 'eighth_face_temple'; readonly force: boolean }
   | { readonly kind: 'temple_bury'; readonly unitId: UnitId }
   | { readonly kind: 'announce_spells'; readonly casts: readonly AnnouncedSpell[] }
+  | { readonly kind: 'flashfire'; readonly unitIds: readonly UnitId[] }
   | { readonly kind: 'dragon_order'; readonly slot: TerrainSlot }
   | {
       readonly kind: 'dragon_target'
@@ -1225,6 +1251,24 @@ export type LogEntry =
       readonly needed: number
       readonly resisted: number
       readonly moved: boolean
+    }
+  /** Flashfire: dice thrown again, and what they came back as. */
+  | {
+      readonly kind: 'flashfire'
+      readonly player: PlayerId
+      readonly slot: ArmyRef
+      readonly unitIds: readonly UnitId[]
+    }
+  /**
+   * Accelerated Growth: a die that would have died, swapped for a small one instead.
+   *
+   * Not a death, so there is no `units_killed` entry beside it and no death trigger
+   * fires -- an exchange never kills anybody (`dua.ts`).
+   */
+  | {
+      readonly kind: 'units_regrown'
+      readonly player: PlayerId
+      readonly pairs: readonly PromotionPair[]
     }
   /** Wall of Thorns: what a successful maneuver cost, after the melee roll that
    *  reduced it. */

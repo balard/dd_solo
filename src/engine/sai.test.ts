@@ -1163,7 +1163,12 @@ describe('the two halves of an exchange', () => {
   it('stops between the two rolls, holding the attack dice', () => {
     const mid = stepGame(atResolveAttack(twoOaklings()))
 
-    expect(mid.turn.marchStep).toBe('sai_target_attack')
+    // Phase 7e put Flashfire's pause here, at step 3, before the SAIs are applied at
+    // step 4 -- so the exchange now rests one step earlier than it used to. With no
+    // Flashfire in play the step passes straight through to the targeting seam.
+    expect(mid.turn.marchStep).toBe('flashfire_attack')
+    expect(stepGame(mid).turn.marchStep).toBe('sai_target_attack')
+
     expect(mid.turn.combat?.attack?.dice).toHaveLength(1)
     // The attack roll has happened; the save roll has not.
     expect(mid.log.some((e) => e.kind === 'combat_resolved')).toBe(false)

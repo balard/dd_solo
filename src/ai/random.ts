@@ -137,6 +137,18 @@ export const randomAi: AiPlayer = {
         return [{ kind: 'announce_spells', casts } as GameAction, state] as const
       }
 
+      // Declining stays in the pool: it is legal, it is what a sensible player does
+      // with a good roll, and a fuzz that always re-rolled would never reach the
+      // path where the faces are left alone.
+      case 'flashfire': {
+        const [howMany, afterCount] = nextInt(rng, pending.budget + 1)
+        const [shuffled, next] = shuffle(afterCount, pending.options)
+        return [
+          { kind: 'flashfire', unitIds: shuffled.slice(0, howMany) } as GameAction,
+          next,
+        ] as const
+      }
+
       case 'dragon_order': {
         const [slot, next] = pick(rng, pending.options)
         return [{ kind: 'dragon_order', slot } as GameAction, next] as const

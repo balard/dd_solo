@@ -112,6 +112,7 @@ export interface Prompt {
     | 'dragon_allocate'
     | 'dragon_damage_split'
     | 'announce_spells'
+    | 'flashfire'
 }
 
 const stepFace = (face: TerrainFace, direction: Direction): TerrainFace =>
@@ -380,6 +381,16 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         question: `Spend ${pending.melee} melee and ${pending.missile} missile on the dragons`,
         choices: [],
         custom: 'dragon_damage_split',
+      }
+
+    // A sheet rather than buttons: the answer is a set of your own dice, which is the
+    // grid's job, and the same gesture damage assignment uses.
+    case 'flashfire':
+      return {
+        question:
+          `Flashfire: throw ${pending.budget === 1 ? 'a die' : `up to ${pending.budget} dice`} again?`,
+        choices: [],
+        custom: 'flashfire',
       }
 
     case 'dragon_order':
@@ -793,6 +804,9 @@ export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): Sele
     // `sai_target` to point there, and the first ever that may be answered with none.
     case 'sai_promote':
     case 'sai_move':
+      return { side: 'mine', slot: pending.slot }
+    // Your own dice, at the terrain that just rolled them.
+    case 'flashfire':
       return { side: 'mine', slot: pending.slot }
     case 'retreat':
       return { side: 'mine', slot: null }

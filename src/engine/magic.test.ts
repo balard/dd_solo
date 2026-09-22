@@ -11,12 +11,13 @@ import { describe, expect, it } from 'vitest'
 
 import { randomAi } from '../ai/random'
 import { runGame } from '../ai/run'
-import { unitType } from '../data/load'
+import { UNIT_TYPES, unitType } from '../data/load'
 import type { Element } from '../data/types'
 import { SPELLS, spell, spellAcceptsElement, spellAllowsSpecies } from '../data/spells'
 
 import { legalActions } from './combat'
-import { armyRoll, pruneEffects, thornsAt, type Effect } from './effects'
+import { armyRoll, flashfireBudget, pruneEffects, thornsAt, type Effect } from './effects'
+import { deathEntries, killUnits, killedIds } from './death'
 import {
   announcementProblem,
   castableSpells,
@@ -28,13 +29,17 @@ import {
 import { advance, begin, reduce } from './reduce'
 import { BESTIARY_FORCES, STARTER_FORCES, setupGame } from './setup'
 import { castSpell, resolvesSpell, spellEffect, summonable, type SpellContext } from './spells'
+import { rollOnTheTable } from './turn'
 import {
   armyAt,
+  deadUnits,
   DRAGON_RULES,
   SPELL_RULES,
   V0_RULES,
   type DragonInPlay,
+  type ArmyRef,
   type GameState,
+  type Pending,
   type PlayerId,
   type SpellTarget,
   type TerrainSlot,
@@ -121,9 +126,12 @@ describe('resolvesSpell', () => {
   // Every slice moves names out of this list; by 7f it is empty and the test inverts.
   // Naming them rather than counting means a spell that quietly stops resolving shows
   // up here instead of passing on a number that happens to match.
-  it('resolves everything but the two triggers 7e still owes', () => {
-    const unbuilt = SPELLS.filter((s) => !resolvesSpell(s.id, SPELL_RULES)).map((s) => s.id).sort()
-    expect(unbuilt).toEqual(['accelerated_growth', 'flashfire'])
+  // The assertion 7a wrote down, finally inverted: every spell in the book resolves.
+  // It stays as a guard -- a spell added to `data/` with no code behind it fails here
+  // rather than being quietly uncastable.
+  it('resolves all eighteen', () => {
+    const unbuilt = SPELLS.filter((s) => !resolvesSpell(s.id, SPELL_RULES)).map((s) => s.id)
+    expect(unbuilt).toEqual([])
   })
 })
 
@@ -630,6 +638,181 @@ describe('Wall of Thorns', () => {
   }
 })
 
+describe('Flashfire', () => {
+  const ward = (state: GameState, player: PlayerId, ref: ArmyRef, count: number): GameState => ({
+    ...state,
+    effects: [
+      ...state.effects,
+      {
+        source: 'Flashfire',
+        target: { kind: 'army', player, army: ref },
+        modifiers: [],
+        flashfire: count,
+        expiresAtStartOfTurnOf: 'p2',
+      },
+    ],
+  })
+
+  it('is a budget, so separate castings reach more dice', () => {
+    const one = ward(gameAt('p1'), 'p1', 'frontier', 1)
+    expect(flashfireBudget(one, 'p1', 'frontier')).toBe(1)
+    expect(flashfireBudget(ward(one, 'p1', 'frontier', 1), 'p1', 'frontier')).toBe(2)
+    // It is the army's, not the player's: another terrain is untouched.
+    expect(flashfireBudget(one, 'p1', 'p1_home')).toBe(0)
+  })
+
+  it('modifies no roll, because a reroll is not arithmetic', () => {
+    const state = ward(gameAt('p1'), 'p1', 'frontier', 1)
+    expect(armyRoll(state, 'p1', 'frontier', 'melee').modifiers).toEqual([])
+  })
+
+  it('pauses an attack roll and replaces the die it is given', () => {
+    const paused = advance(atExchange(ward(gameAt('p1'), 'p1', 'frontier', 1)))
+
+    expect(paused.pending?.kind).toBe('flashfire')
+    const pending = paused.pending as Extract<Pending, { kind: 'flashfire' }>
+    const parked = (paused.turn.combat?.attack?.dice ?? []).length
+    const target = pending.options[0]!
+
+    const after = reduce(paused, { kind: 'flashfire', unitIds: [target] })
+    const resolved = after.log.find((e) => e.kind === 'combat_resolved')
+
+    expect(after.log.some((e) => e.kind === 'flashfire')).toBe(true)
+    // **Replaced, not appended.** Step 3's ordinary rerolls add a die and both faces
+    // count; this one throws the old face away, so the roll keeps its length -- which
+    // is the whole reason `SaiOutcome.reroll` cannot express it.
+    expect(resolved).toMatchObject({ attackDice: expect.any(Array) })
+    const dice = resolved?.kind === 'combat_resolved' ? resolved.attackDice : []
+    expect(dice.filter((d) => !d.reroll)).toHaveLength(parked)
+    expect(dice.filter((d) => d.unitId === target && !d.reroll)).toHaveLength(1)
+  })
+
+  it('draws nothing when it is declined', () => {
+    const paused = advance(atExchange(ward(gameAt('p1'), 'p1', 'frontier', 1)))
+    const declined = reduce(paused, { kind: 'flashfire', unitIds: [] })
+
+    // The same exchange with nobody warded: declining has to cost exactly what not
+    // being offered costs, or a Flashfire in play would shift every die after it.
+    const plain = advance(atExchange(gameAt('p1')))
+
+    expect(declined.rng.counter).toBe(plain.rng.counter)
+    expect(declined.log.some((e) => e.kind === 'flashfire')).toBe(false)
+  })
+
+  it('is not spent: the effect survives the roll it was used on', () => {
+    const paused = advance(atExchange(ward(gameAt('p1'), 'p1', 'frontier', 1)))
+    const used = reduce(paused, {
+      kind: 'flashfire',
+      unitIds: [(paused.pending as Extract<Pending, { kind: 'flashfire' }>).options[0]!],
+    })
+
+    // "This effect lasts until the beginning of your next turn" -- the "once" governs
+    // the reroll inside a roll, not the lifetime, so the next roll gets one too.
+    expect(flashfireBudget(used, 'p1', 'frontier')).toBe(1)
+    expect(used.effects.some((e) => e.source === 'Flashfire')).toBe(true)
+  })
+
+  it('refuses more dice than the budget, and dice that did not roll', () => {
+    const paused = advance(atExchange(ward(gameAt('p1'), 'p1', 'frontier', 1)))
+    const options = (paused.pending as Extract<Pending, { kind: 'flashfire' }>).options
+
+    expect(() => reduce(paused, { kind: 'flashfire', unitIds: options.slice(0, 2) })).toThrow(
+      /re-rolls 1 dice/,
+    )
+    expect(() => reduce(paused, { kind: 'flashfire', unitIds: ['nobody'] })).toThrow(/did not roll/)
+  })
+
+  it('shows the roll it is asking about', () => {
+    // "A decision sheet shows the roll that caused it" -- and this one more than most:
+    // being asked which dice to throw away without being shown what they came up as is
+    // not a decision at all. `rollOnTheTable` returned null at this step until a read
+    // of it caught that, which is the same bug the dragon allocation sheet had.
+    const paused = advance(atExchange(ward(gameAt('p1'), 'p1', 'frontier', 1)))
+    const shown = rollOnTheTable(paused)
+
+    expect(shown?.kind).toBe('attack')
+    expect(shown?.dice.length).toBeGreaterThan(0)
+  })
+
+  it('asks nobody when the army has no Flashfire on it', () => {
+    const paused = advance(atExchange(gameAt('p1')))
+    expect(paused.pending?.kind).not.toBe('flashfire')
+  })
+})
+
+describe('Accelerated Growth', () => {
+  const growing = (state: GameState, player: PlayerId): GameState => ({
+    ...state,
+    effects: [
+      ...state.effects,
+      {
+        source: 'Accelerated Growth',
+        target: { kind: 'player', player },
+        modifiers: [],
+        trigger: 'accelerated_growth',
+        expiresAtStartOfTurnOf: player,
+      },
+    ],
+  })
+
+  it('exchanges a dying die for a small one instead of killing it', () => {
+    const base = withDua(gameAt('p1'), 'p1', 1)
+    const small = deadUnits(base, 'p1')[0]!
+    const doomed = armyAt(base, 'p1', 'p1_home').find((u) => unitType(u.typeId).health >= 2)!
+
+    const outcome = killUnits(growing(base, 'p1'), [doomed.id])
+
+    expect(outcome.regrown).toEqual([{ unitId: doomed.id, partnerId: small.id }])
+    // They swapped places: the big one is in the DUA, the small one is on the board.
+    expect(outcome.state.units[doomed.id]?.location.kind).toBe('dua')
+    expect(outcome.state.units[small.id]?.location).toEqual({ kind: 'terrain', slot: 'p1_home' })
+    // **Not a death.** `killedIds` is what keeps it out of the caller's log entry.
+    expect(killedIds(outcome, [doomed.id])).toEqual([])
+    expect(deathEntries(outcome, 'p1', 'p1_home', [doomed.id]).map((e) => e.kind)).toEqual([
+      'units_regrown',
+    ])
+  })
+
+  it('does nothing without a one-health die in the DUA', () => {
+    const base = withDua(gameAt('p1'), 'p1', 2)
+    const doomed = armyAt(base, 'p1', 'p1_home').find((u) => unitType(u.typeId).health >= 2)!
+
+    const outcome = killUnits(growing(base, 'p1'), [doomed.id])
+    expect(outcome.regrown).toEqual([])
+    expect(outcome.state.units[doomed.id]?.location.kind).toBe('dua')
+  })
+
+  it('leaves a one-health die to die, having nothing smaller to become', () => {
+    const base = withDua(gameAt('p1'), 'p1', 1)
+    const doomed = armyAt(base, 'p1', 'p1_home').find((u) => unitType(u.typeId).health === 1)
+    if (doomed === undefined) return
+
+    expect(killUnits(growing(base, 'p1'), [doomed.id]).regrown).toEqual([])
+  })
+
+  it('spends each partner once, so two deaths cannot claim the same die', () => {
+    const base = withDua(gameAt('p1'), 'p1', 1)
+    const doomed = armyAt(base, 'p1', 'p1_home')
+      .filter((u) => unitType(u.typeId).health >= 2)
+      .slice(0, 2)
+    if (doomed.length < 2) return
+
+    const outcome = killUnits(growing(base, 'p1'), doomed.map((u) => u.id))
+    expect(outcome.regrown).toHaveLength(1)
+  })
+
+  it('can never meet Rise from the Ashes, which is a fact about the data', () => {
+    // Rise from the Ashes is on the Phoenix and nowhere else, and the Phoenix is a
+    // Firewalkers die; Accelerated Growth is Treefolk-only and a force is one species.
+    // So the ordering question the plan flagged as open cannot arise.
+    const risers = UNIT_TYPES.filter((type) =>
+      type.faces.some((face) => face.icon === 'SAI' && face.sai === 'Rise from the Ashes'),
+    )
+    expect(risers.map((t) => t.species)).toEqual(['firewalkers'])
+    expect(spell('accelerated_growth').species).toBe('treefolk')
+  })
+})
+
 describe('the Frontier dragon seed', () => {
   it('is gone once a spell can summon', () => {
     const state = setupGame({ seed: 4, forces: STARTER_FORCES, ruleSet: SPELL_RULES })
@@ -658,6 +841,9 @@ describe('the fuzz', () => {
     let moved = 0
     let flooded = 0
     let floodHeld = 0
+    let flashfires = 0
+    let declined = 0
+    let regrown = 0
 
     // Both force sets, because the two species reach different spell lists: Treefolk
     // can never cast an air or fire spell and Firewalkers never a water or earth one,
@@ -671,12 +857,17 @@ describe('the fuzz', () => {
         })
         if (result.stoppedBecause === 'stuck') stuck += 1
         announcements += result.record.actions.filter((a) => a.kind === 'announce_spells').length
+        declined += result.record.actions.filter(
+          (a) => a.kind === 'flashfire' && a.unitIds.length === 0,
+        ).length
         for (const entry of result.state.log) {
           if (entry.kind === 'magic_rolled') magicActions += 1
           if (entry.kind === 'spell_cast') cast.set(entry.spell, (cast.get(entry.spell) ?? 0) + 1)
           if (entry.kind === 'dragon_summoned') summoned += 1
           if (entry.kind === 'units_resurrected') resurrected += 1
           if (entry.kind === 'units_moved' && entry.sai === 'Path') moved += 1
+          if (entry.kind === 'flashfire') flashfires += 1
+          if (entry.kind === 'units_regrown') regrown += 1
           if (entry.kind === 'flash_flood') {
             if (entry.moved) flooded += 1
             else floodHeld += 1
@@ -696,13 +887,18 @@ describe('the fuzz', () => {
     expect(moved).toBeGreaterThan(0)
     expect(flooded).toBeGreaterThan(0)
     expect(floodHeld).toBeGreaterThan(0)
+    // Both triggers, and both of Flashfire's answers: a fuzz that always re-rolled
+    // would never reach the path where the faces are left alone.
+    expect(flashfires).toBeGreaterThan(0)
+    expect(declined).toBeGreaterThan(0)
+    expect(regrown).toBeGreaterThan(0)
 
     // The counters are what make a clean run mean something: a fuzz over rules nothing
     // reached would be green and prove nothing. **Every spell this build resolves
     // fires**, which is a stronger claim than a list, and it tightens on its own as
     // each later slice moves a name out of the unbuilt set.
     const live = SPELLS.filter((s) => resolvesSpell(s.id, SPELL_RULES)).map((s) => s.id)
-    expect(live).toHaveLength(16)
+    expect(live).toHaveLength(18)
     for (const id of live) expect(cast.get(id) ?? 0).toBeGreaterThan(0)
 
     // And nothing unbuilt is ever cast: a spell the rung cannot resolve is never
@@ -726,6 +922,22 @@ function cast(
     count: 1,
     ...over,
   })
+}
+
+/** A state paused at the start of an exchange at the Frontier. */
+function atExchange(base: GameState): GameState {
+  return {
+    ...base,
+    pending: null,
+    turn: {
+      ...base.turn,
+      marching: 'p1',
+      phase: 'march',
+      marchStep: 'resolve_attack',
+      marchingArmy: 'frontier',
+      combat: { action: 'melee', targetSlot: 'frontier', damage: 0 },
+    },
+  }
 }
 
 /** Empties an army, so an announced target can vanish before its spell resolves. */

@@ -472,6 +472,33 @@ function Line({
 
     // Both numbers, because "the flood failed" and "the flood failed by one result"
     // are different things to read on your opponent's turn.
+    case 'flashfire':
+      return (
+        <p className="log-line">
+          <b>Flashfire</b> throws{' '}
+          {entry.unitIds
+            .map((id) => (state.units[id] ? unitType(state.units[id]!.typeId).name : id))
+            .join(', ')}{' '}
+          again
+        </p>
+      )
+
+    // An exchange, not a death: the die that would have gone to the DUA is in it, and
+    // the small one it swapped with is on the board.
+    case 'units_regrown':
+      return (
+        <p className="log-line">
+          <b>Accelerated Growth</b>{' '}
+          {entry.pairs
+            .map(
+              (pair) =>
+                `${state.units[pair.unitId] ? unitType(state.units[pair.unitId]!.typeId).name : pair.unitId}` +
+                ` \u2192 ${state.units[pair.partnerId] ? unitType(state.units[pair.partnerId]!.typeId).name : pair.partnerId}`,
+            )
+            .join(', ')}
+        </p>
+      )
+
     case 'flash_flood':
       return (
         <p className="log-line">

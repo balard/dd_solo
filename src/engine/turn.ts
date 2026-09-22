@@ -53,9 +53,10 @@ import {
   promotionPartners,
   recruit,
 } from './dua'
-import { buryUnits, killAndBury, killUnits } from './death'
+import { buryUnits, deathEntries, killAndBury, killUnits } from './death'
 import {
   armyRoll,
+  flashfireBudget,
   thornsAt,
   doublesIds,
   expireEffects,
@@ -330,6 +331,14 @@ function stepMarch(state: GameState): GameState {
     // and the damage being assigned.
     case 'resolve_attack':
       return beginExchange(state, false)
+    case 'flashfire_attack':
+      return stepFlashfire(state, false, false)
+    case 'flashfire_attack_saves':
+      return stepFlashfire(state, false, true)
+    case 'flashfire_counter':
+      return stepFlashfire(state, true, false)
+    case 'flashfire_counter_saves':
+      return stepFlashfire(state, true, true)
     case 'sai_target_attack':
       return stepTargeting(state, false)
     case 'resolve_attack_saves':
@@ -443,16 +452,20 @@ function stepMarch(state: GameState): GameState {
 
 const COMBAT_SEQUENCE = [
   'resolve_attack',
+  'flashfire_attack',
   'sai_target_attack',
   'resolve_attack_saves',
+  'flashfire_attack_saves',
   'sai_delayed_attack',
   'resolve_attack_damage',
   'assign_attack_damage',
   'assign_attack_riposte',
   'offer_counter',
   'resolve_counter',
+  'flashfire_counter',
   'sai_target_counter',
   'resolve_counter_saves',
+  'flashfire_counter_saves',
   'sai_delayed_counter',
   'resolve_counter_damage',
   'assign_counter_damage',
@@ -465,13 +478,17 @@ type CombatStep = (typeof COMBAT_SEQUENCE)[number]
  *  deals. `CombatState.attack` may exist at these and nowhere else. */
 export const MID_EXCHANGE_STEPS: readonly MarchStep[] = [
   'resolve_attack',
+  'flashfire_attack',
   'sai_target_attack',
   'resolve_attack_saves',
+  'flashfire_attack_saves',
   'sai_delayed_attack',
   'resolve_attack_damage',
   'resolve_counter',
+  'flashfire_counter',
   'sai_target_counter',
   'resolve_counter_saves',
+  'flashfire_counter_saves',
   'sai_delayed_counter',
   'resolve_counter_damage',
 ]
@@ -600,32 +617,18 @@ function beginExchange(state: GameState, isCounter: boolean): GameState {
   const spec = exchangeSpec(state, isCounter)
   const [attack, rng] = rollAttack(state, spec)
 
-  // Reading the faces costs nothing and draws nothing -- `resolveFaces` is pure -- so
-  // the targeting queue is worked out here and the same faces are resolved again for
-  // real once the queue has drained. That is the whole point of the 4a seam.
-  const effects = attackEffects(state, spec, attack)
-  const targets = targetTasks(effects)
-  // Choke and Confuse wait for the defender's dice. They are parked here rather than
-  // with the save roll because they are *this* roll's SAIs and exist two steps before
-  // there is anything to apply them to.
-  const delayed = delayedTasks(effects)
-
-  // A spread, unlike the rebuild below, and safe for the opposite reason: this is
-  // the *same* exchange one step later, not the next one. Nothing between here and
-  // `finishExchange` reads `damage` or `riposte`, and `finishExchange` rebuilds the
-  // object from the outcome rather than from this.
+  // **The targeting queue is not built here.** Flashfire re-rolls a die at step 3,
+  // before SAIs are applied at step 4, and a queue worked out from faces that then
+  // change is a queue about dice nobody threw. So the dice are parked and the queue is
+  // built on the far side of the Flashfire pause, by `afterFlashfire`.
+  //
+  // A spread, unlike the rebuild in `finishExchange`, and safe for the opposite
+  // reason: this is the *same* exchange one step later, not the next one.
   return withTurn(
     { ...state, rng },
     {
-      marchStep: isCounter ? 'sai_target_counter' : 'sai_target_attack',
-      combat: {
-        ...combat,
-        attack: {
-          ...attack,
-          ...(targets.length > 0 ? { targets } : {}),
-          ...(delayed.length > 0 ? { delayed } : {}),
-        },
-      },
+      marchStep: isCounter ? 'flashfire_counter' : 'flashfire_attack',
+      combat: { ...combat, attack },
     },
   )
 }
@@ -975,18 +978,208 @@ function rollSaves(state: GameState, isCounter: boolean): GameState {
   }
 
   const [saves, rng] = rollSaveFaces(state, spec, state.rng)
+  // The queue waits for the Flashfire pause, for `beginExchange`'s reason: a save die
+  // thrown again would leave it describing faces that are gone.
+  return withTurn(
+    { ...state, rng },
+    {
+      marchStep: isCounter ? 'flashfire_counter_saves' : 'flashfire_attack_saves',
+      combat: withSaves(combat, saves, {}),
+    },
+  )
+}
+
+/** Which army threw the dice that are parked right now, and whose they are. */
+function flashfireArmy(
+  state: GameState,
+  isCounter: boolean,
+  onSaves: boolean,
+): { readonly player: PlayerId; readonly ref: ArmyRef } {
+  const spec = exchangeSpec(state, isCounter)
+  return onSaves
+    ? { player: spec.defender, ref: spec.defenderSlot }
+    : { player: spec.attacker, ref: spec.attackerSlot }
+}
+
+/**
+ * Flashfire's pause: "the target's owner may re-roll any one unit in the target army
+ * once, ignoring the previous result."
+ *
+ * Visited exactly once per roll by construction -- the step is entered, asked and left
+ * -- so nothing has to remember whether it has been used. The effect is **not** spent:
+ * it lasts until its caster's next turn and reaches every non-maneuver roll in between,
+ * which is what "this effect lasts until the beginning of your next turn" means beside
+ * a "once" that governs the reroll.
+ */
+function stepFlashfire(state: GameState, isCounter: boolean, onSaves: boolean): GameState {
+  const { player, ref } = flashfireArmy(state, isCounter, onSaves)
+  const budget = flashfireBudget(state, player, ref)
+  const dice = parkedDice(state, onSaves)
+
+  // No Flashfire on this army, or nothing on the table: nothing to ask.
+  if (budget === 0 || dice.length === 0) return afterFlashfire(state, isCounter, onSaves)
+
+  const options = [...new Set(dice.map((die) => die.unitId))]
+  return {
+    ...state,
+    pending: { kind: 'flashfire', player, slot: ref, budget: Math.min(budget, options.length), options },
+  }
+}
+
+const parkedDice = (state: GameState, onSaves: boolean): readonly RawDie[] => {
+  const combat = requireCombat(state)
+  return onSaves ? (combat.saves?.dice ?? []) : (combat.attack?.dice ?? [])
+}
+
+/**
+ * Builds the targeting queue from the faces as they finally stand, and moves on.
+ *
+ * This is where `beginExchange` and `rollSaves` used to end. It happens after the
+ * Flashfire pause instead, so the queue describes the dice that are actually on the
+ * table rather than the ones that were thrown first.
+ */
+function afterFlashfire(state: GameState, isCounter: boolean, onSaves: boolean): GameState {
+  const combat = requireCombat(state)
+  const spec = exchangeSpec(state, isCounter)
+  const attack = requireAttack(state, combat)
+
+  if (!onSaves) {
+    const effects = attackEffects(state, spec, attack)
+    const targets = targetTasks(effects)
+    // Choke and Confuse wait for the defender's dice. They are parked with the attack
+    // because they are *this* roll's SAIs and exist two steps before there is anything
+    // to apply them to.
+    const delayed = delayedTasks(effects)
+
+    return withTurn(state, {
+      marchStep: isCounter ? 'sai_target_counter' : 'sai_target_attack',
+      combat: {
+        ...combat,
+        attack: {
+          ...attack,
+          ...(targets.length > 0 ? { targets } : {}),
+          ...(delayed.length > 0 ? { delayed } : {}),
+        },
+      },
+    })
+  }
+
+  const saves = requireSaves(state, combat)
   // The attacker's delayed effects first, then the defending army's own -- the
   // rulebook's order, steps 2 then 4, and the one that lets a defender decide their
   // Wild Growth split knowing what Choke has already taken.
   const tasks = [...(attack.delayed ?? []), ...targetTasks(saveEffects(state, spec, saves))]
 
-  return withTurn(
+  return withTurn(state, {
+    marchStep: isCounter ? 'sai_delayed_counter' : 'sai_delayed_attack',
+    combat: withSaves(combat, saves, { tasks }),
+  })
+}
+
+/**
+ * Throws the named dice again, **replacing** what they showed.
+ *
+ * `applyConfuse`'s mechanism pointed at the roller's own dice: step 3's ordinary
+ * rerolls append and both faces count, so a replacement cannot go through
+ * `SaiOutcome.reroll`. The new dice sit where the old ones sat, so the strip still
+ * reads in unit order.
+ *
+ * **House rule:** this does not restart the reroll sweep, so a Rend that comes up on a
+ * Flashfire reroll does not roll again (`RULES-V0.md` section 15).
+ */
+function applyFlashfire(state: GameState, unitIds: readonly UnitId[]): GameState {
+  // The dragon roll is the one parked roll outside an exchange, so it answers first
+  // and by its own route -- exactly as `applyAssignDamage` branches on it.
+  if (state.turn.dragonAttack !== undefined) return applyDragonFlashfire(state, unitIds)
+
+  const step = state.turn.marchStep
+  const onSaves = step === 'flashfire_attack_saves' || step === 'flashfire_counter_saves'
+  const isCounter = step === 'flashfire_counter' || step === 'flashfire_counter_saves'
+  if (!onSaves && step !== 'flashfire_attack' && step !== 'flashfire_counter') {
+    throw new IllegalActionError(`no Flashfire is waiting (march step ${step})`)
+  }
+
+  const { player, ref } = flashfireArmy(state, isCounter, onSaves)
+  const budget = flashfireBudget(state, player, ref)
+  if (unitIds.length > budget) {
+    throw new IllegalActionError(`Flashfire re-rolls ${budget} dice, not ${unitIds.length}`)
+  }
+
+  const combat = requireCombat(state)
+  const dice = parkedDice(state, onSaves)
+  for (const id of unitIds) {
+    if (!dice.some((die) => die.unitId === id)) {
+      throw new IllegalActionError(`${id} did not roll, so Flashfire cannot throw it again`)
+    }
+  }
+
+  if (unitIds.length === 0) return afterFlashfire(state, isCounter, onSaves)
+
+  // Board order, not the order they were named -- `death.ts`'s rule, so two players
+  // naming the same dice differently get the same game.
+  let rng = state.rng
+  const replaced = new Map<UnitId, RawDie>()
+  for (const unit of Object.values(state.units)) {
+    if (!unitIds.includes(unit.id)) continue
+    const [rolled, next] = rollFaces([unit], rng)
+    rng = next
+    const die = rolled[0]
+    if (die !== undefined) replaced.set(unit.id, die)
+  }
+
+  const swapped = dice.map((die) => replaced.get(die.unitId) ?? die)
+  const rerolled = withLog(
     { ...state, rng },
-    {
-      marchStep: isCounter ? 'sai_delayed_counter' : 'sai_delayed_attack',
-      combat: withSaves(combat, saves, { tasks }),
-    },
+    { kind: 'flashfire', player, slot: ref, unitIds },
   )
+
+  const next = onSaves
+    ? withTurn(rerolled, {
+        combat: withSaves(combat, requireSaves(state, combat), { dice: swapped }),
+      })
+    : withTurn(rerolled, {
+        combat: { ...combat, attack: { ...requireAttack(state, combat), dice: swapped } },
+      })
+
+  return afterFlashfire(next, isCounter, onSaves)
+}
+
+/** Flashfire on the dragon combination roll. */
+function applyDragonFlashfire(state: GameState, unitIds: readonly UnitId[]): GameState {
+  const attack = dragonAttackOf(state)
+  const budget = flashfireBudget(state, attack.defender, attack.slot)
+  if (unitIds.length > budget) {
+    throw new IllegalActionError(`Flashfire re-rolls ${budget} dice, not ${unitIds.length}`)
+  }
+
+  const dice = attack.armyDice ?? []
+  for (const id of unitIds) {
+    if (!dice.some((die) => die.unitId === id)) {
+      throw new IllegalActionError(`${id} did not roll, so Flashfire cannot throw it again`)
+    }
+  }
+
+  if (unitIds.length === 0) return withDragonAttack(state, { ...attack, step: 'army_roll' })
+
+  let rng = state.rng
+  const replaced = new Map<UnitId, RawDie>()
+  for (const unit of Object.values(state.units)) {
+    if (!unitIds.includes(unit.id)) continue
+    const [rolled, next] = rollFaces([unit], rng)
+    rng = next
+    const die = rolled[0]
+    if (die !== undefined) replaced.set(unit.id, die)
+  }
+
+  const logged = withLog(
+    { ...state, rng },
+    { kind: 'flashfire', player: attack.defender, slot: attack.slot, unitIds },
+  )
+  return withDragonAttack(logged, {
+    ...attack,
+    step: 'army_roll',
+    armyDice: dice.map((die) => replaced.get(die.unitId) ?? die),
+  })
 }
 
 /**
@@ -1169,17 +1362,14 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
 
   // "The targets are killed and buried" is two steps because the rules are two, and a
   // Phoenix rolls Rise from the Ashes at each of them.
-  const { state: dead, risen } =
+  const outcome =
     task.fate === 'bury' ? killAndBury(rolled, doomed) : killUnits(rolled, doomed)
-  const buried = doomed.filter((id) => dead.units[id]?.location.kind === 'bua')
+  const buried = doomed.filter((id) => outcome.state.units[id]?.location.kind === 'bua')
 
   return dropHeadTask(
     withLog(
-      dead,
-      { kind: 'units_killed', player: spec.defender, slot: spec.defenderSlot, unitIds: doomed },
-      ...(risen.length > 0
-        ? [{ kind: 'units_risen', player: spec.defender, unitIds: risen } as const]
-        : []),
+      outcome.state,
+      ...deathEntries(outcome, spec.defender, spec.defenderSlot, doomed),
       ...(buried.length > 0
         ? [{ kind: 'units_buried', player: spec.defender, unitIds: buried } as const]
         : []),
@@ -1245,13 +1435,10 @@ function applyChoke(
   const combat = requireCombat(state)
   const saves = requireSaves(state, combat)
 
-  const { state: dead, risen } = killUnits(state, unitIds)
+  const outcome = killUnits(state, unitIds)
   const logged = withLog(
-    dead,
-    { kind: 'units_killed', player: spec.defender, slot: spec.defenderSlot, unitIds },
-    ...(risen.length > 0
-      ? [{ kind: 'units_risen', player: spec.defender, unitIds: risen } as const]
-      : []),
+    outcome.state,
+    ...deathEntries(outcome, spec.defender, spec.defenderSlot, unitIds),
   )
 
   const dice = saves.dice.filter((die) => !unitIds.includes(die.unitId))
@@ -1914,7 +2101,10 @@ export function rollOnTheTable(
   // should go. Resolved with an empty allocation purely to render -- `resolveFaces`
   // draws nothing, which is what lets the same faces be read twice.
   const dragon = state.turn.dragonAttack
-  if (dragon?.armyDice !== undefined && dragon.step === 'army_roll') {
+  if (
+    dragon?.armyDice !== undefined &&
+    (dragon.step === 'army_roll' || dragon.step === 'army_flashfire')
+  ) {
     // A combination roll cannot be resolved at all without an allocation that spends
     // the ID pool exactly -- `allocateIds` refuses, which crashed the sheet that was
     // trying to *show* the roll so the player could allocate it. The pool goes on one
@@ -1933,9 +2123,25 @@ export function rollOnTheTable(
   if (combat === null) return null
 
   const step = state.turn.marchStep
-  const isCounter = step === 'sai_target_counter' || step === 'sai_delayed_counter'
-  const delayed = step === 'sai_delayed_attack' || step === 'sai_delayed_counter'
-  if (!delayed && step !== 'sai_target_attack' && step !== 'sai_target_counter') return null
+  const isCounter =
+    step === 'sai_target_counter' ||
+    step === 'sai_delayed_counter' ||
+    step === 'flashfire_counter' ||
+    step === 'flashfire_counter_saves'
+  // Flashfire's pause is about the save dice at the two `_saves` steps and the attack
+  // dice at the other two, the same split the targeting and delayed pauses make.
+  const delayed =
+    step === 'sai_delayed_attack' ||
+    step === 'sai_delayed_counter' ||
+    step === 'flashfire_attack_saves' ||
+    step === 'flashfire_counter_saves'
+  const asking =
+    delayed ||
+    step === 'sai_target_attack' ||
+    step === 'sai_target_counter' ||
+    step === 'flashfire_attack' ||
+    step === 'flashfire_counter'
+  if (!asking) return null
 
   const attack = combat.attack
   if (attack === undefined) return null
@@ -2758,13 +2964,10 @@ function applyDragonAssign(state: GameState, unitIds: readonly UnitId[]): GameSt
   const problem = damageAssignmentProblem(army, pending.damage, unitIds)
   if (problem !== null) throw new IllegalActionError(problem)
 
-  const { state: dead, risen } = killUnits(state, unitIds)
+  const outcome = killUnits(state, unitIds)
   const killed = withLog(
-    dead,
-    { kind: 'units_killed', player: attack.defender, slot: attack.slot, unitIds },
-    ...(risen.length > 0
-      ? [{ kind: 'units_risen', player: attack.defender, unitIds: risen } as const]
-      : []),
+    outcome.state,
+    ...deathEntries(outcome, attack.defender, attack.slot, unitIds),
   )
 
   return endDragonAttack(killed, attack)
@@ -2841,12 +3044,35 @@ function stepDragonAttack(state: GameState): GameState {
       if (attack.armyDice === undefined) {
         const { units } = armyRoll(state, attack.defender, attack.slot, 'melee')
         const [dice, rng] = rollFaces(units, state.rng)
-        return withDragonAttack({ ...state, rng }, { ...attack, armyDice: dice })
+        // Flashfire first: it is a step-3 reroll, and the allocation at step 5 spends
+        // the faces it may have changed.
+        return withDragonAttack({ ...state, rng }, { ...attack, step: 'army_flashfire', armyDice: dice })
       }
       const pending = armyRollPending(state, attack)
       if (pending !== null) return { ...state, pending }
       // Nothing to allocate: resolve the same faces straight through.
       return resolveArmyRoll(state, attack)
+    }
+
+    // The fourth place an army roll rests between landing and being counted, and the
+    // only one outside an exchange.
+    case 'army_flashfire': {
+      const budget = flashfireBudget(state, attack.defender, attack.slot)
+      const dice = attack.armyDice ?? []
+      if (budget === 0 || dice.length === 0) {
+        return withDragonAttack(state, { ...attack, step: 'army_roll' })
+      }
+      const options = [...new Set(dice.map((die) => die.unitId))]
+      return {
+        ...state,
+        pending: {
+          kind: 'flashfire',
+          player: attack.defender,
+          slot: attack.slot,
+          budget: Math.min(budget, options.length),
+          options,
+        },
+      }
     }
 
     case 'damage': {
@@ -3163,12 +3389,8 @@ function applyThornsDamage(state: GameState, unitIds: readonly UnitId[]): GameSt
   const problem = damageAssignmentProblem(army, owed.damage, unitIds)
   if (problem !== null) throw new IllegalActionError(problem)
 
-  const { state: dead, risen } = killUnits(state, unitIds)
-  const killed = withLog(
-    dead,
-    { kind: 'units_killed', player, slot: owed.slot, unitIds },
-    ...(risen.length > 0 ? [{ kind: 'units_risen', player, unitIds: risen } as const] : []),
-  )
+  const outcome = killUnits(state, unitIds)
+  const killed = withLog(outcome.state, ...deathEntries(outcome, player, owed.slot, unitIds))
 
   // Built field by field so `thorns` is dropped by omission, the rule every optional
   // field near the digest follows.
@@ -3286,18 +3508,11 @@ function applyAssignDamage(state: GameState, unitIds: readonly UnitId[]): GameSt
   // Not `applyDamage`: a death is a moment a rule can intervene in. Under
   // `dua: 'inert'` this is `applyDamage` and consumes no randomness, which is what
   // keeps the golden corpus byte-identical.
-  const { state: dead, risen } = killUnits(state, unitIds)
-
-  const killed = withLog(
-    dead,
-    { kind: 'units_killed', player: victim, slot, unitIds },
-    // A subset of the line above, and a second entry rather than a field on it: the
-    // unit really was killed, and then moved. Omitted entirely when nothing rose,
-    // because every golden digest carries every log entry verbatim.
-    ...(risen.length > 0
-      ? [{ kind: 'units_risen', player: victim, unitIds: risen } as const]
-      : []),
-  )
+  // The three-way split -- really dead, risen, or exchanged by an Accelerated Growth --
+  // is `deathEntries`' business. Every optional entry is omitted when empty, because
+  // every golden digest carries every log entry verbatim.
+  const outcome = killUnits(state, unitIds)
+  const killed = withLog(outcome.state, ...deathEntries(outcome, victim, slot, unitIds))
 
   return afterCombatStep(killed, step)
 
@@ -3312,13 +3527,10 @@ function applySpellDamage(state: GameState, unitIds: readonly UnitId[]): GameSta
   const problem = damageAssignmentProblem(army, choice.damage, unitIds)
   if (problem !== null) throw new IllegalActionError(problem)
 
-  const { state: dead, risen } = killUnits(state, unitIds)
+  const outcome = killUnits(state, unitIds)
   const killed = withLog(
-    dead,
-    { kind: 'units_killed', player: choice.player, slot: choice.army, unitIds },
-    ...(risen.length > 0
-      ? [{ kind: 'units_risen', player: choice.player, unitIds: risen } as const]
-      : []),
+    outcome.state,
+    ...deathEntries(outcome, choice.player, choice.army, unitIds),
   )
 
   return afterSpellChoice(killed, null)
@@ -3499,6 +3711,8 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyDragonOrder(cleared, action.slot)
     case 'dragon_target':
       return applyDragonTarget(cleared, action.targets)
+    case 'flashfire':
+      return applyFlashfire(cleared, action.unitIds)
     case 'spell_move':
       return applySpellMove(cleared, action.slot)
     case 'spell_summon':

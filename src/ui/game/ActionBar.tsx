@@ -431,9 +431,12 @@ export function ActionBar({
  * happens to the dice afterwards. `SAI_TEXT` lives beside the handlers so the sentence
  * and the behaviour cannot drift.
  */
-function SaiHeader({ state, sai }: { state: GameState; sai: string }) {
+function SaiHeader({ state, sai, rule }: { state: GameState; sai?: string; rule?: string }) {
   const roll = rollOnTheTable(state)
-  const text = SAI_TEXT[sai]
+  // A spell's sentence lives in `data/spells.json` rather than in `SAI_TEXT`, so a
+  // caller that already has one hands it over. Flashfire is the first: it raises a
+  // decision on a roll exactly as a targeting SAI does, and wants the same header.
+  const text = rule ?? (sai === undefined ? undefined : SAI_TEXT[sai])
 
   return (
     <>
@@ -861,6 +864,45 @@ function SaiHeader({ state, sai }: { state: GameState; sai: string }) {
                 </button>
               )}
             </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (prompt.custom === 'flashfire' && pending.kind === 'flashfire') {
+    // Your own dice, chosen from the grid -- the same gesture damage assignment and
+    // retreat use, because the answer is a set of units and that is what the grid is.
+    const chosen = [...selection].filter((id) => pending.options.includes(id))
+    const over = chosen.length > pending.budget
+
+    return (
+      <div className="action-bar">
+        <p className="question">
+          {prompt.question}
+          <span className="muted">
+            {' '}
+            — tap the dice you want back
+            {chosen.length > 0 ? ` (${chosen.length} of ${pending.budget})` : ''}
+          </span>
+        </p>
+        <SaiHeader state={state} rule={spell('flashfire').text} />
+        <div className="choices">
+          <button
+            type="button"
+            className={chosen.length === 0 ? 'choice secondary' : 'choice'}
+            disabled={over}
+            onClick={() => {
+              dispatch({ kind: 'flashfire', unitIds: chosen })
+              onClearSelection()
+            }}
+          >
+            {chosen.length === 0 ? 'Keep them' : `Throw ${chosen.length} again`}
+          </button>
+          {chosen.length > 0 && (
+            <button type="button" className="choice secondary" onClick={onClearSelection}>
+              Clear
+            </button>
           )}
         </div>
       </div>

@@ -27,7 +27,7 @@ import { spell, type Spell, type SpellEffectSpec, type SpellModifierSpec } from 
 import type { Element, ResultType } from '../data/types'
 
 import { healthsOf, maxAbsorbable } from './damage'
-import { killUnits } from './death'
+import { deathEntries, killUnits } from './death'
 import { returnFromDua } from './dua'
 import { armyRoll, unitRoll, type Effect, type EffectTarget } from './effects'
 import { expectNoEffects, rollArmy, rollUnits, type DieRoll } from './roll'
@@ -392,16 +392,13 @@ const lightningStrike: SpellHandler = (state, ctx) => {
 
   if (rolled.failed.length === 0) return { state: logged }
 
-  const { state: dead, risen } = killUnits(logged, rolled.failed)
+  const outcome = killUnits(logged, rolled.failed)
   return {
     state: {
-      ...dead,
+      ...outcome.state,
       log: [
-        ...dead.log,
-        { kind: 'units_killed', player: victim, slot: where, unitIds: rolled.failed },
-        ...(risen.length > 0
-          ? [{ kind: 'units_risen' as const, player: victim, unitIds: risen }]
-          : []),
+        ...outcome.state.log,
+        ...deathEntries(outcome, victim, where, rolled.failed),
       ],
     },
   }
@@ -522,7 +519,79 @@ function slotOf(state: GameState, ids: readonly UnitId[]): ArmyRef {
   return first !== undefined && first.location.kind === 'terrain' ? first.location.slot : 'reserve'
 }
 
+/**
+ * Flashfire: a standing licence to throw one of your own dice again.
+ *
+ * An `Effect` with no modifiers, like Wall of Thorns -- a reroll is not arithmetic on
+ * a roll. `Effect.flashfire` is how many dice it covers, because the cumulative number
+ * is "any **one** unit" and two separate castings therefore reach two.
+ */
+const flashfire: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'army') throw new Error('Flashfire targets an army')
+
+  return {
+    state: {
+      ...state,
+      effects: [
+        ...state.effects,
+        {
+          source: 'Flashfire',
+          target: { kind: 'army', player: ctx.target.player, army: ctx.target.army },
+          modifiers: [],
+          flashfire: ctx.count,
+          expiresAtStartOfTurnOf: ctx.caster,
+        },
+      ],
+      log: [
+        ...state.log,
+        {
+          kind: 'effect_cast',
+          player: ctx.caster,
+          source: 'Flashfire',
+          target: ctx.target.player,
+          slot: ctx.target.army,
+        },
+      ],
+    },
+  }
+}
+
+/**
+ * Accelerated Growth: a standing licence for your dying Treefolk to swap places with a
+ * small one instead.
+ *
+ * Targets the *player*, not an army or a terrain: "target your DUA", which is neither.
+ * `killUnits` reads it; nothing that throws dice does.
+ */
+const acceleratedGrowth: SpellHandler = (state, ctx) => ({
+  state: {
+    ...state,
+    effects: [
+      ...state.effects,
+      {
+        source: 'Accelerated Growth',
+        target: { kind: 'player', player: ctx.caster },
+        modifiers: [],
+        trigger: 'accelerated_growth',
+        expiresAtStartOfTurnOf: ctx.caster,
+      },
+    ],
+    log: [
+      ...state.log,
+      {
+        kind: 'effect_cast',
+        player: ctx.caster,
+        source: 'Accelerated Growth',
+        target: ctx.caster,
+        slot: ctx.army,
+      },
+    ],
+  },
+})
+
 const HANDLERS: Readonly<Record<string, SpellHandler>> = {
+  flashfire,
+  accelerated_growth: acceleratedGrowth,
   hailstorm,
   path,
   resurrect_dead: resurrectDead,

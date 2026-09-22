@@ -654,6 +654,11 @@ nothing.
   would be a decision with nowhere to live. `RollContext.isTrigger` is what suppresses them, and
   it is a sibling of `isSubRoll` rather than a reuse of it: there a die rolls for its life with no
   army behind it, here an army really is rolling. Only the consequence is shared.
+- **Accelerated Growth is taken automatically, not offered.** "You **may** instead exchange it with
+  a one health Treefolk unit from your DUA" -- but `killUnits` is a pure transform called from eight
+  places, and none of them can stop to ask. The "may" is exercised by choosing to cast the spell.
+- **A Flashfire reroll does not restart the reroll sweep**, so a Rend that comes up on one does not
+  roll again. It is a step-3 reroll arriving after step 3 has finished.
 - **Resurrect Dead prices its target rather than its caster.** A unit's health *is* the number of
   castings it needs, so a 2-health unit costs six magic. That number rides on the offer, not in a
   rule the clients have to know, which is what stops either of them showing a target the engine
@@ -673,6 +678,14 @@ nothing.
   twelve maneuver results; they do not push the terrain down twice. "A terrain may never be reduced
   by more than one step during a player's turn from the effects of Flash Flood", so a second
   casting at the same terrain still rolls and still achieves nothing.
+- **Flashfire is once per *roll*, not once in total.** "The target's owner may re-roll any one unit
+  in the target army once ... This effect lasts until the beginning of your next turn." The "once"
+  governs the reroll inside a roll; the duration governs how many rolls it reaches. So the effect is
+  not spent when used, and two separate castings allow two dice in every roll.
+- **Accelerated Growth and Rise from the Ashes can never meet.** Both fire on a death, and the rules
+  do not order them -- but Rise from the Ashes is on the Phoenix and nowhere else, the Phoenix is a
+  Firewalkers die, Accelerated Growth is Treefolk-only, and a force is one species. The ordering
+  question cannot arise, and `magic.test.ts` checks that against the data rather than trusting it.
 - **A terrain effect never ends early.** "If an army is destroyed ... any spells affecting that army
   end" is a rule about armies. A terrain cannot empty, so Ash Storm and Wall of Fog run their full
   duration whoever is standing there.

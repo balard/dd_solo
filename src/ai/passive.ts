@@ -54,6 +54,12 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     // put a decision in its hands. Each takes the first legal answer: there is no
     // passive option -- a declared target and a summoned dragon are forced once the
     // spell resolves -- and picking is not the same as wanting.
+    // It declines the reroll, which is the one genuinely passive answer among these:
+    // "may re-roll", and keeping what you rolled is a real choice rather than a
+    // forfeit.
+    case 'flashfire':
+      return { kind: 'flashfire', unitIds: [] }
+
     case 'dragon_order':
       return { kind: 'dragon_order', slot: pending.options[0] as TerrainSlot }
 

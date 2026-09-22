@@ -97,7 +97,8 @@
       "cumulative": true,
       "reserves": true,
       "cantrip": true,
-      "text": "Target any army. During any non-maneuver army roll, the target's owner may re-roll any one unit in the target army once, ignoring the previous result. This effect lasts until the beginning of your next turn."
+      "text": "Target any army. During any non-maneuver army roll, the target's owner may re-roll any one unit in the target army once, ignoring the previous result. This effect lasts until the beginning of your next turn.",
+      "handler": "flashfire"
     },
     {
       "id": "fiery_weapon",
@@ -183,7 +184,8 @@
       "cumulative": false,
       "reserves": true,
       "cantrip": true,
-      "text": "Target your DUA. When a two (or greater) health Treefolk unit is killed, you may instead exchange it with a one health Treefolk unit from your DUA. This effect lasts until the beginning of your next turn."
+      "text": "Target your DUA. When a two (or greater) health Treefolk unit is killed, you may instead exchange it with a one health Treefolk unit from your DUA. This effect lasts until the beginning of your next turn.",
+      "handler": "accelerated_growth"
     },
     {
       "id": "flash_flood",

@@ -28,9 +28,19 @@
 import { unitType } from '../data/load'
 
 import { applyDamage } from './damage'
-import { bury } from './dua'
+import { bury, exchangeWithDua } from './dua'
+import { regrows } from './effects'
 import { rollDie } from './rng'
-import type { GameState, UnitId, UnitInstance } from './types'
+import {
+  deadUnits,
+  type ArmyRef,
+  type GameState,
+  type LogEntry,
+  type PlayerId,
+  type PromotionPair,
+  type UnitId,
+  type UnitInstance,
+} from './types'
 
 /**
  * The SAI whose whole point is this file.
@@ -46,6 +56,55 @@ export interface DeathOutcome {
   /** Units that rolled their way into Reserves instead. Always a subset of what was
    *  passed in, and empty under `dua: 'inert'`. */
   readonly risen: readonly UnitId[]
+  /**
+   * Accelerated Growth: units that were exchanged rather than killed (Phase 7e).
+   *
+   * **They were never killed**, which is the difference between this and `risen`: a
+   * risen unit really died and then moved, and the log says both. These did not die at
+   * all, so the caller must leave them out of its `units_killed` entry -- which is what
+   * `killedIds` is for.
+   */
+  readonly regrown: readonly PromotionPair[]
+}
+
+/** What a caller should actually report as killed, given what it asked for. */
+export function killedIds(
+  outcome: DeathOutcome,
+  requested: readonly UnitId[],
+): readonly UnitId[] {
+  if (outcome.regrown.length === 0) return requested
+  const swapped = new Set(outcome.regrown.map((pair) => pair.unitId))
+  return requested.filter((id) => !swapped.has(id))
+}
+
+/**
+ * The log one death produces: who really died, who rose, and who was exchanged.
+ *
+ * Entries are *built* here rather than written -- this file still logs nothing and
+ * still knows nothing about phases. They are built here because the three-way split is
+ * a fact about what `killUnits` just did, and eight call sites each deriving it from
+ * `risen` and `regrown` is eight chances to report a unit as killed that never died.
+ */
+export function deathEntries(
+  outcome: DeathOutcome,
+  player: PlayerId,
+  slot: ArmyRef,
+  requested: readonly UnitId[],
+): readonly LogEntry[] {
+  const killed = killedIds(outcome, requested)
+  return [
+    ...(killed.length > 0
+      ? [{ kind: 'units_killed', player, slot, unitIds: killed } as const]
+      : []),
+    // A subset of the line above: the unit really was killed, and then moved.
+    ...(outcome.risen.length > 0
+      ? [{ kind: 'units_risen', player, unitIds: outcome.risen } as const]
+      : []),
+    // Not a subset of anything: these never died at all.
+    ...(outcome.regrown.length > 0
+      ? [{ kind: 'units_regrown', player, pairs: outcome.regrown } as const]
+      : []),
+  ]
 }
 
 const hasRiseFace = (unit: UnitInstance): boolean =>
@@ -67,7 +126,7 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
   const candidates = Object.values(state.units).filter(
     (unit) => unitIds.includes(unit.id) && hasRiseFace(unit),
   )
-  if (candidates.length === 0) return { state, risen: [] }
+  if (candidates.length === 0) return { state, risen: [], regrown: [] }
 
   const units = { ...state.units }
   const risen: UnitId[] = []
@@ -88,7 +147,7 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
     risen.push(unit.id)
   }
 
-  return { state: { ...state, units, rng }, risen }
+  return { state: { ...state, units, rng }, risen, regrown: [] }
 }
 
 /**
@@ -99,9 +158,58 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
  * does, because the win check runs after every state change.
  */
 export function killUnits(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
-  const killed = applyDamage(state, unitIds)
-  if (state.ruleSet.dua !== 'active') return { state: killed, risen: [] }
-  return riseFromTheAshes(killed, unitIds)
+  // Accelerated Growth intercepts first: a unit it saves never reaches `applyDamage`,
+  // so it is never killed and no death trigger fires on it.
+  const regrown = acceleratedGrowth(state, unitIds)
+  const grown = regrown.length === 0 ? state : exchangeWithDua(state, regrown)
+  const dying = killedIds({ state: grown, risen: [], regrown }, unitIds)
+
+  const killed = applyDamage(grown, dying)
+  if (state.ruleSet.dua !== 'active') return { state: killed, risen: [], regrown }
+  return { ...riseFromTheAshes(killed, dying), regrown }
+}
+
+/**
+ * Accelerated Growth: "when a two (or greater) health Treefolk unit is killed, you may
+ * instead exchange it with a one health Treefolk unit from your DUA."
+ *
+ * **Taken automatically rather than offered**, which is a house rule and the only one
+ * this spell needs (`RULES-V0.md` section 15). The "may" is exercised by choosing to
+ * cast it: `killUnits` is a pure transform called from eight places -- damage
+ * assignment, a breath, a Flame, a Temple -- and none of them can stop to ask.
+ *
+ * Board order, and one partner per dying unit, so two deaths in one assignment cannot
+ * both claim the same small die.
+ */
+function acceleratedGrowth(
+  state: GameState,
+  unitIds: readonly UnitId[],
+): readonly PromotionPair[] {
+  if (state.ruleSet.dua !== 'active') return []
+
+  const pairs: PromotionPair[] = []
+  const taken = new Set<UnitId>()
+
+  for (const unit of Object.values(state.units)) {
+    if (!unitIds.includes(unit.id)) continue
+    if (!regrows(state, unit.owner)) continue
+
+    const type = unitType(unit.typeId)
+    if (type.health < 2) continue
+
+    const partner = deadUnits(state, unit.owner).find(
+      (dead) =>
+        !taken.has(dead.id) &&
+        unitType(dead.typeId).species === type.species &&
+        unitType(dead.typeId).health === 1,
+    )
+    if (partner === undefined) continue
+
+    taken.add(partner.id)
+    pairs.push({ unitId: unit.id, partnerId: partner.id })
+  }
+
+  return pairs
 }
 
 /**
@@ -112,8 +220,8 @@ export function killUnits(state: GameState, unitIds: readonly UnitId[]): DeathOu
  */
 export function buryUnits(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
   const buried = bury(state, unitIds)
-  if (state.ruleSet.dua !== 'active') return { state: buried, risen: [] }
-  return riseFromTheAshes(buried, unitIds)
+  if (state.ruleSet.dua !== 'active') return { state: buried, risen: [], regrown: [] }
+  return { ...riseFromTheAshes(buried, unitIds), regrown: [] }
 }
 
 /**
@@ -137,6 +245,10 @@ export function killAndBury(state: GameState, unitIds: readonly UnitId[]): Death
   const survivors = unitIds.filter((id) => !killed.risen.includes(id))
   const buried = buryUnits(killed.state, survivors)
 
-  return { state: buried.state, risen: [...killed.risen, ...buried.risen] }
+  return {
+    state: buried.state,
+    risen: [...killed.risen, ...buried.risen],
+    regrown: killed.regrown,
+  }
 }
 

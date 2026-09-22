@@ -62,6 +62,12 @@ export type EffectTarget =
   | { readonly kind: 'army'; readonly player: PlayerId; readonly army: ArmyRef }
   | { readonly kind: 'unit'; readonly unitId: UnitId }
   | { readonly kind: 'terrain'; readonly slot: TerrainSlot; readonly scope: TerrainScope }
+  /**
+   * Accelerated Growth: "target your DUA". Not a place a roll happens and not an army
+   * that can empty -- it follows the *player*, and it is read by `killUnits` rather
+   * than by anything that throws dice.
+   */
+  | { readonly kind: 'player'; readonly player: PlayerId }
 
 /**
  * Who a terrain-scoped effect reaches.
@@ -102,6 +108,19 @@ export interface Effect {
    */
   readonly thorns?: number
   /**
+   * Flashfire: how many of the target army's dice its owner may re-roll, **once per
+   * roll** rather than once in total.
+   *
+   * "During any non-maneuver army roll, the target's owner may re-roll any one unit in
+   * the target army once ... This effect lasts until the beginning of your next turn."
+   * The "once" governs the reroll inside a roll; the duration governs how many rolls
+   * it reaches. Two separate castings therefore allow two dice, which is what makes
+   * this a number rather than a flag.
+   */
+  readonly flashfire?: number
+  /** Accelerated Growth: what `killUnits` does instead of killing a Treefolk die. */
+  readonly trigger?: 'accelerated_growth'
+  /**
    * "Until the beginning of your next turn" -- *your* being whoever made the roll,
    * which on a counter-attack is the defending player, not the marching one.
    *
@@ -117,6 +136,9 @@ const targetsArmy = (effect: Effect, player: PlayerId, ref: ArmyRef): boolean =>
 
 const targetsUnit = (effect: Effect, unitId: UnitId): boolean =>
   effect.target.kind === 'unit' && effect.target.unitId === unitId
+
+const targetsPlayer = (effect: Effect, player: PlayerId): boolean =>
+  effect.target.kind === 'player' && effect.target.player === player
 
 const targetsTerrain = (effect: Effect, ref: ArmyRef, scope: TerrainScope): boolean =>
   effect.target.kind === 'terrain' &&
@@ -298,6 +320,27 @@ export function unitRoll(state: GameState, unitId: UnitId): UnitRollInput {
 }
 
 /**
+ * How many of this army's dice Flashfire lets its owner re-roll in one roll.
+ *
+ * Summed across separate castings, the same arithmetic `thornsAt` does and for the
+ * same reason: two announcements are two spells, and both apply.
+ */
+export function flashfireBudget(state: GameState, player: PlayerId, ref: ArmyRef): number {
+  let total = 0
+  for (const effect of state.effects) {
+    if (targetsArmy(effect, player, ref)) total += effect.flashfire ?? 0
+  }
+  return total
+}
+
+/** Accelerated Growth: whether this player's dead are exchanging rather than dying. */
+export function regrows(state: GameState, player: PlayerId): boolean {
+  return state.effects.some(
+    (effect) => targetsPlayer(effect, player) && effect.trigger === 'accelerated_growth',
+  )
+}
+
+/**
  * Wall of Thorns' damage at a terrain, or 0.
  *
  * Summed rather than taken singly: two castings of a cumulative spell on one target
@@ -360,6 +403,10 @@ export function pruneEffects(state: GameState): GameState {
       // ends by expiring. "If an army is destroyed ... any spells affecting that army
       // end" is a rule about armies, and this is not one.
       case 'terrain':
+        return true
+      // A player is never gone: losing every unit ends the game rather than the
+      // effect, and `stepGame` prunes before it checks for a winner.
+      case 'player':
         return true
       case 'unit': {
         const unit = state.units[effect.target.unitId]
