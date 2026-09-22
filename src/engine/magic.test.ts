@@ -15,8 +15,9 @@ import { UNIT_TYPES, unitType } from '../data/load'
 import type { Element } from '../data/types'
 import { SPELLS, spell, spellAcceptsElement, spellAllowsSpecies } from '../data/spells'
 
-import { legalActions } from './combat'
+import { legalActions, resolveAttack, type AttackSpec } from './combat'
 import { saiEffects, type RollContext } from './sai'
+import type { DieRoll } from './roll'
 import { marchableArmies } from './turn'
 import { armyRoll, flashfireBudget, pruneEffects, thornsAt, type Effect } from './effects'
 import { deathEntries, killUnits, killedIds } from './death'
@@ -36,6 +37,7 @@ import { castSpell, resolvesSpell, spellEffect, summonable, type SpellContext } 
 import { rollOnTheTable } from './turn'
 import {
   armyAt,
+  army as armyRef,
   deadUnits,
   DRAGON_RULES,
   SPELL_RULES,
@@ -405,7 +407,37 @@ describe('the board spells', () => {
     expect(outcome.choice).toBeUndefined()
   })
 
-  it('asks the defender who dies when a Hailstorm can kill', () => {
+  it('asks the defender who dies when a Hailstorm gets past their saves', () => {
+    // Enough castings that no save roll this army can make will stop all of it.
+    const state = gameAt('p1')
+    const outcome = castSpell(state, spell('hailstorm'), {
+      caster: 'p1',
+      army: 'p1_home',
+      element: 'air',
+      count: 40,
+      target: { kind: 'army', player: 'p2', army: 'frontier' },
+    })
+
+    const saved = outcome.state.log.find((e) => e.kind === 'spell_saves')
+    expect(saved).toBeDefined()
+
+    // The victim chooses, not the caster -- it is the ordinary damage decision -- and
+    // the number is what their own save roll left of it.
+    expect(outcome.choice?.kind).toBe('damage')
+    const choice = outcome.choice?.kind === 'damage' ? outcome.choice : null
+    expect(choice?.player).toBe('p2')
+    expect(choice?.army).toBe('frontier')
+    expect(choice?.damage).toBe(40 - (saved?.kind === 'spell_saves' ? saved.saves : 0))
+  })
+
+  it('lets the target save against a Hailstorm, because every spell allows that', () => {
+    /*
+     * "When a unit takes damage it is permitted to make a save roll unless an effect
+     * states otherwise", and "attacks or spells that target an army allow the entire
+     * army to make a save roll" (p. 29). Hailstorm's own sentence states nothing
+     * otherwise -- and this shipped in 7c without it, making a Hailstorm the only
+     * damage in the game no save could touch.
+     */
     const state = gameAt('p1')
     const outcome = castSpell(state, spell('hailstorm'), {
       caster: 'p1',
@@ -415,13 +447,50 @@ describe('the board spells', () => {
       target: { kind: 'army', player: 'p2', army: 'frontier' },
     })
 
-    // The victim chooses, not the caster -- it is the ordinary damage decision.
-    expect(outcome.choice).toEqual({
-      kind: 'damage',
-      player: 'p2',
-      army: 'frontier',
-      damage: 4,
-    })
+    // The roll happened, it consumed randomness, and it is in the log even though it
+    // may well have stopped the spell dead.
+    const entry = outcome.state.log.find((e) => e.kind === 'spell_saves')
+    expect(entry?.kind === 'spell_saves' ? entry.player : null).toBe('p2')
+    expect(outcome.state.rng).not.toEqual(state.rng)
+
+    // Saves that cover it leave nothing to assign; anything left is asked about.
+    const saves = entry?.kind === 'spell_saves' ? entry.saves : 0
+    if (saves >= 4) expect(outcome.choice).toBeUndefined()
+    else expect(outcome.choice?.kind).toBe('damage')
+  })
+
+  it("adds a Stone Skin to the save roll a Hailstorm's target makes", () => {
+    // It is an *army* roll, so everything sitting on that army reaches it. That is
+    // what `armyRoll` is for, and the reason the roll is not a bespoke one.
+    const state = gameAt('p1')
+    const shielded: GameState = {
+      ...state,
+      effects: [
+        ...state.effects,
+        spellEffect(spell('stone_skin'), {
+          caster: 'p2',
+          army: 'frontier',
+          element: 'earth',
+          count: 3,
+          target: { kind: 'army', player: 'p2', army: 'frontier' },
+        }),
+      ],
+    }
+
+    const savesIn = (s: GameState): number => {
+      const outcome = castSpell(s, spell('hailstorm'), {
+        caster: 'p1',
+        army: 'p1_home',
+        element: 'air',
+        count: 4,
+        target: { kind: 'army', player: 'p2', army: 'frontier' },
+      })
+      const entry = outcome.state.log.find((e) => e.kind === 'spell_saves')
+      return entry?.kind === 'spell_saves' ? entry.saves : -1
+    }
+
+    // Same seed, same dice, three more saves: the only difference is the effect.
+    expect(savesIn(shielded)).toBe(savesIn(state) + 3)
   })
 
   it('offers Path every terrain but the one the unit is standing on', () => {
@@ -1048,6 +1117,31 @@ describe('Reserve magic', () => {
     expect(legalActions({ ...state, ruleSet: DRAGON_RULES }, 'p1', 'reserve')).toEqual([])
   })
 
+  it('counts its own ID results, which the Tower rule was eating', () => {
+    /*
+     * Tower's rule is "if attacking a Reserve Army, only count non-ID missile
+     * results". `attackRollSpec` tested that as `defenderSlot === 'reserve'`, which
+     * said the same thing while a missile was the only way to aim at Reserves -- and
+     * then Reserve magic arrived, whose `targetSlot` is the caster's own ref because
+     * magic names no terrain. Every ID result in a Reserve Army's magic roll was
+     * silently thrown away, and the die drew as a blank while it was at it.
+     */
+    const rolled = reserveRoll('magic')
+    const ids = rolled.filter((die) => die.face.icon === 'ID')
+
+    expect(ids.length).toBeGreaterThan(0)
+    for (const die of ids) expect(die.results).toBeGreaterThan(0)
+  })
+
+  it('still lets a Tower missile ignore the ID results of the army it shoots at', () => {
+    // The rule the fix above narrowed, still doing its job. Same state, same rng, so
+    // the same faces come up and only the action differs.
+    const ids = reserveRoll('missile').filter((die) => die.face.icon === 'ID')
+
+    expect(ids.length).toBeGreaterThan(0)
+    for (const die of ids) expect(die.results).toBe(0)
+  })
+
   it('offers only spells marked R from there', () => {
     const state = toReserve(gameAt('p1'), 'p1', 'p1_home')
     const pool = magicPool(state, 'p1', 'reserve', 99)
@@ -1281,6 +1375,36 @@ const withEffect = (state: GameState, effect: Effect): GameState => ({
   ...state,
   effects: [...state.effects, effect],
 })
+
+/**
+ * One Reserve Army's roll, by action, on a board where an ID face is certain to come
+ * up. Both callers share the state and the rng, so the faces are identical and the
+ * only thing that can differ is whether the ID results were counted.
+ */
+function reserveRoll(action: 'magic' | 'missile'): readonly DieRoll[] {
+  for (let seed = 1; seed <= 200; seed += 1) {
+    const base = begin(setupGame({ seed, forces: STARTER_FORCES, ruleSet: SPELL_RULES }))
+    const state = toReserve(base, 'p1', 'frontier')
+    if (armyRef(state, 'p1', 'reserve').length === 0) continue
+
+    // `defenderSlot: 'reserve'` either way, and that is the whole point: a magic
+    // action from Reserves is aimed at the caster's own ref, because magic names no
+    // terrain -- so the two rolls are distinguishable *only* by the action, which is
+    // exactly what `attackRollSpec` was not looking at.
+    const spec: AttackSpec = {
+      action,
+      attacker: 'p1',
+      attackerSlot: 'reserve',
+      defender: 'p2',
+      defenderSlot: 'reserve',
+      isCounter: false,
+    }
+
+    const dice = resolveAttack(state, spec).attackRoll.dice
+    if (dice.some((die) => die.face.icon === 'ID')) return dice
+  }
+  throw new Error('no seed put an ID face in a Reserve Army roll')
+}
 
 /** A started game under the spell rules, for the pure pool queries. */
 function gameAt(_player: 'p1'): GameState {

@@ -464,6 +464,54 @@ body {
 .rolled-effect { border-color: var(--accent); }
 .rolled-effect .effect-damage { color: var(--accent); }
 
+/* "10 -> 9": what the army's modifiers did to a roll nothing on the dice shows.
+   Sits at the end of the strip, in the muted voice, because it is arithmetic about
+   the dice rather than one of them. */
+.roll-modified {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  align-self: center;
+  padding: 2px 5px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: .7rem;
+  font-variant-numeric: tabular-nums;
+}
+.roll-modified b { color: var(--fg); }
+
+/* A die in a decision sheet's roll strip that is itself the answer (Flashfire). It
+   has to look pressable next to dice that are only evidence. */
+.roll-strip.is-pickable .rolled-pickable {
+  cursor: pointer;
+  border-style: dashed;
+  border-color: var(--accent);
+  /* A button, not a span: reset the parts the browser supplies. */
+  font: inherit;
+  color: inherit;
+}
+.roll-strip.is-pickable .rolled-pickable:hover { background: var(--line); }
+.rolled-chosen {
+  border-style: solid !important;
+  background: var(--accent) !important;
+  color: var(--accent-fg) !important;
+}
+/* The unit art is black line work; on the accent it has to flip, the same trick
+   `.choice-face` plays on a prompt button. */
+.rolled-chosen .face-art { filter: brightness(0) invert(1); }
+
+/* A heading inside a run of choice buttons: which army the targets below stand in.
+   Full-width so the flex row breaks before it. */
+.choice-group {
+  flex: 1 0 100%;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
 .roll-sum { font-variant-numeric: tabular-nums; }
 
 /* --- action bar ----------------------------------------------------------- */

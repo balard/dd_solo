@@ -173,17 +173,69 @@ export function spellEffect(s: Spell, ctx: SpellContext): Effect {
  * makes, maximal-subset rule and all. One point usually kills nothing, which is not a
  * special case: damage too small to kill anything is dropped, exactly as it is after
  * a melee exchange.
+ *
+ * **And the target rolls saves first.** "When a unit takes damage it is permitted to
+ * make a save roll unless an effect states otherwise", and "attacks or spells that
+ * target an army allow the entire army to make a save roll" (p. 29). Hailstorm's own
+ * sentence states nothing otherwise, so the general rule stands -- which is what this
+ * shipped without, making it the only damage in the game that no save could touch.
+ * Every other saveless number in v1 says so on the face of it: a riposte, Smite's
+ * unsavable results, Wall of Thorns' melee roll *instead of* a save roll.
  */
 const hailstorm: SpellHandler = (state, ctx) => {
   if (ctx.target.kind !== 'army') throw new Error('Hailstorm targets an army')
-  const army = armyOf(state, ctx.target.player, ctx.target.army)
-  const damage = ctx.count
 
-  if (maxAbsorbable(healthsOf(army), damage) === 0) return { state }
+  const rolled = spellSaveRoll(state, 'Hailstorm', ctx.target.player, ctx.target.army)
+  const damage = Math.max(0, ctx.count - rolled.saves)
+  const army = armyOf(rolled.state, ctx.target.player, ctx.target.army)
+
+  if (damage === 0 || maxAbsorbable(healthsOf(army), damage) === 0) return { state: rolled.state }
 
   return {
-    state,
+    state: rolled.state,
     choice: { kind: 'damage', player: ctx.target.player, army: ctx.target.army, damage },
+  }
+}
+
+/**
+ * The save roll a damaging spell allows its target, and the log line for it.
+ *
+ * An **army** roll, because the spell targets an army -- so it picks up a Stone Skin,
+ * an Ash Storm and the eighth face's ID doubling, all of which the rules mean it to.
+ *
+ * Two details it shares with Wall of Thorns' roll, for the same reasons:
+ *
+ *  - the purpose is a **save roll against nothing** (`against: null`), the SAI
+ *    reference's "any other save roll" -- so Counter and Volley generate their save
+ *    results and no riposte, there being nobody to send one back to;
+ *  - `isTrigger` stops Wild Growth and the free moves offering a decision that a
+ *    spell resolving mid-list has nowhere to put. A house rule, `RULES-V0.md` §15.
+ */
+function spellSaveRoll(
+  state: GameState,
+  source: string,
+  player: PlayerId,
+  ref: ArmyRef,
+): { readonly state: GameState; readonly saves: number } {
+  const army = armyRoll(state, player, ref, 'save')
+  if (army.units.length === 0) return { state, saves: 0 }
+
+  const [roll, rng] = rollArmy(army.units, 'save', state.rng, state.ruleSet, army.modifiers, {
+    purpose: { kind: 'save', against: null },
+    isCounter: false,
+    isTrigger: true,
+  })
+  expectNoEffects(roll, `${source}'s save roll`)
+
+  return {
+    state: {
+      ...{ ...state, rng },
+      log: [
+        ...state.log,
+        { kind: 'spell_saves', player, source, slot: ref, saves: roll.total, dice: roll.dice },
+      ],
+    },
+    saves: roll.total,
   }
 }
 

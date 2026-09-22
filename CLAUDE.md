@@ -348,8 +348,14 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   the 30-health pair the alpha shipped with and the one the goldens are recorded against -- do not
   edit those two lists. `BESTIARY_FORCES` is 35 health and holds one of every monster and every
   large die, which puts **all 25 SAIs** on the board against the starters' 10; reach for it when a
-  rule needs a die a rolled force might not draw. Both are in `FORCE_SETS` in `src/cli/play.ts`, so
-  a new pair needs adding there to be playable from the terminal.
+  rule needs a die a rolled force might not draw. Both are in `FORCE_SETS` in `setup.ts`, which the
+  terminal's `--forces` and the app's `?forces=` share.
+  - **The ten monster fixtures are in `FORCE_SETS` too, as mirrors** -- `?forces=firewalkers_genie`
+    is six Genies against six Genies. They existed from Phase 1 and only a test could reach one,
+    which is why a Phase 7 bug report about Flashfire could not be reproduced in a browser at all:
+    Flashfire is Firewalkers-only, the human plays p1, and `bestiary` puts Treefolk there. The
+    registry is derived from `PRESETS`, so a monster added later is playable in the same edit that
+    gives it a fixture.
   - **A preset is not required to be 30 health.** The rule is that the two sides of a *game* bring
     the same total and no army exceeds half of it; "every preset is 30" was a fact about there
     being only two of them, and `setup.test.ts` used to assert it.
@@ -516,6 +522,19 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   made every slice of Phase 7 playable rather than a throwing half-build, and it is the
   `sai: 'results'` lesson rather than the `'full'` one. By 7f nothing is in that state and a test
   says so, which is the guard against a spell reaching `data/` with no code behind it.
+- **A spell that inflicts damage rolls the target's saves first** (`spellSaveRoll` in `spells.ts`).
+  "When a unit takes damage it is permitted to make a save roll unless an effect states otherwise"
+  (p. 29), and Hailstorm's own sentence states nothing otherwise -- it shipped in 7c without one,
+  which made it the only damage in the game no save could touch. It is an **army** roll, so a Stone
+  Skin and an Ash Storm both reach it; its purpose is `save` against `null` so a Counter saves and
+  ripostes at nobody; and it carries `isTrigger`, because a spell resolving out of an announced list
+  has no exchange to hang a Wild Growth on. Wall of Thorns' roll, one rung along.
+- **A rule about "attacking a Reserve Army" has to name the action.** Tower's "only count non-ID
+  missile results" was tested as `defenderSlot === 'reserve'`, which said the same thing while a
+  missile was the only way to aim at Reserves -- and then Phase 7f let a Reserve Army take a *magic*
+  action, whose `targetSlot` is the caster's own ref because magic names no terrain. Every ID result
+  in a Reserve Army's own magic roll was thrown away, and the die drew as a blank while it was at
+  it. A predicate that happens to be equivalent is not the same as the rule.
 - **`SpellTargetOffer.minCount` rides on the offer, not in a rule.** Resurrect Dead's price is a
   property of what it is aimed at -- a 2-health die needs two castings -- so the number travels with
   the target and every chooser respects it for free. A rule the clients do not know is a rule both
@@ -777,6 +796,25 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     drift this file has been bitten by twice. `X` stays `X`: the sheet's own line says what the
     number is on this die. `sai.test.ts` asserts every SAI that can raise a pending has text, since
     a missing one renders as *nothing at all*.
+- **A roll strip says what the modifiers did to it**, via `RollStrip`'s optional `total` (the
+  post-pipeline number the log entry already carries). It draws `12 → 8` whenever that disagrees
+  with the sum on the dice. Without it a Dancing Lights, an Ash Storm or a Galeforce changed a
+  roll with nothing on screen to show for it, and the only symptom was a total that did not add
+  up -- which is what two Phase 7 bug reports turned out to be. Deliberately **not** attributed to
+  a named effect: which modifiers applied is a fact about the moment the dice were thrown, and a
+  log line scrolled back three turns cannot know it. The arithmetic is honest at any distance; the
+  board's effect list names the cause.
+- **A decision sheet's roll strip can be the answer, not only the evidence** -- `RollStrip`'s
+  `pick`, used by the Flashfire sheet. The sheet said "tap the dice you want back" directly above a
+  picture of the dice, and the only thing that answered was the board further up the page; somebody
+  who taps the die they are looking at is not making a mistake. The board stays selectable too --
+  both toggle the same `App` selection by unit id, so a chain of rerolls picks the die rather than
+  one of its faces.
+- **A unit target is named by its army, and the buttons are grouped by it** (`spellTargetLabel`'s
+  `where`, `targetGroups` in `ActionBar`). Lightning Strike, Mirage and Path offer one button per
+  unit, and a force fields several dice of one type across three armies -- so the list read "Pine,
+  Pine, Pine, Pine" and picking the right one was guesswork. Grouping only applies to unit targets:
+  an army or terrain target already names its own place.
 - **An effect with a duration is drawn on the army it sits on** (`.army-effects`, from
   `effectsOnArmy`). It is the one thing on the board that is true *between* rolls, and it used to be
   invisible: a Galeforced army saved at minus four with the arithmetic only in a log line that had

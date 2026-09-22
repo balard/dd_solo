@@ -29,7 +29,7 @@ import {
   unitType,
 } from '../data/load'
 import type { Element } from '../data/types'
-import { preset, PRESET_ARMY_NAMES, type PresetArmyName } from '../data/presets'
+import { preset, PRESET_ARMY_NAMES, PRESETS, type PresetArmyName } from '../data/presets'
 
 import { generateForces, type GeneratedForce } from './force'
 import { nextInt, rngFrom, type RngState } from './rng'
@@ -82,6 +82,26 @@ export const BESTIARY_FORCES: ForceSpec = {
 }
 
 /**
+ * The ten monster fixtures, each as a **mirror** -- six copies of one monster die
+ * against six of the same.
+ *
+ * They have existed since Phase 1 and until now only a test could reach one, which is
+ * why a Phase 7 bug report about Flashfire could not be reproduced in a browser:
+ * Flashfire is Firewalkers-only, the human plays p1, and `bestiary` puts Treefolk
+ * there. A mirror sidesteps that entirely -- whatever the die does, both sides can do
+ * it -- and a mirror is the most useful board of the lot anyway, being one die read
+ * against itself.
+ *
+ * Derived from `PRESETS` rather than listed, so a monster added to
+ * `data/presets.json` becomes playable in the same edit that gives it a fixture.
+ */
+const MONSTER_MIRRORS: Readonly<Record<string, ForceSpec>> = Object.fromEntries(
+  PRESETS.map((p) => p.id)
+    .filter((id) => !id.endsWith('_starter') && !id.endsWith('_bestiary'))
+    .map((id) => [id, { kind: 'named', forces: { p1: id, p2: id } } as ForceSpec]),
+)
+
+/**
  * The hand-authored pairings, by the name a front end takes for them.
  *
  * One registry rather than one per client: the terminal's `--forces` and the app's
@@ -91,6 +111,7 @@ export const BESTIARY_FORCES: ForceSpec = {
 export const FORCE_SETS: Readonly<Record<string, ForceSpec>> = {
   starter: STARTER_FORCES,
   bestiary: BESTIARY_FORCES,
+  ...MONSTER_MIRRORS,
 }
 
 /** The named pairing, or null -- so a caller can say what it wants done about a

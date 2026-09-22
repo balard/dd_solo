@@ -542,6 +542,19 @@ export function spellTargetLabel(
   human: PlayerId,
   name: (ref: ArmyRef) => string,
   unitName: (id: string) => string,
+  /**
+   * Where a named unit is standing, or null for one in the DUA.
+   *
+   * **A unit target is not identified by its name**, which is the bug this closes:
+   * Lightning Strike, Mirage and Path each offer one button per unit, and a force
+   * fields several dice of one type across three armies -- so the list read
+   * "Pine, Pine, Pine, Pine" and picking the right one was guesswork. The name plus
+   * the place is what a player actually sees on the board.
+   *
+   * Resurrect Dead's targets are in the DUA, which is not a place you could confuse
+   * with another, so a null reads as the bare name.
+   */
+  where: (id: string) => ArmyRef | null = () => null,
 ): string {
   switch (target.kind) {
     case 'none':
@@ -550,7 +563,12 @@ export function spellTargetLabel(
       return name(target.slot)
     case 'army':
       return `${target.player === human ? 'your' : "the enemy's"} army at ${name(target.army)}`
-    case 'units':
-      return target.unitIds.map(unitName).join(', ')
+    case 'units': {
+      const named = target.unitIds.map(unitName).join(', ')
+      // One place or none: every spell in scope targets units in a single army, so
+      // a second terrain here would mean a rule changed rather than a label.
+      const ref = target.unitIds.map(where).find((r) => r !== null) ?? null
+      return ref === null ? named : `${named} at ${name(ref)}`
+    }
   }
 }

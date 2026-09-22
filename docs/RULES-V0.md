@@ -702,6 +702,10 @@ rules to go.
   effects entirely; it refuses now, so the house rule is a decision rather than an accident.
 - **A Flashfire reroll does not restart the reroll sweep**, so a Rend that comes up on one does not
   roll again. It is a step-3 reroll arriving after step 3 has finished.
+- **Hailstorm's save roll offers no free move, promotion or cantrip either**, for Wall of Thorns'
+  reason and by the same `RollContext.isTrigger`: a spell resolving out of an announced list has no
+  exchange to hang a decision on. The roll itself is an ordinary army save roll and picks up
+  everything sitting on that army -- a Stone Skin, an Ash Storm, the eighth face's ID doubling.
 - **Resurrect Dead prices its target rather than its caster.** A unit's health *is* the number of
   castings it needs, so a 2-health unit costs six magic. That number rides on the offer, not in a
   rule the clients have to know, which is what stops either of them showing a target the engine
@@ -709,6 +713,18 @@ rules to go.
 
 ### What is not a house rule, and is easy to misread as one
 
+- **Hailstorm allows a save roll, although its own sentence does not say so.** "When a unit takes
+  damage it is permitted to make a save roll unless an effect states otherwise", and "attacks or
+  spells that target an army allow the entire army to make a save roll" (p. 29). The general rule
+  stands unless an effect displaces it, and every saveless number in this game says so on the face
+  of it: a riposte, Smite's unsavable results, Wall of Thorns' melee roll *instead of* a save roll.
+  **Phase 7c shipped without it**, which made Hailstorm the only damage in the game no save could
+  touch.
+- **Cantrip on a magic action opens no casting window, and that is the first sentence of the rule.**
+  "During a magic action, Cantrip generates X magic results" -- ordinary magic, spent on the
+  announcement like any other. The window is the *second* sentence, for any other non-maneuver roll,
+  where there is no announcement to join. A Cantrip face in a magic action that seems to do nothing
+  has in fact already added its X to the pool.
 - **An announced target that is gone by the time the spell resolves is dropped, not re-aimed.** "If
   for any reason the announced target of a spell is no longer present, then you may not select a new
   target" (p. 13). The same shape as damage too small to kill anything.

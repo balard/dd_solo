@@ -95,9 +95,12 @@ function Line({
       return (
         <div className="log-roll">
           <div className="roll-head">horde roll-off</div>
-          <RollStrip dice={entry.dice[human]} />
+          <RollStrip dice={entry.dice[human]} total={entry.rolls[human]} />
           <div className="roll-head">the enemy&rsquo;s horde</div>
-          <RollStrip dice={entry.dice[human === 'p1' ? 'p2' : 'p1']} />
+          <RollStrip
+            dice={entry.dice[human === 'p1' ? 'p2' : 'p1']}
+            total={entry.rolls[human === 'p1' ? 'p2' : 'p1']}
+          />
           <div className="roll-sum">{outcome}</div>
         </div>
       )
@@ -128,9 +131,9 @@ function Line({
       return (
         <div className="log-roll">
           <div className="roll-head">maneuver</div>
-          <RollStrip dice={entry.marcherDice} />
+          <RollStrip dice={entry.marcherDice} total={entry.marcher} />
           <div className="roll-head">opposing maneuver</div>
-          <RollStrip dice={entry.defenderDice} />
+          <RollStrip dice={entry.defenderDice} total={entry.defender} />
           <div className="roll-sum">
             {entry.marcher} vs {entry.defender} maneuver;{' '}
             <b>{entry.marcherWins ? 'the marcher wins' : 'the marcher loses'}</b>
@@ -201,11 +204,14 @@ function Line({
               </>
             )}
           </div>
-          <RollStrip dice={entry.attackDice} />
+          <RollStrip dice={entry.attackDice} total={entry.attackTotal} />
           {entry.saveDice !== null && (
             <>
               <div className="roll-head">saves</div>
-              <RollStrip dice={entry.saveDice} />
+              <RollStrip
+                dice={entry.saveDice}
+                {...(entry.saveTotal === null ? {} : { total: entry.saveTotal })}
+              />
             </>
           )}
           {/* The SAI is named, not just its arithmetic. "3 melee - 11 saves = 0
@@ -425,7 +431,7 @@ function Line({
       return (
         <div className="log-roll">
           <div className="roll-head">magic at {where(entry.slot)}</div>
-          <RollStrip dice={entry.dice} />
+          <RollStrip dice={entry.dice} total={entry.total} />
           <div className="roll-sum">
             <b>{entry.total}</b> magic <span className="muted">({entry.elements.join(' or ')})</span>
           </div>
@@ -537,9 +543,26 @@ function Line({
       return (
         <div className="log-roll">
           <div className="roll-head">Wall of Thorns at {where(entry.slot)}</div>
-          <RollStrip dice={entry.dice} />
+          <RollStrip dice={entry.dice} total={entry.melee} />
           <div className="roll-sum">
             {entry.melee} melee &rarr; <b>{entry.damage}</b> damage
+          </div>
+        </div>
+      )
+
+    // The roll that stands between a damaging spell and its damage. Drawn even when
+    // it stops the spell dead: a Hailstorm that killed nobody and a Hailstorm that
+    // was saved against look identical without it.
+    case 'spell_saves':
+      return (
+        <div className="log-roll">
+          <div className="roll-head">
+            {entry.source} — {whoLower(entry.player)} {verb(entry.player, 'saves', 'save')} at{' '}
+            {where(entry.slot)}
+          </div>
+          <RollStrip dice={entry.dice} total={entry.saves} />
+          <div className="roll-sum">
+            <b>{entry.saves}</b> saves
           </div>
         </div>
       )

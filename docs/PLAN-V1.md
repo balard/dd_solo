@@ -1873,6 +1873,46 @@ named tests instead, which is what this plan asks for when a fuzz cannot reach a
 **Not done, and deliberately**: the 1000-game fuzz still runs `V0_RULES` only. That is now the oldest
 open item in this document by five phases — see Risks.
 
+### What playing it found afterwards
+
+Six reports from the first real session, and the split is the interesting part: **one rule wrong,
+one rule right for the wrong reason, and four things the screen would not say.**
+
+- **Hailstorm allowed no save roll.** The rulebook's damage section, not the spell's own sentence:
+  "when a unit takes damage it is permitted to make a save roll unless an effect states otherwise".
+  Every other saveless number in the game announces itself — a riposte, Smite, Wall of Thorns'
+  melee roll *instead of* a save roll — so the absence of a clause was read as permission when it
+  is the opposite. Fixed; `spellSaveRoll` is the seam and a second damaging spell needs no new code.
+- **A Reserve Army's magic roll threw away its ID results.** Tower's "if attacking a Reserve Army,
+  only count non-ID missile results" was tested as `defenderSlot === 'reserve'` — equivalent while
+  a missile was the only way to aim at Reserves, and 7f made a magic action's `targetSlot` the
+  caster's own ref. **A predicate that happens to be equivalent is not the rule**, and the symptom
+  was a die drawn blank beside a total that had silently lost it.
+- **Ash Storm and Dancing Lights "did not subtract".** Both were arithmetically correct. What was
+  missing is that a roll showed twelve on the dice and reported eight with nothing on screen
+  between them. `RollStrip` now prints `12 → 8` whenever the modified total disagrees with the
+  faces. Dancing Lights was the sharper case, because step 6 subtracts *before* step 8 adds SAI
+  results — so a −6 against four normal results and eight from a Smite really does leave eight,
+  and no amount of staring at the dice recovers that.
+- **Flashfire "would not let me pick the dice".** It would; the dice were on the board, further up
+  the page, while the sheet said "tap the dice you want back" directly above a picture of them.
+  The strip is the answer surface now as well as the evidence. **This one could not be reproduced
+  from the engine at all** — a probe over a hundred games confirmed the board offered exactly the
+  right dice every time — and it took a browser and a force that could cast the spell.
+- **"I rolled a Cantrip and it didn't even ask"** was the first sentence of the rule doing its job:
+  in a magic action Cantrip generates ordinary magic results, and the window is the second sentence,
+  for rolls with no announcement to join. Counted across 120 fuzz games: every Cantrip face in a
+  melee or missile exchange opened a window, 26 for 26. Recorded in `RULES-V0.md` §15 rather than
+  changed.
+- **Lightning Strike's targets were unnameable.** "Target any opposing unit" offers one button per
+  unit and a force fields several dice of one type, so the list read `Pine, Pine, Pine, Pine`. The
+  labels carry the army now and the buttons are grouped by it.
+
+**The tooling lesson is the one worth keeping**: the ten monster fixtures had been unreachable from
+either client since Phase 1, and that is why a Firewalkers-only spell could not be put in front of a
+browser — the human plays p1 and `bestiary` puts Treefolk there. They are mirrors in `FORCE_SETS`
+now. A fixture only a test can load is a fixture that cannot help when a test is not the problem.
+
 ## Phase 8 — Species abilities
 
 **Deliverable.** The missing seventh turn phase, and four abilities.

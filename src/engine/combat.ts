@@ -245,9 +245,20 @@ function attackRollSpec(spec: AttackSpec, modifiers: readonly Modifier[]): RollS
     kinds: [spec.action],
     modifiers,
     context: { purpose: { kind: 'attack', action: spec.action }, isCounter: spec.isCounter },
-    // Tower's "if attacking a Reserve Army, only count non-ID missile results"
-    // (Phase 5d): a missile action is the only one a Tower can aim at Reserves.
-    ...(spec.defenderSlot === 'reserve' ? { countIds: false as const } : {}),
+    /*
+     * Tower's "if attacking a Reserve Army, only count non-ID missile results"
+     * (Phase 5d).
+     *
+     * **The action has to be named.** When this was written a missile action was the
+     * only one a Tower could aim at Reserves, so `defenderSlot === 'reserve'` said the
+     * same thing -- and then Phase 7f let a Reserve Army take a *magic* action, whose
+     * `targetSlot` is the caster's own ref because magic names no terrain. The test
+     * then read "this roll is aimed at a Reserve Army" as true of a roll the Reserve
+     * Army was itself making, and silently threw away every ID result in it.
+     */
+    ...(spec.action === 'missile' && spec.defenderSlot === 'reserve'
+      ? { countIds: false as const }
+      : {}),
   }
 }
 

@@ -1358,6 +1358,23 @@ export type LogEntry =
       readonly melee: number
       readonly dice: readonly DieRoll[]
     }
+  /**
+   * The save roll a damaging spell allows its target (p. 29).
+   *
+   * Its own entry rather than a field on `spell_cast`, because the roll happens even
+   * when it stops the damage dead -- and a spell that was survived with nothing in the
+   * log reads exactly like a spell that did not resolve. Hailstorm is the only caster
+   * in scope; `source` is a string so the next one needs no new entry.
+   */
+  | {
+      readonly kind: 'spell_saves'
+      /** The army that rolled -- the spell's *target*, not its caster. */
+      readonly player: PlayerId
+      readonly source: string
+      readonly slot: ArmyRef
+      readonly saves: number
+      readonly dice: readonly DieRoll[]
+    }
   /** Resurrect Dead: units walking back out of the DUA into the casting army. */
   | {
       readonly kind: 'units_resurrected'
@@ -1610,6 +1627,18 @@ export function livingUnits(state: GameState, player: PlayerId): readonly UnitIn
 
 export function army(state: GameState, player: PlayerId, ref: ArmyRef): readonly UnitInstance[] {
   return ref === 'reserve' ? reserveArmy(state, player) : armyAt(state, player, ref)
+}
+
+/**
+ * Which army a unit stands in, or null for one that is off the board -- the DUA or
+ * the BUA. `army`'s inverse, and the query behind naming a unit target by its place
+ * as well as its name.
+ */
+export function armyRefOf(state: GameState, id: string): ArmyRef | null {
+  const unit = state.units[id]
+  if (unit === undefined) return null
+  if (unit.location.kind === 'terrain') return unit.location.slot
+  return unit.location.kind === 'reserve' ? 'reserve' : null
 }
 
 export function capturedCount(state: GameState, player: PlayerId): number {

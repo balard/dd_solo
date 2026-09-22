@@ -16,6 +16,7 @@ import type { Element, ResultType, TerrainFaceNumber } from '../../data/types'
 import { rollOnTheTable } from '../../engine/turn'
 import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../../engine/sai'
 import {
+  armyRefOf,
   livingUnits,
   type GameAction,
   type GameState,
@@ -50,7 +51,12 @@ import {
   type FaceHint,
   type ReinforceMove,
 } from './prompts'
-import { spellPlan, type SpellAim, type SpellDraftCast } from '../../engine/magic'
+import {
+  spellPlan,
+  type SpellAim,
+  type SpellDraftCast,
+  type SpellTargetOffer,
+} from '../../engine/magic'
 
 import { useFaceArt } from './useFaceArt'
 
@@ -70,6 +76,7 @@ export function ActionBar({
   onStage,
   onPair,
   onCount,
+  onToggle,
   onClearSelection,
   onClearDraft,
   dispatch,
@@ -97,6 +104,9 @@ export function ActionBar({
   onStage: (moves: readonly ReinforceMove[]) => void
   onPair: (pair: PromotionPair) => void
   onCount: (key: string, by: number) => void
+  /** The same toggle the board's grids use, so a die picked in either place is the
+   *  one selection. */
+  onToggle: (id: UnitId) => void
   onClearSelection: () => void
   /** Clear is not "unselect": mid-reinforce it has to drop the staged moves too. */
   onClearDraft: () => void
@@ -431,7 +441,53 @@ export function ActionBar({
  * happens to the dice afterwards. `SAI_TEXT` lives beside the handlers so the sentence
  * and the behaviour cannot drift.
  */
-function SaiHeader({ state, sai, rule }: { state: GameState; sai?: string; rule?: string }) {
+/**
+ * A spell's targets, split into the armies they stand in.
+ *
+ * Only unit targets group: an army or a terrain target already names its own place,
+ * so grouping those would add a heading that repeats the button under it. `head` is
+ * null for the ungrouped case, which is most spells.
+ */
+function targetGroups(
+  state: GameState,
+  human: PlayerId,
+  targets: readonly SpellTargetOffer[],
+): readonly { readonly head: string | null; readonly aims: readonly SpellTargetOffer[] }[] {
+  if (!targets.every((aim) => aim.target.kind === 'units')) return [{ head: null, aims: targets }]
+
+  const groups = new Map<string, SpellTargetOffer[]>()
+  for (const aim of targets) {
+    const ids = aim.target.kind === 'units' ? aim.target.unitIds : []
+    const ref = ids.map((id) => armyRefOf(state, id)).find((r) => r !== null) ?? null
+    // A unit that is nowhere on the board is in the DUA -- Resurrect Dead's targets.
+    const head = ref === null ? 'your dead' : slotLabel(ref, human)
+    const at = groups.get(head)
+    if (at === undefined) groups.set(head, [aim])
+    else at.push(aim)
+  }
+
+  // One group is no grouping: a heading over the whole list says nothing.
+  if (groups.size < 2) return [{ head: null, aims: targets }]
+  return [...groups].map(([head, aims]) => ({ head, aims }))
+}
+
+function SaiHeader({
+  state,
+  sai,
+  rule,
+  pick,
+}: {
+  state: GameState
+  sai?: string
+  rule?: string
+  /** Makes the dice in the header the answer as well as the evidence -- Flashfire.
+   *  See `RollStrip`'s own note for why that is not a convenience. */
+  pick?: {
+    readonly options: ReadonlySet<string>
+    readonly selected: ReadonlySet<string>
+    readonly onToggle: (unitId: string) => void
+  }
+}) {
   const roll = rollOnTheTable(state)
   // A spell's sentence lives in `data/spells.json` rather than in `SAI_TEXT`, so a
   // caller that already has one hands it over. Flashfire is the first: it raises a
@@ -443,7 +499,7 @@ function SaiHeader({ state, sai, rule }: { state: GameState; sai?: string; rule?
       {roll !== null && roll.dice.length > 0 && (
         <div className="sai-roll">
           <div className="roll-head">{roll.kind === 'save' ? 'saves' : 'the roll'}</div>
-          <RollStrip dice={roll.dice} />
+          <RollStrip dice={roll.dice} {...(pick === undefined ? {} : { pick })} />
         </div>
       )}
       {text !== undefined && <p className="sai-text">{text}</p>}
@@ -800,29 +856,42 @@ function SaiHeader({ state, sai, rule }: { state: GameState; sai?: string; rule?
             </>
           ) : aimed !== undefined && element !== undefined ? (
             <>
-              {aimed.castable.targets.map((aim, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  className="choice"
-                  disabled={aim.minCount * aimed.castable.spell.cost > plan.remaining}
-                  onClick={() => {
-                    onCast({
-                      spell: aimed.castable.spell.id,
-                      element,
-                      // The target sets the floor: Resurrect Dead's price is a
-                      // property of what it is aimed at, not a separate choice.
-                      count: aim.minCount,
-                      target: aim.target,
-                    })
-                    onAim(null)
-                  }}
-                >
-                  {spellTargetLabel(aim.target, human, state)}
-                  {aim.minCount > 1 && (
-                    <span className="muted"> {aim.minCount * aimed.castable.spell.cost}</span>
-                  )}
-                </button>
+              {/*
+               * Grouped by the army the targets stand in, not one flat list. A spell
+               * that targets units offers one button per unit, and a force fields
+               * several dice of one type -- so Mirage in a monster mirror printed
+               * "Genie" twelve times over. The heading says which army, and the
+               * label says it again on each button, because a button read aloud on
+               * its own still has to identify what it picks.
+               */}
+              {targetGroups(state, human, aimed.castable.targets).map((group) => (
+                <Fragment key={group.head ?? 'all'}>
+                  {group.head !== null && <p className="choice-group">{group.head}</p>}
+                  {group.aims.map((aim, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className="choice"
+                      disabled={aim.minCount * aimed.castable.spell.cost > plan.remaining}
+                      onClick={() => {
+                        onCast({
+                          spell: aimed.castable.spell.id,
+                          element,
+                          // The target sets the floor: Resurrect Dead's price is a
+                          // property of what it is aimed at, not a separate choice.
+                          count: aim.minCount,
+                          target: aim.target,
+                        })
+                        onAim(null)
+                      }}
+                    >
+                      {spellTargetLabel(aim.target, human, state)}
+                      {aim.minCount > 1 && (
+                        <span className="muted"> {aim.minCount * aimed.castable.spell.cost}</span>
+                      )}
+                    </button>
+                  ))}
+                </Fragment>
               ))}
               <button type="button" className="choice secondary" onClick={() => onAim(null)}>
                 Back
@@ -886,7 +955,14 @@ function SaiHeader({ state, sai, rule }: { state: GameState; sai?: string; rule?
             {chosen.length > 0 ? ` (${chosen.length} of ${pending.budget})` : ''}
           </span>
         </p>
-        <SaiHeader state={state} rule={spell('flashfire').text} />
+        {/* The dice are tappable *here*, not only on the board. The sheet says "tap
+            the dice" directly above a picture of them, and answering used to mean
+            scrolling back up to the army -- which reads as there being no answer. */}
+        <SaiHeader
+          state={state}
+          rule={spell('flashfire').text}
+          pick={{ options: new Set(pending.options), selected: selection, onToggle }}
+        />
         <div className="choices">
           <button
             type="button"

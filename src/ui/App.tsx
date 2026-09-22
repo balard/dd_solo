@@ -367,6 +367,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
         onStage={(moves) => setStaged((current) => [...current, ...moves])}
         onPair={(pair) => setPairs((current) => [...current, pair])}
         onCount={count}
+        onToggle={toggle}
         onClearSelection={() => setSelection(new Set())}
         onClearDraft={clearDraft}
         dispatch={dispatch}

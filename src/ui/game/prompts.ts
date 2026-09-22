@@ -21,6 +21,7 @@ import {
   TERRAIN_SLOTS,
   armyAt,
   army as armyRef,
+  armyRefOf,
   reserveArmy,
   type ArmyRef,
   type Direction,
@@ -974,6 +975,7 @@ export function spellTargetLabel(
     human,
     (ref) => slotLabel(ref, human),
     (id) => unitName(state, id),
+    (id) => armyRefOf(state, id),
   )
 }
 

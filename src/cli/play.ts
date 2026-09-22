@@ -38,6 +38,7 @@ import {
   TERRAIN_SLOTS,
   armyAt,
   army as armyRef,
+  armyRefOf,
   buriedUnits,
   deadUnits,
 
@@ -415,6 +416,12 @@ function describe(entry: LogEntry, state: GameState): string | null {
           `${entry.melee} melee — ${bold(String(entry.damage))} damage`,
       )
 
+    case 'spell_saves':
+      return yellow(
+        `  ${bold(entry.source)} at ${SLOT_LABEL[entry.slot]}: ` +
+          `${entry.player} rolls ${bold(String(entry.saves))} saves`,
+      )
+
     case 'spell_fizzled':
       return dim(`  ${spell(entry.spell).name} fizzles -- its target is gone`)
 
@@ -771,6 +778,7 @@ const spellName = (state: GameState, target: SpellTarget): string =>
     state.turn.marching,
     (ref) => SLOT_LABEL[ref as TerrainSlot] ?? 'reserve',
     (id) => (state.units[id] ? name(state.units[id]!) : id),
+    (id) => armyRefOf(state, id),
   )
 
 const rl = createInterface({ input: stdin, output: stdout })

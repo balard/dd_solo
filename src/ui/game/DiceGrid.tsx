@@ -361,11 +361,50 @@ export function chainRerolls(dice: readonly StripDie[]): readonly (readonly Stri
   return chains
 }
 
-/** The dice of a roll, showing the face each one landed on. */
-export function RollStrip({ dice }: { dice: readonly StripDie[] }) {
+/**
+ * The dice of a roll, showing the face each one landed on.
+ *
+ * `total` is what the roll came to **after the modifiers on the army** -- steps 6 to
+ * 10 of the pipeline. Pass it wherever the log entry carries one, and the strip says
+ * so whenever it disagrees with the dice: a Dancing Lights on the army, an Ash Storm
+ * on the terrain or a Galeforce off an SAI all change the number without touching a
+ * single face, and before this the only sign was a total that did not add up.
+ *
+ * Deliberately *not* attributed to a named effect. Which modifiers applied is a fact
+ * about the moment the dice were thrown, and a log line scrolled back three turns
+ * cannot know it -- `state.effects` says what is true now. The arithmetic is honest
+ * at any distance; the board's own effect list names the cause.
+ */
+export function RollStrip({
+  dice,
+  total,
+  pick,
+}: {
+  dice: readonly StripDie[]
+  total?: number
+  /**
+   * Makes the strip the *answer* surface as well as the evidence.
+   *
+   * Flashfire is the case that forced it, and it was a real bug report: the sheet
+   * said "tap the dice you want back" directly under a picture of the dice, and the
+   * only thing that actually answered was the board further up the page. Somebody who
+   * taps the die they are looking at is not making a mistake.
+   *
+   * The board stays selectable too -- this is a second way in, not a replacement --
+   * and both toggle the same `App` selection by unit id, so a chain of rerolls picks
+   * the die rather than one of its faces.
+   */
+  pick?: {
+    readonly options: ReadonlySet<string>
+    readonly selected: ReadonlySet<string>
+    readonly onToggle: (unitId: string) => void
+  }
+}) {
   const ruleSet = useRuleSet()
+  const onTheDice = dice.reduce((sum, die) => sum + die.results, 0)
+  const modified = total !== undefined && total !== onTheDice
   return (
-    <div className="roll-strip">
+    <div className={pick === undefined ? 'roll-strip' : 'roll-strip is-pickable'}>
       {chainRerolls(dice).map((chain, c) => (
         <span className={`roll-chain ${chain.length > 1 ? 'is-rerolled' : ''}`} key={c}>
           {chain.map((die, i) => (
@@ -378,37 +417,71 @@ export function RollStrip({ dice }: { dice: readonly StripDie[] }) {
                   &rarr;
                 </span>
               )}
-              <span
-                className={[
+              {(() => {
+                const pickable = pick !== undefined && pick.options.has(die.unitId)
+                const chosen = pickable && pick.selected.has(die.unitId)
+                const className = [
                   `rolled i-${die.face.icon}`,
                   // Blank only when the die really did nothing. An effect is not a
                   // result and never shows in `results`, so keying the grey-out on
                   // `results` alone hid Smite, Counter and Surprise completely.
                   die.results === 0 && effectOf(die) === null ? 'rolled-blank' : '',
                   effectOf(die) === null ? '' : 'rolled-effect',
+                  pickable ? 'rolled-pickable' : '',
+                  chosen ? 'rolled-chosen' : '',
                 ]
                   .filter(Boolean)
-                  .join(' ')}
-                title={
+                  .join(' ')
+                const title =
                   `${unitType(die.typeId).name}: ${faceLabel(die.face, ruleSet)}` +
                   (effectOf(die) === null ? '' : ` — ${effectOf(die)}`) +
                   (i > 0 ? ' (rerolled)' : '')
-                }
-              >
-                <FaceArt typeId={die.typeId} faceIndex={die.faceIndex} face={die.face} size={30} />
-                {die.results > 0 && <b>{die.results}</b>}
-                {/* The effect's damage, marked apart from the result count beside it:
-                    4 unsavable damage is not 4 melee results, and the two can appear
-                    on the same die. */}
-                {effectDamage(die.effects ?? []) !== null && (
-                  <b className="effect-damage">+{effectDamage(die.effects ?? [])}</b>
-                )}
-              </span>
+                const body = (
+                  <>
+                    <FaceArt
+                      typeId={die.typeId}
+                      faceIndex={die.faceIndex}
+                      face={die.face}
+                      size={30}
+                    />
+                    {die.results > 0 && <b>{die.results}</b>}
+                    {/* The effect's damage, marked apart from the result count beside
+                        it: 4 unsavable damage is not 4 melee results, and the two can
+                        appear on the same die. */}
+                    {effectDamage(die.effects ?? []) !== null && (
+                      <b className="effect-damage">+{effectDamage(die.effects ?? [])}</b>
+                    )}
+                  </>
+                )
 
+                return pickable ? (
+                  <button
+                    type="button"
+                    className={className}
+                    title={title}
+                    aria-pressed={chosen}
+                    onClick={() => pick?.onToggle(die.unitId)}
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <span className={className} title={title}>
+                    {body}
+                  </span>
+                )
+              })()}
             </Fragment>
           ))}
         </span>
       ))}
+      {modified && (
+        <span
+          className="roll-modified"
+          title={`${onTheDice} on the dice, ${total} after the modifiers on this army`}
+        >
+          {onTheDice} &rarr; <b>{total}</b>
+        </span>
+      )}
     </div>
   )
 }
