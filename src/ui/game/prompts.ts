@@ -14,7 +14,7 @@ import {
 } from '../../engine/magic'
 import { growthPartners, promotionGain } from '../../engine/dua'
 import { ALL_RESULT_TYPES, type Modifier } from '../../engine/pipeline'
-import { isAsleep } from '../../engine/effects'
+import { isAsleep, type Effect } from '../../engine/effects'
 import { legalDirections } from '../../engine/turn'
 import {
   TERRAIN_SLOTS,
@@ -969,15 +969,35 @@ export function effectsOnTerrain(
     if (effect.target.kind !== 'terrain' || effect.target.slot !== slot) continue
     out.push({
       source: effect.source,
-      what:
-        effect.target.scope === 'attackers'
-          ? `${describeModifiers(effect.modifiers)} for anyone attacking here`
-          : describeModifiers(effect.modifiers),
+      what: describeTerrainEffect(effect),
       until: effect.expiresAtStartOfTurnOf === human ? 'your next turn' : "the enemy's next turn",
     })
   }
 
   return out
+}
+
+/**
+ * What a terrain effect costs whoever it reaches.
+ *
+ * Wall of Thorns is why this is not just `describeModifiers`: it carries **no
+ * modifiers at all**, so the generic path printed a source name and an empty
+ * half-sentence -- the same shape `describeModifiers`' missing `ignore_ids` case
+ * printed until 7b, arriving from the other direction. A ward whose damage is
+ * invisible is a ward you cannot plan around, which is the whole reason effects are
+ * drawn on the board.
+ */
+function describeTerrainEffect(effect: Effect): string {
+  if (effect.target.kind !== 'terrain') return describeModifiers(effect.modifiers)
+
+  switch (effect.target.scope) {
+    case 'attackers':
+      return `${describeModifiers(effect.modifiers)} for anyone attacking here`
+    case 'maneuverers':
+      return `${effect.thorns ?? 0} damage to an army that maneuvers here`
+    case 'all_armies':
+      return describeModifiers(effect.modifiers)
+  }
 }
 
 /**

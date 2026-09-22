@@ -648,6 +648,12 @@ nothing.
   are two announcements, which is what the rules already provide for -- "any spell that has a
   cumulative effect may instead be cast multiple separate times, with a different target each
   time" -- so nothing is actually lost.
+- **Wall of Thorns' melee roll offers no free move and no promotion.** By the letter Wild
+  Growth, Firewalking and Teleport apply to "any non-maneuver roll", and this is one -- but it
+  happens in the *maneuver step*, with no exchange to hang a decision on, so a promotion there
+  would be a decision with nowhere to live. `RollContext.isTrigger` is what suppresses them, and
+  it is a sibling of `isSubRoll` rather than a reuse of it: there a die rolls for its life with no
+  army behind it, here an army really is rolling. Only the consequence is shared.
 - **Resurrect Dead prices its target rather than its caster.** A unit's health *is* the number of
   castings it needs, so a 2-health unit costs six magic. That number rides on the offer, not in a
   rule the clients have to know, which is what stops either of them showing a target the engine
@@ -658,6 +664,15 @@ nothing.
 - **An announced target that is gone by the time the spell resolves is dropped, not re-aimed.** "If
   for any reason the announced target of a spell is no longer present, then you may not select a new
   target" (p. 13). The same shape as damage too small to kill anything.
+- **"A melee roll instead of a save roll" settles two questions, not one.** Wall of Thorns' roll
+  *counts* melee and its *purpose* is a save roll against nothing -- the distinction `RollSpec`
+  has drawn since Phase 0b. As an attack roll a Smite on those dice would generate unsavable
+  damage against an army that is not there; as "any other save roll" Counter and Volley generate
+  their saves and no riposte, and those saves are in a type this roll does not count.
+- **Flash Flood's red number is the resistance, not the step.** Two castings raise the bar to
+  twelve maneuver results; they do not push the terrain down twice. "A terrain may never be reduced
+  by more than one step during a player's turn from the effects of Flash Flood", so a second
+  casting at the same terrain still rolls and still achieves nothing.
 - **A terrain effect never ends early.** "If an army is destroyed ... any spells affecting that army
   end" is a rule about armies. A terrain cannot empty, so Ash Storm and Wall of Fog run their full
   duration whoever is standing there.

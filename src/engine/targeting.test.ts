@@ -652,7 +652,7 @@ describe('the sub-rolls', () => {
     expect(done.units[lucky]?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
     expect(done.units[doomed]?.location).toEqual({ kind: 'dua' })
     expect(subRollEntry(done)).toMatchObject({
-      sai: 'Smother',
+      source: 'Smother',
       test: 'maneuver',
       escaped: [lucky],
     })

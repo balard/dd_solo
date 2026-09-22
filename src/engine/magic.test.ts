@@ -12,11 +12,19 @@ import { describe, expect, it } from 'vitest'
 import { randomAi } from '../ai/random'
 import { runGame } from '../ai/run'
 import { unitType } from '../data/load'
+import type { Element } from '../data/types'
 import { SPELLS, spell, spellAcceptsElement, spellAllowsSpecies } from '../data/spells'
 
 import { legalActions } from './combat'
-import { armyRoll, pruneEffects, type Effect } from './effects'
-import { castableSpells, castingElements, magicPool, magicRolled, type MagicPool } from './magic'
+import { armyRoll, pruneEffects, thornsAt, type Effect } from './effects'
+import {
+  announcementProblem,
+  castableSpells,
+  castingElements,
+  magicPool,
+  magicRolled,
+  type MagicPool,
+} from './magic'
 import { advance, begin, reduce } from './reduce'
 import { BESTIARY_FORCES, STARTER_FORCES, setupGame } from './setup'
 import { castSpell, resolvesSpell, spellEffect, summonable, type SpellContext } from './spells'
@@ -28,6 +36,7 @@ import {
   type DragonInPlay,
   type GameState,
   type PlayerId,
+  type SpellTarget,
   type TerrainSlot,
 } from './types'
 
@@ -112,16 +121,9 @@ describe('resolvesSpell', () => {
   // Every slice moves names out of this list; by 7f it is empty and the test inverts.
   // Naming them rather than counting means a spell that quietly stops resolving shows
   // up here instead of passing on a number that happens to match.
-  it('resolves everything but the six spells 7d and 7e still owe', () => {
+  it('resolves everything but the two triggers 7e still owes', () => {
     const unbuilt = SPELLS.filter((s) => !resolvesSpell(s.id, SPELL_RULES)).map((s) => s.id).sort()
-    expect(unbuilt).toEqual([
-      'accelerated_growth',
-      'flash_flood',
-      'flashfire',
-      'lightning_strike',
-      'mirage',
-      'wall_of_thorns',
-    ])
+    expect(unbuilt).toEqual(['accelerated_growth', 'flashfire'])
   })
 })
 
@@ -151,12 +153,15 @@ describe('the magic pool', () => {
     // pay for, and the pools are full even though nothing is seeded on the board.
     // Resurrect Dead is absent for the opposite reason: the DUA is empty at setup, and
     // a spell with no target is not offered.
+    // Lightning Strike is absent for the same reason Hailstorm is: both are air.
     expect(castable.map((c) => c.spell.id).sort()).toEqual([
+      'flash_flood',
       'path',
       'stone_skin',
       'summon_dragon',
       'transmute_rock_to_mud',
       'wall_of_fog',
+      'wall_of_thorns',
       'watery_double',
     ])
   })
@@ -485,6 +490,146 @@ describe('a target that is gone by the time the spell resolves', () => {
   })
 })
 
+describe('the sub-roll spells', () => {
+  it('sends a Mirage failure to Reserves without killing it', () => {
+    // Seize's shape: an escapee is not killed, so nothing goes to the DUA and no death
+    // trigger fires. Rolled with a seed that fails the save.
+    const base = gameAt('p1')
+    const victim = armyAt(base, 'p2', 'frontier')[0]!
+    const out = cast(base, 'mirage', {
+      element: 'air',
+      target: { kind: 'units', unitIds: [victim.id] },
+    })
+
+    const moved = out.state.units[victim.id]!
+    expect(['reserve', 'terrain']).toContain(moved.location.kind)
+    // Whatever the die did, it is never dead: Mirage moves, it does not kill.
+    expect(moved.location.kind).not.toBe('dua')
+    expect(out.state.log.some((e) => e.kind === 'units_killed')).toBe(false)
+    expect(out.state.log.some((e) => e.kind === 'sai_sub_roll' && e.source === 'Mirage')).toBe(true)
+  })
+
+  it('kills what a Lightning Strike beats, through the death trigger', () => {
+    const base = gameAt('p1')
+    const victim = armyAt(base, 'p2', 'frontier')[0]!
+    const out = cast(base, 'lightning_strike', {
+      element: 'air',
+      target: { kind: 'units', unitIds: [victim.id] },
+    })
+
+    const after = out.state.units[victim.id]!
+    // A kill, not a move: it goes to the DUA, or it saved and stayed.
+    expect(['dua', 'terrain', 'reserve']).toContain(after.location.kind)
+    expect(after.location.kind).not.toBe('reserve')
+  })
+
+  it('refuses two Lightning Strikes at one unit in a single magic action', () => {
+    // "A unit may not be targeted by more than one Lightning Strike per magic action."
+    // A rule *between* casts, which is what proves an announcement has to be validated
+    // as a whole rather than cast by cast.
+    const victim = 'p2:oak#0'
+    const twice = [1, 2].map(() => ({
+      spell: 'lightning_strike',
+      element: 'air' as const,
+      count: 1,
+      target: { kind: 'units', unitIds: [victim] } as const,
+    }))
+    expect(announcementProblem(twice)).toMatch(/more than one Lightning Strike/)
+    expect(announcementProblem([twice[0]!])).toBeNull()
+  })
+
+  it('lets Flash Flood through only when the army there cannot hold it', () => {
+    const base = gameAt('p1')
+    const held = cast(evacuate(base, 'p2', 'frontier'), 'flash_flood', {
+      element: 'water',
+      target: { kind: 'terrain', slot: 'frontier' },
+    })
+    // Nobody opposing means nobody resists: the flood always lands, and no dice are
+    // thrown for an army that is not there.
+    expect(held.choice).toEqual({ kind: 'flood', slot: 'frontier' })
+    expect(held.state.rng).toEqual(base.rng)
+  })
+
+  it('multiplies Flash Flood\'s resistance by the castings, not its step', () => {
+    // The red number is the *threshold*, and the step is hard-capped at one: two
+    // castings raise the bar to twelve, they do not push the terrain down twice.
+    const base = evacuate(gameAt('p1'), 'p2', 'frontier')
+    const twice = cast(base, 'flash_flood', {
+      element: 'water',
+      count: 2,
+      target: { kind: 'terrain', slot: 'frontier' },
+    })
+    const entry = twice.state.log.find((e) => e.kind === 'flash_flood')
+    expect(entry).toMatchObject({ needed: 12 })
+    expect(twice.choice).toEqual({ kind: 'flood', slot: 'frontier' })
+  })
+})
+
+describe('Wall of Thorns', () => {
+  /**
+   * The fuzz barely reaches this -- an army has to maneuver a terrain somebody warded
+   * on the previous turn, which two hundred games produced twice. So it is named.
+   */
+  const ward = (state: GameState, slot: TerrainSlot, damage: number): GameState => ({
+    ...state,
+    effects: [
+      ...state.effects,
+      {
+        source: 'Wall of Thorns',
+        target: { kind: 'terrain', slot, scope: 'maneuverers' },
+        modifiers: [],
+        thorns: damage,
+        expiresAtStartOfTurnOf: 'p2',
+      },
+    ],
+  })
+
+  it('is read by no roll, so it modifies nothing', () => {
+    // `armyRoll` names the scope and returns nothing for it: the ward fires on an
+    // event, not on dice.
+    const state = ward(gameAt('p1'), 'frontier', 6)
+    expect(armyRoll(state, 'p1', 'frontier', 'melee').modifiers).toEqual([])
+    expect(armyRoll(state, 'p1', 'frontier', 'maneuver').modifiers).toEqual([])
+    expect(thornsAt(state, 'frontier')).toBe(6)
+    expect(thornsAt(state, 'p1_home')).toBe(0)
+  })
+
+  it('sums separate castings, because each is its own spell', () => {
+    const twice = ward(ward(gameAt('p1'), 'frontier', 6), 'frontier', 6)
+    expect(thornsAt(twice, 'frontier')).toBe(12)
+  })
+
+  it('bites an army that maneuvers the terrain, and nobody else', () => {
+    const state = maneuverFrontier(ward(gameAt('p1'), 'frontier', 6))
+    const entry = state.log.find((e) => e.kind === 'thorns')
+    expect(entry).toBeDefined()
+    // "The army makes a melee roll instead of a save roll", and the damage is what is
+    // left of six after it.
+    expect(entry).toMatchObject({ slot: 'frontier' })
+    const thorns = entry as Extract<typeof entry, { kind: 'thorns' }>
+    expect(thorns.damage).toBe(Math.max(0, 6 - thorns.melee))
+  })
+
+  it('does not fire on a terrain nobody warded', () => {
+    expect(maneuverFrontier(gameAt('p1')).log.some((e) => e.kind === 'thorns')).toBe(false)
+  })
+
+  /** Turns the Frontier up, which is the event the ward waits for. */
+  function maneuverFrontier(base: GameState): GameState {
+    const ready = advance({
+      ...base,
+      pending: null,
+      turn: {
+        ...base.turn,
+        phase: 'march',
+        marchStep: 'choose_direction',
+        marchingArmy: 'frontier',
+      },
+    })
+    return reduce(ready, { kind: 'choose_direction', direction: 'up' })
+  }
+})
+
 describe('the Frontier dragon seed', () => {
   it('is gone once a spell can summon', () => {
     const state = setupGame({ seed: 4, forces: STARTER_FORCES, ruleSet: SPELL_RULES })
@@ -511,6 +656,8 @@ describe('the fuzz', () => {
     let summoned = 0
     let resurrected = 0
     let moved = 0
+    let flooded = 0
+    let floodHeld = 0
 
     // Both force sets, because the two species reach different spell lists: Treefolk
     // can never cast an air or fire spell and Firewalkers never a water or earth one,
@@ -530,6 +677,10 @@ describe('the fuzz', () => {
           if (entry.kind === 'dragon_summoned') summoned += 1
           if (entry.kind === 'units_resurrected') resurrected += 1
           if (entry.kind === 'units_moved' && entry.sai === 'Path') moved += 1
+          if (entry.kind === 'flash_flood') {
+            if (entry.moved) flooded += 1
+            else floodHeld += 1
+          }
         }
       }
     }
@@ -537,18 +688,21 @@ describe('the fuzz', () => {
     expect(stuck).toBe(0)
     expect(announcements).toBe(magicActions)
 
-    // The board spells did what they do, rather than merely being announced: a dragon
-    // left a pool, a unit walked out of the DUA, a unit changed terrain.
+    // The spells that *do* something rather than merely sitting on an army: a dragon
+    // left a pool, a unit walked out of the DUA, a unit changed terrain, a terrain went
+    // down -- and an army held one, which is the branch a one-sided counter would miss.
     expect(summoned).toBeGreaterThan(0)
     expect(resurrected).toBeGreaterThan(0)
     expect(moved).toBeGreaterThan(0)
+    expect(flooded).toBeGreaterThan(0)
+    expect(floodHeld).toBeGreaterThan(0)
 
     // The counters are what make a clean run mean something: a fuzz over rules nothing
     // reached would be green and prove nothing. **Every spell this build resolves
     // fires**, which is a stronger claim than a list, and it tightens on its own as
     // each later slice moves a name out of the unbuilt set.
     const live = SPELLS.filter((s) => resolvesSpell(s.id, SPELL_RULES)).map((s) => s.id)
-    expect(live).toHaveLength(12)
+    expect(live).toHaveLength(16)
     for (const id of live) expect(cast.get(id) ?? 0).toBeGreaterThan(0)
 
     // And nothing unbuilt is ever cast: a spell the rung cannot resolve is never
@@ -559,6 +713,20 @@ describe('the fuzz', () => {
 })
 
 // --- helpers -----------------------------------------------------------------
+
+/** Resolves one spell directly, for the handlers that need no announcement. */
+function cast(
+  state: GameState,
+  id: string,
+  over: { element: Element; count?: number; target: SpellTarget },
+) {
+  return castSpell(state, spell(id), {
+    caster: 'p1',
+    army: 'p1_home',
+    count: 1,
+    ...over,
+  })
+}
 
 /** Empties an army, so an announced target can vanish before its spell resolves. */
 function evacuate(state: GameState, player: PlayerId, slot: TerrainSlot): GameState {

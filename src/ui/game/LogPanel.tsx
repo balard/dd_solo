@@ -314,7 +314,7 @@ function Line({
       return (
         <div className="log-roll">
           <div className="roll-head">
-            <strong>{entry.sai}</strong> &middot; {asked} or die &middot; {where(entry.slot)}
+            <strong>{entry.source}</strong> &middot; {asked} or die &middot; {where(entry.slot)}
           </div>
           <RollStrip dice={entry.dice} />
           <div className="roll-sum">
@@ -468,6 +468,31 @@ function Line({
               : `from ${slotLabel(entry.from, human)}`}
           </span>
         </p>
+      )
+
+    // Both numbers, because "the flood failed" and "the flood failed by one result"
+    // are different things to read on your opponent's turn.
+    case 'flash_flood':
+      return (
+        <p className="log-line">
+          <b>Flash Flood</b> at {where(entry.slot)} &mdash;{' '}
+          {entry.moved ? 'the terrain goes down' : 'held'}
+          <span className="muted">
+            {' '}
+            ({entry.resisted} of {entry.needed} maneuver)
+          </span>
+        </p>
+      )
+
+    case 'thorns':
+      return (
+        <div className="log-roll">
+          <div className="roll-head">Wall of Thorns at {where(entry.slot)}</div>
+          <RollStrip dice={entry.dice} />
+          <div className="roll-sum">
+            {entry.melee} melee &rarr; <b>{entry.damage}</b> damage
+          </div>
+        </div>
       )
 
     case 'spell_fizzled':

@@ -294,7 +294,7 @@ function describe(entry: LogEntry, state: GameState): string | null {
           : entry.toReserve === true
             ? `${who} escape${one} to ${entry.player}'s reserves`
             : `${who} get${one} away`
-      return yellow(`  ${bold(entry.sai)}: ${asked} or die — ${got}`)
+      return yellow(`  ${bold(entry.source)}: ${asked} or die — ${got}`)
     }
     // Says when it ends as well as what it hit: an effect with a duration is the one
     // thing in the log that is still true on the next line.
@@ -372,6 +372,19 @@ function describe(entry: LogEntry, state: GameState): string | null {
       return cyan(
         `  ${dragonName(entry.dieId)} is summoned to ${SLOT_LABEL[entry.slot]}` +
           dim(entry.from === 'pool' ? ' from the Summoning Pool' : ` from ${SLOT_LABEL[entry.from]}`),
+      )
+
+    case 'flash_flood':
+      return cyan(
+        `  ${bold('Flash Flood')} at ${SLOT_LABEL[entry.slot]} — ` +
+          (entry.moved ? 'the terrain goes down' : 'held') +
+          dim(` (${entry.resisted} of ${entry.needed} maneuver)`),
+      )
+
+    case 'thorns':
+      return yellow(
+        `  ${bold('Wall of Thorns')} at ${SLOT_LABEL[entry.slot]}: ` +
+          `${entry.melee} melee — ${bold(String(entry.damage))} damage`,
       )
 
     case 'spell_fizzled':

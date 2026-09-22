@@ -74,6 +74,15 @@ export type TerrainScope =
   | 'all_armies'
   /** Wall of Fog: a roll aimed *at* this terrain, made from somewhere else. */
   | 'attackers'
+  /**
+   * Wall of Thorns: an army that successfully maneuvers this terrain.
+   *
+   * **Gathered by no roll at all**, which is why `armyRoll` names it and returns
+   * nothing for it. It is read at the maneuver site, once, after the terrain has
+   * turned -- the only effect in the game that fires on an event rather than on a
+   * die being thrown.
+   */
+  | 'maneuverers'
 
 export interface Effect {
   /** Spell name, SAI name, breath element -- what the log names it by. */
@@ -84,6 +93,14 @@ export interface Effect {
   readonly modifiers: readonly Modifier[]
   /** Sleep: the unit cannot be rolled, and cannot leave the terrain it occupies. */
   readonly asleep?: true
+  /**
+   * Wall of Thorns: damage an army takes for successfully maneuvering this terrain.
+   *
+   * A field rather than a `Modifier`, for `asleep`'s reason: it is not arithmetic on a
+   * roll. The army answers it with a **melee** roll in place of a save roll, which no
+   * modifier could express either.
+   */
+  readonly thorns?: number
   /**
    * "Until the beginning of your next turn" -- *your* being whoever made the roll,
    * which on a counter-attack is the defending player, not the marching one.
@@ -226,6 +243,8 @@ export function armyRoll(
     else if (against !== undefined && targetsTerrain(effect, against, 'attackers')) {
       modifiers.push(...effect.modifiers)
     }
+    // `'maneuverers'` is deliberately absent: Wall of Thorns fires on an event rather
+    // than on a roll, and is read at the maneuver site by `thornsAt`.
   }
   if (doublesIds(state, player, ref)) modifiers.push(doubleIdsModifier(resultType))
 
@@ -276,6 +295,21 @@ export function unitRoll(state: GameState, unitId: UnitId): UnitRollInput {
   }
 
   return { unit, rollable: !isAsleep(state, unitId), modifiers }
+}
+
+/**
+ * Wall of Thorns' damage at a terrain, or 0.
+ *
+ * Summed rather than taken singly: two castings of a cumulative spell on one target
+ * are one spell with a bigger number, but two *separate* announcements are two spells
+ * and both bite. The same arithmetic `armyRoll` does for two Galeforces.
+ */
+export function thornsAt(state: GameState, slot: TerrainSlot): number {
+  let total = 0
+  for (const effect of state.effects) {
+    if (targetsTerrain(effect, slot, 'maneuverers')) total += effect.thorns ?? 0
+  }
+  return total
 }
 
 /**

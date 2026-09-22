@@ -56,6 +56,7 @@ import {
 import { buryUnits, killAndBury, killUnits } from './death'
 import {
   armyRoll,
+  thornsAt,
   doublesIds,
   expireEffects,
   iconAt,
@@ -83,7 +84,13 @@ import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
 import { delayedTasks, targetTasks, type TargetTask } from './targeting'
 import { unitType } from '../data/load'
 import { spell } from '../data/spells'
-import { castableSpells, magicPool, sameSpellTarget, spellTargetProblem } from './magic'
+import {
+  announcementProblem,
+  castableSpells,
+  magicPool,
+  sameSpellTarget,
+  spellTargetProblem,
+} from './magic'
 import { castSpell, spellEffect } from './spells'
 import type { DragonElement, ResultType } from '../data/types'
 import {
@@ -342,6 +349,20 @@ function stepMarch(state: GameState): GameState {
     case 'resolve_counter_damage':
       return finishExchange(state, true)
 
+    case 'thorns_damage': {
+      const owed = state.turn.thorns
+      if (owed === undefined) return stepThorns(state)
+      return {
+        ...state,
+        pending: {
+          kind: 'assign_damage',
+          player,
+          slot: owed.slot,
+          damage: owed.damage,
+        },
+      }
+    }
+
     case 'assign_attack_damage':
     case 'assign_attack_riposte':
     case 'assign_counter_damage':
@@ -379,8 +400,13 @@ function stepMarch(state: GameState): GameState {
     case 'resolve_spell_choice': {
       const choice = magicOf(state).choice
       if (choice === undefined) return withTurn(state, { marchStep: 'resolve_spell' })
+      // Flash Flood owes no decision -- the roll that could have stopped it has
+      // already happened -- but it resolves *after* a roll, so it comes back through
+      // the same door and is applied here rather than inside the handler.
+      if (choice.kind === 'flood') return applyFlood(state, choice.slot)
       return { ...state, pending: spellChoicePending(state, choice) }
     }
+
 
     case 'offer_counter': {
       const combat = requireCombat(state)
@@ -1477,7 +1503,7 @@ function subRoll(
   const entry: LogEntry = {
     kind: 'sai_sub_roll',
     player: spec.defender,
-    sai: task.sai,
+    source: task.sai,
     slot: spec.defenderSlot,
     test: task.escape === 'id' ? 'id' : task.escape === 'save' ? 'save' : 'maneuver',
     dice,
@@ -1664,6 +1690,11 @@ function spellChoicePending(state: GameState, choice: SpellChoice): Pending {
         options: choice.options,
         remaining: choice.remaining,
       }
+    // Flash Flood asks nobody anything: it is intercepted a line earlier and applied.
+    // Exhaustive rather than defaulted, so a new `SpellChoice` is a compile error here
+    // instead of a silently unasked question.
+    case 'flood':
+      throw new Error('a flood is applied rather than asked about')
   }
 }
 
@@ -1679,6 +1710,20 @@ function afterSpellChoice(state: GameState, choice: SpellChoice | null): GameSta
   return withTurn(withMagic(state, next), {
     marchStep: choice === null ? 'resolve_spell' : 'resolve_spell_choice',
   })
+}
+
+/**
+ * Flash Flood: the terrain goes down a step, once per player turn.
+ *
+ * `floodedSlots` is what makes "once" true: a second casting at the same terrain still
+ * rolls, and still achieves nothing, which is the rule rather than an optimisation.
+ */
+function applyFlood(state: GameState, slot: TerrainSlot): GameState {
+  const moved = moveTerrain(state, slot, 'down')
+  return afterSpellChoice(
+    withTurn(moved, { floodedSlots: [...(state.turn.floodedSlots ?? []), slot] }),
+    null,
+  )
 }
 
 /** Path: the units it named go where the caster says. */
@@ -3042,7 +3087,94 @@ function applyDirection(state: GameState, direction: Direction): GameState {
       `cannot maneuver ${direction} from face ${state.terrains[slot].face}`,
     )
   }
-  return withTurn(moveTerrain(state, slot, direction), { marchStep: 'action' })
+
+  const moved = moveTerrain(state, slot, direction)
+  // "Any army that successfully maneuvers that terrain takes six points of damage."
+  // *After* the terrain turns, because the maneuver is what triggers it -- and only
+  // here, because this is the one place a maneuver is known to have succeeded.
+  return withTurn(moved, {
+    marchStep: thornsAt(moved, slot) > 0 ? 'thorns_damage' : 'action',
+  })
+}
+
+/**
+ * Wall of Thorns' bite: six damage, less whatever the army's melee roll cuts off it.
+ *
+ * "The army makes a melee roll **instead of a save roll**", and that sentence settles
+ * both halves of the roll separately -- which is exactly the distinction `RollSpec`
+ * draws between what a roll *counts* and what it is *for*. It counts **melee**; its
+ * purpose is a **save roll against nothing**, because that is the roll it replaces.
+ *
+ * Getting the purpose wrong is not cosmetic. As an attack roll a Smite here would
+ * generate unsavable damage against an army that does not exist; as `save` with
+ * `against: null` -- the narrow reading the SAI reference calls "any other save roll"
+ * -- Counter and Volley generate their saves and no riposte, and the saves are in a
+ * type this roll does not count, so they are simply ignored.
+ *
+ * `isTrigger` is what stops Wild Growth and the free moves offering a decision the
+ * maneuver step has nowhere to put. A house rule, `RULES-V0.md` section 15.
+ */
+function stepThorns(state: GameState): GameState {
+  const player = state.turn.marching
+  const slot = marchingSlot(state)
+  const owed = thornsAt(state, slot)
+
+  const army = armyRoll(state, player, slot, 'melee')
+  const [roll, rng] = rollArmy(
+    army.units,
+    'melee',
+    state.rng,
+    state.ruleSet,
+    army.modifiers,
+    { purpose: { kind: 'save', against: null }, isCounter: false, isTrigger: true },
+  )
+  // The army is rolling against a hedge, so there is nowhere for a riposte or a
+  // targeting SAI to go: refuse rather than drop, as every other roll with no home
+  // for an effect does.
+  expectNoEffects(roll, "Wall of Thorns' melee roll")
+
+  const damage = Math.max(0, owed - roll.total)
+  const logged = withLog({ ...state, rng }, {
+    kind: 'thorns',
+    player,
+    slot,
+    damage,
+    melee: roll.total,
+    dice: roll.dice,
+  })
+
+  // Damage too small to kill anything is dropped rather than asked about, exactly as
+  // after an exchange.
+  const survivors = armyRef(logged, player, slot)
+  if (damage === 0 || maxAbsorbable(healthsOf(survivors), damage) === 0) {
+    return withTurn(logged, { marchStep: 'action' })
+  }
+
+  return withTurn(logged, { marchStep: 'thorns_damage', thorns: { slot, damage } })
+}
+
+/** Wall of Thorns' dead, chosen by their owner under the maximal-subset rule. */
+function applyThornsDamage(state: GameState, unitIds: readonly UnitId[]): GameState {
+  const owed = state.turn.thorns
+  if (owed === undefined) throw new IllegalActionError('no thorns damage is waiting')
+
+  const player = state.turn.marching
+  const army = armyRef(state, player, owed.slot)
+  const problem = damageAssignmentProblem(army, owed.damage, unitIds)
+  if (problem !== null) throw new IllegalActionError(problem)
+
+  const { state: dead, risen } = killUnits(state, unitIds)
+  const killed = withLog(
+    dead,
+    { kind: 'units_killed', player, slot: owed.slot, unitIds },
+    ...(risen.length > 0 ? [{ kind: 'units_risen', player, unitIds: risen } as const] : []),
+  )
+
+  // Built field by field so `thorns` is dropped by omission, the rule every optional
+  // field near the digest follows.
+  const turn = killed.turn
+  const { thorns: _spent, ...rest } = turn
+  return { ...killed, turn: { ...rest, marchStep: 'action' } }
 }
 
 function applyChooseAction(state: GameState, action: ActionKind | null): GameState {
@@ -3137,6 +3269,9 @@ function applyAssignDamage(state: GameState, unitIds: readonly UnitId[]): GameSt
   // And so does Hailstorm, for the same reason: the decision is identical and only
   // where the state goes next differs.
   if (state.turn.magic?.choice?.kind === 'damage') return applySpellDamage(state, unitIds)
+  // And so does Wall of Thorns, which is a spell's damage arriving on somebody else's
+  // turn -- there is no `turn.magic` to hang it on, so it has a field of its own.
+  if (state.turn.thorns !== undefined) return applyThornsDamage(state, unitIds)
 
   const step = state.turn.marchStep
   if (!isAssignStep(step)) {
@@ -3263,6 +3398,10 @@ function applyAnnounceSpells(state: GameState, casts: readonly AnnouncedSpell[])
     if (problem !== null) throw new IllegalActionError(problem)
     spent += offer.spell.cost * cast.count
   }
+
+  // A rule between casts rather than about one: Lightning Strike's once-per-unit.
+  const across = announcementProblem(casts)
+  if (across !== null) throw new IllegalActionError(across)
 
   if (spent > magic.pool.points) {
     throw new IllegalActionError(

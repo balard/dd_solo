@@ -171,6 +171,14 @@ export type MarchStep =
   // one per spell: what differs is the question, which `SpellChoice` carries, not the
   // place the machine stands while it is asked.
   | 'resolve_spell_choice'
+  /**
+   * Wall of Thorns, after a maneuver that succeeded (Phase 7d).
+   *
+   * A step of the *marching* player's turn rather than of any spell's resolution: the
+   * ward was cast on somebody else's turn and fires on an event, so there is no
+   * `turn.magic` to hang it on.
+   */
+  | 'thorns_damage'
 
 /**
  * An attack roll that has landed, held while the exchange is paused between the
@@ -296,6 +304,9 @@ export type SpellChoice =
       readonly unitIds: readonly UnitId[]
       readonly options: readonly TerrainSlot[]
     }
+  /** Flash Flood: the terrain goes down a step. No decision, but the spell resolves
+   *  after a roll, so it comes back through the same door the others do. */
+  | { readonly kind: 'flood'; readonly slot: TerrainSlot }
   /** Summon Dragon: which dragon of that element, from any pool or terrain. Drained
    *  one per answer, because combined castings summon more than one. */
   | {
@@ -374,6 +385,20 @@ export interface TurnState {
    * what is left has to be remembered rather than derived.
    */
   readonly dragonsDone?: readonly TerrainSlot[]
+  /**
+   * Wall of Thorns' damage, between the melee roll that reduced it and the assignment
+   * that spends it (Phase 7d).
+   */
+  readonly thorns?: { readonly slot: TerrainSlot; readonly damage: number }
+  /**
+   * Terrains Flash Flood has already pushed down this turn.
+   *
+   * "A terrain may never be reduced by more than one step during a player's turn from
+   * the effects of Flash Flood" -- so a second casting at the same terrain rolls and
+   * achieves nothing, which is the rule rather than a shortcut. Cleared with the turn,
+   * which `endTurn` now does by building rather than spreading.
+   */
+  readonly floodedSlots?: readonly TerrainSlot[]
 }
 
 /**
@@ -1057,7 +1082,9 @@ export type LogEntry =
       readonly kind: 'sai_sub_roll'
       /** The owner of the dice that rolled. *Not* the roller who targeted them. */
       readonly player: PlayerId
-      readonly sai: string
+      /** An SAI name, or a spell name from Phase 7d -- Mirage and Lightning Strike
+       *  put their targets through exactly the roll Bullseye and Seize do. */
+      readonly source: string
       /** A Reserve Army after a Tower's missile (Phase 5d): Bullseye and Seize
        *  both reach one. */
       readonly slot: ArmyRef
@@ -1185,6 +1212,30 @@ export type LogEntry =
   /** An announced cast whose target was gone by the time it resolved. "You may not
    *  select a new target" (p. 13), so it is dropped and said so. */
   | { readonly kind: 'spell_fizzled'; readonly player: PlayerId; readonly spell: string }
+  /**
+   * Flash Flood: the terrain went down, or the army there held it.
+   *
+   * `resisted` and `needed` both, because "the flood failed" and "the flood failed by
+   * one result" are different things to read on your opponent's turn.
+   */
+  | {
+      readonly kind: 'flash_flood'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly needed: number
+      readonly resisted: number
+      readonly moved: boolean
+    }
+  /** Wall of Thorns: what a successful maneuver cost, after the melee roll that
+   *  reduced it. */
+  | {
+      readonly kind: 'thorns'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly damage: number
+      readonly melee: number
+      readonly dice: readonly DieRoll[]
+    }
   /** Resurrect Dead: units walking back out of the DUA into the casting army. */
   | {
       readonly kind: 'units_resurrected'

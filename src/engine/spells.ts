@@ -27,12 +27,15 @@ import { spell, type Spell, type SpellEffectSpec, type SpellModifierSpec } from 
 import type { Element, ResultType } from '../data/types'
 
 import { healthsOf, maxAbsorbable } from './damage'
+import { killUnits } from './death'
 import { returnFromDua } from './dua'
-import type { Effect, EffectTarget } from './effects'
+import { armyRoll, unitRoll, type Effect, type EffectTarget } from './effects'
+import { expectNoEffects, rollArmy, rollUnits, type DieRoll } from './roll'
 import { ALL_RESULT_TYPES, type Modifier } from './pipeline'
 
 import {
   army as armyOf,
+  opponentOf,
   TERRAIN_SLOTS,
   type ArmyRef,
   type DragonId,
@@ -42,6 +45,7 @@ import {
   type SpellChoice,
   type SpellTarget,
   type TerrainSlot,
+  type UnitId,
   type UnitInstance,
 } from './types'
 
@@ -264,11 +268,269 @@ export function summonable(
     .map((d) => d.id)
 }
 
+/**
+ * The roll Mirage and Lightning Strike put their targets through.
+ *
+ * Exactly Phase 4d's sub-roll, and it reuses it wholesale: a *unit* roll, so it gathers
+ * through `unitRoll` and never `armyRoll` -- "modifiers that affect an army do not
+ * affect the roll of an individual unit from that army" (p. 28). A die that cannot be
+ * rolled generates nothing, which means it fails, and draws no randomness doing it.
+ *
+ * `isSubRoll` is what tells an SAI this is one die rolling for its life: without it a
+ * Firewalking face on a target offers a free move nobody can be asked about, and
+ * `expectNoEffects` refuses the roll rather than the effect being quietly dropped.
+ */
+function saveSubRoll(
+  state: GameState,
+  source: string,
+  unitIds: readonly UnitId[],
+): { readonly state: GameState; readonly failed: readonly UnitId[]; readonly dice: readonly DieRoll[] } {
+  // Board order, not the order the caster named them -- `death.ts`'s rule, so two
+  // players naming the same units differently get the same game.
+  const ordered = Object.values(state.units)
+    .filter((unit) => unitIds.includes(unit.id))
+    .map((unit) => unitRoll(state, unit.id))
+
+  const [rolls, rng] = rollUnits(
+    ordered,
+    'save',
+    { purpose: { kind: 'save', against: null }, isCounter: false, isSubRoll: true },
+    state.rng,
+    state.ruleSet,
+  )
+
+  const failed: UnitId[] = []
+  const dice: DieRoll[] = []
+  for (const sub of rolls) {
+    if (sub.roll === null) {
+      failed.push(sub.unitId)
+      continue
+    }
+    expectNoEffects(sub.roll, `${source}'s save roll`)
+    dice.push(...sub.roll.dice)
+    if (sub.roll.total === 0) failed.push(sub.unitId)
+  }
+
+  return { state: { ...state, rng }, failed, dice }
+}
+
+/** The units a spell named that are still where it named them. */
+const stillThere = (state: GameState, ids: readonly UnitId[]): readonly UnitId[] =>
+  ids.filter((id) => state.units[id]?.location.kind === 'terrain')
+
+/**
+ * Mirage: "the targets make a save roll. Those that do not generate a save result are
+ * moved to their Reserve Area."
+ *
+ * Seize's shape exactly, down to the escapees not being killed -- so no death trigger
+ * fires and nothing goes to the DUA.
+ */
+const mirage: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'units') throw new Error('Mirage targets units')
+  const targets = stillThere(state, ctx.target.unitIds)
+  if (targets.length === 0) return { state }
+
+  const rolled = saveSubRoll(state, 'Mirage', targets)
+  const units = { ...rolled.state.units }
+  for (const id of rolled.failed) {
+    const unit = units[id]
+    if (unit !== undefined) units[id] = { ...unit, location: { kind: 'reserve' } }
+  }
+
+  return {
+    state: {
+      ...rolled.state,
+      units,
+      log: [
+        ...rolled.state.log,
+        {
+          kind: 'sai_sub_roll',
+          player: owners(state, targets),
+          source: 'Mirage',
+          slot: slotOf(state, targets),
+          test: 'save',
+          dice: rolled.dice,
+          escaped: targets.filter((id) => !rolled.failed.includes(id)),
+          ...(rolled.failed.length > 0 ? { toReserve: true as const } : {}),
+        },
+      ],
+    },
+  }
+}
+
+/**
+ * Lightning Strike: "the target makes a save roll. If it does not generate a save
+ * result, it is killed."
+ *
+ * A kill rather than a move, so it goes through `killUnits` and the death trigger
+ * fires -- a Phoenix struck by lightning still gets its roll.
+ */
+const lightningStrike: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'units') throw new Error('Lightning Strike targets a unit')
+  const targets = ctx.target.unitIds.filter((id) => state.units[id] !== undefined)
+  if (targets.length === 0) return { state }
+
+  const rolled = saveSubRoll(state, 'Lightning Strike', targets)
+  const victim = owners(state, targets)
+  const where = slotOf(state, targets)
+
+  const logged: GameState = {
+    ...rolled.state,
+    log: [
+      ...rolled.state.log,
+      {
+        kind: 'sai_sub_roll',
+        player: victim,
+        source: 'Lightning Strike',
+        slot: where,
+        test: 'save',
+        dice: rolled.dice,
+        escaped: targets.filter((id) => !rolled.failed.includes(id)),
+      },
+    ],
+  }
+
+  if (rolled.failed.length === 0) return { state: logged }
+
+  const { state: dead, risen } = killUnits(logged, rolled.failed)
+  return {
+    state: {
+      ...dead,
+      log: [
+        ...dead.log,
+        { kind: 'units_killed', player: victim, slot: where, unitIds: rolled.failed },
+        ...(risen.length > 0
+          ? [{ kind: 'units_risen' as const, player: victim, unitIds: risen }]
+          : []),
+      ],
+    },
+  }
+}
+
+/**
+ * Flash Flood: "reduce that terrain one step unless an opposing army at that terrain
+ * generates at least six maneuver results."
+ *
+ * The defender's roll is an **army** roll, so it goes through `armyRoll` and picks up
+ * everything sitting on that army -- an Ash Storm there makes the wall harder to clear.
+ * No opposing army means no roll and no randomness: there is nobody to resist.
+ *
+ * "A terrain may never be reduced by more than one step during a player's turn from
+ * the effects of Flash Flood", so a second casting at the same terrain still rolls and
+ * still achieves nothing. That is the rule as written, not a shortcut.
+ */
+const flashFlood: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'terrain') throw new Error('Flash Flood targets a terrain')
+  const slot = ctx.target.slot
+  const needed = FLASH_FLOOD_RESISTANCE * ctx.count
+  const defender = opponentOf(ctx.caster)
+
+  const army = armyRoll(state, defender, slot, 'maneuver')
+  let next = state
+  let resisted = 0
+
+  if (army.units.length > 0) {
+    const [roll, rng] = rollArmy(
+      army.units,
+      'maneuver',
+      state.rng,
+      state.ruleSet,
+      army.modifiers,
+      { purpose: { kind: 'maneuver' }, isCounter: false },
+    )
+    // A maneuver roll has nowhere to put an effect, exactly as a contest does.
+    expectNoEffects(roll, "Flash Flood's maneuver roll")
+    resisted = roll.total
+    next = { ...state, rng }
+  }
+
+  const held = resisted >= needed
+  const already = (next.turn.floodedSlots ?? []).includes(slot)
+  const face = next.terrains[slot].face
+
+  return {
+    state: {
+      ...next,
+      log: [
+        ...next.log,
+        {
+          kind: 'flash_flood',
+          player: ctx.caster,
+          slot,
+          needed,
+          resisted,
+          moved: !held && !already && face > 1,
+        },
+      ],
+    },
+    ...(held || already || face <= 1 ? {} : { choice: { kind: 'flood', slot } as const }),
+  }
+}
+
+/**
+ * Wall of Thorns: a ward on a terrain that bites an army for maneuvering it.
+ *
+ * An `Effect` with no modifiers at all -- the damage is not arithmetic on a roll, and
+ * the roll the army answers with is a *melee* roll in place of a save roll, which no
+ * `Modifier` could express either. Hence `Effect.thorns`, `asleep`'s sibling.
+ */
+const wallOfThorns: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'terrain') throw new Error('Wall of Thorns targets a terrain')
+
+  return {
+    state: {
+      ...state,
+      effects: [
+        ...state.effects,
+        {
+          source: 'Wall of Thorns',
+          target: { kind: 'terrain', slot: ctx.target.slot, scope: 'maneuverers' },
+          modifiers: [],
+          thorns: WALL_OF_THORNS_DAMAGE * ctx.count,
+          expiresAtStartOfTurnOf: ctx.caster,
+        },
+      ],
+      log: [
+        ...state.log,
+        {
+          kind: 'effect_cast',
+          player: ctx.caster,
+          source: 'Wall of Thorns',
+          slot: ctx.target.slot,
+        },
+      ],
+    },
+  }
+}
+
+/** "...unless an opposing army at that terrain generates at least six maneuver
+ *  results", multiplied by the castings. */
+export const FLASH_FLOOD_RESISTANCE = 6
+
+/** "...takes six points of damage", multiplied by the castings. */
+export const WALL_OF_THORNS_DAMAGE = 6
+
+/** Whose dice these are. They are one army's, so the first answers for all. */
+function owners(state: GameState, ids: readonly UnitId[]): PlayerId {
+  const first = ids[0] === undefined ? undefined : state.units[ids[0]]
+  return first?.owner ?? 'p1'
+}
+
+/** Where they stand. Reserves for a unit that is not at a terrain. */
+function slotOf(state: GameState, ids: readonly UnitId[]): ArmyRef {
+  const first = ids[0] === undefined ? undefined : state.units[ids[0]]
+  return first !== undefined && first.location.kind === 'terrain' ? first.location.slot : 'reserve'
+}
+
 const HANDLERS: Readonly<Record<string, SpellHandler>> = {
   hailstorm,
   path,
   resurrect_dead: resurrectDead,
   summon_dragon: summonDragon,
+  mirage,
+  lightning_strike: lightningStrike,
+  flash_flood: flashFlood,
+  wall_of_thorns: wallOfThorns,
 }
 
 /** The spell ids this build can actually resolve, for tests and for the clients. */

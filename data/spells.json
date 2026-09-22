@@ -48,7 +48,8 @@
       "cumulative": true,
       "reserves": false,
       "cantrip": false,
-      "text": "Target up to five health-worth of units at any terrain. The targets make a save roll. Those that do not generate a save result are moved to their Reserve Area."
+      "text": "Target up to five health-worth of units at any terrain. The targets make a save roll. Those that do not generate a save result are moved to their Reserve Area.",
+      "handler": "mirage"
     },
     {
       "id": "lightning_strike",
@@ -60,7 +61,8 @@
       "cumulative": false,
       "reserves": false,
       "cantrip": false,
-      "text": "Target any opposing unit. The target makes a save roll. If it does not generate a save result, it is killed. A unit may not be targeted by more than one Lightning Strike per magic action."
+      "text": "Target any opposing unit. The target makes a save roll. If it does not generate a save result, it is killed. A unit may not be targeted by more than one Lightning Strike per magic action.",
+      "handler": "lightning_strike"
     },
     {
       "id": "ash_storm",
@@ -193,7 +195,8 @@
       "cumulative": true,
       "reserves": false,
       "cantrip": false,
-      "text": "Target any terrain. Reduce that terrain one step unless an opposing army at that terrain generates at least six maneuver results. A terrain may never be reduced by more than one step during a player's turn from the effects of Flash Flood."
+      "text": "Target any terrain. Reduce that terrain one step unless an opposing army at that terrain generates at least six maneuver results. A terrain may never be reduced by more than one step during a player's turn from the effects of Flash Flood.",
+      "handler": "flash_flood"
     },
     {
       "id": "wall_of_fog",
@@ -264,7 +267,8 @@
       "cumulative": true,
       "reserves": false,
       "cantrip": false,
-      "text": "Target any terrain not at its eighth face. Any army that successfully maneuvers that terrain takes six points of damage. The army makes a melee roll instead of a save roll. Reduce the damage taken by the number of melee results generated. This effect lasts until the beginning of your next turn."
+      "text": "Target any terrain not at its eighth face. Any army that successfully maneuvers that terrain takes six points of damage. The army makes a melee roll instead of a save roll. Reduce the damage taken by the number of melee results generated. This effect lasts until the beginning of your next turn.",
+      "handler": "wall_of_thorns"
     },
     {
       "id": "transmute_rock_to_mud",

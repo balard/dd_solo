@@ -32,6 +32,7 @@ import { resolvesSpell, summonable } from './spells'
 import {
   army as armyOf,
   deadUnits,
+  livingUnits,
   opponentOf,
   speciesOf,
   TERRAIN_SLOTS,
@@ -183,12 +184,43 @@ export function spellTargets(
         minCount: unitType(unit.typeId).health,
       }))
 
-    // 7d: Mirage and Lightning Strike. Nothing with these targets resolves yet, so
-    // `castableSpells` filters them out before this is ever asked.
+    // Lightning Strike: "target any opposing unit". Reserves included -- the rules
+    // shield a Reserve Army from missile fire and from dragons, and say nothing about
+    // magic.
     case 'opposing_unit':
+      return livingUnits(state, opponentOf(caster)).map((unit) =>
+        once({ kind: 'units', unitIds: [unit.id] }),
+      )
+
+    // Mirage: "up to five health-worth of units **at any terrain**" -- so not
+    // Reserves, and either player's. One unit per casting; see RULES-V0.md section 15.
     case 'units':
-      return []
+      return TERRAIN_SLOTS.flatMap((slot) =>
+        [caster, opponentOf(caster)].flatMap((player) =>
+          armyOf(state, player, slot).map((unit) => once({ kind: 'units', unitIds: [unit.id] })),
+        ),
+      )
   }
+}
+
+/**
+ * Why this whole announcement is illegal, or null.
+ *
+ * Separate from `spellTargetProblem` because it is a rule *between* casts rather than
+ * about any one of them -- and it is the rule that proves an announcement has to be
+ * validated as a whole rather than cast by cast.
+ */
+export function announcementProblem(casts: readonly AnnouncedSpell[]): string | null {
+  // "A unit may not be targeted by more than one Lightning Strike per magic action."
+  const struck = new Set<string>()
+  for (const cast of casts) {
+    if (cast.spell !== 'lightning_strike' || cast.target.kind !== 'units') continue
+    for (const id of cast.target.unitIds) {
+      if (struck.has(id)) return 'a unit may not be targeted by more than one Lightning Strike'
+      struck.add(id)
+    }
+  }
+  return null
 }
 
 /**

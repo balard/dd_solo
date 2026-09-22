@@ -13,7 +13,7 @@ Standing Stones, and retires Phase 6's Frontier dragon seed.
 | **7a** | The data and the seam: `data/spells.json`, `magic.ts`, `MagicState`, the march steps. No spell resolves. | **landed** |
 | **7b** | The eight declarative spells, `EffectTarget.terrain`, and the whole client surface | **landed** |
 | **7c** | The board spells: Hailstorm, Path, Resurrect Dead, Summon Dragon | **landed** |
-| **7d** | The sub-roll spells: Mirage, Lightning Strike, Flash Flood, Wall of Thorns | |
+| **7d** | The sub-roll spells: Mirage, Lightning Strike, Flash Flood, Wall of Thorns | **landed** |
 | **7e** | The two triggers: Flashfire and Accelerated Growth | |
 | **7f** | Cantrip, Dispel Magic, Standing Stones, Reserve magic, and the flip | |
 
@@ -279,20 +279,89 @@ unbuilt set -- plus a dragon summoned, a unit resurrected and a unit moved by Pa
 
 ---
 
-## 7d -- the sub-roll spells
+## 7d -- the sub-roll spells -- **landed**
 
-**Mirage, Lightning Strike, Flash Flood, Wall of Thorns.** All four are Phase 4d's `unitRoll` /
-`rollUnits` / `armyRoll` machinery unchanged.
+**Delivered.** Mirage and Lightning Strike put their targets through Phase 4d's sub-roll unchanged;
+Flash Flood rolls the defending army against a threshold; Wall of Thorns is a ward that fires on an
+event rather than on dice. `TerrainScope` gained `'maneuverers'` and `Effect` gained `thorns`, the
+first field since `asleep` that is a status rather than arithmetic. **Sixteen of the eighteen spells
+resolve**; only Flashfire and Accelerated Growth are left. 669 tests (was 660), goldens
+byte-identical and unregenerated.
+
+### Where the plan was wrong
+
+- **Wall of Thorns' roll needed a `RollContext` flag, not just a purpose.** The plan asked which
+  `RollPurpose` "a melee roll instead of a save roll" is, and the answer turned out to be *both
+  halves separately*: it **counts** melee and its **purpose** is a save roll against nothing. That
+  is not pedantry -- as an attack roll a Smite on those dice generates unsavable damage against an
+  army that does not exist. But the purpose alone was not enough; see below.
+- **`sai_sub_roll.sai` became `source`.** A spell can cause one now, and a field called `sai`
+  holding `"Mirage"` is a small lie of exactly the kind this project keeps finding in its own log
+  entries. Same rename the `Effect.source` field already carries.
+- **Flash Flood needed no pending.** Its roll is the *defender's*, and by the time it has happened
+  there is nothing left to decide -- so it returns a `SpellChoice` that is applied rather than
+  asked about. Worth the one odd-looking member: the alternative was a handler reaching into
+  `moveTerrain`, which lives in `turn.ts` for good reasons.
+
+### What the browser caught, and no test did
+
+**`Wall of Thorns' melee roll produced a wild_growth effect, which nothing reads`** -- a crash, on
+the first game that actually maneuvered a warded terrain. By the letter Wild Growth applies to any
+non-maneuver roll and this is one, but it happens in the *maneuver step*, where there is no exchange
+to hang a promotion on. `RollContext.isTrigger` suppresses it and the free moves, and it is a
+**sibling of `isSubRoll` rather than a reuse**: there a single die rolls for its life with no army
+behind it, here an army really is rolling, and only the consequence is shared. House rule,
+`RULES-V0.md` section 15.
+
+That this got as far as a browser is the point. The engine tests all passed, the fuzz ran 200 clean
+games, and Wall of Thorns fired in **two** of them -- neither with a Wild Growth face in the army.
+
+**And the ward drew as `Wall of Thorns ·` with nothing after it.** It carries no modifiers at all, so
+the generic `describeModifiers` path printed a source name and an empty half-sentence -- the same
+shape 7b's missing `ignore_ids` case printed, arriving from the opposite direction. A ward whose
+damage is invisible is a ward you cannot plan around, which is the entire reason effects are drawn
+on the board. `describeTerrainEffect` switches exhaustively on the scope now.
+
+### Deliberately not done
+
+- **One unit per casting still**, for Mirage as for Path and Resurrect Dead. Mirage is the case
+  where it costs something real -- "up to five health-worth" in a single casting could take two
+  small dice, and here it takes one. Recorded in `RULES-V0.md` section 15 rather than left silent;
+  the rules' own "cast multiple separate times, with a different target each time" is what makes it
+  survivable.
+- No `SAVE_VERSION` bump: the app still plays `DRAGON_RULES`.
+
+### Verification
+
+`npm test` 669 passed (25 files). `npm run typecheck` clean. `git diff --stat src/engine/__golden__/`
+empty. `python tools/validate_data.py` OK, 2 spells still unbuilt. Fuzz: 200 `SPELL_RULES` games
+across both force sets, `stuck === 0`, a counter `> 0` for **every one of the sixteen spells this
+build resolves**, and both Flash Flood branches -- a terrain going down and an army holding one.
+
+Wall of Thorns fired only twice in 200 games, so it has named tests instead: the ward modifies no
+roll, separate castings sum, it bites an army that maneuvers the terrain, and it does not fire on a
+terrain nobody warded. Browser pass at `?forces=bestiary&seed=1` with `useGame.ts` flipped to
+`SPELL_RULES`, reverted before the commit; the flip also tripped `useGame.test.ts`'s "never starts a
+game on a different ruleset", which is that test doing its job.
+
+---
+
+## 7e -- the two triggers
+
+**Flashfire and Accelerated Growth**, and then 7f flips the app.
 
 ### Checklist
 
-- [ ] `TerrainScope` gains `'maneuverers'`, with the code that gathers it
-- [ ] Mirage: save sub-roll, failures to Reserves (Seize's shape); `units` target with a health budget
-- [ ] Lightning Strike: save sub-roll on one unit; **once per unit per magic action**, validated at
-      announcement against the rest of the announcement -- the rule that proves an announcement must
-      be checked as a whole
-- [ ] Flash Flood: the defender's opposed *army* maneuver roll; one step per player turn, capped by a
-      `TurnState.floodedSlots?` cleared in `endTurn` -- **which now builds rather than spreads**
-- [ ] Wall of Thorns: a maneuver trigger, 6 damage, and a **melee roll instead of a save roll** --
-      state which `RollPurpose` that is, in `RULES-V0.md`
+- [ ] Flashfire: the reroll **replaces** a parked face, `applyConfuse`'s mechanism pointed at the
+      roller's own dice -- and it needs a pause wherever an army roll is parked (`combat.attack`,
+      the save roll's delayed pause, `dragonAttack.armyDice`, and the magic roll)
+- [ ] the effect is **spent**: `applyFlashfire` drops it from `state.effects`, so "used this roll"
+      needs no flag on four parked objects
+- [ ] the house rule: a Flashfire reroll does not restart the reroll sweep
+- [ ] Accelerated Growth: a death trigger at `killUnits`, beside Rise from the Ashes;
+      `exchangeWithDua` used *downward*, which `promote` forbids and the primitive allows
+- [ ] it is **not a death**: no `units_killed`, no second trigger
+- [ ] **open question:** it and Rise from the Ashes both fire on the same death, and the rules do
+      not order them
+- [ ] `EffectTarget` gains `player` (Accelerated Growth targets "your DUA")
 - [ ] tests + fuzz with a per-spell counter > 0

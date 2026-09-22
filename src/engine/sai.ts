@@ -74,6 +74,24 @@ export interface RollContext {
    * the rolls that SAI is about.
    */
   readonly isSubRoll?: true
+  /**
+   * A roll an army makes in answer to a standing effect, outside any action.
+   *
+   * Wall of Thorns is the first and so far only one: "any army that successfully
+   * maneuvers that terrain takes six points of damage. The army makes a melee roll
+   * instead of a save roll." That happens in the *maneuver step*, with no exchange to
+   * hang a decision on -- so a Wild Growth promotion or a Firewalking free move there
+   * would be a decision with nowhere to live, and `expectNoEffects` refuses the roll
+   * rather than letting it be dropped.
+   *
+   * A flag of its own rather than reusing `isSubRoll`, which says something different
+   * and true: that one die is rolling for its life, with no army behind it. Here an
+   * army really is rolling. What the two share is only the consequence.
+   *
+   * House rule, `RULES-V0.md` section 15 -- by the letter Wild Growth applies to any
+   * non-maneuver roll, and this is one.
+   */
+  readonly isTrigger?: true
 }
 
 export interface SaiOutcome {
@@ -113,7 +131,7 @@ const gives = (type: ResultType, x: number): SaiOutcome => ({
  */
 const freeMove = (x: number, ctx: RollContext, rung: RuleSet['sai']): SaiOutcome => {
   if (ctx.purpose.kind === 'maneuver') return gives('maneuver', x)
-  if (rung !== 'full' || ctx.isSubRoll === true) return NOTHING
+  if (rung !== 'full' || ctx.isSubRoll === true || ctx.isTrigger === true) return NOTHING
   return { results: {}, effects: [{ kind: 'free_move', health: 3 }], reroll: false }
 }
 
@@ -561,7 +579,7 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
     // results -- the rule plainly says it does, and a die that dies holding a Wild
     // Growth face would be wrong -- but there is no split to decide: no army rolled
     // this, and the promotion half would need a pause inside a pause.
-    if (ctx.isSubRoll === true) return gives('save', x)
+    if (ctx.isSubRoll === true || ctx.isTrigger === true) return gives('save', x)
     return { results: {}, effects: [{ kind: 'wild_growth', budget: x }], reroll: false }
   },
 }
