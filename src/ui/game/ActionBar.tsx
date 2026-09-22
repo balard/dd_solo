@@ -50,7 +50,7 @@ import {
   type FaceHint,
   type ReinforceMove,
 } from './prompts'
-import { spellPlan, type SpellDraftCast } from '../../engine/magic'
+import { spellPlan, type SpellAim, type SpellDraftCast } from '../../engine/magic'
 
 import { useFaceArt } from './useFaceArt'
 
@@ -91,8 +91,8 @@ export function ActionBar({
   /** The spell picker's draft: every cast staged so far. */
   casts: readonly SpellDraftCast[]
   /** Which spell is being aimed, between the two taps an announcement takes. */
-  aiming: string | null
-  onAim: (spell: string | null) => void
+  aiming: SpellAim | null
+  onAim: (aim: SpellAim | null) => void
   onCast: (cast: SpellDraftCast) => void
   onStage: (moves: readonly ReinforceMove[]) => void
   onPair: (pair: PromotionPair) => void
@@ -741,18 +741,25 @@ function SaiHeader({ state, sai }: { state: GameState; sai: string }) {
     // Step's reason: dispatching per spell would leak the resolution order into the
     // announcement, which the rules choose separately and afterwards.
     const plan = spellPlan(pending.castable, pending.pool, casts)
-    const aimed = plan.offers.find((o) => o.castable.spell.id === aiming)
+    const aimed = plan.offers.find((o) => o.castable.spell.id === aiming?.spell)
+    // An Elemental spell takes any one of the caster's elements, so which one paid is
+    // a real question. Every other spell has exactly one, and is not asked.
+    const element = aiming?.element ?? (aimed?.castable.elements.length === 1
+      ? (aimed.castable.elements[0] as Element)
+      : undefined)
 
     return (
       <div className="action-bar">
         <p className="question">
           {prompt.question}
           <span className="muted">
-            {aimed !== undefined
-              ? ` — aim ${aimed.castable.spell.name} where?`
-              : plan.spent > 0
+            {aimed === undefined
+              ? plan.spent > 0
                 ? ` — ${plan.remaining} left`
-                : ' — pick a spell'}
+                : ' — pick a spell'
+              : element === undefined
+                ? ` — pay for ${aimed.castable.spell.name} with which element?`
+                : ` — aim ${aimed.castable.spell.name} where?`}
           </span>
         </p>
 
@@ -772,27 +779,46 @@ function SaiHeader({ state, sai }: { state: GameState; sai: string }) {
         {aimed !== undefined && <p className="rule-text muted">{aimed.castable.spell.text}</p>}
 
         <div className="choices">
-          {aimed !== undefined ? (
+          {aimed !== undefined && element === undefined ? (
             <>
-              {aimed.castable.targets.map((target, i) => (
+              {aimed.castable.elements.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  className="choice"
+                  onClick={() => onAim({ spell: aimed.castable.spell.id, element: e })}
+                >
+                  {e}
+                </button>
+              ))}
+              <button type="button" className="choice secondary" onClick={() => onAim(null)}>
+                Back
+              </button>
+            </>
+          ) : aimed !== undefined && element !== undefined ? (
+            <>
+              {aimed.castable.targets.map((aim, i) => (
                 <button
                   key={i}
                   type="button"
                   className="choice"
+                  disabled={aim.minCount * aimed.castable.spell.cost > plan.remaining}
                   onClick={() => {
                     onCast({
                       spell: aimed.castable.spell.id,
-                      // Exactly one element per spell on this rung: a single-element
-                      // spell takes only its own, and the two Elemental spells that
-                      // could offer a choice arrive in 7c with the picker for it.
-                      element: aimed.castable.elements[0] as Element,
-                      count: 1,
-                      target,
+                      element,
+                      // The target sets the floor: Resurrect Dead's price is a
+                      // property of what it is aimed at, not a separate choice.
+                      count: aim.minCount,
+                      target: aim.target,
                     })
                     onAim(null)
                   }}
                 >
-                  {spellTargetLabel(target, human, state)}
+                  {spellTargetLabel(aim.target, human, state)}
+                  {aim.minCount > 1 && (
+                    <span className="muted"> {aim.minCount * aimed.castable.spell.cost}</span>
+                  )}
                 </button>
               ))}
               <button type="button" className="choice secondary" onClick={() => onAim(null)}>
@@ -808,7 +834,7 @@ function SaiHeader({ state, sai }: { state: GameState; sai: string }) {
                   className="choice"
                   disabled={offer.affordable < 1}
                   title={offer.castable.spell.text}
-                  onClick={() => onAim(offer.castable.spell.id)}
+                  onClick={() => onAim({ spell: offer.castable.spell.id })}
                 >
                   {offer.castable.spell.name}{' '}
                   <span className="muted">

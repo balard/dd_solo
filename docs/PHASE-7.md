@@ -12,7 +12,7 @@ Standing Stones, and retires Phase 6's Frontier dragon seed.
 |---|---|---|
 | **7a** | The data and the seam: `data/spells.json`, `magic.ts`, `MagicState`, the march steps. No spell resolves. | **landed** |
 | **7b** | The eight declarative spells, `EffectTarget.terrain`, and the whole client surface | **landed** |
-| **7c** | The board spells: Hailstorm, Path, Resurrect Dead, Summon Dragon | |
+| **7c** | The board spells: Hailstorm, Path, Resurrect Dead, Summon Dragon | **landed** |
 | **7d** | The sub-roll spells: Mirage, Lightning Strike, Flash Flood, Wall of Thorns | |
 | **7e** | The two triggers: Flashfire and Accelerated Growth | |
 | **7f** | Cantrip, Dispel Magic, Standing Stones, Reserve magic, and the flip | |
@@ -201,21 +201,98 @@ before the commit.
 
 ---
 
-## 7c -- the board spells
+## 7c -- the board spells -- **landed**
 
-**Hailstorm, Path, Resurrect Dead, Summon Dragon** -- the four that touch existing subsystems rather
-than adding one.
+**Delivered.** Hailstorm, Path, Resurrect Dead and Summon Dragon -- the four that touch existing
+subsystems rather than adding one. `SpellOutcome` lets a handler hand back a decision it cannot
+raise itself; one new march step (`resolve_spell_choice`) rests on it. `returnFromDua` is `recruit`'s
+health-budget sibling. **Phase 6's Frontier dragon seed retires** under `magic: 'spells'`, and the
+two simplifications `dragons.ts` had been deferring since Phase 6 are real decisions now. The
+element picker arrived with the two Elemental spells that first need it. 660 tests (was 641),
+goldens byte-identical and unregenerated.
+
+Six spells left: Mirage, Lightning Strike, Flash Flood, Wall of Thorns (7d), Flashfire, Accelerated
+Growth (7e).
+
+### Where the plan was wrong
+
+- **A spell that owes a decision needs one march step, not one per spell.** The plan implied a step
+  each for damage, movement and summoning. What differs between them is the *question*, which
+  `SpellChoice` carries; where the machine stands while it is asked is the same place. So
+  `resolve_spell_choice` is one member and `spellChoicePending` is the switch.
+- **Hailstorm needed no new pending at all.** It reuses `assign_damage`, with `applyAssignDamage`
+  branching on `turn.magic.choice` exactly as it already branches on `turn.dragonAttack`. One army,
+  one number, the maximal-subset rule -- a second pending of that shape is one both clients would
+  have had to learn twice.
+- **`minCount` belongs on the offer, not in a validation rule.** The plan had Resurrect Dead's health
+  budget as an announcement check. That is a rule the clients do not know, so both would happily
+  show a target the engine then refuses -- and the fuzz proved it within a hundred games, throwing
+  `Resurrect Dead returns 1 health-worth, and that is 2`. A unit's health *is* the castings it
+  needs, so `SpellTargetOffer` carries it and every chooser respects it for free.
+- **`spellTargets` is not the whole of "what may I aim at".** p. 13 says the target "**or the
+  conditions for a spell's effect to occur**" must exist when it is selected. Summon Dragon is the
+  first spell with a condition beyond its target: a terrain is only a target if a dragon of a colour
+  this pool can pay for could actually reach it. Without that it was offered on a board with no
+  matching dragon anywhere, quietly wasting seven magic.
+
+### Two things that would have shipped silently
+
+1. **`endTurn` spread the old turn state, so `dragonsDone` survived the turn that made it.** Turn two
+   was told every terrain's dragons had already attacked, and they never attacked again for the rest
+   of the game. Two Phase 6 fuzz counters caught it -- nothing else would have, because a dragon
+   attack that does not happen is not an invalid state and breaks no total. `endTurn` **builds** the
+   next turn now rather than spreading the last one: every transient field belongs to the turn that
+   is ending.
+2. **The four handlers existed and the data never named them.** `resolvesSpell` asks the data for a
+   `handler`, and `data/spells.json` had none -- so all four were silently uncastable, with the
+   engine, the clients and the AI all correct and a green suite. Caught by a fuzz counter that
+   stayed at zero, which is the argument for per-rule counters in one line.
+
+### What the browser caught, and what it could not reach
+
+The whole Summon Dragon flow was played at `?forces=bestiary&seed=1` with `useGame.ts` flipped to
+`SPELL_RULES`: the element picker ("pay for Summon Dragon with which element?"), the target, the
+staged line, the summon sheet, and the log reading `Water Drake is summoned to Frontier from the
+Summoning Pool` with the dragon appearing on the board row. Console clean; the flip was reverted
+before the commit. No new bugs this time -- the sheets all render through the generic button path
+that 7b already exercised, and the only new JSX was the element step.
+
+**The two dragon decisions are not reachable by the fuzz** -- `dragon_order` needs two terrains
+holding dragons with the marching player at both, and `dragon_target` needs three dragons of mixed
+elements at one terrain, which two hundred games never produced. They have named tests instead,
+which is what the plan's own rule asks for when a fuzz cannot reach a rule.
+
+### Deliberately not done
+
+- **Path moves the units it named to one destination.** Combining castings on a single target does
+  nothing extra; two units are two announcements, which is what the rules already provide for.
+  Recorded in `RULES-V0.md` section 15.
+- No `SAVE_VERSION` bump: the app still plays `DRAGON_RULES`.
+
+### Verification
+
+`npm test` 660 passed (25 files). `npm run typecheck` clean. `git diff --stat src/engine/__golden__/`
+empty. `python tools/validate_data.py` OK, 6 spells still unbuilt. Fuzz: 200 `SPELL_RULES` games
+across both force sets, `stuck === 0`, **a counter `> 0` for every one of the twelve spells this
+build resolves** -- an assertion that tightens on its own as each later slice moves a name out of the
+unbuilt set -- plus a dragon summoned, a unit resurrected and a unit moved by Path.
+
+---
+
+## 7d -- the sub-roll spells
+
+**Mirage, Lightning Strike, Flash Flood, Wall of Thorns.** All four are Phase 4d's `unitRoll` /
+`rollUnits` / `armyRoll` machinery unchanged.
 
 ### Checklist
 
-- [ ] the element picker: Resurrect Dead and Summon Dragon are the first spells with a choice of
-      element, which 7b deliberately deferred
-- [ ] Hailstorm: `assign_spell_damage`, reusing `assign_damage` and `applyAssignDamage`
-- [ ] Path: `applySaiMove`'s movement shape, and the `own_unit` target
-- [ ] Resurrect Dead: `recruit` is 1-health-only and the spell is cumulative -- a health-budget
-      sibling, **not** a relaxed guard
-- [ ] Summon Dragon: pool **or terrain** -> terrain, element must match; retires Phase 6's Frontier
-      seed and the two `dragons.ts` simplifications (`:135`, `:171`)
-- [ ] a vanished target is **dropped, not thrown on** -- first reachable here, when Hailstorm can
-      empty the army a later cast named
+- [ ] `TerrainScope` gains `'maneuverers'`, with the code that gathers it
+- [ ] Mirage: save sub-roll, failures to Reserves (Seize's shape); `units` target with a health budget
+- [ ] Lightning Strike: save sub-roll on one unit; **once per unit per magic action**, validated at
+      announcement against the rest of the announcement -- the rule that proves an announcement must
+      be checked as a whole
+- [ ] Flash Flood: the defender's opposed *army* maneuver roll; one step per player turn, capped by a
+      `TurnState.floodedSlots?` cleared in `endTurn` -- **which now builds rather than spreads**
+- [ ] Wall of Thorns: a maneuver trigger, 6 damage, and a **melee roll instead of a save roll** --
+      state which `RollPurpose` that is, in `RULES-V0.md`
 - [ ] tests + fuzz with a per-spell counter > 0

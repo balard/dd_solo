@@ -21,14 +21,29 @@
  * `castSpell` guards against a spell reaching resolution anyway, not against
  * half-built work.
  */
+import { dragonDie } from '../data/load'
 import { spell, type Spell, type SpellEffectSpec, type SpellModifierSpec } from '../data/spells'
 
 import type { Element, ResultType } from '../data/types'
 
+import { healthsOf, maxAbsorbable } from './damage'
+import { returnFromDua } from './dua'
 import type { Effect, EffectTarget } from './effects'
 import { ALL_RESULT_TYPES, type Modifier } from './pipeline'
 
-import type { ArmyRef, GameState, PlayerId, RuleSet, SpellTarget } from './types'
+import {
+  army as armyOf,
+  TERRAIN_SLOTS,
+  type ArmyRef,
+  type DragonId,
+  type GameState,
+  type PlayerId,
+  type RuleSet,
+  type SpellChoice,
+  type SpellTarget,
+  type TerrainSlot,
+  type UnitInstance,
+} from './types'
 
 /** What a handler is told about the cast it is resolving. */
 export interface SpellContext {
@@ -45,7 +60,19 @@ export interface SpellContext {
   readonly target: SpellTarget
 }
 
-type SpellHandler = (state: GameState, ctx: SpellContext) => GameState
+/**
+ * What a handler did, and what it still needs to be told.
+ *
+ * A handler cannot raise a `Pending` -- `applyAction` clears `pending` and only
+ * `stepGame` sets one -- so a spell that owes a decision hands one back here and the
+ * march step asks. `SaiOutcome`'s shape, for `SaiOutcome`'s reason.
+ */
+export interface SpellOutcome {
+  readonly state: GameState
+  readonly choice?: SpellChoice
+}
+
+type SpellHandler = (state: GameState, ctx: SpellContext) => SpellOutcome
 
 /**
  * One data modifier as the pipeline's, scaled by the number of combined castings.
@@ -135,7 +162,114 @@ export function spellEffect(s: Spell, ctx: SpellContext): Effect {
  * Each later slice moves its spells in here, or gives them an `effect` block in
  * `data/spells.json`.
  */
-const HANDLERS: Readonly<Record<string, SpellHandler>> = {}
+/**
+ * Hailstorm: "inflict one point of damage on the target", multiplied by the castings.
+ *
+ * Damage, not an effect -- so it goes through the ordinary assignment the defender
+ * makes, maximal-subset rule and all. One point usually kills nothing, which is not a
+ * special case: damage too small to kill anything is dropped, exactly as it is after
+ * a melee exchange.
+ */
+const hailstorm: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'army') throw new Error('Hailstorm targets an army')
+  const army = armyOf(state, ctx.target.player, ctx.target.army)
+  const damage = ctx.count
+
+  if (maxAbsorbable(healthsOf(army), damage) === 0) return { state }
+
+  return {
+    state,
+    choice: { kind: 'damage', player: ctx.target.player, army: ctx.target.army, damage },
+  }
+}
+
+/**
+ * Path: "move the target to any other terrain where you have an army."
+ *
+ * The unit is named at announcement and the destination is chosen now, because the
+ * destination is the spell's *effect* rather than its target -- the rules announce
+ * targets, not outcomes.
+ */
+const path: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'units') throw new Error('Path targets units')
+
+  const movers = ctx.target.unitIds
+    .map((id) => state.units[id])
+    .filter((u): u is UnitInstance => u !== undefined && u.location.kind === 'terrain')
+  if (movers.length === 0) return { state }
+
+  const here = new Set(
+    movers.map((u) => (u.location.kind === 'terrain' ? u.location.slot : null)),
+  )
+  const options = TERRAIN_SLOTS.filter(
+    (slot) => !here.has(slot) && armyOf(state, ctx.caster, slot).length > 0,
+  )
+  // "Any *other* terrain where you have an army" -- with nowhere to go the spell does
+  // nothing, and a decision with no answers is not asked.
+  if (options.length === 0) return { state }
+
+  return { state, choice: { kind: 'move', unitIds: movers.map((u) => u.id), options } }
+}
+
+/**
+ * Resurrect Dead: "target one health-worth of units in your DUA that contains the
+ * element of magic used to cast this spell. Return the targets to the casting army."
+ *
+ * The health budget and the element were both checked at announcement, where the
+ * number of castings is known. This moves them.
+ */
+const resurrectDead: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'units') throw new Error('Resurrect Dead targets units')
+
+  const alive = ctx.target.unitIds.filter((id) => state.units[id]?.location.kind === 'dua')
+  if (alive.length === 0) return { state }
+
+  return { state: returnFromDua(state, alive, ctx.army) }
+}
+
+/**
+ * Summon Dragon: "summon one dragon that contains the element used to cast this spell
+ * from any Summoning Pool or terrain to the target terrain."
+ *
+ * **Any** pool, including the opponent's, and any terrain -- the spell pulls a dragon
+ * off the board as readily as out of a pool. What it may not do is fetch an element
+ * the magic did not pay for, which is the one thing `ctx.element` is read for.
+ */
+const summonDragon: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'terrain') throw new Error('Summon Dragon targets a terrain')
+
+  const options = summonable(state, ctx.element, ctx.target.slot)
+  if (options.length === 0) return { state }
+
+  return {
+    state,
+    choice: {
+      kind: 'summon',
+      slot: ctx.target.slot,
+      options,
+      remaining: Math.min(ctx.count, options.length),
+    },
+  }
+}
+
+/** Every dragon this element could fetch: the right colour, and not already there. */
+export function summonable(
+  state: GameState,
+  element: Element,
+  slot: TerrainSlot,
+): readonly DragonId[] {
+  return Object.values(state.dragons)
+    .filter((d) => dragonDie(d.dieId).element === element)
+    .filter((d) => !(d.location.kind === 'terrain' && d.location.slot === slot))
+    .map((d) => d.id)
+}
+
+const HANDLERS: Readonly<Record<string, SpellHandler>> = {
+  hailstorm,
+  path,
+  resurrect_dead: resurrectDead,
+  summon_dragon: summonDragon,
+}
 
 /** The spell ids this build can actually resolve, for tests and for the clients. */
 export function resolvableSpells(ruleSet: RuleSet): readonly string[] {
@@ -164,7 +298,7 @@ export function resolvesSpell(id: string, ruleSet: RuleSet): boolean {
  * an unimplemented spell can never be announced, and this can only fire if something
  * bypassed the offer.
  */
-export function castSpell(state: GameState, s: Spell, ctx: SpellContext): GameState {
+export function castSpell(state: GameState, s: Spell, ctx: SpellContext): SpellOutcome {
   const handler = HANDLERS[s.handler ?? '']
   if (handler !== undefined) return handler(state, ctx)
 

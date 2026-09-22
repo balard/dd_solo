@@ -125,34 +125,45 @@ export type DragonTarget =
  * never attacks its own element, which is the only exclusion the five base elements
  * can produce.
  *
- * *One simplification, and it cannot bite yet.* The rules let the owner choose which
- * dragon to attack when several are eligible, declared in secret and revealed. Phase
- * 6 puts at most one dragon per player on the board and nothing summons another, so
- * no dragon ever has two eligible targets; this picks the first in board order and
- * raises no decision. It becomes a real choice when Phase 7's `Summon Dragon` can
- * crowd a terrain, and that is when it needs a pending.
+ * **The owner chooses when several are eligible**, which is what `choices` carries and
+ * why this returns two maps rather than one. It was unreachable in Phase 6 -- at most
+ * one dragon per player could be on the board and nothing summoned another, so no
+ * dragon ever had two eligible targets -- and Phase 7c's `Summon Dragon` is what made
+ * it real.
  */
+export interface DragonTargeting {
+  /** Dragons with nothing to decide: one eligible enemy, or none and so the army. */
+  readonly settled: ReadonlyMap<DragonId, DragonTarget>
+  /** Dragons whose owner must declare, by the dragons they may declare against.
+   *  Empty until a terrain can hold more than two dragons, which needs Phase 7c's
+   *  `Summon Dragon`. */
+  readonly choices: ReadonlyMap<DragonId, readonly DragonId[]>
+}
+
 export function dragonTargets(
   state: GameState,
   slot: TerrainSlot,
   marching: PlayerId,
-): ReadonlyMap<DragonId, DragonTarget> {
+): DragonTargeting {
   const present = dragonsAt(state, slot)
-  const targets = new Map<DragonId, DragonTarget>()
+  const settled = new Map<DragonId, DragonTarget>()
+  const choices = new Map<DragonId, readonly DragonId[]>()
 
   for (const dragon of present) {
-    const enemy = present.find(
+    // p. 18's six-kind table with every out-of-scope row removed: attack a
+    // different-element dragon if one is here, never your own element, otherwise the
+    // marching army. Same-element dragons never fight each other.
+    const enemies = present.filter(
       (other) => other.id !== dragon.id && elementOf(other) !== elementOf(dragon),
     )
-    targets.set(
-      dragon.id,
-      enemy !== undefined
-        ? { kind: 'dragon', dragonId: enemy.id }
-        : { kind: 'army', player: marching },
-    )
+
+    if (enemies.length === 0) settled.set(dragon.id, { kind: 'army', player: marching })
+    else if (enemies.length === 1 && enemies[0] !== undefined) {
+      settled.set(dragon.id, { kind: 'dragon', dragonId: enemies[0].id })
+    } else choices.set(dragon.id, enemies.map((e) => e.id))
   }
 
-  return targets
+  return { settled, choices }
 }
 
 export const elementOf = (dragon: DragonInPlay): DragonElement => dragonDie(dragon.dieId).element
@@ -163,10 +174,10 @@ export const nameOf = (dragon: DragonInPlay): string => dragonName(dragon.dieId)
  * Every terrain the Dragon Attack Phase fires at: those where the marching player
  * has an army and at least one dragon is present (p. 17).
  *
- * In board order. The rules let the marching player choose the order when several
- * terrains qualify; with both dragons seeded at the Frontier and nothing able to
- * move one, no game in Phase 6 has two such terrains, so this fixes the order rather
- * than raising a decision nobody can yet be offered. Phase 7 is where that changes.
+ * In board order, which is the order the *pending* offers them in -- the marching
+ * player picks, because the rules let them (p. 18) and because Phase 7c's `Summon
+ * Dragon` finally makes two qualifying terrains reachable. Phase 6 fixed the order
+ * here instead, having no way to put a dragon anywhere but the Frontier.
  */
 export function dragonAttackSlots(state: GameState, marching: PlayerId): readonly TerrainSlot[] {
   return TERRAIN_SLOTS.filter(

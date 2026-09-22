@@ -20,6 +20,7 @@ import { unitType } from '../data/load'
 
 import {
   deadUnits,
+  type ArmyRef,
   type GameState,
   type PlayerId,
   type TerrainSlot,
@@ -289,6 +290,41 @@ export function recruit(
       )
     }
     units[id] = { ...unit, location: { kind: 'terrain', slot } }
+  }
+
+  return { ...state, units }
+}
+
+/**
+ * Returns units from the DUA to an army -- Resurrect Dead (Phase 7c).
+ *
+ * `recruit`'s sibling rather than a relaxation of it. The City recruits "a small (1
+ * health) unit" and that guard is the rule, not an obstacle; Resurrect Dead returns
+ * "one health-worth of units" and is cumulative, so two castings return two health's
+ * worth and the guard would be wrong rather than inconvenient. The budget is the
+ * caster's to satisfy at announcement, which is where the number is known; this moves
+ * what it is given.
+ *
+ * `ArmyRef`, not `TerrainSlot`: the spell returns them "to the casting army", and a
+ * Reserve Army may cast it once Reserve magic lands in 7f.
+ */
+export function returnFromDua(
+  state: GameState,
+  unitIds: readonly UnitId[],
+  ref: ArmyRef,
+): GameState {
+  if (unitIds.length === 0) return state
+
+  const units = { ...state.units }
+  for (const id of unitIds) {
+    const unit = lookup(state, id, 'returnFromDua')
+    if (unit.location.kind !== 'dua') {
+      throw new Error(`returnFromDua: ${id} is not in the DUA (${unit.location.kind})`)
+    }
+    units[id] =
+      ref === 'reserve'
+        ? { ...unit, location: { kind: 'reserve' } }
+        : { ...unit, location: { kind: 'terrain', slot: ref } }
   }
 
   return { ...state, units }

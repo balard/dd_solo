@@ -36,7 +36,7 @@ import {
   selectModeFor,
   type ReinforceMove,
 } from './game/prompts'
-import { sameSpellTarget, type SpellDraftCast } from '../engine/magic'
+import { sameSpellTarget, type SpellAim, type SpellDraftCast } from '../engine/magic'
 
 import { NewGameScreen } from './game/NewGameScreen'
 import { useGame, type PlayingGame } from './game/useGame'
@@ -81,7 +81,11 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // spell, then pick its target -- and `aiming` is selection-shaped rather than
   // draft-shaped: it is "what am I pointing at", not "what have I decided".
   const [casts, setCasts] = useState<readonly SpellDraftCast[]>([])
-  const [aiming, setAiming] = useState<string | null>(null)
+  // Which spell is being aimed, and which element is paying for it once that has been
+  // chosen. An Elemental spell accepts either of the caster's colours, so announcing
+  // one is three taps rather than two -- and `element` is what distinguishes "I have
+  // picked the spell" from "I have picked how to pay for it".
+  const [aiming, setAiming] = useState<SpellAim | null>(null)
 
   const [inspecting, setInspecting] = useState<UnitId | null>(null)
   const [showFallen, setShowFallen] = useState(false)

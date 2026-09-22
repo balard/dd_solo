@@ -478,14 +478,23 @@ export function setupGame(options: SetupOptions): GameState {
       }))
     }
 
-    // The Phase 6 house rule: one dragon each, drawn from that player's own pool,
-    // starts at the Frontier. Without it nothing could ever leave a pool before
-    // Phase 7's `Summon Dragon`, and the whole Dragon Attack Phase would be
-    // unreachable. A pool of one is a forced choice and draws nothing.
+    // Phase 6's house rule: one dragon each starts at the Frontier, drawn from that
+    // player's own pool. Without it nothing could leave a pool at all and the whole
+    // Dragon Attack Phase would be unreachable by any legal sequence of actions.
+    //
+    // **It retires under `magic: 'spells'`** (Phase 7c), because `Summon Dragon` is
+    // the route the base rules intend and it now exists. So the seed is gated on the
+    // absence of the thing that replaces it rather than removed: `DRAGON_RULES` is
+    // still a playable configuration and still needs it.
+    //
+    // A pool of one is a forced choice and draws nothing, the same rule that governs
+    // a pinned terrain and a named force.
+    const seedFrontier = ruleSet.magic !== 'spells'
+
     for (const player of ['p1', 'p2'] as const) {
       const pool = pools[player]
       let index = 0
-      if (pool.length > 1) {
+      if (seedFrontier && pool.length > 1) {
         const [drawn, next] = nextInt(rng, pool.length)
         rng = next
         index = drawn
@@ -493,7 +502,9 @@ export function setupGame(options: SetupOptions): GameState {
 
       for (const [i, dragon] of pool.entries()) {
         dragons[dragon.id] =
-          i === index ? { ...dragon, location: { kind: 'terrain', slot: 'frontier' } } : dragon
+          seedFrontier && i === index
+            ? { ...dragon, location: { kind: 'terrain', slot: 'frontier' } }
+            : dragon
       }
 
       const seeded = pool[index]
@@ -502,7 +513,7 @@ export function setupGame(options: SetupOptions): GameState {
         kind: 'dragons_drawn',
         player,
         pool: pool.map((d) => d.dieId),
-        frontier: seeded.dieId,
+        ...(seedFrontier ? { frontier: seeded.dieId } : {}),
       })
     }
   }

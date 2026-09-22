@@ -442,6 +442,34 @@ function Line({
         </p>
       )
 
+    case 'units_resurrected':
+      return (
+        <p className="log-line">
+          {who(entry.player)} {verb(entry.player, 'raises', 'raise')}{' '}
+          <b>
+            {entry.unitIds
+              .map((id) => (state.units[id] ? unitType(state.units[id]!.typeId).name : id))
+              .join(', ')}
+          </b>{' '}
+          into the army at {slotLabel(entry.slot, human)}
+        </p>
+      )
+
+    // Where it came from matters: the spell pulls a dragon off another terrain as
+    // readily as out of a pool, and "it left the Frontier" is half the news.
+    case 'dragon_summoned':
+      return (
+        <p className="log-line">
+          <b>{dragonName(entry.dieId)}</b> is summoned to {slotLabel(entry.slot, human)}
+          <span className="muted">
+            {' '}
+            {entry.from === 'pool'
+              ? 'from the Summoning Pool'
+              : `from ${slotLabel(entry.from, human)}`}
+          </span>
+        </p>
+      )
+
     case 'spell_fizzled':
       return (
         <p className="log-line muted">
@@ -508,14 +536,24 @@ function Line({
         </p>
       )
     }
-    case 'dragons_drawn':
+    // No Frontier seed under `magic: 'spells'`: every dragon waits in the pool for a
+    // `Summon Dragon`, which is what the base rules say and what Phase 6 could not do.
+    case 'dragons_drawn': {
+      const frontier = entry.frontier
       return (
         <p className="log-line muted">
           {who(entry.player)} {verb(entry.player, 'brings', 'bring')}{' '}
           {entry.pool.map(dragonName).join(' and ')} &mdash;{' '}
-          <b>{dragonName(entry.frontier)}</b> starts at the Frontier
+          {frontier === undefined ? (
+            <>they wait in the Summoning Pool</>
+          ) : (
+            <>
+              <b>{dragonName(frontier)}</b> starts at the Frontier
+            </>
+          )}
         </p>
       )
+    }
 
     /*
      * One line per dragon, not one per face.

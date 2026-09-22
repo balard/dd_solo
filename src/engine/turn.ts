@@ -35,6 +35,7 @@ import {
   BREATH_NAME,
   dragonAttackSlots,
   dragonTargets,
+  type DragonTarget,
   dragonTotals,
   elementOf,
   killThreshold,
@@ -82,7 +83,7 @@ import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
 import { delayedTasks, targetTasks, type TargetTask } from './targeting'
 import { unitType } from '../data/load'
 import { spell } from '../data/spells'
-import { castableSpells, magicPool, sameSpellTarget } from './magic'
+import { castableSpells, magicPool, sameSpellTarget, spellTargetProblem } from './magic'
 import { castSpell, spellEffect } from './spells'
 import type { DragonElement, ResultType } from '../data/types'
 import {
@@ -113,6 +114,7 @@ import {
   type PendingSaves,
   type PromotionPair,
   type PlayerId,
+  type SpellChoice,
   type SpellTarget,
   type TerrainFace,
   type TerrainSlot,
@@ -224,18 +226,32 @@ function endMarch(state: GameState): GameState {
     : withTurn(base, { phase: 'reserves_reinforce' })
 }
 
+/**
+ * Hands the turn over.
+ *
+ * The next turn's state is **built, not spread**: every transient field -- the
+ * exchange, the magic action, the eighth-face step, which terrains' dragons have
+ * already attacked -- belongs to the turn that is ending, and a spread carries them
+ * into the next one. `dragonsDone` is what made that concrete: left behind, it told
+ * turn two that every terrain's dragons had already attacked, and they never attacked
+ * again for the rest of the game. Two fuzz counters caught it; nothing else would
+ * have, because a dragon attack that does not happen is not an invalid state.
+ */
 function endTurn(state: GameState): GameState {
   const next = opponentOf(state.turn.marching)
   return withLog(
-    withTurn(state, {
-      marching: next,
-      phase: 'effects_expire',
-      marchIndex: 0,
-      marchStep: 'select_army',
-      marchingArmy: null,
-      armiesMarched: [],
-      combat: null,
-    }),
+    {
+      ...state,
+      turn: {
+        marching: next,
+        phase: 'effects_expire',
+        marchIndex: 0,
+        marchStep: 'select_army',
+        marchingArmy: null,
+        armiesMarched: [],
+        combat: null,
+      },
+    },
     { kind: 'turn_end', player: state.turn.marching },
   )
 }
@@ -359,6 +375,12 @@ function stepMarch(state: GameState): GameState {
 
     case 'resolve_spell':
       return resolveNextSpell(state)
+
+    case 'resolve_spell_choice': {
+      const choice = magicOf(state).choice
+      if (choice === undefined) return withTurn(state, { marchStep: 'resolve_spell' })
+      return { ...state, pending: spellChoicePending(state, choice) }
+    }
 
     case 'offer_counter': {
       const combat = requireCombat(state)
@@ -1569,18 +1591,178 @@ function resolveNextSpell(state: GameState): GameState {
 
   // A declarative spell is a `Modifier` plus a place, so it needs no handler: it goes
   // straight into `state.effects` through the same door Sleep and Galeforce use.
-  const cast =
+  const outcome =
     s.effect === undefined
       ? castSpell(next, s, ctx)
-      : castEffect(next, player, spellEffect(s, ctx), castSite(head.target))
+      : { state: castEffect(next, player, spellEffect(s, ctx), castSite(head.target)) }
 
-  return withLog(cast, {
-    kind: 'spell_cast',
-    player,
-    spell: head.spell,
-    element: head.element,
-    count: head.count,
+  // Resurrect Dead is the one handler that moves units with nothing else to announce
+  // it: no damage, no effect, no decision. The `spell_cast` line says which spell,
+  // and this says who walked back out of the DUA.
+  const raised =
+    s.id === 'resurrect_dead' && head.target.kind === 'units'
+      ? head.target.unitIds.filter((id) => outcome.state.units[id]?.location.kind !== 'dua')
+      : []
+
+  const logged = withLog(
+    outcome.state,
+    {
+      kind: 'spell_cast',
+      player,
+      spell: head.spell,
+      element: head.element,
+      count: head.count,
+    },
+    ...(raised.length > 0
+      ? [
+          {
+            kind: 'units_resurrected',
+            player,
+            unitIds: raised,
+            slot: magic.army,
+          } as const,
+        ]
+      : []),
+  )
+
+  // A spell that owes a decision parks it and the machine rests on
+  // `resolve_spell_choice`; one that does not falls straight back into the loop and
+  // resolves the next announced spell.
+  if (outcome.choice === undefined) return logged
+  return withTurn(withMagic(logged, { ...remaining, choice: outcome.choice }), {
+    marchStep: 'resolve_spell_choice',
   })
+}
+
+/** The pending a parked spell decision raises. */
+function spellChoicePending(state: GameState, choice: SpellChoice): Pending {
+  const player = state.turn.marching
+  switch (choice.kind) {
+    // Hailstorm reuses the ordinary damage decision: one army, one number, the
+    // maximal-subset rule. The same reuse a dragon attack makes, and for the same
+    // reason -- a second pending of that shape is one both clients learn twice.
+    case 'damage':
+      return {
+        kind: 'assign_damage',
+        player: choice.player,
+        slot: choice.army,
+        damage: choice.damage,
+      }
+    case 'move':
+      return {
+        kind: 'spell_move',
+        player,
+        spell: 'Path',
+        unitIds: choice.unitIds,
+        options: choice.options,
+      }
+    case 'summon':
+      return {
+        kind: 'spell_summon',
+        player,
+        slot: choice.slot,
+        options: choice.options,
+        remaining: choice.remaining,
+      }
+  }
+}
+
+/** Puts the magic machine back into its resolution loop, the decision answered. */
+function afterSpellChoice(state: GameState, choice: SpellChoice | null): GameState {
+  const magic = magicOf(state)
+  const next: MagicState = {
+    army: magic.army,
+    pool: magic.pool,
+    ...(magic.announced !== undefined ? { announced: magic.announced } : {}),
+    ...(choice !== null ? { choice } : {}),
+  }
+  return withTurn(withMagic(state, next), {
+    marchStep: choice === null ? 'resolve_spell' : 'resolve_spell_choice',
+  })
+}
+
+/** Path: the units it named go where the caster says. */
+function applySpellMove(state: GameState, slot: TerrainSlot): GameState {
+  const magic = magicOf(state)
+  const choice = magic.choice
+  if (choice?.kind !== 'move') throw new IllegalActionError('no spell is waiting for a move')
+  if (!choice.options.includes(slot)) {
+    throw new IllegalActionError(`Path cannot move them to ${slot}`)
+  }
+
+  const units = { ...state.units }
+  const moved: UnitId[] = []
+  let from: TerrainSlot | null = null
+  for (const id of choice.unitIds) {
+    const unit = units[id]
+    if (unit === undefined || unit.location.kind !== 'terrain') continue
+    from ??= unit.location.slot
+    units[id] = { ...unit, location: { kind: 'terrain', slot } }
+    moved.push(id)
+  }
+
+  const logged =
+    moved.length === 0 || from === null
+      ? state
+      : withLog(
+          { ...state, units },
+          {
+            kind: 'units_moved',
+            player: state.turn.marching,
+            sai: 'Path',
+            unitIds: moved,
+            from,
+            to: slot,
+          },
+        )
+
+  return afterSpellChoice(logged, null)
+}
+
+/**
+ * Summon Dragon: one dragon per answer, because combined castings summon more than one.
+ *
+ * The queue drains the way every other repeated decision in the engine does -- ask,
+ * answer, decrement -- rather than asking for a set, because each pick narrows what is
+ * left for the next.
+ */
+function applySpellSummon(state: GameState, dragonId: DragonId): GameState {
+  const magic = magicOf(state)
+  const choice = magic.choice
+  if (choice?.kind !== 'summon') throw new IllegalActionError('no spell is summoning a dragon')
+  if (!choice.options.includes(dragonId)) {
+    throw new IllegalActionError(`${dragonId} cannot be summoned by this spell`)
+  }
+
+  const dragon = state.dragons[dragonId]
+  if (dragon === undefined) throw new IllegalActionError(`no such dragon ${dragonId}`)
+
+  const summoned = withLog(
+    {
+      ...state,
+      dragons: {
+        ...state.dragons,
+        [dragonId]: { ...dragon, location: { kind: 'terrain' as const, slot: choice.slot } },
+      },
+    },
+    {
+      kind: 'dragon_summoned',
+      player: state.turn.marching,
+      dragonId,
+      dieId: dragon.dieId,
+      from: dragon.location.kind === 'terrain' ? dragon.location.slot : 'pool',
+      slot: choice.slot,
+    },
+  )
+
+  const left = choice.options.filter((id) => id !== dragonId)
+  const remaining = choice.remaining - 1
+  return afterSpellChoice(
+    summoned,
+    remaining > 0 && left.length > 0
+      ? { kind: 'summon', slot: choice.slot, options: left, remaining }
+      : null,
+  )
 }
 
 /** Whether an announced target still exists. */
@@ -1963,9 +2145,85 @@ function treasuresOwed(state: GameState, attack: DragonAttackState): number {
  * Rolls every dragon at a terrain and opens the attack: steps 1 to 3 in one move,
  * since the targets follow from the board and the rolls take no decision.
  */
+/**
+ * Opens a terrain's dragon attack at the declaration step.
+ *
+ * Nothing is thrown here. Breath rerolls against a dragon and not against an army, so
+ * every target has to be settled before any die is, which is why the rulebook
+ * designates targets at step 2 and rolls at step 3.
+ */
 function beginDragonAttack(state: GameState, slot: TerrainSlot): GameState {
   const marching = state.turn.marching
-  const targets = dragonTargets(state, slot, marching)
+  const { settled, choices } = dragonTargets(state, slot, marching)
+
+  // Who still has to declare, in player order. Both owners declare before anything is
+  // revealed -- and nothing is, because `targets` reaches neither client until the
+  // roll is logged.
+  const declaring = PLAYERS.filter((player) =>
+    [...choices.keys()].some((id) => state.dragons[id]?.owner === player),
+  )
+
+  return withDragonAttack(state, {
+    slot,
+    step: 'declare',
+    defender: marching,
+    rolls: [],
+    targets: Object.fromEntries(settled),
+    resolved: 0,
+    ...(declaring.length > 0 ? { declaring } : {}),
+  })
+}
+
+/** The declaration a player still owes at this terrain. */
+function dragonTargetPending(state: GameState, attack: DragonAttackState): Pending | null {
+  const player = attack.declaring?.[0]
+  if (player === undefined) return null
+
+  const { choices } = dragonTargets(state, attack.slot, attack.defender)
+  const mine = [...choices.entries()]
+    .filter(([id]) => state.dragons[id]?.owner === player)
+    .map(([dragonId, options]) => ({ dragonId, options }))
+
+  // A player whose dragons all settled while others were declaring owes nothing.
+  if (mine.length === 0) return null
+  return { kind: 'dragon_target', player, slot: attack.slot, choices: mine }
+}
+
+function applyDragonTarget(
+  state: GameState,
+  targets: Readonly<Record<DragonId, DragonId>>,
+): GameState {
+  const attack = dragonAttackOf(state)
+  const pending = dragonTargetPending(state, attack)
+  if (pending?.kind !== 'dragon_target') {
+    throw new IllegalActionError('no dragon is waiting to declare a target')
+  }
+
+  const declared: Record<DragonId, DragonTarget> = { ...attack.targets }
+  for (const choice of pending.choices) {
+    const against = targets[choice.dragonId]
+    if (against === undefined || !choice.options.includes(against)) {
+      throw new IllegalActionError(`${choice.dragonId} must declare against an eligible dragon`)
+    }
+    declared[choice.dragonId] = { kind: 'dragon', dragonId: against }
+  }
+
+  // Rebuilt field by field rather than spread-with-undefined: `exactOptionalPropertyTypes`
+  // is on, and a written `declaring: undefined` is a present key in the golden digest.
+  const left = (attack.declaring ?? []).filter((p) => p !== pending.player)
+  const { declaring: _dropped, ...rest } = attack
+  return withDragonAttack(state, {
+    ...rest,
+    targets: declared,
+    ...(left.length > 0 ? { declaring: left } : {}),
+  })
+}
+
+/** Step 3: every attacking dragon throws one face, and follows its own rerolls. */
+function rollDragonAttack(state: GameState, attack: DragonAttackState): GameState {
+  const slot = attack.slot
+  const marching = attack.defender
+  const targets = new Map(Object.entries(attack.targets))
 
   let rng = state.rng
   const rolls: DragonRoll[] = []
@@ -2001,14 +2259,7 @@ function beginDragonAttack(state: GameState, slot: TerrainSlot): GameState {
     { kind: 'dragon_attack', slot, defender: marching, dragons: entries },
   )
 
-  return withDragonAttack(logged, {
-    slot,
-    step: 'breath',
-    defender: marching,
-    rolls,
-    targets: Object.fromEntries(targets),
-    resolved: 0,
-  })
+  return withDragonAttack(logged, { ...attack, step: 'breath', rolls, resolved: 0 })
 }
 
 /**
@@ -2495,14 +2746,26 @@ function stepDragonAttack(state: GameState): GameState {
   const attack = state.turn.dragonAttack
 
   if (attack === undefined) {
-    const slot = dragonAttackSlots(state, marching)[0]
-    if (slot === undefined) {
+    const left = dragonsLeft(state)
+    const only = left[0]
+    if (only === undefined) {
       return withTurn(state, { phase: 'march', marchIndex: 0, marchStep: 'select_army' })
     }
-    return beginDragonAttack(state, slot)
+    // "If dragons attack at more than one terrain, the marching player chooses the
+    // order" (p. 18). With one terrain there is nothing to choose, so nothing is asked.
+    if (left.length > 1) {
+      return { ...state, pending: { kind: 'dragon_order', player: marching, options: left } }
+    }
+    return beginDragonAttack(state, only)
   }
 
   switch (attack.step) {
+    case 'declare': {
+      const pending = dragonTargetPending(state, attack)
+      if (pending !== null) return { ...state, pending }
+      return rollDragonAttack(state, attack)
+    }
+
     case 'breath': {
       const pending = breathPending(state, attack)
       if (pending !== null) return { ...state, pending }
@@ -2556,16 +2819,28 @@ function stepDragonAttack(state: GameState): GameState {
 }
 
 /** This terrain is done: drop the working state and look for the next one. */
+/** Terrains whose dragons have not attacked yet this turn, in board order. */
+function dragonsLeft(state: GameState): readonly TerrainSlot[] {
+  const done = state.turn.dragonsDone ?? []
+  return dragonAttackSlots(state, state.turn.marching).filter((slot) => !done.includes(slot))
+}
+
 function endDragonAttack(state: GameState, attack: DragonAttackState): GameState {
-  const done = withDragonAttack(state, null)
-  const remaining = dragonAttackSlots(done, done.turn.marching).filter(
-    (slot) => TERRAIN_SLOTS.indexOf(slot) > TERRAIN_SLOTS.indexOf(attack.slot),
-  )
-  const next = remaining[0]
-  if (next === undefined) {
-    return withTurn(done, { phase: 'march', marchIndex: 0, marchStep: 'select_army' })
+  // Marked done rather than compared by board index: the marching player picks the
+  // order now, so "after this one" is no longer a fact about where the terrain sits.
+  const done = withTurn(withDragonAttack(state, null), {
+    dragonsDone: [...(state.turn.dragonsDone ?? []), attack.slot],
+  })
+  // `stepDragonAttack` picks up whatever is left, asking about the order if more than
+  // one terrain still qualifies.
+  return done
+}
+
+function applyDragonOrder(state: GameState, slot: TerrainSlot): GameState {
+  if (!dragonsLeft(state).includes(slot)) {
+    throw new IllegalActionError(`no dragon attack is waiting at ${slot}`)
   }
-  return beginDragonAttack(done, next)
+  return beginDragonAttack(state, slot)
 }
 
 /**
@@ -2859,6 +3134,9 @@ function applyAssignDamage(state: GameState, unitIds: readonly UnitId[]): GameSt
   // What differs is only where the state goes next, which is why the branch is here
   // and not in the `Pending`.
   if (state.turn.dragonAttack !== undefined) return applyDragonAssign(state, unitIds)
+  // And so does Hailstorm, for the same reason: the decision is identical and only
+  // where the state goes next differs.
+  if (state.turn.magic?.choice?.kind === 'damage') return applySpellDamage(state, unitIds)
 
   const step = state.turn.marchStep
   if (!isAssignStep(step)) {
@@ -2888,6 +3166,27 @@ function applyAssignDamage(state: GameState, unitIds: readonly UnitId[]): GameSt
 
   return afterCombatStep(killed, step)
 
+}
+
+/** Hailstorm's dead, chosen by their owner under the ordinary maximal-subset rule. */
+function applySpellDamage(state: GameState, unitIds: readonly UnitId[]): GameState {
+  const choice = magicOf(state).choice
+  if (choice?.kind !== 'damage') throw new IllegalActionError('no spell damage is waiting')
+
+  const army = armyRef(state, choice.player, choice.army)
+  const problem = damageAssignmentProblem(army, choice.damage, unitIds)
+  if (problem !== null) throw new IllegalActionError(problem)
+
+  const { state: dead, risen } = killUnits(state, unitIds)
+  const killed = withLog(
+    dead,
+    { kind: 'units_killed', player: choice.player, slot: choice.army, unitIds },
+    ...(risen.length > 0
+      ? [{ kind: 'units_risen', player: choice.player, unitIds: risen } as const]
+      : []),
+  )
+
+  return afterSpellChoice(killed, null)
 }
 
 function applyReinforce(
@@ -2948,9 +3247,20 @@ function applyAnnounceSpells(state: GameState, casts: readonly AnnouncedSpell[])
     }
     // Checked against exactly what was offered rather than re-derived: one list, so
     // the client cannot be shown a target the engine will then refuse.
-    if (!offer.targets.some((t) => sameSpellTarget(t, cast.target))) {
+    const aim = offer.targets.find((t) => sameSpellTarget(t.target, cast.target))
+    if (aim === undefined) {
       throw new IllegalActionError(`${cast.spell} cannot be aimed there`)
     }
+    if (cast.count < aim.minCount) {
+      throw new IllegalActionError(
+        `${cast.spell} needs ${aim.minCount} castings to reach that target, not ${cast.count}`,
+      )
+    }
+    // The rules a list of targets cannot express, because they depend on how many
+    // castings were combined: Resurrect Dead's health budget today, Lightning
+    // Strike's once-per-unit in 7d.
+    const problem = spellTargetProblem(state, cast)
+    if (problem !== null) throw new IllegalActionError(problem)
     spent += offer.spell.cost * cast.count
   }
 
@@ -3046,5 +3356,13 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyDragonDamageSplit(cleared, action)
     case 'announce_spells':
       return applyAnnounceSpells(cleared, action.casts)
+    case 'dragon_order':
+      return applyDragonOrder(cleared, action.slot)
+    case 'dragon_target':
+      return applyDragonTarget(cleared, action.targets)
+    case 'spell_move':
+      return applySpellMove(cleared, action.slot)
+    case 'spell_summon':
+      return applySpellSummon(cleared, action.dragonId)
   }
 }

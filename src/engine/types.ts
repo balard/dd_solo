@@ -166,6 +166,11 @@ export type MarchStep =
   // place in the game where those come apart, and Dispel Magic lives in the gap.
   | 'announce_spells'
   | 'resolve_spell'
+  // A spell that owes a decision parks it on `turn.magic.choice` and rests here, the
+  // way a targeting SAI rests on `sai_target_*`. One step for all of them rather than
+  // one per spell: what differs is the question, which `SpellChoice` carries, not the
+  // place the machine stands while it is asked.
+  | 'resolve_spell_choice'
 
 /**
  * An attack roll that has landed, held while the exchange is paused between the
@@ -266,7 +271,39 @@ export interface MagicState {
   /** Announced and still unresolved, in the order the caster listed them -- which is
    *  the order they resolve in. Omitted once empty. */
   readonly announced?: readonly AnnouncedSpell[]
+  /** What the spell that is resolving right now is waiting to be told. */
+  readonly choice?: SpellChoice
 }
+
+/**
+ * A decision a spell owes in the middle of resolving (Phase 7c).
+ *
+ * A spell handler cannot set `pending` -- `applyAction` clears it and only `stepGame`
+ * sets one -- so a handler hands one of these back instead and `stepMarch` asks. The
+ * same shape a targeting SAI's `TargetTask` has, and for the same reason.
+ */
+export type SpellChoice =
+  /** Hailstorm: the defender picks who dies, by the ordinary maximal-subset rule. */
+  | {
+      readonly kind: 'damage'
+      readonly player: PlayerId
+      readonly army: ArmyRef
+      readonly damage: number
+    }
+  /** Path: the caster picks where the units it named are going. */
+  | {
+      readonly kind: 'move'
+      readonly unitIds: readonly UnitId[]
+      readonly options: readonly TerrainSlot[]
+    }
+  /** Summon Dragon: which dragon of that element, from any pool or terrain. Drained
+   *  one per answer, because combined castings summon more than one. */
+  | {
+      readonly kind: 'summon'
+      readonly slot: TerrainSlot
+      readonly options: readonly DragonId[]
+      readonly remaining: number
+    }
 
 /**
  * One announced cast.
@@ -329,6 +366,14 @@ export interface TurnState {
    * end of the march, and omitted the rest of the time for `dragonAttack`'s reason.
    */
   readonly magic?: MagicState
+  /**
+   * Terrains whose dragon attack is finished this turn (Phase 7c).
+   *
+   * Phase 6 needed no such list: it resolved terrains in board order and "after this
+   * one" was a comparison of indices. The marching player picks the order now, so
+   * what is left has to be remembered rather than derived.
+   */
+  readonly dragonsDone?: readonly TerrainSlot[]
 }
 
 /**
@@ -339,6 +384,16 @@ export interface TurnState {
  * dragon at a time, which is what `resolved` counts.
  */
 export type DragonAttackStep =
+  /**
+   * Steps 1 and 2: who each dragon is attacking, before anything is thrown.
+   *
+   * A real step only when a dragon has more than one eligible enemy, which needs a
+   * terrain holding three -- unreachable until Phase 7c's `Summon Dragon`. Breath
+   * rerolls against a dragon and not against an army, so the target has to be known
+   * before the dice are, which is exactly why the rulebook designates at step 2 and
+   * rolls at step 3.
+   */
+  | 'declare'
   /** Step 4: this attack's breaths, one at a time, the defender choosing the dead. */
   | 'breath'
   /** Fire only: the units it just killed roll for their lives before burial. */
@@ -364,6 +419,9 @@ export interface DragonAttackState {
   /** How many of this step's one-at-a-time items are already done. */
   readonly resolved: number
   /** The army's stashed combination roll, between the question and the answer. */
+  /** Dragon-vs-dragon declarations still owed, by the player who owes them. Omitted
+   *  once every dragon's target is settled. */
+  readonly declaring?: readonly PlayerId[]
   readonly armyDice?: readonly RawDie[]
   /** Units a Fire breath just killed and must now roll to avoid burial. */
   readonly burning?: readonly UnitId[]
@@ -635,6 +693,50 @@ export type Pending =
    * **An empty answer is always legal.** "Any number of spells can be cast up to the
    * number of magic results generated"; unused results are simply lost.
    */
+  /** Path: where the units this spell named are going. */
+  /**
+   * Which terrain's dragons attack next, when more than one qualifies (p. 18).
+   *
+   * Asked of the marching player, whose armies are the ones being attacked -- the
+   * rules give them the order because it is their turn, not because the dragons are
+   * theirs.
+   */
+  | {
+      readonly kind: 'dragon_order'
+      readonly player: PlayerId
+      readonly options: readonly TerrainSlot[]
+    }
+  /**
+   * Which dragon each of yours is attacking, when more than one is eligible.
+   *
+   * One atomic decision per declaring player rather than one per dragon, because the
+   * rules have both owners declare and reveal together: asking dragon by dragon would
+   * let a second answer be chosen knowing the first.
+   */
+  | {
+      readonly kind: 'dragon_target'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly choices: readonly {
+        readonly dragonId: DragonId
+        readonly options: readonly DragonId[]
+      }[]
+    }
+  | {
+      readonly kind: 'spell_move'
+      readonly player: PlayerId
+      readonly spell: string
+      readonly unitIds: readonly UnitId[]
+      readonly options: readonly TerrainSlot[]
+    }
+  /** Summon Dragon: which dragon to bring, from any Summoning Pool or terrain. */
+  | {
+      readonly kind: 'spell_summon'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly options: readonly DragonId[]
+      readonly remaining: number
+    }
   | {
       readonly kind: 'announce_spells'
       readonly player: PlayerId
@@ -713,6 +815,14 @@ export type GameAction =
   | { readonly kind: 'eighth_face_temple'; readonly force: boolean }
   | { readonly kind: 'temple_bury'; readonly unitId: UnitId }
   | { readonly kind: 'announce_spells'; readonly casts: readonly AnnouncedSpell[] }
+  | { readonly kind: 'dragon_order'; readonly slot: TerrainSlot }
+  | {
+      readonly kind: 'dragon_target'
+      /** Attacker dragon id to the dragon it declares against. */
+      readonly targets: Readonly<Record<DragonId, DragonId>>
+    }
+  | { readonly kind: 'spell_move'; readonly slot: TerrainSlot }
+  | { readonly kind: 'spell_summon'; readonly dragonId: DragonId }
   | { readonly kind: 'dragon_breath'; readonly unitIds: readonly UnitId[] }
   /** `null` declines: the rules say the army *may* promote. */
   | { readonly kind: 'dragon_treasure'; readonly pair: PromotionPair | null }
@@ -772,8 +882,14 @@ export type LogEntry =
       readonly player: PlayerId
       /** Every dragon die drawn, in pool order, by die id. */
       readonly pool: readonly string[]
-      /** The one that starts on the Frontier -- the Phase 6 house rule. */
-      readonly frontier: string
+      /**
+       * The one that starts on the Frontier -- Phase 6's house rule.
+       *
+       * **Omitted under `magic: 'spells'`**, where the house rule retires: `Summon
+       * Dragon` is a real way onto the board, so the pool keeps everything it drew and
+       * the base rules stand. Optional-and-omitted, like every field near the digest.
+       */
+      readonly frontier?: string
     }
   | {
       /** Every dragon at one terrain rolls (p. 18 step 3). */
@@ -1069,6 +1185,23 @@ export type LogEntry =
   /** An announced cast whose target was gone by the time it resolved. "You may not
    *  select a new target" (p. 13), so it is dropped and said so. */
   | { readonly kind: 'spell_fizzled'; readonly player: PlayerId; readonly spell: string }
+  /** Resurrect Dead: units walking back out of the DUA into the casting army. */
+  | {
+      readonly kind: 'units_resurrected'
+      readonly player: PlayerId
+      readonly unitIds: readonly UnitId[]
+      readonly slot: ArmyRef
+    }
+  /** Summon Dragon. `from` is where it came from, which may be another terrain: the
+   *  spell can pull a dragon off the board as well as out of a pool. */
+  | {
+      readonly kind: 'dragon_summoned'
+      readonly player: PlayerId
+      readonly dragonId: DragonId
+      readonly dieId: string
+      readonly from: TerrainSlot | 'pool'
+      readonly slot: TerrainSlot
+    }
   /**
    * The Effects Expire Phase actually removing something.
    *

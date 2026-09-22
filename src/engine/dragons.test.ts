@@ -17,6 +17,7 @@ import {
   type DragonRoll,
 } from './dragons'
 import { applyModifiers, ignoreIdsModifiers, doubleIdsModifier } from './pipeline'
+import { passiveAi } from '../ai/passive'
 import { begin, reduce } from './reduce'
 import { resolveFaces } from './roll'
 import { DRAGON_ROLL_KINDS } from './sai'
@@ -28,6 +29,7 @@ import {
   dragonsAt,
   type DragonInPlay,
   type GameState,
+  type Pending,
   type TerrainSlot,
 } from './types'
 
@@ -155,7 +157,7 @@ describe('rollDragon', () => {
 })
 
 describe('who a dragon attacks', () => {
-  const targetsAt = (state: GameState) => dragonTargets(state, 'frontier', 'p1')
+  const targetsAt = (state: GameState) => dragonTargets(state, 'frontier', 'p1').settled
 
   it('attacks a dragon of another element rather than the army', () => {
     const state = withDragons({ p1d: 'fire_drake', p2d: 'water_drake' })
@@ -178,7 +180,7 @@ describe('who a dragon attacks', () => {
   /** "Dragons attack regardless of who owns or summoned the dragon" (p. 17). */
   it('attacks its own summoner army just the same', () => {
     const state = withDragons({ p1d: 'fire_drake' })
-    expect(dragonTargets(state, 'frontier', 'p1').get('p1d')).toEqual({
+    expect(dragonTargets(state, 'frontier', 'p1').settled.get('p1d')).toEqual({
       kind: 'army',
       player: 'p1',
     })
@@ -245,7 +247,7 @@ describe('the dragon setup seed', () => {
   it('always sets up a duel in the starter matchup', () => {
     for (let seed = 1; seed <= 50; seed++) {
       const state = setupGame({ seed, forces: STARTER_FORCES, ruleSet: DRAGON_RULES })
-      for (const [, target] of dragonTargets(state, 'frontier', 'p1')) {
+      for (const [, target] of dragonTargets(state, 'frontier', 'p1').settled) {
         expect(target.kind, `seed ${seed}`).toBe('dragon')
       }
     }
@@ -260,7 +262,7 @@ describe('the dragon setup seed', () => {
     let sameElement = 0
     for (let seed = 1; seed <= 50; seed++) {
       const state = setupGame({ seed, forces: mirror, ruleSet: DRAGON_RULES })
-      const targets = [...dragonTargets(state, 'frontier', 'p1').values()]
+      const targets = [...dragonTargets(state, 'frontier', 'p1').settled.values()]
       if (targets.every((t) => t.kind === 'army')) sameElement++
     }
     expect(sameElement).toBeGreaterThan(0)
@@ -498,7 +500,7 @@ describe('dragon self-play', () => {
 
   it('does not roll the army when both dragons are busy with each other', () => {
     const state = setupGame({ seed: 7, forces: STARTER_FORCES, ruleSet: DRAGON_RULES })
-    const targets = [...dragonTargets(state, 'frontier', 'p1').values()]
+    const targets = [...dragonTargets(state, 'frontier', 'p1').settled.values()]
     expect(targets.every((t) => t.kind === 'dragon')).toBe(true)
 
     const result = runGame({
@@ -525,3 +527,111 @@ describe('dragon self-play', () => {
     }
   })
 })
+
+describe('the two choices Summon Dragon made real', () => {
+  /**
+   * Phase 6 put at most one dragon per player on the board and nothing could move one,
+   * so a dragon never had two eligible targets and dragons never stood at two terrains
+   * at once. Both were fixed in board order with a comment promising Phase 7. Summon
+   * Dragon is what redeemed it -- and neither is reachable often enough for a fuzz to
+   * find, which is why they are named tests.
+   */
+  it('asks the owner which dragon to attack when more than one is eligible', () => {
+    const state = threeAtFrontier()
+    const { settled, choices } = dragonTargets(state, 'frontier', 'p1')
+
+    // The water drake may attack either fire dragon; each fire dragon has exactly one
+    // enemy and so is settled, never asked about.
+    expect([...choices.keys()]).toEqual(['water'])
+    expect([...(choices.get('water') ?? [])].sort()).toEqual(['fireA', 'fireB'])
+    expect(settled.get('fireA')).toEqual({ kind: 'dragon', dragonId: 'water' })
+    expect(settled.get('fireB')).toEqual({ kind: 'dragon', dragonId: 'water' })
+  })
+
+  it('still settles a lone eligible target without asking', () => {
+    const state = placed({ p1d: 'water_drake', p2d: 'fire_drake' })
+    const { settled, choices } = dragonTargets(state, 'frontier', 'p1')
+    expect(choices.size).toBe(0)
+    expect(settled.get('p1d')).toEqual({ kind: 'dragon', dragonId: 'p2d' })
+  })
+
+  it('never offers a dragon its own element, however many are present', () => {
+    const state = placed({ a: 'fire_drake', b: 'fire_wyrm', c: 'fire_drake' })
+    const { settled, choices } = dragonTargets(state, 'frontier', 'p1')
+    // Same-element dragons never attack each other, so all three go for the army.
+    expect(choices.size).toBe(0)
+    for (const [, target] of settled) expect(target).toEqual({ kind: 'army', player: 'p1' })
+  })
+
+  it('raises the declaration through the real machine, and rolls only after it', () => {
+    const state = begin(atDragonPhase(threeAtFrontier()))
+
+    expect(state.pending?.kind).toBe('dragon_target')
+    // Nothing has been thrown: breath rerolls against a dragon and not against an
+    // army, so every target has to be settled before any die is.
+    expect(state.log.some((e) => e.kind === 'dragon_attack')).toBe(false)
+
+    const pending = state.pending as Extract<Pending, { kind: 'dragon_target' }>
+    const answered = reduce(state, {
+      kind: 'dragon_target',
+      targets: { [pending.choices[0]!.dragonId]: pending.choices[0]!.options[1]! },
+    })
+    expect(answered.log.some((e) => e.kind === 'dragon_attack')).toBe(true)
+  })
+
+  it('lets the marching player order two terrains, and asks nothing about one', () => {
+    const one = begin(atDragonPhase(placed({ a: 'fire_drake' })))
+    expect(one.pending?.kind).not.toBe('dragon_order')
+
+    const two = begin(atDragonPhase(atTerrains({ a: 'fire_drake' }, { b: 'water_drake' })))
+    expect(two.pending?.kind).toBe('dragon_order')
+    const options = (two.pending as Extract<Pending, { kind: 'dragon_order' }>).options
+    expect([...options].sort()).toEqual(['frontier', 'p1_home'])
+  })
+
+  it('does not ask twice about a terrain whose dragons have already attacked', () => {
+    // `dragonsDone` is what makes "what is left" a fact rather than a board-index
+    // comparison, now that the order is the player's to choose.
+    let state = begin(atDragonPhase(atTerrains({ a: 'fire_drake' }, { b: 'water_drake' })))
+    let asked = 0
+    for (let i = 0; i < 200 && state.pending !== null && state.winner === null; i += 1) {
+      if (state.pending.kind === 'dragon_order') asked += 1
+      if (state.turn.phase !== 'dragon_attack') break
+      state = reduce(state, passiveAi.decide(state, state.pending, { seed: 1, counter: 0 })[0])
+    }
+    // Two terrains, so exactly one order decision: the second is forced.
+    expect(asked).toBe(1)
+  })
+})
+
+/** Three dragons at the Frontier: one water against two fire, so the water drake has
+ *  a choice and the two fire dragons do not. */
+function threeAtFrontier(): GameState {
+  return placed({ water: 'water_drake', fireA: 'fire_drake', fireB: 'fire_wyrm' })
+}
+
+/** A real board under the dragon rules, with the given dragons placed. */
+function placed(spec: Readonly<Record<string, string>>): GameState {
+  return atTerrains(spec, {})
+}
+
+function atTerrains(
+  frontier: Readonly<Record<string, string>>,
+  home: Readonly<Record<string, string>>,
+): GameState {
+  const base = setupGame({ seed: 5, forces: STARTER_FORCES, firstPlayer: 'p1', ruleSet: DRAGON_RULES })
+  const dragons: Record<string, DragonInPlay> = {}
+  const place = (spec: Readonly<Record<string, string>>, slot: TerrainSlot) => {
+    for (const [id, dieId] of Object.entries(spec)) {
+      dragons[id] = { id, dieId, owner: id.startsWith('p2') ? 'p2' : 'p1', location: { kind: 'terrain', slot } }
+    }
+  }
+  place(frontier, 'frontier')
+  place(home, 'p1_home')
+  return { ...base, dragons }
+}
+
+/** Wound forward to the Dragon Attack Phase, with nothing before it to answer. */
+function atDragonPhase(state: GameState): GameState {
+  return { ...state, turn: { ...state.turn, phase: 'dragon_attack' } }
+}

@@ -361,6 +361,19 @@ function describe(entry: LogEntry, state: GameState): string | null {
         dim(`(${entry.element})`)
       )
 
+    case 'units_resurrected':
+      return green(
+        `  ${entry.player} raises ${entry.unitIds
+          .map((id) => (state.units[id] ? name(state.units[id]!) : id))
+          .join(', ')} into the army at ${SLOT_LABEL[entry.slot as TerrainSlot] ?? entry.slot}`,
+      )
+
+    case 'dragon_summoned':
+      return cyan(
+        `  ${dragonName(entry.dieId)} is summoned to ${SLOT_LABEL[entry.slot]}` +
+          dim(entry.from === 'pool' ? ' from the Summoning Pool' : ` from ${SLOT_LABEL[entry.from]}`),
+      )
+
     case 'spell_fizzled':
       return dim(`  ${spell(entry.spell).name} fizzles -- its target is gone`)
 
@@ -384,11 +397,16 @@ function describe(entry: LogEntry, state: GameState): string | null {
           groups.map((g) => `${SLOT_LABEL[g.slot]} with ${g.names.join(', ')}`).join('; '),
       )
     }
-    case 'dragons_drawn':
+    // No Frontier seed under `magic: 'spells'`: every dragon waits in the pool for a
+    // `Summon Dragon`, which is what the base rules say and what Phase 6 could not do.
+    case 'dragons_drawn': {
+      const brings = `${entry.player} brings ${entry.pool.map(dragonName).join(' and ')}`
       return dim(
-        `${entry.player} brings ${entry.pool.map(dragonName).join(' and ')} — ` +
-          `${dragonName(entry.frontier)} starts at the Frontier`,
+        entry.frontier === undefined
+          ? `${brings} — both wait in the Summoning Pool`
+          : `${brings} — ${dragonName(entry.frontier)} starts at the Frontier`,
       )
+    }
 
     // One line per dragon: a flat list of faces never said who was attacked, hid
     // the rerolls inside one die, and never totalled anything.
@@ -447,7 +465,12 @@ interface Choice {
   readonly action: GameAction
 }
 
-function choicesFor(pending: Pending): Choice[] {
+const dragonNameOf = (state: GameState, dragonId: string | undefined): string => {
+  const dragon = dragonId === undefined ? undefined : state.dragons[dragonId]
+  return dragon === undefined ? 'a dragon' : dragonName(dragon.dieId)
+}
+
+function choicesFor(state: GameState, pending: Pending): Choice[] {
   switch (pending.kind) {
     case 'choose_march_army':
       return [
@@ -529,6 +552,45 @@ function choicesFor(pending: Pending): Choice[] {
     case 'eighth_face_city':
       return []
 
+    case 'dragon_order':
+      return pending.options.map((slot, i) => ({
+        key: String(i + 1),
+        label: `dragons at ${SLOT_LABEL[slot]} attack next`,
+        action: { kind: 'dragon_order', slot } as GameAction,
+      }))
+
+    case 'dragon_target': {
+      const first = pending.choices[0]
+      if (first === undefined) return []
+      return first.options.map((dragonId, i) => ({
+        key: String(i + 1),
+        label: `${dragonNameOf(state, first.dragonId)} attacks ${dragonNameOf(state, dragonId)}`,
+        action: {
+          kind: 'dragon_target',
+          targets: Object.fromEntries(
+            pending.choices.map((c) => [
+              c.dragonId,
+              c.dragonId === first.dragonId ? dragonId : (c.options[0] as string),
+            ]),
+          ),
+        } as GameAction,
+      }))
+    }
+
+    case 'spell_move':
+      return pending.options.map((slot, i) => ({
+        key: String(i + 1),
+        label: `move to ${SLOT_LABEL[slot]}`,
+        action: { kind: 'spell_move', slot } as GameAction,
+      }))
+
+    case 'spell_summon':
+      return pending.options.map((dragonId, i) => ({
+        key: String(i + 1),
+        label: `summon ${dragonNameOf(state, dragonId)} to ${SLOT_LABEL[pending.slot]}`,
+        action: { kind: 'spell_summon', dragonId } as GameAction,
+      }))
+
     case 'announce_spells':
     case 'temple_bury':
     case 'dragon_breath':
@@ -589,22 +651,47 @@ ${bold('Magic')} ${dim(`— ${plan.remaining} of ${pending.pool.points} left`)}`
       continue
     }
 
+    // An Elemental spell takes any one of the caster's elements, and which one paid is
+    // what Resurrect Dead and Summon Dragon both read. One element means no question.
+    let element = offer.castable.elements[0] as Element
+    if (offer.castable.elements.length > 1) {
+      console.log(dim(`  pay for ${offer.castable.spell.name} with which element?`))
+      offer.castable.elements.forEach((e, i) => console.log(`    ${i + 1}) ${e}`))
+      const picked = offer.castable.elements[Number((await ask('> ')).trim()) - 1]
+      if (picked === undefined) {
+        console.log(red('  no element chosen; nothing staged'))
+        continue
+      }
+      element = picked
+    }
+
     console.log(dim(`  aim ${offer.castable.spell.name} where?`))
-    offer.castable.targets.forEach((target, i) => {
-      console.log(`    ${i + 1}) ${spellName(state, target)}`)
+    offer.castable.targets.forEach((aim, i) => {
+      const price = aim.minCount > 1 ? dim(` (${aim.minCount} castings)`) : ''
+      console.log(`    ${i + 1}) ${spellName(state, aim.target)}${price}`)
     })
-    const which = offer.castable.targets[Number((await ask('> ')).trim()) - 1]
-    if (which === undefined) {
+    const aimed = offer.castable.targets[Number((await ask('> ')).trim()) - 1]
+    if (aimed === undefined) {
       console.log(red('  no target chosen; nothing staged'))
       continue
     }
+    const which = aimed.target
 
     // Two castings of one spell at one target are one combined spell with its number
     // multiplied, not two spells -- so this merges rather than appending.
-    const at = casts.findIndex((c) => c.spell === offer.castable.spell.id && sameSpellTarget(c.target, which))
-    const element = offer.castable.elements[0] as Element
-    if (at === -1) casts.push({ spell: offer.castable.spell.id, element, count: 1, target: which })
-    else casts[at] = { ...(casts[at] as AnnouncedSpell), count: (casts[at] as AnnouncedSpell).count + 1 }
+    const at = casts.findIndex(
+      (c) => c.spell === offer.castable.spell.id && sameSpellTarget(c.target, which),
+    )
+    if (at === -1) {
+      casts.push({
+        spell: offer.castable.spell.id,
+        element,
+        count: aimed.minCount,
+        target: which,
+      })
+    } else {
+      casts[at] = { ...(casts[at] as AnnouncedSpell), count: (casts[at] as AnnouncedSpell).count + 1 }
+    }
   }
 }
 
@@ -1127,7 +1214,7 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
   if (pending.kind === 'temple_bury') return askTempleBury(state, pending)
   if (pending.kind === 'announce_spells') return askSpells(state, pending)
 
-  const choices = choicesFor(pending)
+  const choices = choicesFor(state, pending)
   for (;;) {
     console.log()
     for (const choice of choices) console.log(`  ${choice.key}) ${choice.label}`)

@@ -16,7 +16,7 @@
  */
 import { damageOptions } from '../engine/damage'
 import type { RngState } from '../engine/rng'
-import type { GameAction, GameState, Pending } from '../engine/types'
+import type { GameAction, GameState, Pending, TerrainSlot } from '../engine/types'
 import { army as armyRef } from '../engine/types'
 
 import type { AiPlayer } from './types'
@@ -49,6 +49,27 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     // is where that is answered; see OVERVIEW.md section 4.
     case 'announce_spells':
       return { kind: 'announce_spells', casts: [] }
+
+    // It casts nothing, so these only ever reach it as a spell of the *human's* that
+    // put a decision in its hands. Each takes the first legal answer: there is no
+    // passive option -- a declared target and a summoned dragon are forced once the
+    // spell resolves -- and picking is not the same as wanting.
+    case 'dragon_order':
+      return { kind: 'dragon_order', slot: pending.options[0] as TerrainSlot }
+
+    case 'dragon_target':
+      return {
+        kind: 'dragon_target',
+        targets: Object.fromEntries(
+          pending.choices.map((choice) => [choice.dragonId, choice.options[0] as string]),
+        ),
+      }
+
+    case 'spell_move':
+      return { kind: 'spell_move', slot: pending.options[0] as TerrainSlot }
+
+    case 'spell_summon':
+      return { kind: 'spell_summon', dragonId: pending.options[0] as string }
 
     // It counters: free, and it keeps the counter-attack path live under test.
     case 'choose_counter_attack':

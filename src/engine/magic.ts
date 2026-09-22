@@ -17,8 +17,9 @@
  * ability, or a mixed force. Nothing else in the spell system depends on it, and this
  * comment is where a future reader should start when it does.
  */
-import { speciesElements, terrainDie, terrainType } from '../data/load'
+import { speciesElements, terrainDie, terrainType, unitType } from '../data/load'
 import {
+  spell,
   spellAcceptsElement,
   spellAllowsSpecies,
   SPELLS,
@@ -27,12 +28,14 @@ import {
 import type { Element } from '../data/types'
 
 import { iconAt } from './effects'
-import { resolvesSpell } from './spells'
+import { resolvesSpell, summonable } from './spells'
 import {
   army as armyOf,
+  deadUnits,
   opponentOf,
   speciesOf,
   TERRAIN_SLOTS,
+  type AnnouncedSpell,
   type ArmyRef,
   type GameState,
   type PlayerId,
@@ -113,7 +116,24 @@ export interface Castable {
   readonly maxCount: number
   /** Every legal target, so the client offers a list rather than computing one and
    *  the engine validates against exactly what it offered. */
-  readonly targets: readonly SpellTarget[]
+  readonly targets: readonly SpellTargetOffer[]
+}
+
+/**
+ * One target, and the fewest castings that can reach it.
+ *
+ * `minCount` exists because Resurrect Dead's cost is a property of what it is aimed
+ * at: "target one health-worth of units in your DUA", multiplied by the castings, so a
+ * 2-health unit needs two castings and six magic. Carrying it on the offer is what
+ * keeps the rule in one place -- a client that shows a target the engine will then
+ * refuse is the bug this whole shape exists to prevent, and the fuzz found it within
+ * a hundred games.
+ *
+ * 1 for every other spell, where a target is a target and the count is free.
+ */
+export interface SpellTargetOffer {
+  readonly target: SpellTarget
+  readonly minCount: number
 }
 
 /**
@@ -130,11 +150,13 @@ export function spellTargets(
   state: GameState,
   caster: PlayerId,
   s: Spell,
-): readonly SpellTarget[] {
-  const armies = (player: PlayerId): SpellTarget[] =>
+): readonly SpellTargetOffer[] {
+  const once = (target: SpellTarget): SpellTargetOffer => ({ target, minCount: 1 })
+
+  const armies = (player: PlayerId): SpellTargetOffer[] =>
     ([...TERRAIN_SLOTS, 'reserve'] as readonly ArmyRef[])
       .filter((ref) => armyOf(state, player, ref).length > 0)
-      .map((ref) => ({ kind: 'army', player, army: ref }) as const)
+      .map((ref) => once({ kind: 'army', player, army: ref }))
 
   switch (s.target) {
     case 'army':
@@ -142,15 +164,60 @@ export function spellTargets(
     case 'opposing_army':
       return armies(opponentOf(caster))
     case 'terrain':
-      return TERRAIN_SLOTS.map((slot) => ({ kind: 'terrain', slot }) as const)
-    // 7c and 7d. Nothing with these targets has an effect or a handler yet, so
-    // `castableSpells` filters them out before this is ever asked.
+      return TERRAIN_SLOTS.map((slot) => once({ kind: 'terrain', slot }))
+
+    // Path. One unit per target rather than a set: the rules let a cumulative spell be
+    // "cast multiple separate times, with a different target each time", which is how
+    // a caster moves two units, and a set would need a budgeted selection at
+    // announcement for no gain.
     case 'own_unit':
+      return TERRAIN_SLOTS.flatMap((slot) =>
+        armyOf(state, caster, slot).map((unit) => once({ kind: 'units', unitIds: [unit.id] })),
+      )
+
+    // Resurrect Dead. A unit's health *is* the number of castings it needs, so the
+    // offer carries it and neither client has to know the rule.
+    case 'own_dua':
+      return deadUnits(state, caster).map((unit) => ({
+        target: { kind: 'units', unitIds: [unit.id] } as const,
+        minCount: unitType(unit.typeId).health,
+      }))
+
+    // 7d: Mirage and Lightning Strike. Nothing with these targets resolves yet, so
+    // `castableSpells` filters them out before this is ever asked.
     case 'opposing_unit':
     case 'units':
-    case 'own_dua':
       return []
   }
+}
+
+/**
+ * Why this announced cast is illegal, or null.
+ *
+ * The per-spell rules that a list of targets cannot express, because they depend on
+ * the number of castings or on the rest of the announcement. Separate from
+ * `spellTargets` for that reason: one answers "what may I aim at", this answers "may I
+ * aim *this* at it, for *this* much".
+ */
+export function spellTargetProblem(state: GameState, cast: AnnouncedSpell): string | null {
+  const s = spell(cast.spell)
+
+  if (s.id === 'resurrect_dead' && cast.target.kind === 'units') {
+    // "...units in your DUA that contains the element of magic used to cast this
+    // spell." The health budget is on the offer as `minCount`; this is the half that
+    // depends on which element paid, and it bites only when a Standing Stones has lent
+    // the pool an element the caster's species does not carry.
+    for (const id of cast.target.unitIds) {
+      const unit = state.units[id]
+      if (unit === undefined) continue
+      const elements = speciesElements(unitType(unit.typeId).species)
+      if (!elements.includes(cast.element)) {
+        return `${unitType(unit.typeId).name} does not contain ${cast.element}`
+      }
+    }
+  }
+
+  return null
 }
 
 /**
@@ -180,19 +247,48 @@ export function castableSpells(
     if (pool.fromReserves === true && !s.reserves) continue
     if (s.cost > pool.points) continue
 
-    const elements = pool.elements.filter((e) => spellAcceptsElement(s, e))
+    let elements = pool.elements.filter((e) => spellAcceptsElement(s, e))
+    // "...units in your DUA that contains the element of magic used to cast this
+    // spell." Your dead are all your own species, so this is a fact about the *spell*
+    // rather than about any one target -- and it bites only when a Standing Stones has
+    // lent the pool an element your species does not carry.
+    if (s.id === 'resurrect_dead') {
+      const own = speciesElements(speciesId)
+      elements = elements.filter((e) => own.includes(e))
+    }
     if (elements.length === 0) continue
 
     // A spell with nowhere to land is dropped rather than offered -- the same rule
     // that drops a targeting SAI whose army holds nothing small enough to take.
-    const targets = spellTargets(state, caster, s)
+    // "The target of a spell, **or the conditions for a spell's effect to occur**, must
+    // exist at the time the target is selected" (p. 13). Summon Dragon is the first
+    // spell with a condition beyond its target: a terrain is only a target if some
+    // dragon of a colour this pool can pay for could actually be summoned to it.
+    if (s.id === 'summon_dragon') {
+      elements = elements.filter((e) =>
+        TERRAIN_SLOTS.some((slot) => summonable(state, e, slot).length > 0),
+      )
+      if (elements.length === 0) continue
+    }
+
+    let targets = spellTargets(state, caster, s).filter(
+      (t) => t.minCount * s.cost <= pool.points,
+    )
+    if (s.id === 'summon_dragon') {
+      targets = targets.filter(
+        (t) =>
+          t.target.kind === 'terrain' &&
+          elements.some((e) => summonable(state, e, t.target.kind === 'terrain' ? t.target.slot : 'frontier').length > 0),
+      )
+    }
     if (targets.length === 0) continue
 
     out.push({
       spell: s,
       elements,
       maxCount: s.cumulative ? Math.floor(pool.points / s.cost) : 1,
-      targets,
+      // A target needing more castings than the pool can buy is not a target.
+      targets: targets.filter((t) => t.minCount * s.cost <= pool.points),
     })
   }
 
@@ -254,6 +350,20 @@ export function sameSpellTarget(a: SpellTarget, b: SpellTarget): boolean {
   }
 }
 
+/**
+ * What a client is part-way through announcing: a spell, and the element paying for it
+ * once that is settled.
+ *
+ * Both clients hold one of these between taps. It is here rather than in either of
+ * them for `spellPlan`'s reason -- the terminal and the browser ask the same three
+ * questions in the same order, and two copies of "which half of the answer do I have"
+ * is how they stop agreeing.
+ */
+export interface SpellAim {
+  readonly spell: string
+  readonly element?: Element
+}
+
 /** One staged cast in a client's announcement draft. */
 export interface SpellDraftCast {
   readonly spell: string
@@ -307,7 +417,7 @@ export function spellPlan(
       offer !== undefined &&
       cast.count >= 1 &&
       offer.elements.includes(cast.element) &&
-      offer.targets.some((t) => sameSpellTarget(t, cast.target))
+      offer.targets.some((t) => sameSpellTarget(t.target, cast.target) && cast.count >= t.minCount)
     )
   })
 

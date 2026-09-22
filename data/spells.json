@@ -12,7 +12,8 @@
       "cumulative": true,
       "reserves": false,
       "cantrip": true,
-      "text": "Target any opposing army. Inflict one point of damage on the target."
+      "text": "Target any opposing army. Inflict one point of damage on the target.",
+      "handler": "hailstorm"
     },
     {
       "id": "wind_walk",
@@ -250,7 +251,8 @@
       "cumulative": true,
       "reserves": true,
       "cantrip": false,
-      "text": "Target one of your units at a terrain. Move the target to any other terrain where you have an army."
+      "text": "Target one of your units at a terrain. Move the target to any other terrain where you have an army.",
+      "handler": "path"
     },
     {
       "id": "wall_of_thorns",
@@ -297,7 +299,8 @@
       "cumulative": true,
       "reserves": true,
       "cantrip": false,
-      "text": "Target one health-worth of units in your DUA that contains the element of magic used to cast this spell. Return the targets to the casting army. Multiple castings of this spell targeting a single unit must all use the same element of magic."
+      "text": "Target one health-worth of units in your DUA that contains the element of magic used to cast this spell. Return the targets to the casting army. Multiple castings of this spell targeting a single unit must all use the same element of magic.",
+      "handler": "resurrect_dead"
     },
     {
       "id": "summon_dragon",
@@ -309,7 +312,8 @@
       "cumulative": true,
       "reserves": false,
       "cantrip": false,
-      "text": "Target any terrain. Summon one dragon that contains the element used to cast this spell from any Summoning Pool or terrain to the target terrain."
+      "text": "Target any terrain. Summon one dragon that contains the element used to cast this spell from any Summoning Pool or terrain to the target terrain.",
+      "handler": "summon_dragon"
     }
   ]
 }

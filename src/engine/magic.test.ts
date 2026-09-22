@@ -11,19 +11,24 @@ import { describe, expect, it } from 'vitest'
 
 import { randomAi } from '../ai/random'
 import { runGame } from '../ai/run'
+import { unitType } from '../data/load'
 import { SPELLS, spell, spellAcceptsElement, spellAllowsSpecies } from '../data/spells'
 
 import { legalActions } from './combat'
 import { armyRoll, pruneEffects, type Effect } from './effects'
 import { castableSpells, castingElements, magicPool, magicRolled, type MagicPool } from './magic'
-import { begin, reduce } from './reduce'
+import { advance, begin, reduce } from './reduce'
 import { BESTIARY_FORCES, STARTER_FORCES, setupGame } from './setup'
-import { resolvesSpell, spellEffect, type SpellContext } from './spells'
+import { castSpell, resolvesSpell, spellEffect, summonable, type SpellContext } from './spells'
 import {
+  armyAt,
   DRAGON_RULES,
   SPELL_RULES,
   V0_RULES,
+  type DragonInPlay,
   type GameState,
+  type PlayerId,
+  type TerrainSlot,
 } from './types'
 
 const pool = (over: Partial<MagicPool> = {}): MagicPool => ({
@@ -107,18 +112,14 @@ describe('resolvesSpell', () => {
   // Every slice moves names out of this list; by 7f it is empty and the test inverts.
   // Naming them rather than counting means a spell that quietly stops resolving shows
   // up here instead of passing on a number that happens to match.
-  it('resolves exactly the eight declarative spells, and nothing else yet', () => {
+  it('resolves everything but the six spells 7d and 7e still owe', () => {
     const unbuilt = SPELLS.filter((s) => !resolvesSpell(s.id, SPELL_RULES)).map((s) => s.id).sort()
     expect(unbuilt).toEqual([
       'accelerated_growth',
       'flash_flood',
       'flashfire',
-      'hailstorm',
       'lightning_strike',
       'mirage',
-      'path',
-      'resurrect_dead',
-      'summon_dragon',
       'wall_of_thorns',
     ])
   })
@@ -146,9 +147,14 @@ describe('the magic pool', () => {
     const state = gameAt('p1')
     const castable = castableSpells(state, 'p1', magicPool(state, 'p1', 'p1_home', 99), SPELL_RULES)
     expect(castable.map((c) => c.spell.element)).not.toContain('air')
-    // Water and earth only: the four declarative spells of those two elements.
+    // Water and earth only, plus Summon Dragon -- an Elemental spell any element may
+    // pay for, and the pools are full even though nothing is seeded on the board.
+    // Resurrect Dead is absent for the opposite reason: the DUA is empty at setup, and
+    // a spell with no target is not offered.
     expect(castable.map((c) => c.spell.id).sort()).toEqual([
+      'path',
       'stone_skin',
+      'summon_dragon',
       'transmute_rock_to_mud',
       'wall_of_fog',
       'watery_double',
@@ -314,12 +320,197 @@ describe('where a spell effect reaches', () => {
   })
 })
 
+describe('the board spells', () => {
+  it('prices a Resurrect Dead target by its health, on the offer rather than in a rule', () => {
+    // "Target one health-worth of units in your DUA", multiplied by the castings -- so
+    // a 2-health unit needs two castings and six magic. The number rides on the offer
+    // so that no client can show a target the engine will then refuse; the fuzz found
+    // that within a hundred games when it did not.
+    const state = withDua(gameAt('p1'), 'p1', 1, 2)
+    const pool = magicPool(state, 'p1', 'p1_home', 99)
+    const offer = castableSpells(state, 'p1', pool, SPELL_RULES).find(
+      (c) => c.spell.id === 'resurrect_dead',
+    )
+
+    expect(offer).toBeDefined()
+    const priced = offer!.targets.map((t) => t.minCount).sort()
+    // One dead unit of each health the fixture buried.
+    expect(priced).toEqual([1, 2])
+  })
+
+  it('drops a Resurrect Dead target the pool could never afford', () => {
+    // Three magic buys one casting, so only a 1-health unit is reachable. A target
+    // that cannot be paid for is not a target, the same rule that drops a targeting
+    // SAI whose army holds nothing small enough.
+    const state = withDua(gameAt('p1'), 'p1', 1, 2)
+    const offer = castableSpells(
+      state,
+      'p1',
+      magicPool(state, 'p1', 'p1_home', 3),
+      SPELL_RULES,
+    ).find((c) => c.spell.id === 'resurrect_dead')
+
+    expect(offer!.targets.map((t) => t.minCount)).toEqual([1])
+  })
+
+  it('will not resurrect with an element the caster\'s species does not carry', () => {
+    // "...units in your DUA that contains the element of magic used to cast this
+    // spell." Treefolk are water and earth, so a Standing Stones lending them fire
+    // lends them nothing they can raise their dead with.
+    const state = withDua(gameAt('p1'), 'p1', 1)
+    const lent = castableSpells(
+      state,
+      'p1',
+      { points: 99, elements: ['water', 'earth', 'fire'] },
+      SPELL_RULES,
+    ).find((c) => c.spell.id === 'resurrect_dead')
+
+    expect([...lent!.elements].sort()).toEqual(['earth', 'water'])
+  })
+
+  it('asks nobody about a Hailstorm too small to kill anything', () => {
+    // One point of damage against an army whose smallest die is bigger is dropped, not
+    // asked about -- §6's rule, reached by a spell for the first time.
+    const state = gameAt('p1')
+    const big = onlyBigUnits(state, 'p2', 'frontier')
+    const outcome = castSpell(big, spell('hailstorm'), {
+      caster: 'p1',
+      army: 'p1_home',
+      element: 'air',
+      count: 1,
+      target: { kind: 'army', player: 'p2', army: 'frontier' },
+    })
+
+    expect(outcome.choice).toBeUndefined()
+  })
+
+  it('asks the defender who dies when a Hailstorm can kill', () => {
+    const state = gameAt('p1')
+    const outcome = castSpell(state, spell('hailstorm'), {
+      caster: 'p1',
+      army: 'p1_home',
+      element: 'air',
+      count: 4,
+      target: { kind: 'army', player: 'p2', army: 'frontier' },
+    })
+
+    // The victim chooses, not the caster -- it is the ordinary damage decision.
+    expect(outcome.choice).toEqual({
+      kind: 'damage',
+      player: 'p2',
+      army: 'frontier',
+      damage: 4,
+    })
+  })
+
+  it('offers Path every terrain but the one the unit is standing on', () => {
+    const state = gameAt('p1')
+    const mover = armyAt(state, 'p1', 'p1_home')[0]!
+    const outcome = castSpell(state, spell('path'), {
+      caster: 'p1',
+      army: 'p1_home',
+      element: 'earth',
+      count: 1,
+      target: { kind: 'units', unitIds: [mover.id] },
+    })
+
+    expect(outcome.choice?.kind).toBe('move')
+    const options = outcome.choice?.kind === 'move' ? outcome.choice.options : []
+    expect(options).not.toContain('p1_home')
+    // "Any other terrain where you have an army" -- so only terrains you hold.
+    for (const slot of options) expect(armyAt(state, 'p1', slot).length).toBeGreaterThan(0)
+  })
+
+  it('lets Summon Dragon reach any pool and any other terrain, of that element only', () => {
+    const state = withDragons(gameAt('p1'), {
+      mine: { dieId: 'water_drake', owner: 'p1', at: 'pool' },
+      theirs: { dieId: 'water_wyrm', owner: 'p2', at: 'pool' },
+      elsewhere: { dieId: 'water_drake', owner: 'p1', at: 'p2_home' },
+      wrong: { dieId: 'fire_drake', owner: 'p2', at: 'pool' },
+      already: { dieId: 'water_wyrm', owner: 'p1', at: 'frontier' },
+    })
+
+    // Any Summoning Pool, the opponent's included, and any *other* terrain.
+    expect([...summonable(state, 'water', 'frontier')].sort()).toEqual([
+      'elsewhere',
+      'mine',
+      'theirs',
+    ])
+    // Not an element the magic did not pay for.
+    expect(summonable(state, 'fire', 'frontier')).toEqual(['wrong'])
+  })
+})
+
+describe('a target that is gone by the time the spell resolves', () => {
+  /**
+   * "If for any reason the announced target of a spell is no longer present, then you
+   * may not select a new target" (p. 13). So it is **dropped**, not re-aimed and not
+   * thrown on -- the same shape as damage too small to kill anything.
+   *
+   * First reachable in 7c, because Hailstorm is the first spell that can empty the
+   * army a later cast in the same announcement named.
+   */
+  it('fizzles rather than throwing', () => {
+    const base = gameAt('p1')
+    const emptied = evacuate(base, 'p2', 'frontier')
+
+    const state = advance({
+      ...emptied,
+      // `advance` returns at once on a non-null pending, so the board has to be
+      // handed over mid-march with nothing outstanding.
+      pending: null,
+      turn: {
+        ...emptied.turn,
+        phase: 'march',
+        marchStep: 'resolve_spell',
+        marchingArmy: 'p1_home',
+        magic: {
+          army: 'p1_home',
+          pool: { points: 6, elements: ['water', 'earth'] },
+          announced: [
+            {
+              spell: 'stone_skin',
+              element: 'earth',
+              count: 1,
+              target: { kind: 'army', player: 'p2', army: 'frontier' },
+            },
+          ],
+        },
+      },
+    })
+
+    expect(state.log.some((e) => e.kind === 'spell_fizzled' && e.spell === 'stone_skin')).toBe(true)
+    // Nothing was cast on the vanished army, and nothing was cast anywhere else either.
+    expect(state.effects).toEqual([])
+  })
+})
+
+describe('the Frontier dragon seed', () => {
+  it('is gone once a spell can summon', () => {
+    const state = setupGame({ seed: 4, forces: STARTER_FORCES, ruleSet: SPELL_RULES })
+    const onBoard = Object.values(state.dragons).filter((d) => d.location.kind === 'terrain')
+    expect(onBoard).toEqual([])
+    expect(Object.values(state.dragons).length).toBeGreaterThan(0)
+  })
+
+  it('is still there for the rung that has no way to summon', () => {
+    // `DRAGON_RULES` remains a playable configuration, and without the seed its whole
+    // Dragon Attack Phase would be unreachable by any legal sequence of actions.
+    const state = setupGame({ seed: 4, forces: STARTER_FORCES, ruleSet: DRAGON_RULES })
+    const onBoard = Object.values(state.dragons).filter((d) => d.location.kind === 'terrain')
+    expect(onBoard).toHaveLength(2)
+  })
+})
+
 describe('the fuzz', () => {
-  it('plays 200 SPELL_RULES games, casting every declarative spell at least once', () => {
+  it('plays 200 SPELL_RULES games, casting every spell this build resolves', () => {
     const cast = new Map<string, number>()
     let magicActions = 0
     let announcements = 0
     let stuck = 0
+    let summoned = 0
+    let resurrected = 0
+    let moved = 0
 
     // Both force sets, because the two species reach different spell lists: Treefolk
     // can never cast an air or fire spell and Firewalkers never a water or earth one,
@@ -336,6 +527,9 @@ describe('the fuzz', () => {
         for (const entry of result.state.log) {
           if (entry.kind === 'magic_rolled') magicActions += 1
           if (entry.kind === 'spell_cast') cast.set(entry.spell, (cast.get(entry.spell) ?? 0) + 1)
+          if (entry.kind === 'dragon_summoned') summoned += 1
+          if (entry.kind === 'units_resurrected') resurrected += 1
+          if (entry.kind === 'units_moved' && entry.sai === 'Path') moved += 1
         }
       }
     }
@@ -343,19 +537,77 @@ describe('the fuzz', () => {
     expect(stuck).toBe(0)
     expect(announcements).toBe(magicActions)
 
-    // The counters are what make a clean run mean something: a fuzz over rules nothing
-    // reached would be green and prove nothing. Every declarative spell fires.
-    const declarative = SPELLS.filter((s) => s.effect !== undefined).map((s) => s.id)
-    expect(declarative).toHaveLength(8)
-    for (const id of declarative) expect(cast.get(id) ?? 0).toBeGreaterThan(0)
+    // The board spells did what they do, rather than merely being announced: a dragon
+    // left a pool, a unit walked out of the DUA, a unit changed terrain.
+    expect(summoned).toBeGreaterThan(0)
+    expect(resurrected).toBeGreaterThan(0)
+    expect(moved).toBeGreaterThan(0)
 
-    // And nothing else does: an unbuilt spell is never offered, so it can never be
-    // announced, so it can never reach resolution and throw.
-    for (const id of cast.keys()) expect(declarative).toContain(id)
+    // The counters are what make a clean run mean something: a fuzz over rules nothing
+    // reached would be green and prove nothing. **Every spell this build resolves
+    // fires**, which is a stronger claim than a list, and it tightens on its own as
+    // each later slice moves a name out of the unbuilt set.
+    const live = SPELLS.filter((s) => resolvesSpell(s.id, SPELL_RULES)).map((s) => s.id)
+    expect(live).toHaveLength(12)
+    for (const id of live) expect(cast.get(id) ?? 0).toBeGreaterThan(0)
+
+    // And nothing unbuilt is ever cast: a spell the rung cannot resolve is never
+    // offered, so it can never be announced, so it can never reach resolution and
+    // throw. That is the `sai: 'results'` lesson, and this is what checks it.
+    for (const id of cast.keys()) expect(resolvesSpell(id, SPELL_RULES)).toBe(true)
   })
 })
 
 // --- helpers -----------------------------------------------------------------
+
+/** Empties an army, so an announced target can vanish before its spell resolves. */
+function evacuate(state: GameState, player: PlayerId, slot: TerrainSlot): GameState {
+  const units = { ...state.units }
+  for (const unit of armyAt(state, player, slot)) {
+    units[unit.id] = { ...unit, location: { kind: 'reserve' } }
+  }
+  return { ...state, units }
+}
+
+/** Buries one unit of each of the named healths, so the DUA prices differently. */
+function withDua(state: GameState, player: PlayerId, ...healths: number[]): GameState {
+  const units = { ...state.units }
+  for (const health of healths) {
+    const found = Object.values(units).find(
+      (u) =>
+        u.owner === player && u.location.kind === 'terrain' && unitType(u.typeId).health === health,
+    )
+    if (found === undefined) throw new Error(`no ${health}-health unit to bury`)
+    units[found.id] = { ...found, location: { kind: 'dua' } }
+  }
+  return { ...state, units }
+}
+
+/** Leaves an army holding nothing a single point of damage could kill. */
+function onlyBigUnits(state: GameState, player: PlayerId, slot: TerrainSlot): GameState {
+  const units = { ...state.units }
+  for (const unit of armyAt(state, player, slot)) {
+    if (unitType(unit.typeId).health <= 1) units[unit.id] = { ...unit, location: { kind: 'dua' } }
+  }
+  return { ...state, units }
+}
+
+/** A board with named dragons in named places. */
+function withDragons(
+  state: GameState,
+  spec: Readonly<Record<string, { dieId: string; owner: PlayerId; at: TerrainSlot | 'pool' }>>,
+): GameState {
+  const dragons: Record<string, DragonInPlay> = {}
+  for (const [id, d] of Object.entries(spec)) {
+    dragons[id] = {
+      id,
+      dieId: d.dieId,
+      owner: d.owner,
+      location: d.at === 'pool' ? { kind: 'pool' } : { kind: 'terrain', slot: d.at },
+    }
+  }
+  return { ...state, dragons }
+}
 
 /** A `SpellContext` for the pure effect builder. */
 function ctx(over: Partial<SpellContext> = {}): SpellContext {

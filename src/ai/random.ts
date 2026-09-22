@@ -110,22 +110,60 @@ export const randomAi: AiPlayer = {
 
         for (const offer of order) {
           const affordable = Math.min(offer.maxCount, Math.floor(budget / offer.spell.cost))
+          if (affordable === 0) continue
+
+          // The target first, because it sets the floor: Resurrect Dead's cost is a
+          // property of what it is aimed at, and a count chosen before the target can
+          // be too small for it.
+          const reachable = offer.targets.filter((t) => t.minCount <= affordable)
+          if (reachable.length === 0) continue
+          const [aim, afterTarget] = pick(state, reachable)
+          state = afterTarget
+
           // 0 is in the pool deliberately: "skip this one" has to be reachable, or
           // every castable spell is always cast and the partial-spend path is dead.
-          const [count, afterCount] = nextInt(state, affordable + 1)
+          const [extra, afterCount] = nextInt(state, affordable - aim.minCount + 2)
           state = afterCount
-          if (count === 0) continue
+          if (extra === 0) continue
+          const count = aim.minCount + extra - 1
 
           const [element, afterElement] = pick(state, offer.elements)
           state = afterElement
-          const [target, afterTarget] = pick(state, offer.targets)
-          state = afterTarget
 
-          casts.push({ spell: offer.spell.id, element, count, target })
+          casts.push({ spell: offer.spell.id, element, count, target: aim.target })
           budget -= offer.spell.cost * count
         }
 
         return [{ kind: 'announce_spells', casts } as GameAction, state] as const
+      }
+
+      case 'dragon_order': {
+        const [slot, next] = pick(rng, pending.options)
+        return [{ kind: 'dragon_order', slot } as GameAction, next] as const
+      }
+
+      // One roll per dragon rather than one for the lot: each declaration is its own
+      // choice, and a fuzz that gave every dragon the same index would never produce
+      // two of yours splitting across two enemies.
+      case 'dragon_target': {
+        const targets: Record<string, string> = {}
+        let state = rng
+        for (const choice of pending.choices) {
+          const [against, next] = pick(state, choice.options)
+          state = next
+          targets[choice.dragonId] = against
+        }
+        return [{ kind: 'dragon_target', targets } as GameAction, state] as const
+      }
+
+      case 'spell_move': {
+        const [slot, next] = pick(rng, pending.options)
+        return [{ kind: 'spell_move', slot } as GameAction, next] as const
+      }
+
+      case 'spell_summon': {
+        const [dragonId, next] = pick(rng, pending.options)
+        return [{ kind: 'spell_summon', dragonId } as GameAction, next] as const
       }
 
       case 'choose_missile_target': {

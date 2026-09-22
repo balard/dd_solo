@@ -382,6 +382,57 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         custom: 'dragon_damage_split',
       }
 
+    case 'dragon_order':
+      return {
+        question: 'Whose dragons attack first?',
+        choices: pending.options.map((slot) => ({
+          label: label(slot),
+          action: { kind: 'dragon_order', slot },
+        })),
+      }
+
+    // One decision covering every dragon that owes one, because the rules have both
+    // owners declare and reveal together. With a single dragon owing a choice this is
+    // still a list of one, which keeps the answer one shape.
+    case 'dragon_target':
+      return {
+        question: `Which dragon does ${dragonNameOf(state, pending.choices[0]?.dragonId)} attack?`,
+        choices: (pending.choices[0]?.options ?? []).map((dragonId) => ({
+          label: dragonNameOf(state, dragonId),
+          action: {
+            kind: 'dragon_target',
+            targets: Object.fromEntries(
+              pending.choices.map((c) => [
+                c.dragonId,
+                c.dragonId === pending.choices[0]?.dragonId ? dragonId : (c.options[0] as string),
+              ]),
+            ),
+          } as GameAction,
+        })),
+      }
+
+    case 'spell_move':
+      return {
+        question: `Path: move ${pending.unitIds
+          .map((id) => unitName(state, id))
+          .join(', ')} where?`,
+        choices: pending.options.map((slot) => ({
+          label: label(slot),
+          action: { kind: 'spell_move', slot },
+        })),
+      }
+
+    case 'spell_summon':
+      return {
+        question:
+          `Summon which dragon to ${label(pending.slot)}?` +
+          (pending.remaining > 1 ? ` (${pending.remaining} to summon)` : ''),
+        choices: pending.options.map((dragonId) => ({
+          label: dragonNameOf(state, dragonId),
+          action: { kind: 'spell_summon', dragonId },
+        })),
+      }
+
     // Nothing castable is the ordinary case until 7b, and it is not an error: the
     // results are simply lost. A sheet with no options would be a dead end, so the
     // no-spell case falls back to a plain button rather than `custom`.
@@ -406,6 +457,11 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
 }
 
 
+
+const dragonNameOf = (state: GameState, dragonId: string | undefined): string => {
+  const dragon = dragonId === undefined ? undefined : state.dragons[dragonId]
+  return dragon === undefined ? 'a dragon' : dragonName(dragon.dieId)
+}
 
 const unitName = (state: GameState, unitId: UnitId): string => {
   const unit = state.units[unitId]

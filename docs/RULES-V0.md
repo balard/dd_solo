@@ -557,20 +557,25 @@ results** to kill one — never a combination of the two against the same dragon
 
 **Three house rules**, all narrower than the rulebook and all recorded here:
 
-1. **One dragon per player starts on the Frontier.** The rules keep every dragon in the Summoning
-   Pool until `Summon Dragon` brings it out, and that is a spell (Phase 7) — so without a seed the
-   whole phase would be unreachable. Setup draws one dragon at random from each player's own pool
-   and places it at the Frontier. **The trip is one-way**: a dragon that goes back to its pool,
-   killed or flown, stays there, because nothing in this phase summons. Retires in Phase 7.
+1. **One dragon per player starts on the Frontier — retired in Phase 7c.** The rules keep every
+   dragon in the Summoning Pool until `Summon Dragon` brings it out, and that is a spell — so
+   without a seed the whole phase was unreachable. Setup drew one dragon at random from each
+   player's own pool and placed it at the Frontier, and the trip was one-way, because nothing in
+   Phase 6 summoned. **Under `magic: 'spells'` the seed is gone**: the pool keeps everything it
+   drew and the base rules stand. It survives on the `dragons: true` rung, which still has no way
+   to summon and would otherwise ship a Dragon Attack Phase no legal sequence of actions could
+   reach.
 2. **Pool colour is drawn from the player's own species elements**, not chosen freely as the rules
    allow. A force brings `ceil(health / 24)` dragons: a 2-dragon force gets exactly one of each of
    its species' two elements, a 1-dragon force draws between them, and the form (drake or wyrm) is
    drawn per dragon. This is why no game of Treefolk against Firewalkers ever fields the Death
    dragon — between them they cover the other four.
-3. **Two orderings are fixed rather than chosen.** A dragon with more than one eligible dragon
-   target takes the first in board order, and several qualifying terrains resolve in board order.
-   The rules make both a decision for the owner; neither can arise while at most two dragons are on
-   the board, so neither is raised as a pending. Both become real in Phase 7.
+3. **Two orderings were fixed rather than chosen — both real since Phase 7c.** A dragon with more
+   than one eligible dragon target now asks its owner, and the marching player chooses which
+   terrain's dragons attack first. Neither could arise while at most two dragons were on the board;
+   `Summon Dragon` is what made both reachable, and both are decisions now. Declarations are
+   collected one player at a time and revealed together, in the sense that matters: nothing is
+   shown to either client until every target is settled and the dice are thrown.
 
 **Targeting.** A dragon attacks a *different-element* dragon at its terrain if one is there;
 **same-element dragons never attack each other**; with no eligible dragon it attacks the marching
@@ -637,6 +642,16 @@ nothing.
   allocates at `dragon_allocate`, for a case the rulebook does not call out.
 - **A spell may be cast on a Reserve Army.** "Target any army" names it, and the Reserve Army is an
   army. Wind Walk on one is legal and useless, which is the player's business.
+- **A spell whose cumulative number counts *targets* is offered one target at a time.** Path moves
+  "one of your units" and Resurrect Dead returns "one health-worth"; combining castings on a single
+  named target does nothing extra for Path, and buys a heavier unit for Resurrect Dead. Two units
+  are two announcements, which is what the rules already provide for -- "any spell that has a
+  cumulative effect may instead be cast multiple separate times, with a different target each
+  time" -- so nothing is actually lost.
+- **Resurrect Dead prices its target rather than its caster.** A unit's health *is* the number of
+  castings it needs, so a 2-health unit costs six magic. That number rides on the offer, not in a
+  rule the clients have to know, which is what stops either of them showing a target the engine
+  will then refuse.
 
 ### What is not a house rule, and is easy to misread as one
 

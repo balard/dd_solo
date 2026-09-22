@@ -792,3 +792,70 @@ describe('effectsOnTerrain', () => {
     expect(effectsOnArmy(state, 'p1', 'frontier', 'p1')[0]?.what).toBe('no melee from IDs')
   })
 })
+
+describe("the decisions a spell owes part-way through resolving", () => {
+  /**
+   * Each of these renders through the generic button path rather than a sheet, so what
+   * is worth pinning is the sentence and the options -- a pending with no `case` here
+   * is a compile error, but a pending with a *wrong* label is not.
+   */
+  const state = fresh()
+
+  it('names the dragon, the terrain and the units', () => {
+    expect(
+      promptFor(
+        { kind: 'spell_move', player: 'p1', spell: 'Path', unitIds: [], options: ['frontier'] },
+        'p1',
+        state,
+      ).question,
+    ).toBe('Path: move  where?')
+
+    const summon = promptFor(
+      { kind: 'spell_summon', player: 'p1', slot: 'frontier', options: ['d1'], remaining: 1 },
+      'p1',
+      state,
+    )
+    expect(summon.question).toBe('Summon which dragon to Frontier?')
+    // An unknown id degrades to a phrase rather than throwing: the log and the prompt
+    // both outlive the dragon they name.
+    expect(summon.choices[0]?.label).toBe('a dragon')
+  })
+
+  it('counts the summons still owed, because combined castings bring more than one', () => {
+    expect(
+      promptFor(
+        { kind: 'spell_summon', player: 'p1', slot: 'frontier', options: ['d1'], remaining: 2 },
+        'p1',
+        state,
+      ).question,
+    ).toBe('Summon which dragon to Frontier? (2 to summon)')
+  })
+
+  it('offers the marching player the order, and each dragon its own enemies', () => {
+    expect(
+      promptFor(
+        { kind: 'dragon_order', player: 'p1', options: ['p1_home', 'frontier'] },
+        'p1',
+        state,
+      ).choices.map((c) => c.label),
+    ).toEqual(['Your home', 'Frontier'])
+
+    // One decision covering every dragon that owes one: the rules have both owners
+    // declare and reveal together, so the answer carries all of them at once.
+    const declare = promptFor(
+      {
+        kind: 'dragon_target',
+        player: 'p1',
+        slot: 'frontier',
+        choices: [{ dragonId: 'mine', options: ['a', 'b'] }],
+      },
+      'p1',
+      state,
+    )
+    expect(declare.choices).toHaveLength(2)
+    expect(declare.choices[0]?.action).toEqual({
+      kind: 'dragon_target',
+      targets: { mine: 'a' },
+    })
+  })
+})
