@@ -657,6 +657,23 @@ nothing.
 - **Accelerated Growth is taken automatically, not offered.** "You **may** instead exchange it with
   a one health Treefolk unit from your DUA" -- but `killUnits` is a pure transform called from eight
   places, and none of them can stop to ask. The "may" is exercised by choosing to cast the spell.
+
+  Everything else about the spell is the rule as written: the trigger, the partner, one partner per
+  dying die, the duration, and that an exchange is **not a death** -- no `units_killed` entry and no
+  death trigger, which `deathEntries` enforces at every call site.
+
+  *What undoing this would cost*, recorded so the decision stays legible: `killUnits` would return
+  candidates rather than performing the exchange, and the choice would have to be raised by a step
+  -- a new parked field, a `MarchStep`, a `DragonAttackStep` (dragon deaths are in that phase), a
+  pending, an action, both AIs and both clients, with all eight callers routed through it. Folding
+  it into the decision that caused the death is **not** a shortcut: only five of the eight have the
+  victim deciding at all (the damage assignments, thorns, Hailstorm, a breath), and the other three
+  -- Flame and the targeting sub-rolls, Choke, Lightning Strike -- are chosen by the attacker, so
+  that route would leave three sites silently automatic and be worse than doing it uniformly.
+
+  The choice being given up is small: the big die goes to the DUA either way, so the exchange buys a
+  1-health die on the board for a 1-health die out of the DUA. That die is never a promotion partner
+  (promotion takes one *larger*), only a City recruit or a Resurrect Dead target.
 - **A Flashfire reroll does not restart the reroll sweep**, so a Rend that comes up on one does not
   roll again. It is a step-3 reroll arriving after step 3 has finished.
 - **Resurrect Dead prices its target rather than its caster.** A unit's health *is* the number of
