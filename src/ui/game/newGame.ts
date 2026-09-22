@@ -12,7 +12,7 @@
  */
 import { PRESETS, preset, presetHealth, PRESET_ARMY_NAMES } from '../../data/presets'
 import type { SetupOptions } from '../../engine/setup'
-import { DRAGON_RULES } from '../../engine/types'
+import { SPELL_RULES } from '../../engine/types'
 
 export interface PresetChoice {
   readonly id: string
@@ -125,7 +125,7 @@ export function newGameSetup(
 
   return {
     kind: 'ok',
-    setup: { seed: seed.seed, forces: { kind: 'named', forces: { p1, p2 } }, ruleSet: DRAGON_RULES },
+    setup: { seed: seed.seed, forces: { kind: 'named', forces: { p1, p2 } }, ruleSet: SPELL_RULES },
   }
 }
 
@@ -135,6 +135,6 @@ export function randomGameSetup(seedText: string, randomSeed: number): SetupChoi
   if (seed.kind === 'bad') return { kind: 'problem', problem: seed.problem }
   return {
     kind: 'ok',
-    setup: { seed: seed.seed, forces: { kind: 'random' }, ruleSet: DRAGON_RULES },
+    setup: { seed: seed.seed, forces: { kind: 'random' }, ruleSet: SPELL_RULES },
   }
 }

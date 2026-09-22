@@ -3,8 +3,8 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: v0 alpha complete; v1 Phases 0–6 landed. The app plays every SAI, every eighth-face
-> icon power and all five elemental dragons.**
+> **Status: v0 alpha complete; v1 Phases 0–7 landed. The app plays every SAI, every eighth-face
+> icon power, all five elemental dragons and all eighteen spells.**
 > All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > and installable as a PWA. It opens on a screen that picks the two forces and the seed; saving is
@@ -74,8 +74,8 @@ the dice and the opponent.
 > already built. Ten dragon dice are in `data/` behind `import_dragons.py`; `dragons.ts` holds the
 > pure rules; `GameState.dragons` sits beside `effects`; `RollPurpose` gained the combination-roll
 > member it has been promising since Phase 0b; and the Dragon Attack Phase is a five-step machine
-> on `turn.dragonAttack` with four new `Pending` kinds. The app and the CLI play `DRAGON_RULES`,
-> `SAVE_VERSION` is 8, and the 25 goldens are still byte-identical and unregenerated -- every draw
+> on `turn.dragonAttack` with four new `Pending` kinds. The app and the CLI played `DRAGON_RULES`
+> from here until Phase 7, and the 25 goldens are still byte-identical and unregenerated -- every draw
 > the phase adds is gated on `ruleSet.dragons`, which every recorded game has off.
 >
 > **Only elemental dragons, and only two on the board.** Five elements, drake and wyrm, no Hybrid,
@@ -83,9 +83,30 @@ the dice and the opponent.
 > different-element dragon if one is here, never your own element, otherwise the marching army.
 > **Each player seeds one dragon at the Frontier at setup** (a house rule, `RULES-V0.md` §14),
 > because `Summon Dragon` is a Phase 7 spell and without a seed nothing could ever reach the board.
-> The trip is one-way: a dragon that goes home stays home.
+> **Retired in Phase 7c** -- gated on `magic !== 'spells'`, not deleted, so `DRAGON_RULES` is still
+> playable. The trip is one-way: a dragon that goes home stays home.
 >
-> The ladder after this is spells (Phase 7), species abilities (8), then the greedy AI (9).
+> The ladder after this is species abilities (Phase 8), then the greedy AI (9).
+
+> **Phase 7 landed in six slices, and `magic: 'spells'` is what the app plays.** The v0 magic house
+> rule is gone: `floor(M / 2)`, the same-terrain restriction, the absent save roll, the absent
+> counter-attack and the ban on Reserve magic all retire together, and elements stop being
+> stored-but-ignored. `data/spells.json` holds all eighteen spells Treefolk and Firewalkers can
+> cast; `magic.ts` holds the pool and `spells.ts` the rules. A magic action is **roll, announce every
+> spell and target at once, then resolve them one at a time** -- the rulebook's own three steps, and
+> the gap between the last two is where Dispel Magic lives. `SAVE_VERSION` is 9 and the 25 goldens
+> are still byte-identical and unregenerated.
+>
+> **An army's magic is one number, not a per-element tally**, and that is the load-bearing fact of
+> the whole system. Each unit's results "may be divided between that unit's elements" and a force is
+> one species, so the total splits freely between two elements -- which is why `resolveFaces` is
+> still pure and `GameState`-free, and why validating an announcement is a sum rather than a
+> knapsack. It collapses the day two units in one army carry different colours, and nothing else does.
+>
+> **Phase 6's Frontier dragon seed retired in 7c**, gated on `magic !== 'spells'` rather than
+> deleted: `Summon Dragon` is the route the base rules intend, but `DRAGON_RULES` is still playable
+> and would otherwise ship a Dragon Attack Phase nothing could reach. The two orderings `dragons.ts`
+> had been fixing in board order since Phase 6 are real decisions now.
 
 ## Read these first
 
@@ -162,9 +183,10 @@ These are the things that break the project if violated:
 5. **Scope is controlled by the `RuleSet` config**, not by scattered `if`s. `V0_RULES` is
    `magic: 'simplified'`, `sai: 'inert'`, `eighthFace: 'standard'`, `dua: 'inert'`,
    `dragons: false`, and stays exactly that -- it is what the golden corpus is recorded against.
-   What the app plays is `DRAGON_RULES` = `FULL_RULES` + `dragons: true` (Phase 6); `FULL_RULES`
-   is `DUA_RULES` + `sai: 'full'` + `eighthFace: 'full'` (Phase 5e), and `DUA_RULES` is `V0_RULES`
-   + `sai: 'results'` + `dua: 'active'`. Adding a cut feature means implementing behind its flag,
+   What the app plays is `SPELL_RULES` = `DRAGON_RULES` + `magic: 'spells'` (Phase 7);
+   `DRAGON_RULES` is `FULL_RULES` + `dragons: true` (Phase 6), `FULL_RULES` is `DUA_RULES` +
+   `sai: 'full'` + `eighthFace: 'full'` (Phase 5e), and `DUA_RULES` is `V0_RULES` + `sai: 'results'`
+   + `dua: 'active'`. Adding a cut feature means implementing behind its flag,
    not deleting a condition -- and adding a key to `V0_RULES` is safe for the goldens, because
    `digestState` excludes `ruleSet` and `setupGame` pins an absent one to `V0_RULES`.
 
@@ -184,9 +206,11 @@ These are the things that break the project if violated:
 
 ## Alpha house rules (easy to forget)
 
-- **Magic is a melee variant**: same terrain only, roll magic, `damage = floor(total / 2)`. No
-  save roll, no counter-attack. Elements ignored.
-- **No magic from reserves**, so a Reserve Army cannot march at all in v0.
+- **Magic is a melee variant** -- *under `magic: 'simplified'` only, which is now just the golden
+  corpus's baseline*: same terrain, roll magic, `damage = floor(total / 2)`, no save roll, no
+  counter-attack, elements ignored. Under `'spells'` none of that is true; see `RULES-V0.md` §15.
+- **No magic from reserves** -- again `'simplified'` only. Under `'spells'` a Reserve Army marches,
+  may not maneuver, and casts the eight spells marked `R`.
 - **SAI faces produce zero results under `sai: 'inert'`** — but the face is still stored as
   `<count> SAI:<Name>`. That count is a result count for some SAIs and an X parameter for others
   (`2 SAI:Flame` targets two health-worth of units), so let each SAI interpret its own number.
@@ -237,12 +261,13 @@ These are the things that break the project if violated:
   advantages**: the holder's army doubles all ID results when rolling *anything* there — attack,
   save or maneuver — and may take melee, missile or magic, while any army facing them at that
   terrain is restricted to melee. **Now in, under `eighthFace: 'full'`** (Phase 5e, `RULES-V0.md`
-  §13): Tower, City and Temple. Standing Stones stays inert until spells land in Phase 7.
-  `V0_RULES` stays on `standard`, where the four icons still behave identically.
-- **Dragons are in, spells are not.** Under `dragons: true` (v1 Phase 6, `RULES-V0.md` §14) each
-  player seeds one elemental dragon at the Frontier and the Dragon Attack Phase is real.
-  `V0_RULES` has no dragons at all, and promotion and burying -- machinery since v1 Phase 2 --
-  stay out of its reach.
+  §13): Tower, City and Temple. **Standing Stones came live in Phase 7f** -- it converts the
+  army's magic to the terrain's elements, which is the whole of what it does and needs spells to
+  mean anything. `V0_RULES` stays on `standard`, where the four icons still behave identically.
+- **Dragons and spells are both in.** Under `dragons: true` (v1 Phase 6, `RULES-V0.md` §14) the
+  Dragon Attack Phase is real; under `magic: 'spells'` (Phase 7, §15) all eighteen spells cast, and
+  `Summon Dragon` is how a dragon reaches the board. `V0_RULES` has neither, and promotion and
+  burying -- machinery since v1 Phase 2 -- stay out of its reach.
 
 
 ## Die data
@@ -261,8 +286,10 @@ importer is always safe. Format and vocabulary: `data/ICONS.md`.
 
 **Status: complete.** 40 unit dice (280 faces) and 24 terrain dice (6 basic types × 4 eighth-face
 variants -- Coastland, Feyland and Flatland joined Swampland, Highland and Wasteland in Phase 5a),
-all passing validation, plus **10 dragon dice** (5 elements × drake/wyrm, 12 faces each, Phase 6).
-Nothing is `TODO`: every die in scope is transcribed.
+all passing validation, plus **10 dragon dice** (5 elements × drake/wyrm, 12 faces each, Phase 6)
+and **18 spells** (`data/spells.json`, Phase 7 -- hand-authored like `presets.json`, no importer
+touches it). Nothing is `TODO`: every die in scope is transcribed, and `npm run data` reports any
+spell that is in the data with no code behind it.
 
 **A terrain die is a type plus an eighth-face icon.** Faces 1–7 come from the type, face 8 from the
 icon. Every type runs magic → missile → melee as the face number rises, but the split points differ
@@ -482,6 +509,27 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   a Galeforce quietly not applying. `rollArmy` takes the modifier list; it used to take a
   `doubleIds: boolean`, which was enough while the eighth face was the only thing in the game with
   an opinion about a roll. Attacks, saves and contested maneuvers all count as "rolling the army".
+- **A spell is data, a handler, or neither** (`data/spells.json`, `spells.ts`). Seven are an `effect`
+  block -- modifiers, a scope and a duration -- and nine name a handler, which means "does something
+  at resolution time that is not an `Effect`". **Neither is a legal state**: it means transcribed but
+  not implemented, `resolvesSpell` answers false, and `castableSpells` never offers it. That is what
+  made every slice of Phase 7 playable rather than a throwing half-build, and it is the
+  `sai: 'results'` lesson rather than the `'full'` one. By 7f nothing is in that state and a test
+  says so, which is the guard against a spell reaching `data/` with no code behind it.
+- **`SpellTargetOffer.minCount` rides on the offer, not in a rule.** Resurrect Dead's price is a
+  property of what it is aimed at -- a 2-health die needs two castings -- so the number travels with
+  the target and every chooser respects it for free. A rule the clients do not know is a rule both
+  clients will violate, and the fuzz proved exactly that within a hundred games.
+- **`MagicState.returnTo` is what lets a casting window nest.** Cantrip's second sentence suspends an
+  exchange, announces and resolves spells, and hands the march back where it came from; a magic
+  action has no `returnTo` and ends its march instead. That one optional field is the whole of the
+  difference, and `validateState` reads it as the claim "this exchange is coming back" when it
+  decides whether a parked attack roll has outlived its steps.
+- **Three rolls have nowhere to put a decision that is not about the roll** (`noSideDecision` in
+  `sai.ts`): a sub-roll, Wall of Thorns' trigger roll, and the dragon combination roll. The third was
+  a *silent* drop from Phase 6 until 7f, because `resolveArmyRoll` read the totals and ignored the
+  roll's effects entirely -- Wild Growth's `Applies` column is "Non-Maneuver", which a dragon attack
+  is. It refuses now, so the house rule is a decision rather than an accident.
 - **`iconAt(state, player, slot)` is the eighth-face seam** (Phase 5c, `effects.ts`, beside
   `doublesIds`): non-null exactly when `eighthFace: 'full'`, the terrain is on face 8, and this
   player captured it. Every icon power (Tower, City, Temple) asks this and nothing else, which is
@@ -630,8 +678,14 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - **The 1000-game fuzz runs `V0_RULES` only**, which is no longer the configuration anyone
     plays. Phase 1 turned the app over to `SAI_RULES` and deliberately did not add a second fuzz of
     that size, and every phase since has widened the gap. There are now two smaller ones -- Phase
-    5e's eighth-face fuzz and Phase 6's 240-game dragon fuzz -- but the *big* net still guards the
-    one config that least needs it. Worth knowing before trusting a green suite.
+    5e's eighth-face fuzz, Phase 6's 240-game dragon fuzz and Phase 7's 200-game spell fuzz -- but
+    the *big* net still guards the one config that least needs it, and the gap is now six phases
+    wide. Worth knowing before trusting a green suite.
+  - **A long game needs `maxDecisions` raised, and raising it needs measuring.** Reserve magic
+    (Phase 7f) roughly tripled a random game's length -- the Reserve Army can march every turn --
+    and 20 of 200 games stopped on `runGame`'s default 5000 with every trigger counter quietly
+    under-reporting. The spell fuzz passes `maxDecisions: 20_000` against a longest *observed*
+    game of 16,353. A cap raised by guessing is a cap that will be hit again.
 - **A game record is `{ setup, actions }` and nothing else.** Replaying it reproduces the game die
   for die. `replayTo(record, n)` is undo.
 - **The golden corpus is the guard on "this changed no outcome".** `src/engine/__golden__/` holds
@@ -880,8 +934,9 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   where an unscrolled pane already is. It is reversed in JS, not with
   `flex-direction: column-reverse`, so DOM order matches visual order for a screen reader.
 - **Elements are shown, not just stored.** `ElementDots` renders the species and terrain elements
-  that have been in the data since transcription. They do nothing in v0 (no spells) but they are
-  what makes the board legible at a glance.
+  that have been in the data since transcription. Inert under `magic: 'simplified'`; since Phase 7
+  they are what an army's magic may be spent as, so the dots are now a thing you plan against
+  rather than decoration.
 
 ## Saving
 
@@ -921,10 +976,12 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     the type says cannot exist — the new flag reading `undefined`, behaving as its off value by
     accident rather than by decision. That is the reason `storage.ts` records for version 5, beside
     the version-4 one.
-- **A record written by the app names its ruleset.** `useGame` passes `ruleSet: DRAGON_RULES`
+- **A record written by the app names its ruleset.** `useGame` passes `ruleSet: SPELL_RULES`
   explicitly rather than leaning on the default, so a save says which rules it was played under and
   goes on replaying under them -- which is also why Phase 4e's flip needed no `SAVE_VERSION` bump.
-  Phase 6's bump to 8 is for the setup draws and the new pendings, not for the flip.
+  Phase 6's bump to 8 and Phase 7's to 9 are for the new decisions and the dice they consume, not
+  for the flip. Note what version 9's comment does **not** say: `magic: 'spells'` has been in the
+  union since v0, so the "a `RuleSet` key reading `undefined`" hazard does not apply to it.
 
 - **Wrap every `localStorage` access.** It throws in private windows, with site data blocked, and
   on a full quota. A game that cannot be saved must still be playable.

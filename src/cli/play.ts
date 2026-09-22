@@ -34,7 +34,7 @@ import { sameSpellTarget, spellPlan, spellTargetLabel } from '../engine/magic'
 
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
 import {
-  DRAGON_RULES,
+  SPELL_RULES,
   TERRAIN_SLOTS,
   armyAt,
   army as armyRef,
@@ -374,6 +374,20 @@ function describe(entry: LogEntry, state: GameState): string | null {
           dim(entry.from === 'pool' ? ' from the Summoning Pool' : ` from ${SLOT_LABEL[entry.from]}`),
       )
 
+    case 'dispel_magic':
+      return entry.spells.length === 0
+        ? dim(`  ${nameOf(state, entry.unitId)} tries to dispel, and misses`)
+        : cyan(
+            `  ${bold('Dispel Magic')}: ${nameOf(state, entry.unitId)} stops ` +
+              entry.spells.map((id) => spell(id).name).join(', '),
+          )
+
+    case 'cantrip':
+      return cyan(
+        `  ${bold('Cantrip')} gives ${entry.player} ${entry.points} magic` +
+          dim(' — cantrip spells only'),
+      )
+
     case 'flashfire':
       return cyan(
         `  ${bold('Flashfire')}: ${entry.unitIds.map((id) => nameOf(state, id)).join(', ')} ` +
@@ -578,6 +592,12 @@ function choicesFor(state: GameState, pending: Pending): Choice[] {
     case 'sai_move':
     case 'eighth_face_city':
       return []
+
+    case 'dispel_magic':
+      return [
+        { key: '1', label: `roll ${nameOf(state, pending.unitId)}`, action: { kind: 'dispel_magic', roll: true } as GameAction },
+        { key: '0', label: 'let it through', action: { kind: 'dispel_magic', roll: false } as GameAction },
+      ]
 
     case 'dragon_order':
       return pending.options.map((slot, i) => ({
@@ -1315,7 +1335,7 @@ async function main() {
   const { seed, ai, forces }: { seed: number; ai: AiPlayer; forces: ForceSpec } = parseArgs()
   const human: PlayerId = 'p1'
 
-  let state = begin(setupGame({ seed, forces, ruleSet: DRAGON_RULES }))
+  let state = begin(setupGame({ seed, forces, ruleSet: SPELL_RULES }))
 
   // Which species you are is a roll now, so the banner reads it off the board
   // rather than stating it.

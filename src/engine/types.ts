@@ -173,6 +173,14 @@ export type MarchStep =
   // targets", and only then "cast and resolve the spells one at a time". It is the one
   // place in the game where those come apart, and Dispel Magic lives in the gap.
   | 'announce_spells'
+  /**
+   * Dispel Magic's window: "you may roll this unit **after all spells are announced
+   * but before any are resolved**."
+   *
+   * The only place in the game where announcement and resolution come apart, which is
+   * why the magic action was built as two steps from the start rather than one.
+   */
+  | 'dispel_magic'
   | 'resolve_spell'
   // A spell that owes a decision parks it on `turn.magic.choice` and rests here, the
   // way a targeting SAI rests on `sai_target_*`. One step for all of them rather than
@@ -287,8 +295,26 @@ export interface MagicState {
   /** Announced and still unresolved, in the order the caster listed them -- which is
    *  the order they resolve in. Omitted once empty. */
   readonly announced?: readonly AnnouncedSpell[]
+  /** Dispel Magic rolls still owed, in board order. Omitted once drained. */
+  readonly dispels?: readonly UnitId[]
   /** What the spell that is resolving right now is waiting to be told. */
   readonly choice?: SpellChoice
+  /**
+   * Whose window this is, when it is not the marching player's (Phase 7f).
+   *
+   * A Cantrip face on a *save* roll belongs to the defender, who is not marching. A
+   * magic action's caster always is, so this is omitted there -- the optional-and-
+   * omitted rule, for the digest's sake.
+   */
+  readonly caster?: PlayerId
+  /**
+   * The march step to go back to when the last announced spell has resolved.
+   *
+   * Cantrip's second sentence opens a casting window **inside** another roll: the
+   * spells are "resolved immediately", and then the exchange that was interrupted
+   * carries on. Omitted for a magic action, which ends its march instead.
+   */
+  readonly returnTo?: MarchStep
 }
 
 /**
@@ -339,6 +365,15 @@ export interface AnnouncedSpell {
   readonly element: Element
   readonly count: number
   readonly target: SpellTarget
+  /**
+   * Dispelled, and so never cast.
+   *
+   * Kept in the list rather than removed from it so the log can say a spell was
+   * announced and stopped -- which is the whole of what Dispel Magic does, and
+   * invisible if the cast simply vanished. Optional-and-omitted, like everything else
+   * near the digest.
+   */
+  readonly negated?: true
 }
 
 /**
@@ -493,7 +528,8 @@ export type Pending =
   | {
       readonly kind: 'choose_action'
       readonly player: PlayerId
-      readonly slot: TerrainSlot
+      /** `ArmyRef` since Phase 7f: a Reserve Army marches, and magic is all it may do. */
+      readonly slot: ArmyRef
       readonly legal: readonly ActionKind[]
     }
   | {
@@ -751,6 +787,21 @@ export type Pending =
       readonly budget: number
       readonly options: readonly UnitId[]
     }
+  /**
+   * Dispel Magic: one unit, one yes-or-no, before any announced spell resolves.
+   *
+   * Asked of the unit's owner, who need not be the marching player -- most of the time
+   * they are the one being cast at. "You **may** roll this unit", so declining is a
+   * real answer and costs no randomness.
+   */
+  | {
+      readonly kind: 'dispel_magic'
+      readonly player: PlayerId
+      readonly unitId: UnitId
+      /** The announced spells this roll would stop, for the prompt. */
+      readonly spells: readonly string[]
+      readonly remaining: number
+    }
   | {
       readonly kind: 'dragon_order'
       readonly player: PlayerId
@@ -866,6 +917,7 @@ export type GameAction =
   | { readonly kind: 'temple_bury'; readonly unitId: UnitId }
   | { readonly kind: 'announce_spells'; readonly casts: readonly AnnouncedSpell[] }
   | { readonly kind: 'flashfire'; readonly unitIds: readonly UnitId[] }
+  | { readonly kind: 'dispel_magic'; readonly roll: boolean }
   | { readonly kind: 'dragon_order'; readonly slot: TerrainSlot }
   | {
       readonly kind: 'dragon_target'
@@ -1024,7 +1076,7 @@ export type LogEntry =
        * target. Named `fromSlot` rather than `slot` because "at <slot>" read as the
        * target while meaning the origin.
        */
-      readonly fromSlot: TerrainSlot
+      readonly fromSlot: ArmyRef
       /**
        * What it is aimed at: the same terrain for melee and magic, which hit the army
        * facing them. Missile chooses, so **this entry is written when the target is
@@ -1034,7 +1086,7 @@ export type LogEntry =
       readonly toSlot: ArmyRef
       readonly action: ActionKind
     }
-  | { readonly kind: 'action_skipped'; readonly player: PlayerId; readonly slot: TerrainSlot }
+  | { readonly kind: 'action_skipped'; readonly player: PlayerId; readonly slot: ArmyRef }
   | {
       readonly kind: 'combat_resolved'
       readonly attacker: PlayerId
@@ -1044,7 +1096,7 @@ export type LogEntry =
        * which only ever hit the army facing them; they differ for missile, which
        * shoots at another terrain, and a counter-attack swaps them.
        */
-      readonly attackerSlot: TerrainSlot
+      readonly attackerSlot: ArmyRef
       /** A Reserve Army after a Tower's missile (Phase 5d) -- the attacker always
        *  stands at a terrain, but the defender need not. */
       readonly defenderSlot: ArmyRef
@@ -1251,6 +1303,32 @@ export type LogEntry =
       readonly needed: number
       readonly resisted: number
       readonly moved: boolean
+    }
+  /**
+   * Cantrip's second sentence: a casting window opening in the middle of another roll.
+   *
+   * Without it the log shows a spell cast mid-exchange with nothing saying where the
+   * magic came from -- and a player handed an announcement prompt during a melee
+   * attack has every right to ask.
+   */
+  | {
+      readonly kind: 'cantrip'
+      readonly player: PlayerId
+      readonly slot: ArmyRef
+      readonly points: number
+    }
+  /**
+   * Dispel Magic: a unit rolled, and what it stopped.
+   *
+   * `spells` empty means the roll missed. A separate entry rather than a flag on the
+   * casts, because the *attempt* is the news: a Unicorn that rolled and failed is why
+   * the spell that follows lands.
+   */
+  | {
+      readonly kind: 'dispel_magic'
+      readonly player: PlayerId
+      readonly unitId: UnitId
+      readonly spells: readonly string[]
     }
   /** Flashfire: dice thrown again, and what they came back as. */
   | {

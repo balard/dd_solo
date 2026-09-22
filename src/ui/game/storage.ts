@@ -78,8 +78,23 @@ const KEY = 'dd_solo.save'
  *    two Frontier seeds at setup, and adds four `Pending` kinds plus a phase that
  *    stops for them. A log recorded a moment before this lands would diverge on both
  *    counts at once.
+ *
+ * 9: spells, Phase 7, and this one is every reason at once -- which is what makes it
+ *    the least interesting bump in the list to argue about. Dice consumption changes
+ *    at setup (`magic: 'spells'` seeds no dragon on the Frontier, so the two draws
+ *    Phase 6 added are gone again). Decision order changes in several places: a magic
+ *    action stops to announce spells instead of dealing `floor(M / 2)` damage, every
+ *    army roll may stop for a Flashfire, an announcement may stop for a Dispel Magic,
+ *    and a Reserve Army may now march at all. And the app moves from `DRAGON_RULES`
+ *    to `SPELL_RULES`, so a version-8 log would go on playing the old game with
+ *    nothing on screen saying which.
+ *
+ *    Worth noting what is *still* not a reason: a version-8 record pins
+ *    `magic: 'simplified'` in its own `SetupOptions`, so it would replay correctly
+ *    under the old rules for as long as the engine kept them. The version is not
+ *    protecting that -- `setupGame` still does. It is protecting the live one.
  */
-export const SAVE_VERSION = 8
+export const SAVE_VERSION = 9
 
 
 export interface SavedGame {

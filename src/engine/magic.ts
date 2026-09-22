@@ -27,7 +27,7 @@ import {
 } from '../data/spells'
 import type { Element } from '../data/types'
 
-import { iconAt } from './effects'
+import { iconAt, resolvesIcon } from './effects'
 import { resolvesSpell, summonable } from './spells'
 import {
   army as armyOf,
@@ -42,6 +42,7 @@ import {
   type PlayerId,
   type RuleSet,
   type SpellTarget,
+  type UnitId,
 } from './types'
 
 /**
@@ -78,6 +79,13 @@ export function castingElements(
   const own = speciesElements(speciesOf(state, player))
   if (ref === 'reserve') return own
   if (iconAt(state, player, ref) !== 'standing_stones') return own
+  // `iconAt` answers "is that icon showing and mine", which is not the same question
+  // as "does it do anything in the rules being played". Standing Stones is gated on
+  // `magic: 'spells'` rather than on the eighth-face rung -- converting magic results
+  // to an element is meaningless until results have elements -- so this has to ask
+  // `resolvesIcon` too. Nothing reads the answer under the v0 house rule, which is
+  // exactly why it would have stayed wrong.
+  if (!resolvesIcon('standing_stones', state.ruleSet)) return own
 
   const here = terrainType(terrainDie(state.terrains[ref].dieId).type).elements
   return [...own, ...here.filter((e) => !own.includes(e))]
@@ -202,6 +210,56 @@ export function spellTargets(
       )
   }
 }
+
+/**
+ * Whether this announced cast is magic that a Dispel Magic on `unitId` would stop.
+ *
+ * "Negate all unresolved magic that targets **or effects** this unit, its army or the
+ * terrain it occupies." One predicate, in the engine, because three things ask it --
+ * who is even offered the roll, what the prompt lists, and what the answer negates --
+ * and three copies of "does this spell reach me" is how two of them start disagreeing.
+ *
+ * Note what it does *not* care about: whose spell it is. A Unicorn stops its own side's
+ * magic as readily as the enemy's, which is the rule as written.
+ */
+export function dispelNegates(state: GameState, cast: AnnouncedSpell, unitId: UnitId): boolean {
+  if (cast.negated === true) return false
+  const unit = state.units[unitId]
+  if (unit === undefined) return false
+
+  switch (cast.target.kind) {
+    case 'none':
+      return false
+    case 'units':
+      return cast.target.unitIds.includes(unitId)
+    case 'army':
+      return (
+        cast.target.player === unit.owner &&
+        cast.target.army ===
+          (unit.location.kind === 'terrain' ? unit.location.slot : 'reserve')
+      )
+    case 'terrain':
+      return unit.location.kind === 'terrain' && unit.location.slot === cast.target.slot
+  }
+}
+
+/** Every die that could dispel something in this announcement, in board order. */
+export function dispelCandidates(
+  state: GameState,
+  casts: readonly AnnouncedSpell[],
+): readonly UnitId[] {
+  return Object.values(state.units)
+    .filter((unit) => unit.location.kind === 'terrain' || unit.location.kind === 'reserve')
+    .filter((unit) =>
+      unitType(unit.typeId).faces.some(
+        (face) => face.icon === 'SAI' && face.sai === DISPEL_MAGIC,
+      ),
+    )
+    .filter((unit) => casts.some((cast) => dispelNegates(state, cast, unit.id)))
+    .map((unit) => unit.id)
+}
+
+export const DISPEL_MAGIC = 'Dispel Magic'
 
 /**
  * Why this whole announcement is illegal, or null.

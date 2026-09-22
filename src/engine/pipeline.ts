@@ -94,6 +94,16 @@ export type RollEffectBody =
   /** Surprise: the defending army may not counter-attack. */
   | { readonly kind: 'suppress_counter' }
   /**
+   * Cantrip's second sentence (Phase 7f): magic results from a roll that is not a
+   * magic action, and which buy only spells marked `C`.
+   *
+   * Not `results`, because these are not the roll's own currency -- a melee roll does
+   * not count magic, and the pool they make is spent on spells rather than added to
+   * anything. So they leave the roll as an effect and the march step opens a small
+   * casting window for them.
+   */
+  | { readonly kind: 'cantrip'; readonly points: number }
+  /**
    * Bullseye, Double Strike, Smother, Firecloud, Seize, Flame: pick health-worth of
    * units out of the army this roll is aimed at, and do something to them.
    *

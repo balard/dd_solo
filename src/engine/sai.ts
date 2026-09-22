@@ -131,9 +131,26 @@ const gives = (type: ResultType, x: number): SaiOutcome => ({
  */
 const freeMove = (x: number, ctx: RollContext, rung: RuleSet['sai']): SaiOutcome => {
   if (ctx.purpose.kind === 'maneuver') return gives('maneuver', x)
-  if (rung !== 'full' || ctx.isSubRoll === true || ctx.isTrigger === true) return NOTHING
+  if (rung !== 'full' || noSideDecision(ctx)) return NOTHING
   return { results: {}, effects: [{ kind: 'free_move', health: 3 }], reroll: false }
 }
+
+/**
+ * Whether this roll has anywhere to put a decision that is not about the roll itself.
+ *
+ * Three rolls do not: a **sub-roll** is one die rolling for its life with no army
+ * behind it; a **trigger** roll (Wall of Thorns) happens in the maneuver step with no
+ * exchange to hang a question on; and the **dragon combination roll** happens in a
+ * phase with no targeting queue at all.
+ *
+ * The third of those is a Phase 6 bug this made visible rather than a new rule.
+ * `resolveArmyRoll` read the totals and ignored `outcome.effects` entirely, so a Wild
+ * Growth or a Firewalking on a dragon roll was silently dropped -- and Wild Growth's
+ * `Applies` column is "Non-Maneuver", which a dragon attack is. It is a house rule
+ * now (`RULES-V0.md` section 15) and `resolveArmyRoll` refuses rather than drops.
+ */
+const noSideDecision = (ctx: RollContext): boolean =>
+  ctx.isSubRoll === true || ctx.isTrigger === true || ctx.purpose.kind === 'dragon_attack'
 
 /**
  * Which result types this roll counts.
@@ -196,7 +213,7 @@ const isSaveAgainst = (ctx: RollContext, action: ActionKind): boolean =>
  * rung, their free move only on `'full'` -- and that is a question no table can
  * answer, because a name can only be in one of them. Every other handler ignores it.
  */
-type SaiHandler = (x: number, ctx: RollContext, rung: RuleSet['sai']) => SaiOutcome
+type SaiHandler = (x: number, ctx: RollContext, ruleSet: RuleSet) => SaiOutcome
 
 /**
  * The twelve SAIs `sai: 'results'` implements, and nothing else.
@@ -325,10 +342,10 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
    * The one SAI whose two halves live on different rungs, which is what the `rung`
    * argument above exists for. Three, not X: see `free_move` in `pipeline.ts`.
    */
-  Firewalking: (x, ctx, rung) => freeMove(x, ctx, rung),
+  Firewalking: (x, ctx, rules) => freeMove(x, ctx, rules.sai),
 
   /** Word for word Firewalking, on a different die. */
-  Teleport: (x, ctx, rung) => freeMove(x, ctx, rung),
+  Teleport: (x, ctx, rules) => freeMove(x, ctx, rules.sai),
 
   /**
    * "During a magic action, Cantrip generates X magic results. During other
@@ -346,8 +363,19 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
    * under simplified magic there is nothing -- so they are worth zero rather than
    * unimplemented. Phase 7 gives them something to buy.
    */
-  Cantrip: (x, ctx) =>
-    ctx.purpose.kind === 'attack' && ctx.purpose.action === 'magic' ? gives('magic', x) : NOTHING,
+  Cantrip: (x, ctx, rules) => {
+    // First sentence: on a magic action these are ordinary magic results, and they
+    // work under the v0 house rule too, because magic results are what it counts.
+    if (ctx.purpose.kind === 'attack' && ctx.purpose.action === 'magic') return gives('magic', x)
+    if (ctx.purpose.kind === 'maneuver') return NOTHING
+
+    // Second sentence: on any other non-maneuver roll they are magic results with
+    // exactly one thing to spend them on. Under `magic: 'simplified'` there is
+    // nothing at all, so they are worth zero rather than unimplemented -- and a
+    // sub-roll is one die rolling for its life, with no army behind it to cast.
+    if (rules.magic !== 'spells' || noSideDecision(ctx)) return NOTHING
+    return { results: {}, effects: [{ kind: 'cantrip', points: x }], reroll: false }
+  },
 
   /**
    * "Whenever any magic targets this unit ... you may roll this unit after all spells
@@ -579,7 +607,9 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
     // results -- the rule plainly says it does, and a die that dies holding a Wild
     // Growth face would be wrong -- but there is no split to decide: no army rolled
     // this, and the promotion half would need a pause inside a pause.
-    if (ctx.isSubRoll === true || ctx.isTrigger === true) return gives('save', x)
+    // The save results are still generated where the roll counts them -- a dragon
+    // combination roll does count saves -- and only the promotion half is lost.
+    if (noSideDecision(ctx)) return gives('save', x)
     return { results: {}, effects: [{ kind: 'wild_growth', budget: x }], reroll: false }
   },
 }
@@ -703,7 +733,7 @@ export function saiEffects(face: SaiFace, context: RollContext, ruleSet: RuleSet
   if (ruleSet.sai === 'inert') return NOTHING
 
   const handler = handlerFor(face.sai, ruleSet)
-  if (handler !== undefined) return handler(face.count, context, ruleSet.sai)
+  if (handler !== undefined) return handler(face.count, context, ruleSet)
 
   if (ruleSet.sai === 'full') {
     throw new Error(

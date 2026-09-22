@@ -149,6 +149,13 @@ export const randomAi: AiPlayer = {
         ] as const
       }
 
+      // Declining is legal and free, so both answers stay in the pool -- a fuzz that
+      // always rolled would never exercise a spell landing unopposed.
+      case 'dispel_magic': {
+        const [roll, next] = coin(rng)
+        return [{ kind: 'dispel_magic', roll } as GameAction, next] as const
+      }
+
       case 'dragon_order': {
         const [slot, next] = pick(rng, pending.options)
         return [{ kind: 'dragon_order', slot } as GameAction, next] as const

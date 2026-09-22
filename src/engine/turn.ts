@@ -68,6 +68,7 @@ import {
 } from './effects'
 
 import {
+  asResult,
   defaultContextFor,
   expectNoEffects,
   faceOf,
@@ -87,7 +88,11 @@ import { unitType } from '../data/load'
 import { spell } from '../data/spells'
 import {
   announcementProblem,
+  cantripPool,
   castableSpells,
+  dispelCandidates,
+  dispelNegates,
+  DISPEL_MAGIC,
   magicPool,
   sameSpellTarget,
   spellTargetProblem,
@@ -146,9 +151,24 @@ function withTurn(state: GameState, turn: Partial<TurnState>): GameState {
 /** The marching army's terrain. Throws if the Reserve Army is somehow marching,
  *  which v0 never offers (RULES-V0.md section 3). */
 function marchingSlot(state: GameState): TerrainSlot {
+  const army = marchingRef(state)
+  if (army === 'reserve') {
+    throw new Error('the Reserve Army is not at a terrain, so it cannot do this')
+  }
+  return army
+}
+
+/**
+ * The marching army, wherever it is.
+ *
+ * Split from `marchingSlot` in Phase 7f, when a Reserve Army became able to march.
+ * The two are not interchangeable: the steps that turn a terrain die or contest a
+ * maneuver genuinely need a terrain and keep the throwing version, while the ones that
+ * only name the army -- the action, the magic roll, the log -- take this one.
+ */
+function marchingRef(state: GameState): ArmyRef {
   const army = state.turn.marchingArmy
   if (army === null) throw new Error('no army is marching')
-  if (army === 'reserve') throw new Error('the Reserve Army cannot march in v0')
   return army
 }
 
@@ -172,8 +192,14 @@ function requireTerrainTarget(ref: ArmyRef): TerrainSlot {
  * has no legal action in v0, so offering it would be offering nothing.
  */
 export function marchableArmies(state: GameState, player: PlayerId): readonly ArmyRef[] {
-  return TERRAIN_SLOTS.filter(
-    (slot) => armyAt(state, player, slot).length > 0 && !state.turn.armiesMarched.includes(slot),
+  const refs: readonly ArmyRef[] =
+    // "An army in the Reserve Area may only take a magic action", so before spells it
+    // has nothing to do and offering it would be offering nothing. This is the last of
+    // RULES-V0.md section 4's house rules to go.
+    state.ruleSet.magic === 'spells' ? [...TERRAIN_SLOTS, 'reserve'] : TERRAIN_SLOTS
+
+  return refs.filter(
+    (ref) => armyRef(state, player, ref).length > 0 && !state.turn.armiesMarched.includes(ref),
   )
 }
 
@@ -280,6 +306,9 @@ function stepMarch(state: GameState): GameState {
     }
 
     case 'declare_maneuver':
+      // "This step is optional. **If the army is in the Reserve Area, skip this
+      // step**" (p. 12). Not a decision with one answer -- no decision at all.
+      if (marchingRef(state) === 'reserve') return withTurn(state, { marchStep: 'action' })
       return {
         ...state,
         pending: { kind: 'choose_maneuver', player, slot: marchingSlot(state) },
@@ -309,7 +338,7 @@ function stepMarch(state: GameState): GameState {
     }
 
     case 'action': {
-      const slot = marchingSlot(state)
+      const slot = marchingRef(state)
       const legal = legalActions(state, player, slot)
       return { ...state, pending: { kind: 'choose_action', player, slot, legal } }
     }
@@ -391,17 +420,21 @@ function stepMarch(state: GameState): GameState {
 
     case 'announce_spells': {
       const magic = magicOf(state)
+      const caster = magic.caster ?? player
       return {
         ...state,
         pending: {
           kind: 'announce_spells',
-          player,
+          player: caster,
           slot: magic.army,
           pool: magic.pool,
-          castable: castableSpells(state, player, magic.pool, state.ruleSet),
+          castable: castableSpells(state, caster, magic.pool, state.ruleSet),
         },
       }
     }
+
+    case 'dispel_magic':
+      return stepDispel(state)
 
     case 'resolve_spell':
       return resolveNextSpell(state)
@@ -512,7 +545,7 @@ function damageTarget(
   const combat = requireCombat(state)
   const marcher = state.turn.marching
   const atTarget = { player: opponentOf(marcher), slot: combat.targetSlot } as const
-  const atMarch = { player: marcher, slot: marchingSlot(state) } as const
+  const atMarch = { player: marcher, slot: marchingRef(state) } as const
 
   switch (step) {
     case 'assign_attack_damage':
@@ -592,7 +625,7 @@ function exchangeSpec(state: GameState, isCounter: boolean): AttackSpec {
   const combat = requireCombat(state)
   const marcher = state.turn.marching
   const enemy = opponentOf(marcher)
-  const marchSlot = marchingSlot(state)
+  const marchSlot = marchingRef(state)
 
   return {
     action: combat.action,
@@ -746,7 +779,10 @@ interface TaskOwner {
 }
 
 function taskOwner(task: TargetTask, spec: AttackSpec, delayed: boolean): TaskOwner {
-  const friendly = task.kind === 'promote' || task.kind === 'move'
+  // A Cantrip face is on a die in the rolling army, so its pool belongs to whoever
+  // threw it -- the attacker on an attack roll, the defender on a save roll. Exactly
+  // the split Wild Growth and the free moves make, and for the same reason.
+  const friendly = task.kind === 'promote' || task.kind === 'move' || task.kind === 'cantrip'
   if (delayed && friendly) {
     return { player: spec.defender, army: spec.defender, slot: spec.defenderSlot }
   }
@@ -816,6 +852,18 @@ function taskHasWork(
       const mover = state.units[task.unitId]
       return mover !== undefined && mover.location.kind === 'terrain'
     }
+    case 'cantrip':
+      // A pool that can buy nothing is not a decision. Under `magic: 'simplified'`
+      // the SAI never produces one at all, so this is about a pool too small or a
+      // species with no `C` spell in reach.
+      return (
+        castableSpells(
+          state,
+          owner.player,
+          cantripPool(state, owner.player, owner.slot, task.points),
+          state.ruleSet,
+        ).length > 0
+      )
   }
 }
 
@@ -863,6 +911,10 @@ function taskPending(
         // generates them in a type it does not count.
         saveResultsCount: delayed && owner.player === spec.defender,
       }
+    // Cantrip does not raise one of these: it opens a casting window instead, which
+    // `stepTasks` does before it ever gets here.
+    case 'cantrip':
+      throw new Error('a Cantrip pool opens a casting window rather than a targeting pending')
     case 'move':
       return {
         kind: 'sai_move',
@@ -907,7 +959,45 @@ function stepTasks(state: GameState, isCounter: boolean, delayed: boolean): Game
 
   if (!taskHasWork(state, spec, head, delayed)) return autoResolve(state, spec, head, delayed)
 
+  // Cantrip's second sentence: "X magic results that only allow you to cast spells
+  // marked as `Cantrip'", and the starter adds "these spells are resolved
+  // immediately". So the exchange is suspended, a casting window opens on the spot,
+  // and `returnTo` brings the march back here to finish draining the queue.
+  if (head.kind === 'cantrip') return openCantripWindow(state, spec, head, delayed)
+
   return { ...state, pending: taskPending(state, spec, head, queue.length, delayed) }
+}
+
+/**
+ * Suspends the exchange and opens a Cantrip casting window.
+ *
+ * The task is dropped first, so the step this returns to drains what is left of the
+ * queue rather than asking the same question again.
+ */
+function openCantripWindow(
+  state: GameState,
+  spec: AttackSpec,
+  task: Extract<TargetTask, { kind: 'cantrip' }>,
+  delayed: boolean,
+): GameState {
+  const owner = taskOwner(task, spec, delayed)
+  const dropped = withLog(dropHeadTask(state), {
+    kind: 'cantrip',
+    player: owner.player,
+    slot: owner.slot,
+    points: task.points,
+  })
+
+  return withTurn(
+    withMagic(dropped, {
+      army: owner.slot,
+      pool: cantripPool(state, owner.player, owner.slot, task.points),
+      // The marching player is not always the one holding the Cantrip die.
+      ...(owner.player === state.turn.marching ? {} : { caster: owner.player }),
+      returnTo: state.turn.marchStep,
+    }),
+    { marchStep: 'announce_spells' },
+  )
 }
 
 const nextStepAfterTasks = (isCounter: boolean, delayed: boolean): MarchStep => {
@@ -1288,7 +1378,13 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
 
   const combat = requireCombat(state)
   const [task] = taskQueue(state)
-  if (task === undefined || task.kind === 'galeforce' || task.kind === 'promote' || task.kind === 'move') {
+  if (
+    task === undefined ||
+    task.kind === 'galeforce' ||
+    task.kind === 'promote' ||
+    task.kind === 'move' ||
+    task.kind === 'cantrip'
+  ) {
     throw new IllegalActionError('no SAI is waiting for unit targets')
   }
 
@@ -1779,16 +1875,29 @@ function resolveNextSpell(state: GameState): GameState {
   const magic = magicOf(state)
   const [head, ...rest] = magic.announced ?? []
 
-  if (head === undefined) return endMarch(withMagic(state, null))
+  if (head === undefined) {
+    // A Cantrip window hands the march back where it came from; a magic action ends
+    // it. `returnTo` is the whole of the difference.
+    const back = magic.returnTo
+    return back === undefined
+      ? endMarch(withMagic(state, null))
+      : withTurn(withMagic(state, null), { marchStep: back })
+  }
 
   const remaining: MagicState = {
     army: magic.army,
     pool: magic.pool,
+    ...(magic.caster !== undefined ? { caster: magic.caster } : {}),
+    ...(magic.returnTo !== undefined ? { returnTo: magic.returnTo } : {}),
     ...(rest.length > 0 ? { announced: rest } : {}),
   }
   const next = withMagic(state, remaining)
-  const player = state.turn.marching
+  const player = magic.caster ?? state.turn.marching
   const s = spell(head.spell)
+
+  // Dispelled before it could resolve. The `dispel_magic` entry already said what
+  // stopped it, so this needs no line of its own.
+  if (head.negated === true) return next
 
   if (!spellTargetPresent(state, head.target)) {
     return withLog(next, { kind: 'spell_fizzled', player, spell: head.spell })
@@ -1847,6 +1956,88 @@ function resolveNextSpell(state: GameState): GameState {
   })
 }
 
+/**
+ * Dispel Magic's queue, drained one die at a time.
+ *
+ * A queue of its own rather than a third `TargetTask`: its items are unit ids and its
+ * answer is a boolean, and forcing that into a union built for "health-worth of an
+ * army" would buy nothing and cost a dead field in every golden digest.
+ *
+ * A head whose spells have all been stopped by an earlier roll is **dropped rather
+ * than asked about** -- the same rule that drops a targeting SAI with nothing to take.
+ */
+function stepDispel(state: GameState): GameState {
+  const magic = magicOf(state)
+  const queue = magic.dispels ?? []
+  const [head, ...rest] = queue
+
+  if (head === undefined) return withTurn(withDispels(state, magic, []), { marchStep: 'resolve_spell' })
+
+  const casts = magic.announced ?? []
+  const spells = casts.filter((cast) => dispelNegates(state, cast, head)).map((c) => c.spell)
+  if (spells.length === 0) return withDispels(state, magic, rest)
+
+  const owner = state.units[head]?.owner
+  if (owner === undefined) return withDispels(state, magic, rest)
+
+  return {
+    ...state,
+    pending: { kind: 'dispel_magic', player: owner, unitId: head, spells, remaining: queue.length },
+  }
+}
+
+/** Rewrites the queue, dropping the field entirely once it is empty. */
+function withDispels(
+  state: GameState,
+  magic: MagicState,
+  dispels: readonly UnitId[],
+): GameState {
+  const { dispels: _drained, ...rest } = magic
+  return withMagic(state, { ...rest, ...(dispels.length > 0 ? { dispels } : {}) })
+}
+
+/**
+ * One Dispel Magic roll: "no other icons have any affect during this special roll."
+ *
+ * So it is a question about a **face**, not a total -- Seize's path, not `rollUnits`'
+ * -- which also keeps a die showing some other SAI from being resolved as one.
+ */
+function applyDispelMagic(state: GameState, roll: boolean): GameState {
+  const magic = magicOf(state)
+  const queue = magic.dispels ?? []
+  const [head, ...rest] = queue
+  if (head === undefined) throw new IllegalActionError('nobody is waiting to dispel')
+
+  if (!roll) return withDispels(state, magic, rest)
+
+  const unit = state.units[head]
+  if (unit === undefined) return withDispels(state, magic, rest)
+
+  const [rolled, rng] = rollFaces([unit], state.rng)
+  const die = rolled[0]
+  const face = die === undefined ? undefined : faceOf(die)
+  const hit = face !== undefined && face.icon === 'SAI' && face.sai === DISPEL_MAGIC
+
+  const casts = magic.announced ?? []
+  const stopped = hit ? casts.filter((cast) => dispelNegates(state, cast, head)) : []
+  const negated = casts.map((cast) =>
+    stopped.includes(cast) ? { ...cast, negated: true as const } : cast,
+  )
+
+  const logged = withLog({ ...state, rng }, {
+    kind: 'dispel_magic',
+    player: unit.owner,
+    unitId: head,
+    spells: stopped.map((cast) => cast.spell),
+  })
+
+  const after: MagicState = {
+    ...magic,
+    ...(negated.length > 0 ? { announced: negated } : {}),
+  }
+  return withDispels(logged, after, rest)
+}
+
 /** The pending a parked spell decision raises. */
 function spellChoicePending(state: GameState, choice: SpellChoice): Pending {
   const player = state.turn.marching
@@ -1891,6 +2082,8 @@ function afterSpellChoice(state: GameState, choice: SpellChoice | null): GameSta
   const next: MagicState = {
     army: magic.army,
     pool: magic.pool,
+    ...(magic.caster !== undefined ? { caster: magic.caster } : {}),
+    ...(magic.returnTo !== undefined ? { returnTo: magic.returnTo } : {}),
     ...(magic.announced !== undefined ? { announced: magic.announced } : {}),
     ...(choice !== null ? { choice } : {}),
   }
@@ -2764,6 +2957,12 @@ function resolveArmyRoll(
   if (dice === undefined) throw new Error('the army has not rolled yet')
 
   const outcome = resolveFaces(dice, dragonRollSpec(state, attack, answer), state.ruleSet)
+  // **This had no guard at all until Phase 7f**, so an effect here was dropped in
+  // silence -- which is what a Wild Growth or a Firewalking on a dragon roll had been
+  // doing since Phase 6. Nothing generates one now (see `noSideDecision` in `sai.ts`),
+  // and if something ever does, this is what says so.
+  expectNoEffects(asResult(outcome, 'save'), "the army's dragon roll")
+
   const totals = {
     melee: outcome.totals.melee ?? 0,
     missile: outcome.totals.missile ?? 0,
@@ -3401,7 +3600,9 @@ function applyThornsDamage(state: GameState, unitIds: readonly UnitId[]): GameSt
 
 function applyChooseAction(state: GameState, action: ActionKind | null): GameState {
   const player = state.turn.marching
-  const slot = marchingSlot(state)
+  // `marchingRef`, not `marchingSlot`: a Reserve Army may take a magic action, and
+  // magic is the one action that names no terrain.
+  const slot = marchingRef(state)
 
   if (action === null) {
     return endMarch(withLog(state, { kind: 'action_skipped', player, slot }))
@@ -3409,6 +3610,10 @@ function applyChooseAction(state: GameState, action: ActionKind | null): GameSta
 
   const legal = legalActions(state, player, slot)
   if (!legal.includes(action)) {
+    // A Reserve Army has one legal action and no terrain to explain itself with.
+    if (slot === 'reserve') {
+      throw new IllegalActionError('the Reserve Army may only take a magic action')
+    }
     const terrain = state.terrains[slot]
     if (terrain.face === 8 && state.ruleSet.eighthFace !== 'captureOnly') {
       throw new IllegalActionError(
@@ -3574,7 +3779,7 @@ function applyReinforce(
  */
 function applyAnnounceSpells(state: GameState, casts: readonly AnnouncedSpell[]): GameState {
   const magic = magicOf(state)
-  const player = state.turn.marching
+  const player = magic.caster ?? state.turn.marching
   const castable = castableSpells(state, player, magic.pool, state.ruleSet)
 
   let spent = 0
@@ -3621,12 +3826,22 @@ function applyAnnounceSpells(state: GameState, casts: readonly AnnouncedSpell[])
     )
   }
 
+  // "Once you have decided which spells to cast, announce all of the spells ... Once
+  // all spells and their targets are announced, cast and resolve the spells one at a
+  // time." Dispel Magic lives in the gap, and this is where it opens.
+  const dispels = dispelCandidates(state, casts)
+
   const announced: MagicState = {
     army: magic.army,
     pool: magic.pool,
+    ...(magic.caster !== undefined ? { caster: magic.caster } : {}),
+    ...(magic.returnTo !== undefined ? { returnTo: magic.returnTo } : {}),
     ...(casts.length > 0 ? { announced: casts } : {}),
+    ...(dispels.length > 0 ? { dispels } : {}),
   }
-  return withTurn(withMagic(state, announced), { marchStep: 'resolve_spell' })
+  return withTurn(withMagic(state, announced), {
+    marchStep: dispels.length > 0 ? 'dispel_magic' : 'resolve_spell',
+  })
 }
 
 function applyRetreat(state: GameState, unitIds: readonly UnitId[]): GameState {
@@ -3713,6 +3928,8 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyDragonTarget(cleared, action.targets)
     case 'flashfire':
       return applyFlashfire(cleared, action.unitIds)
+    case 'dispel_magic':
+      return applyDispelMagic(cleared, action.roll)
     case 'spell_move':
       return applySpellMove(cleared, action.slot)
     case 'spell_summon':

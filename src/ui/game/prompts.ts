@@ -6,6 +6,7 @@
  * state or decides what is legal -- the engine already did both.
  */
 import { dragonName, terrainDie, terrainFaceAction, unitType } from '../../data/load'
+import { spell } from '../../data/spells'
 import type { TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
 import {
@@ -391,6 +392,18 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
           `Flashfire: throw ${pending.budget === 1 ? 'a die' : `up to ${pending.budget} dice`} again?`,
         choices: [],
         custom: 'flashfire',
+      }
+
+    case 'dispel_magic':
+      return {
+        question:
+          `Dispel Magic: roll ${unitName(state, pending.unitId)} to stop ` +
+          `${pending.spells.map((id) => spell(id).name).join(', ')}?` +
+          (pending.remaining > 1 ? ` (${pending.remaining} may try)` : ''),
+        choices: [
+          { label: 'Roll it', action: { kind: 'dispel_magic', roll: true } },
+          { label: 'Let it through', action: { kind: 'dispel_magic', roll: false }, passive: true },
+        ],
       }
 
     case 'dragon_order':

@@ -106,7 +106,11 @@ treasure chest to wyrms, and that all ten dice exist.
 
 `air` (blue), `water` (green), `earth` (yellow), `fire` (red), `death` (black), `ivory` (none).
 
-Unused in v0 (no spells), recorded now so the spell system can be added without touching the data.
+**Live since v1 Phase 7.** Under `magic: 'spells'` a species' two elements are what its army's
+magic may be spent as, and a terrain's are what a Standing Stones widens that to; a spell's own
+element is in `data/spells.json`, not here. Under `magic: 'simplified'` they are still stored and
+ignored, which is what `V0_RULES` plays. `death` and `ivory` belong to dice out of scope (Phase 6's
+dragons are the five basic elements only) and no spell names either.
 
 ## Pipeline
 

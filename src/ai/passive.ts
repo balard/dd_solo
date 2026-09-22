@@ -60,6 +60,11 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     case 'flashfire':
       return { kind: 'flashfire', unitIds: [] }
 
+    // It rolls, for the reason it contests and counter-attacks: the die has no other
+    // use this roll, and letting every spell through unopposed is not passivity.
+    case 'dispel_magic':
+      return { kind: 'dispel_magic', roll: true }
+
     case 'dragon_order':
       return { kind: 'dragon_order', slot: pending.options[0] as TerrainSlot }
 

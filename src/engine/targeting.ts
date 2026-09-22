@@ -57,6 +57,13 @@ export type TargetTask =
    * itself" is a rule about that die and not about the army it came from.
    */
   | { readonly kind: 'move'; readonly sai: string; readonly unitId: string; readonly health: number }
+  /**
+   * Cantrip: a pool of magic that may only buy spells marked `C`, spent now.
+   *
+   * Combines like the budgets do -- two Cantrip faces in one roll are one pool of
+   * their sum, which is the ordinary rule and not a special case.
+   */
+  | { readonly kind: 'cantrip'; readonly sai: string; readonly points: number }
 
 /** The effect kinds that wait for the save dice: step 2, "Delayed Effects". */
 const DELAYED: readonly RollEffect['kind'][] = ['choke', 'confuse']
@@ -137,6 +144,8 @@ function taskFor(effect: RollEffect): TargetTask | null {
     case 'choke':
     case 'confuse':
       return { kind: effect.kind, sai: effect.sai, health: effect.health }
+    case 'cantrip':
+      return { kind: 'cantrip', sai: effect.sai, points: effect.points }
     case 'wild_growth':
       return { kind: 'promote', sai: effect.sai, budget: effect.budget }
     default:
@@ -154,6 +163,9 @@ function combined(existing: TargetTask, effect: RollEffect): TargetTask {
   }
   if (existing.kind === 'promote' && effect.kind === 'wild_growth') {
     return { ...existing, budget: existing.budget + effect.budget }
+  }
+  if (existing.kind === 'cantrip' && effect.kind === 'cantrip') {
+    return { ...existing, points: existing.points + effect.points }
   }
   return existing
 }

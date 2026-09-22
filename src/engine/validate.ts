@@ -154,7 +154,15 @@ export function validateState(state: GameState): string[] {
   // survived, `digestState` would carry a list of raw dice into the four recorded
   // games that end mid-combat, and a golden would go red for the right reason but
   // with a useless message.
-  if (state.turn.combat?.attack !== undefined && !MID_EXCHANGE_STEPS.includes(state.turn.marchStep)) {
+  // A Cantrip window (Phase 7f) suspends an exchange to cast a spell, so the parked
+  // roll legitimately outlives the steps that own it -- `returnTo` is precisely the
+  // claim "this exchange is coming back", and nothing else sets it.
+  const suspended = state.turn.magic?.returnTo !== undefined
+  if (
+    state.turn.combat?.attack !== undefined &&
+    !suspended &&
+    !MID_EXCHANGE_STEPS.includes(state.turn.marchStep)
+  ) {
     problems.push(
       `combat: an attack roll is still stashed at march step ${state.turn.marchStep}, ` +
         `which is not inside an exchange`,

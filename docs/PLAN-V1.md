@@ -64,11 +64,11 @@ G  Golden files: 25 recorded v0 games          DONE  cut before anything moves
                                    |
                         4 SAIs B: targeting     DONE (4a-4e)
                                    |
-                        5 Terrains and eighth faces
+                        5 Terrains and eighth faces   DONE
                                    |
-                        6 Dragons
+                        6 Dragons                     DONE
                                    |
-                        7 Spells   -> completes Cantrip, Dispel Magic, Standing Stones
+                        7 Spells   DONE -- completed Cantrip, Dispel Magic, Standing Stones
                                    |
                         8 Species abilities
                                    |
@@ -1739,98 +1739,139 @@ Wild Growth's share.
 
 ---
 
-## Phase 7 — Spells
+## Phase 7 — Spells — **landed**
 
-**Deliverable.** `magic: 'spells'`. The v0 magic house rule retires.
+**Delivered.** `magic: 'spells'`. All eighteen spells castable by Treefolk and Firewalkers, the
+announce-then-resolve magic action, Cantrip's second sentence, Dispel Magic, Standing Stones and
+Reserve magic. The v0 magic house rule retires: `floor(M / 2)`, the same-terrain restriction, the
+absent save roll, the absent counter-attack and the ban on Reserve magic are all gone, and elements
+stop being stored-but-ignored. The app and the CLI play `SPELL_RULES` from here; `SAVE_VERSION` is
+9. **The 25 goldens replay byte-identical and unregenerated through all six slices.**
 
-**The v0 magic house rule ends here.** `floor(M / 2)`, the same-terrain restriction, the absent
-save roll and the absent counter-attack are all replaced, and the rounding question that
-`RULES-V0.md` §10 carried since the alpha expires rather than gets answered — there is no rounding
-left to tune. `magic: 'simplified'` survives only as the `V0_RULES` regression baseline; it is not
-a configuration anyone plays or balances after this phase.
+**Landed in six slices, one commit each**, for the reason Phases 4 and 5 used: 7a delivers nothing a
+player can see and its whole value is the goldens proving it changed no outcome.
 
-This is also the phase that changes the most existing behaviour, because **magic results gain an
-element**. A magic result is elemental according to the species of the unit that rolled it —
-Treefolk generate Water and Earth magic, Firewalkers Air and Fire. A spell of a single element may
-only be cast with magic of that element; an Elemental spell with magic of any one element.
+| Slice | Scope | State |
+|---|---|---|
+| **7a** | The data and the seam: `data/spells.json`, `magic.ts`, `MagicState`, the march steps. No spell resolves. | ✅ landed |
+| **7b** | The eight declarative spells, `EffectTarget.terrain`, and the whole client surface | ✅ landed |
+| **7c** | The board spells: Hailstorm, Path, Resurrect Dead, Summon Dragon — and the Frontier dragon seed retires | ✅ landed |
+| **7d** | The sub-roll spells: Mirage, Lightning Strike, Flash Flood, Wall of Thorns | ✅ landed |
+| **7e** | The two triggers: Flashfire and Accelerated Growth | ✅ landed |
+| **7f** | Cantrip, Dispel Magic, Standing Stones, Reserve magic, and the flip | ✅ landed |
 
-> **Corrected in 7a: `rollArmy`'s magic total does *not* become a per-element tally.** The rules say
-> each unit's magic results "may be divided between that unit's elements" (p. 13), and `validateState`
-> enforces that every unit of a player shares one species — so an army's magic is **one number the
-> caster splits freely between its species' two elements**. The starter book says it outright: "Each
-> result rolled by the army counts as one point of magic of EITHER of the species' elements." Nothing
-> needs per-die element attribution, **`resolveFaces` stays pure and `GameState`-free**, and
-> validating an announcement is a sum rather than a knapsack. It collapses only when two units in one
-> army carry different elements, which nothing in this plan's scope does.
+### Where this section was wrong
 
-A magic action becomes: roll, announce every spell and target at once, then resolve them one at a
-time in the order cast. Unused results are lost. Announcement and resolution are separate steps
-because the rulebook makes them separate (p. 13), which is also the gap Dispel Magic lives in.
+- **"Fourteen of the eighteen are a Phase 3 `Effect` and nothing else" — it is seven.** Wind Walk,
+  Fiery Weapon, Dancing Lights, Watery Double, Stone Skin, Transmute Rock to Mud and Ash Storm are a
+  `Modifier` plus a target. The other eleven each needed machinery that did not exist. That is why
+  the phase took six slices rather than the one this section implied.
+- **`rollArmy`'s magic total does not become a per-element tally.** Each unit's magic results "may be
+  divided between that unit's elements" (p. 13), and `validateState` enforces one species per
+  player — so an army's magic is **one number the caster splits freely between two elements**. The
+  starter book says it outright. Nothing needs per-die attribution, **`resolveFaces` stayed pure and
+  `GameState`-free**, and validating an announcement is a sum rather than a knapsack. It collapses
+  only when two units in one army carry different elements, which nothing in this plan's scope does.
+- **Cumulative spells never met the one-multiplier-per-result-type cap.** `pipeline.ts` predicted
+  they would. Combining castings multiplies the *spell's* number, not the roll — three Wind Walks are
+  one `add` of 12 — and no spell in scope multiplies or divides a roll at all.
+- **`expiresAtStartOfTurnOf` needed no widening**, though `effects.ts` predicted it would: every
+  spell is either instantaneous or lasts until the beginning of the caster's next turn.
+- **A magic action does not need a roll of its own.** 7a planned six march steps and a fork before
+  the roll. But a magic action *is* an attack roll to the SAI reference, so a Galeforce or a Wild
+  Growth on it must resolve as on any attack; forking early meant a second copy of the targeting
+  queue, the `expectOnly` whitelist and the parked-dice pause. The roll reuses `resolve_attack` and
+  the fork is at `resolve_attack_damage`.
+- **Accelerated Growth cannot be a decision.** This section called it a Phase 2 exchange and implied
+  a pending for its "may". `killUnits` is a pure transform called from eight places and not one of
+  them can stop to ask, so it is automatic — a house rule, with the cost of undoing it written down
+  in `RULES-V0.md` §15.
+- **The open question about Accelerated Growth and Rise from the Ashes dissolves.** Both fire on a
+  death and the rules do not order them — but Rise from the Ashes is on the Phoenix and nowhere
+  else, the Phoenix is Firewalkers, Accelerated Growth is Treefolk-only, and a force is one species.
+  A test asserts that against `data/` rather than trusting the reasoning.
 
-**The eighteen spells in scope.** Exactly the spells castable by these two species — the species
-reference sheets (full rules pp. 79, 91) filtered to `Any` plus their own:
+### Five things that would have shipped silently
 
-| Element | Spells |
-|---|---|
-| Air | Hailstorm 2, Wind Walk 4, Mirage 5 *(Firewalkers)*, Lightning Strike 6 |
-| Fire | Ash Storm 2, Flashfire 3 *(Firewalkers)*, Fiery Weapon 4, Dancing Lights 6 |
-| Water | Watery Double 2, Accelerated Growth 3 *(Treefolk)*, Flash Flood 4, Wall of Fog 6 |
-| Earth | Stone Skin 2, Path 4, Wall of Thorns 5 *(Treefolk)*, Transmute Rock to Mud 6 |
-| Elemental | Resurrect Dead 3, Summon Dragon 7 |
+1. **`legalActions` refused magic with no enemy present** (7a). v0 filters every non-missile action
+   on "is there something to hit", because v0 magic is a melee variant. Under real spells most
+   spells target your *own* army, so Stone Skin on an army standing alone would have been quietly
+   unreachable — the game still valid, every test green.
+2. **`describeModifiers` had no `ignore_ids` case and an unannotated callback** (7b) — the bug
+   `CLAUDE.md` records against `effectSummary`, repeated in the function next door, wrong since
+   Phase 6 and invisible only because the Death breath is out of reach.
+3. **`endTurn` spread the old turn state** (7c), so `dragonsDone` outlived its turn and dragons never
+   attacked again after turn one. Two Phase 6 fuzz counters caught it; nothing else could have,
+   because a dragon attack that does not happen is not an invalid state and breaks no total.
+4. **The four 7c handlers existed and `data/spells.json` never named them** — all four silently
+   uncastable with engine, clients and AI all correct. Caught by a fuzz counter that stayed at zero.
+5. **`resolveArmyRoll` had no `expectOnly` at all** (7f), so a Wild Growth or a Firewalking on a
+   dragon combination roll had been **silently dropped since Phase 6**. Wild Growth's `Applies`
+   column is "Non-Maneuver", which a dragon attack is. It is a recorded house rule now and the roll
+   refuses rather than drops.
 
-> **Corrected in 7a: it is seven, not fourteen.** Wind Walk, Fiery Weapon, Dancing Lights, Watery
-> Double, Stone Skin, Transmute Rock to Mud and Ash Storm are a `Modifier` plus a target. The other
-> **eleven** each need machinery that does not exist: two sub-rolls (Mirage, Lightning Strike), an
-> opposed roll (Flash Flood), a modifier that reaches an *attacker's* roll (Wall of Fog), a maneuver
-> trigger (Wall of Thorns), a death trigger (Accelerated Growth), a reroll that replaces a face
-> (Flashfire), a DUA return (Resurrect Dead), a unit move (Path), instant damage (Hailstorm) and a
-> dragon summon. That is why the phase takes six slices rather than one.
->
-> **And cumulative spells do not collide with the one-multiplier-per-result-type cap**, which
-> `pipeline.ts` predicted they would. Combining castings multiplies the *spell's* number, not the
-> roll — three Wind Walks are one `add` of 12 — and no spell in scope multiplies or divides a roll at
-> all, so `atMostOne` is never reached.
+### What only playing it found
 
-Flash Flood moves a terrain, Path moves a unit, Resurrect Dead is a Phase 2 exchange, and Summon
-Dragon moves a dragon out of a Summoning Pool that Phase 6 already built and fills. It is also what
-retires Phase 6's Frontier seed, and what first makes two of that phase's simplifications real —
-a dragon with more than one eligible target, and more than one terrain with dragons at it.
+Five bugs across the six slices reached a browser rather than a test, which is the argument for the
+pass in one paragraph:
 
-Out of scope and worth writing down: **Summon Dragonkin** needs Dragonkin dice (advanced rules);
-**Summon White Dragon** at cost 14 is castable but a White Dragon is not a base-element dragon;
-**Esfah's Gift**, **Rally**, **Evolve Dragonkin** and **Rise of the Eldarim** are Amazon and Eldarim
-spells. Every other single-element spell belongs to a species not in this plan.
+- **"You do a Magic *attack*"** (7a). Under `spells` a magic action attacks nothing.
+- **A stale `data/spells.json` in Vite's module graph** (7b): adding `effect` blocks did not
+  invalidate the transformed module, so the picker was empty while every test passed. Worth knowing
+  in a project whose dice, terrains, dragons and spells are all JSON — **a data-only edit may not
+  reach the dev server.**
+- **"Stone Skin *catches* your army"** (7b) — a verb written for Galeforce, reading as an ambush when
+  half the spells are cast on your own army.
+- **Wall of Thorns' melee roll crashed the game** (7d) with "produced a wild_growth effect, which
+  nothing reads". The suite passed, the fuzz ran 200 clean games, and Wall of Thorns fired in two of
+  them — neither with a Wild Growth face in the army.
+- **The thorns ward drew as "Wall of Thorns ·"** with nothing after it (7d), because it carries no
+  modifiers at all.
 
-Spells are **data, not code** — `data/spells.json` with a schema, validated by
-`tools/validate_data.py`, exactly as invariant 6 requires of die faces. An effect is a `Modifier`
-plus a target selector; the four exceptions get a named handler.
+And one found by reading rather than playing: **`rollOnTheTable` returned `null` at all four
+Flashfire pauses** (7e), so the sheet would have asked which dice to throw away without showing what
+they came up as — the same bug the dragon allocation sheet shipped with in Phase 6.
 
-Three things close here:
+### What the shape of it turned out to be
 
-- **Cantrip and Dispel Magic.** Cantrip's results cast only spells marked in the `C` column; Dispel
-  Magic needs a window after spells are announced but before any resolve, which is the only place in
-  the game where announcement and resolution are separate steps.
-- **Standing Stones** becomes live — converting magic results to a terrain's element is meaningless
-  until results have elements.
-- **Reserve magic returns.** v0 cut it, which is why a Reserve Army cannot march at all
-  (`RULES-V0.md` §4). Spells marked `R` are castable from Reserves, so the Reserve Army becomes a
-  real army again and `marchableArmies` stops being a special case.
+- **The magic pool is one number plus two permissions** — `MagicPool` in `magic.ts`: how many points,
+  which elements they may be spent as (widened by a Standing Stones), and whether they are restricted
+  to `C` or `R` spells. `castableSpells` is pure and testable from a literal, the way `saiEffects` is.
+- **`SpellTargetOffer.minCount` is on the offer, not in a rule.** Resurrect Dead's price is a
+  property of what it is aimed at, so the number rides with the target and every chooser respects it
+  for free. A rule the clients do not know is a rule both will violate, and the fuzz proved that
+  within a hundred games.
+- **A spell that owes a decision hands back a `SpellOutcome`** and rests on one march step, because
+  what differs between damage, movement and summoning is the question rather than the place.
+- **Cantrip's window nests**, via `MagicState.returnTo`: an exchange is suspended, spells are
+  announced and resolved, and the exchange carries on. A melee attack → a Cantrip window → a Dispel
+  Magic roll → the exchange completing was played end to end in a browser.
+- **`resolvesSpell` is `resolvesSai`'s and `resolvesIcon`'s twin**, and it is what made a half-built
+  rung playable at every slice: a spell the rules cannot resolve is never offered, so the throw
+  behind it guards only against a spell added to `data/` with no code.
 
-**Exit criterion.** All 18 spells cast and resolve. `magic: 'simplified'` still plays the v0 game.
-1000 fuzz games clean.
+**Exit criterion.** ✅ All 18 spells cast and resolve. `magic: 'simplified'` still plays the v0 game.
+699 tests; the 25 goldens byte-identical and unregenerated.
 
-**Tests.**
+**The fuzz**: 200 `SPELL_RULES` games across both force sets, `stuck === 0`, with a trigger counter
+`> 0` for **every one of the eighteen spells** plus a dragon summoned, a unit resurrected, a Path
+move, both Flash Flood branches, a Flashfire taken and declined, an Accelerated Growth exchange, a
+Cantrip window, a Dispel Magic that stopped something, and a spell cast from the Reserve Area.
 
-- A Treefolk army cannot cast Hailstorm — it generates no Air magic.
-- Cumulative spells multiply the highlighted number; three Wind Walks add 12 maneuver, not 4.
-- Non-cumulative spells cast twice on one target have no extra effect.
-- Casting costs are spent against the correct element's tally and leftovers are discarded.
-- A spell on an army does not follow it to another terrain; a spell on a unit does.
-- Dispel Magic negates only magic targeting that unit, its army or its terrain.
+**Reserve magic made games about three times longer in decisions** — the Reserve Army can march every
+turn and `RandomAI` retreats into it constantly — so 20 of 200 games hit `runGame`'s default 5000 and
+stopped on `cap`. Not a bug, but it made every counter a lie by omission; the spell fuzz passes
+`maxDecisions: 20_000`, against a longest observed game of 16,353. **This is the Risks section's
+"expect to raise it, and be suspicious the first time you do" coming due, and it was worth being
+suspicious: the raise was justified by measuring, not by assuming.**
 
-**Bump `SAVE_VERSION`.**
+**Two things Wall of Thorns and the dragon decisions have in common**: neither is reachable often
+enough for a fuzz to prove. Wall of Thorns fired twice in 200 games; `dragon_order` and
+`dragon_target` never, because they need three mixed-element dragons at one terrain. All three have
+named tests instead, which is what this plan asks for when a fuzz cannot reach a rule.
 
----
+**Not done, and deliberately**: the 1000-game fuzz still runs `V0_RULES` only. That is now the oldest
+open item in this document by five phases — see Risks.
 
 ## Phase 8 — Species abilities
 
@@ -1901,17 +1942,17 @@ on a phone, and the log explains every number in it.
 
 | v0 house rule | Replaced in |
 |---|---|
-| Magic is a melee variant: same terrain, `floor(total / 2)`, no save, no counter | Phase 7 |
-| Elements are stored but ignored | Phase 7 |
-| No magic from Reserves, so a Reserve Army cannot march | Phase 7 |
-| SAI faces produce zero results | Phases 1 ✅ and 4 |
+| Magic is a melee variant: same terrain, `floor(total / 2)`, no save, no counter | Phase 7 ✅ |
+| Elements are stored but ignored | Phase 7 ✅ |
+| No magic from Reserves, so a Reserve Army cannot march | Phase 7 ✅ |
+| SAI faces produce zero results | Phases 1 ✅ and 4 ✅ |
 | Eighth face grants only the two standard advantages | Phase 5 ✅ |
 | No dragons | Phase 6 ✅ (with an interim house rule of its own — see below) |
-| No spells | Phase 7 |
+| No spells | Phase 7 ✅ |
 | No promotion | Phase 2 ✅ (machinery; first in-game caller is Phase 5's City) |
 | No burying | Phase 2 ✅ (machinery; first in-game caller is Phase 4's Flame) |
 
-| Three fixed terrains, all Towers | Phase 5 |
+| Three fixed terrains, all Towers | Phase 5 ✅ |
 | Two hand-authored 30-health forces, fixed race per player | Phase 0a |
 | The Frontier is a constant, and both forces must propose the same die | Phase 0a |
 
@@ -1937,12 +1978,12 @@ The v1 ruleset:
 
 ```ts
 export const V1_RULES: RuleSet = {
-  magic: 'spells',
-  sai: 'full',
-  eighthFace: 'full',
-  dua: 'active',            // new flag, Phase 2 -- landed
-  dragons: true,
-  speciesAbilities: true,   // new flag, Phase 8
+  magic: 'spells',          // Phase 7 -- landed, and `SPELL_RULES` is what the app plays
+  sai: 'full',              // Phase 4 -- landed
+  eighthFace: 'full',       // Phase 5 -- landed
+  dua: 'active',            // Phase 2 -- landed
+  dragons: true,            // Phase 6 -- landed
+  speciesAbilities: true,   // new flag, Phase 8 -- the only one left
 }
 
 ```
@@ -1954,6 +1995,13 @@ export const V1_RULES: RuleSet = {
 **Phase 0b is the phase people skip.** It delivers nothing a player can see and every later phase is
 cheaper for it. If it gets cut short, the symptom is Phase 6 discovering that combination rolls need
 `rollArmy` rewritten anyway — with SAIs and spells already built on top of the old shape.
+
+**The data was the long pole three times, and the third one proved it.** Phase 7's eighteen spells
+were "already written down" when this was written -- and transcribing them still turned up a trap
+worth recording: the full rules' spell tables are **two-column**, and `pdftotext -layout` interleaves
+them so that names pair with the wrong effects. `-table` gets it right. Worse, the *cumulative*
+number is encoded as red text, which no text extraction preserves at all; it has to be read off the
+rendered page, and `cumulative` is therefore the field in `data/spells.json` most likely to be wrong.
 
 **Two blocking data gaps, and they were not code — both are now closed.** Terrain faces for
 Coastland, Flatland and Feyland were transcribed in Phase 5a; the face layouts for the ten dragon
@@ -1987,9 +2035,17 @@ standing fuzz builds its pairs from the health groups and runs every force there
 cannot be fuzzed is now a bug rather than a fact of life. It earned its keep immediately, finding an
 effect that outlived a won game and a `RandomAI` that had never been taught Choke's eligible set.
 
-What is *still* open is the oldest gap, and it is now the only one: **`FULL_RULES` is what the app
-plays, and the 1000-game fuzz still runs `V0_RULES`.** The full-rules fuzz is 66 games, not 1000.
-Closing that is one `it.each` over two rulesets, and it is cheaper now than it has ever been.
+What is *still* open is the oldest gap, and after Phase 7 it is **five phases wide**: `SPELL_RULES`
+is what the app plays, and the 1000-game fuzz still runs `V0_RULES`. The live-rules fuzz is 200
+games, not 1000.
+
+Phase 7 changed the arithmetic of closing it, though, and this is the part to read before trying.
+**Reserve magic made a game about three times longer in decisions** -- the Reserve Army can march
+every turn and `RandomAI` retreats into it constantly -- so the spell fuzz needs
+`maxDecisions: 20_000` against a longest observed game of 16,353, and 200 games take about 9
+seconds. A thousand would be closer to 45. That is not a reason not to do it; it is a reason to
+decide deliberately whether the standing suite wants it, or whether the 1000-game run belongs behind
+a flag with 200 in the default suite.
 
 **The verification scaffold was the other new risk, and it shrank rather than compounding.** 4b
 needed a preset and a ruleset flip; 4c needed both refusal branches stubbed as well; **4d needed one
@@ -2002,6 +2058,13 @@ data — where it is a four-line query.
 **Spells are where the balance stops being ours.** v0's magic house rule was explicitly a guess to
 be tuned. Real spells are not tunable — they are the game. Expect Phase 7 to make the game feel
 completely different, and do not treat that as a regression.
+
+> **Landed, and the shape of the difference is worth recording.** The change that dominates is not
+> any one spell: it is that a Reserve Army marches. Retreating is no longer a way of taking dice off
+> the board, and a second march is almost always available, which is what tripled the decision count.
+> The second is that half the eighteen spells are cast on your *own* army, so a magic face stopped
+> being the weak face — `RULES-V0.md` §5's note that "Wasteland plays as a high-lethality terrain and
+> Highland as a slow one" is a fact about the alpha and is now wrong.
 
 **`PassiveAI` will quietly stop being a fair opponent.** It is honest in v0 because it has nothing
 to decline except attacks. Once it is declining 18 spells and every SAI target, "passive" becomes

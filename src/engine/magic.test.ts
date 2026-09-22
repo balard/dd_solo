@@ -16,11 +16,15 @@ import type { Element } from '../data/types'
 import { SPELLS, spell, spellAcceptsElement, spellAllowsSpecies } from '../data/spells'
 
 import { legalActions } from './combat'
+import { saiEffects, type RollContext } from './sai'
+import { marchableArmies } from './turn'
 import { armyRoll, flashfireBudget, pruneEffects, thornsAt, type Effect } from './effects'
 import { deathEntries, killUnits, killedIds } from './death'
 import {
   announcementProblem,
   castableSpells,
+  dispelCandidates,
+  dispelNegates,
   castingElements,
   magicPool,
   magicRolled,
@@ -37,6 +41,7 @@ import {
   SPELL_RULES,
   V0_RULES,
   type DragonInPlay,
+  type AnnouncedSpell,
   type ArmyRef,
   type GameState,
   type Pending,
@@ -44,6 +49,9 @@ import {
   type SpellTarget,
   type TerrainSlot,
 } from './types'
+
+/** What an SAI that does nothing at all returns. */
+const NOTHING_AT_ALL = { results: {}, effects: [], reroll: false }
 
 const pool = (over: Partial<MagicPool> = {}): MagicPool => ({
   points: 10,
@@ -813,6 +821,246 @@ describe('Accelerated Growth', () => {
   })
 })
 
+describe('Standing Stones', () => {
+  /**
+   * "All units in your controlling army may convert any or all of their magic results
+   * to an element this terrain contains."
+   *
+   * It has been live since the day `magic` became `'spells'` -- `resolvesIcon` gated it
+   * on that flag rather than on `eighthFace` from Phase 5c on -- but nothing exercised
+   * it until there were spells to spend the borrowed element on.
+   */
+  const holding = (base: GameState, dieId: string): GameState => ({
+    ...base,
+    terrains: {
+      ...base.terrains,
+      frontier: { ...base.terrains.frontier, dieId, face: 8, capturedBy: 'p1' },
+    },
+  })
+
+  it('lends the terrain elements to the army holding it', () => {
+    // Wasteland is air and fire; Treefolk are water and earth. Four elements, which is
+    // every element either species in this plan can reach.
+    const state = holding(gameAt('p1'), 'wasteland_standing_stones')
+    expect([...castingElements(state, 'p1', 'frontier')].sort()).toEqual([
+      'air',
+      'earth',
+      'fire',
+      'water',
+    ])
+    // Only where it stands, and only for the army that captured it.
+    expect([...castingElements(state, 'p1', 'p1_home')].sort()).toEqual(['earth', 'water'])
+    expect([...castingElements(state, 'p2', 'frontier')].sort()).toEqual(['air', 'fire'])
+  })
+
+  it('lets a Treefolk army cast an air spell it could never otherwise reach', () => {
+    const state = holding(gameAt('p1'), 'wasteland_standing_stones')
+    const castable = castableSpells(
+      state,
+      'p1',
+      magicPool(state, 'p1', 'frontier', 99),
+      SPELL_RULES,
+    ).map((c) => c.spell.id)
+
+    // Hailstorm is air and `Any`, so the borrowed element is the whole of what makes
+    // it castable -- and the same army at home cannot.
+    expect(castable).toContain('hailstorm')
+    expect(
+      castableSpells(state, 'p1', magicPool(state, 'p1', 'p1_home', 99), SPELL_RULES).map(
+        (c) => c.spell.id,
+      ),
+    ).not.toContain('hailstorm')
+  })
+
+  it('does not lend a species spell, which is a different restriction', () => {
+    // Mirage is air *and* Firewalkers. An element the terrain lends does not make the
+    // caster a Firewalker.
+    const state = holding(gameAt('p1'), 'wasteland_standing_stones')
+    const castable = castableSpells(
+      state,
+      'p1',
+      magicPool(state, 'p1', 'frontier', 99),
+      SPELL_RULES,
+    ).map((c) => c.spell.id)
+    expect(castable).not.toContain('mirage')
+  })
+
+  it('lends nothing at all while magic is the v0 house rule', () => {
+    const state = holding(
+      begin(setupGame({ seed: 7, forces: STARTER_FORCES, ruleSet: DRAGON_RULES })),
+      'wasteland_standing_stones',
+    )
+    expect([...castingElements(state, 'p1', 'frontier')].sort()).toEqual(['earth', 'water'])
+  })
+})
+
+describe('Cantrip', () => {
+  const face = (count: number) => ({ count, icon: 'SAI' as const, sai: 'Cantrip' })
+  const ctxFor = (over: Partial<RollContext>): RollContext => ({
+    purpose: { kind: 'attack', action: 'melee' },
+    isCounter: false,
+    ...over,
+  })
+
+  it('is ordinary magic on a magic action, on every rung', () => {
+    for (const rules of [DRAGON_RULES, SPELL_RULES]) {
+      expect(
+        saiEffects(face(3), ctxFor({ purpose: { kind: 'attack', action: 'magic' } }), rules).results,
+      ).toEqual({ magic: 3 })
+    }
+  })
+
+  it('is a restricted pool on any other non-maneuver roll, once spells exist', () => {
+    expect(saiEffects(face(3), ctxFor({}), SPELL_RULES).effects).toEqual([
+      { kind: 'cantrip', points: 3 },
+    ])
+    // And worth nothing at all under the v0 house rule, where there is nothing to buy.
+    expect(saiEffects(face(3), ctxFor({}), DRAGON_RULES).effects).toEqual([])
+  })
+
+  it('generates nothing on a maneuver roll, a sub-roll or a trigger roll', () => {
+    expect(saiEffects(face(3), ctxFor({ purpose: { kind: 'maneuver' } }), SPELL_RULES)).toEqual(
+      NOTHING_AT_ALL,
+    )
+    expect(saiEffects(face(3), ctxFor({ isSubRoll: true }), SPELL_RULES).effects).toEqual([])
+    expect(saiEffects(face(3), ctxFor({ isTrigger: true }), SPELL_RULES).effects).toEqual([])
+  })
+
+  it('buys only spells marked C', () => {
+    const cantrip = castableSpells(
+      gameAt('p1'),
+      'p1',
+      { points: 99, elements: ['water', 'earth'], cantripOnly: true },
+      SPELL_RULES,
+    ).map((c) => c.spell.id)
+
+    for (const id of cantrip) expect(spell(id).cantrip).toBe(true)
+    // Stone Skin is `C`; Path is not, and is affordable and castable otherwise.
+    expect(cantrip).toContain('stone_skin')
+    expect(cantrip).not.toContain('path')
+  })
+})
+
+describe('the dragon roll has nowhere to put a side decision', () => {
+  /**
+   * `resolveArmyRoll` read the totals and ignored `outcome.effects` entirely, so a
+   * Wild Growth or a Firewalking on a dragon combination roll was **silently dropped**
+   * from Phase 6 until here -- and Wild Growth's `Applies` column is "Non-Maneuver",
+   * which a dragon attack is. It is a house rule now, and the guard is what makes it
+   * one rather than an accident.
+   */
+  const ctx: RollContext = { purpose: { kind: 'dragon_attack' }, isCounter: false }
+
+  it('turns Wild Growth into the save results the roll does count', () => {
+    const outcome = saiEffects({ count: 4, icon: 'SAI', sai: 'Wild Growth' }, ctx, SPELL_RULES)
+    expect(outcome.effects).toEqual([])
+    // The saves are still generated -- a dragon roll counts them -- and only the
+    // promotion half is lost.
+    expect(outcome.results).toEqual({ save: 4 })
+  })
+
+  it('silences the free moves and Cantrip there', () => {
+    for (const sai of ['Firewalking', 'Teleport', 'Cantrip']) {
+      expect(saiEffects({ count: 4, icon: 'SAI', sai }, ctx, SPELL_RULES).effects).toEqual([])
+    }
+  })
+})
+
+describe('Dispel Magic', () => {
+  const cast = (target: SpellTarget): AnnouncedSpell => ({
+    spell: 'stone_skin',
+    element: 'earth',
+    count: 1,
+    target,
+  })
+
+  it('reaches a spell aimed at the unit, its army or its terrain, and nothing else', () => {
+    const state = gameAt('p1')
+    const mine = armyAt(state, 'p1', 'p1_home')[0]!
+
+    expect(dispelNegates(state, cast({ kind: 'units', unitIds: [mine.id] }), mine.id)).toBe(true)
+    expect(
+      dispelNegates(state, cast({ kind: 'army', player: 'p1', army: 'p1_home' }), mine.id),
+    ).toBe(true)
+    expect(dispelNegates(state, cast({ kind: 'terrain', slot: 'p1_home' }), mine.id)).toBe(true)
+
+    // Somebody else's army at the same terrain, and the same army elsewhere.
+    expect(
+      dispelNegates(state, cast({ kind: 'army', player: 'p2', army: 'p1_home' }), mine.id),
+    ).toBe(false)
+    expect(dispelNegates(state, cast({ kind: 'terrain', slot: 'frontier' }), mine.id)).toBe(false)
+    expect(dispelNegates(state, cast({ kind: 'none' }), mine.id)).toBe(false)
+  })
+
+  it('does not reach a spell another roll already stopped', () => {
+    const state = gameAt('p1')
+    const mine = armyAt(state, 'p1', 'p1_home')[0]!
+    const already = { ...cast({ kind: 'terrain', slot: 'p1_home' }), negated: true as const }
+    expect(dispelNegates(state, already, mine.id)).toBe(false)
+  })
+
+  it('offers the roll to the Unicorn and to nothing else in the box', () => {
+    // It is two faces of one die, Treefolk only -- so `treefolk_unicorn` is the only
+    // board that can queue several, and Firewalkers can never dispel at all.
+    const carriers = UNIT_TYPES.filter((type) =>
+      type.faces.some((f) => f.icon === 'SAI' && f.sai === 'Dispel Magic'),
+    )
+    expect(carriers.map((t) => t.id)).toEqual(['treefolk.unicorn'])
+
+    const unicorns = begin(
+      setupGame({
+        seed: 3,
+        forces: { kind: 'named', forces: { p1: 'treefolk_unicorn', p2: 'treefolk_unicorn' } },
+        ruleSet: SPELL_RULES,
+      }),
+    )
+    const target = armyAt(unicorns, 'p1', 'frontier')[0]!
+    const candidates = dispelCandidates(unicorns, [
+      cast({ kind: 'army', player: 'p1', army: 'frontier' }),
+    ])
+    // Every Unicorn standing in the army the spell was aimed at, and no other.
+    expect(candidates.length).toBeGreaterThan(1)
+    expect(candidates).toContain(target.id)
+  })
+
+  it('offers nobody a roll when no announced spell reaches them', () => {
+    const state = gameAt('p1')
+    expect(dispelCandidates(state, [cast({ kind: 'none' })])).toEqual([])
+  })
+})
+
+describe('Reserve magic', () => {
+  it('lets a Reserve Army march once spells exist, and never before', () => {
+    const base = gameAt('p1')
+    const withReserve = toReserve(base, 'p1', 'p1_home')
+
+    expect(marchableArmies(withReserve, 'p1')).toContain('reserve')
+    // The last of RULES-V0.md section 4's house rules: before spells the Reserve Army
+    // can neither maneuver nor act, so offering it would be offering nothing.
+    expect(
+      marchableArmies({ ...withReserve, ruleSet: DRAGON_RULES }, 'p1'),
+    ).not.toContain('reserve')
+  })
+
+  it('gives it magic and nothing else', () => {
+    const state = toReserve(gameAt('p1'), 'p1', 'p1_home')
+    expect(legalActions(state, 'p1', 'reserve')).toEqual(['magic'])
+    expect(legalActions({ ...state, ruleSet: DRAGON_RULES }, 'p1', 'reserve')).toEqual([])
+  })
+
+  it('offers only spells marked R from there', () => {
+    const state = toReserve(gameAt('p1'), 'p1', 'p1_home')
+    const pool = magicPool(state, 'p1', 'reserve', 99)
+
+    expect(pool.fromReserves).toBe(true)
+    const castable = castableSpells(state, 'p1', pool, SPELL_RULES)
+    for (const offer of castable) expect(offer.spell.reserves).toBe(true)
+    // Stone Skin is an `R` spell; Wall of Fog is not, and is otherwise castable.
+    expect(castable.map((c) => c.spell.id)).toContain('stone_skin')
+    expect(castable.map((c) => c.spell.id)).not.toContain('wall_of_fog')
+  })
+})
+
 describe('the Frontier dragon seed', () => {
   it('is gone once a spell can summon', () => {
     const state = setupGame({ seed: 4, forces: STARTER_FORCES, ruleSet: SPELL_RULES })
@@ -842,6 +1090,9 @@ describe('the fuzz', () => {
     let flooded = 0
     let floodHeld = 0
     let flashfires = 0
+    let cantrips = 0
+    let dispelled = 0
+    let fromReserves = 0
     let declined = 0
     let regrown = 0
 
@@ -854,6 +1105,12 @@ describe('the fuzz', () => {
           setup: { seed, forces, ruleSet: SPELL_RULES },
           players: { p1: randomAi, p2: randomAi },
           aiSeed: seed,
+          // Reserve magic (7f) made a game about three times as long in decisions: the
+          // Reserve Army can march every turn, and `RandomAI` retreats into it
+          // constantly. 20 of 200 games hit `runGame`'s default 5000 and stopped on
+          // `cap`, which is not a bug but does make every counter below a lie by
+          // omission. The longest game needs 16,353; this is the next round number up.
+          maxDecisions: 20_000,
         })
         if (result.stoppedBecause === 'stuck') stuck += 1
         announcements += result.record.actions.filter((a) => a.kind === 'announce_spells').length
@@ -867,6 +1124,9 @@ describe('the fuzz', () => {
           if (entry.kind === 'units_resurrected') resurrected += 1
           if (entry.kind === 'units_moved' && entry.sai === 'Path') moved += 1
           if (entry.kind === 'flashfire') flashfires += 1
+          if (entry.kind === 'cantrip') cantrips += 1
+          if (entry.kind === 'dispel_magic' && entry.spells.length > 0) dispelled += 1
+          if (entry.kind === 'magic_rolled' && entry.slot === 'reserve') fromReserves += 1
           if (entry.kind === 'units_regrown') regrown += 1
           if (entry.kind === 'flash_flood') {
             if (entry.moved) flooded += 1
@@ -877,7 +1137,10 @@ describe('the fuzz', () => {
     }
 
     expect(stuck).toBe(0)
-    expect(announcements).toBe(magicActions)
+    // Every magic roll asks for an announcement, and so does every Cantrip window --
+    // exactly, which only holds while no game is cut short by the decision cap.
+    expect(announcements).toBe(magicActions + cantrips)
+    expect(cantrips).toBeGreaterThan(0)
 
     // The spells that *do* something rather than merely sitting on an army: a dragon
     // left a pool, a unit walked out of the DUA, a unit changed terrain, a terrain went
@@ -892,6 +1155,10 @@ describe('the fuzz', () => {
     expect(flashfires).toBeGreaterThan(0)
     expect(declined).toBeGreaterThan(0)
     expect(regrown).toBeGreaterThan(0)
+    // The three things 7f closed: a Cantrip window mid-roll, a Dispel Magic roll that
+    // actually stopped something, and a spell cast from the Reserve Area.
+    expect(dispelled).toBeGreaterThan(0)
+    expect(fromReserves).toBeGreaterThan(0)
 
     // The counters are what make a clean run mean something: a fuzz over rules nothing
     // reached would be green and prove nothing. **Every spell this build resolves
@@ -922,6 +1189,15 @@ function cast(
     count: 1,
     ...over,
   })
+}
+
+/** Pulls a whole army back into Reserves, so the Reserve Army has something in it. */
+function toReserve(state: GameState, player: PlayerId, slot: TerrainSlot): GameState {
+  const units = { ...state.units }
+  for (const unit of armyAt(state, player, slot)) {
+    units[unit.id] = { ...unit, location: { kind: 'reserve' } }
+  }
+  return { ...state, units }
 }
 
 /** A state paused at the start of an exchange at the Frontier. */

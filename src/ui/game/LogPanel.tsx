@@ -472,6 +472,28 @@ function Line({
 
     // Both numbers, because "the flood failed" and "the flood failed by one result"
     // are different things to read on your opponent's turn.
+    case 'dispel_magic': {
+      const who_ = state.units[entry.unitId]
+        ? unitType(state.units[entry.unitId]!.typeId).name
+        : entry.unitId
+      return entry.spells.length === 0 ? (
+        <p className="log-line muted">{who_} tries to dispel, and misses</p>
+      ) : (
+        <p className="log-line">
+          <b>Dispel Magic</b> — {who_} stops{' '}
+          {entry.spells.map((id) => spell(id).name).join(', ')}
+        </p>
+      )
+    }
+
+    case 'cantrip':
+      return (
+        <p className="log-line">
+          <b>Cantrip</b> gives {who(entry.player)} {entry.points} magic{' '}
+          <span className="muted">— cantrip spells only</span>
+        </p>
+      )
+
     case 'flashfire':
       return (
         <p className="log-line">

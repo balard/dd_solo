@@ -90,8 +90,13 @@ export function missileTargets(
 export function legalActions(
   state: GameState,
   player: PlayerId,
-  slot: TerrainSlot,
+  slot: ArmyRef,
 ): readonly ActionKind[] {
+  // "An army in the Reserve Area may only take a magic action" (p. 12). Under the v0
+  // house rule magic from Reserves is cut entirely, which is what made a Reserve Army
+  // unable to march at all -- it can neither maneuver nor act.
+  if (slot === 'reserve') return state.ruleSet.magic === 'spells' ? ['magic'] : []
+
   const defender = opponentOf(player)
 
   // What the terrain offers, before checking there is anything to hit.
@@ -164,7 +169,9 @@ export interface AttackOutcome {
 export interface AttackSpec {
   readonly action: ActionKind
   readonly attacker: PlayerId
-  readonly attackerSlot: TerrainSlot
+  /** `ArmyRef` since Phase 7f: a Reserve Army may take a magic action, which is the
+   *  only action it has and the only one that needs no terrain. */
+  readonly attackerSlot: ArmyRef
   readonly defender: PlayerId
   /** A Reserve Army after a Tower's missile (Phase 5d): the attacker always stands
    *  at a terrain, but the defender need not. */
@@ -345,6 +352,7 @@ export function attackFacts(state: GameState, spec: AttackSpec, attack: AttackRo
       'confuse',
       'wild_growth',
       'free_move',
+      'cantrip',
     ],
     `a ${spec.action} attack`,
   )
@@ -482,7 +490,7 @@ export function finishSaves(
   // same pause the attacker's Choke was. They stay on the list; they are not dropped.
   expectOnly(
     saveRoll.effects,
-    ['riposte', 'wild_growth', 'free_move'],
+    ['riposte', 'wild_growth', 'free_move', 'cantrip'],
     `a save roll against ${spec.action}`,
   )
 

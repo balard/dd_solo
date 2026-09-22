@@ -291,6 +291,8 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
           return `${effect.damage} damage straight back`
         case 'suppress_counter':
           return 'no counter-attack'
+        case 'cantrip':
+          return `${effect.points} magic for cantrip spells`
         case 'target_enemy':
           switch (effect.escape) {
             case 'none':
