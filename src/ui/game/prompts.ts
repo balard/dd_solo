@@ -373,7 +373,13 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
             pending.flexible > 0 ? `${pending.flexible} Create Fireminions` : '',
           ]
             .filter(Boolean)
-            .join(' and '),
+            .join(' and ') +
+          // Flaming Shields is a choice here and nowhere else: this roll counts saves
+          // as well as melee, so every save moved is a save lost.
+          ((pending.shields ?? 0) > 0
+            ? `${pending.ids > 0 || pending.flexible > 0 ? ', and ' : ''}choose how many of ` +
+              `${pending.shields} saves Flaming Shields counts as melee`
+            : ''),
         choices: [],
         custom: 'dragon_allocate',
       }
@@ -941,6 +947,10 @@ function describeModifiers(modifiers: readonly Modifier[]): string {
         return `${modifier.resultType} \u00d7 ${modifier.by}`
       case 'ignore_ids':
         return `no ${modifier.resultType} from IDs`
+      // Never on an effect -- `armyRoll` gathers it from the species, not from
+      // `state.effects` -- but a `Modifier` all the same, so it is named here too.
+      case 'counts_as':
+        return `${modifier.from} counts as ${modifier.resultType}`
     }
   })
   return collapseEveryType(parts, modifiers)

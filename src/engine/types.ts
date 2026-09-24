@@ -107,6 +107,17 @@ export type Phase =
   | 'effects_expire'
   | 'eighth_face'
   | 'dragon_attack'
+  /**
+   * The Species Abilities Phase (full rules p. 11, step 4), since v1 Phase 8.
+   *
+   * **A pass-through for every species in this box.** Treefolk and Firewalkers have
+   * four abilities between them and none acts here: Rapid Growth fires on a
+   * counter-maneuver, Replanting on a death, Air Flight in the Retreat Step and
+   * Flaming Shields in a melee roll. The phase exists because the turn has seven, and
+   * because the abilities that *do* live here (Feralization, Winter's Fortitude,
+   * Mutate) belong to species outside the plan.
+   */
+  | 'species_abilities'
   | 'march'
   | 'reserves_reinforce'
   | 'reserves_retreat'
@@ -730,6 +741,13 @@ export type Pending =
       readonly ids: number
       /** Step-8 results whose type the roller picks. */
       readonly flexible: number
+      /**
+       * Flaming Shields (Phase 8): rolled save results the owner may count as melee
+       * instead. Up to this many, including none -- "may". Omitted when the army has
+       * nothing to convert, which is every army but a Firewalker one at a fire
+       * terrain.
+       */
+      readonly shields?: number
     }
   /**
    * Which dragons the army's melee and missile go to (p. 18).
@@ -933,6 +951,8 @@ export type GameAction =
       readonly kind: 'dragon_allocate'
       readonly ids: Readonly<Partial<Record<ResultType, number>>>
       readonly flexible: Readonly<Partial<Record<ResultType, number>>>
+      /** Flaming Shields: how many of `Pending.shields` become melee. Omitted is none. */
+      readonly savesAsMelee?: number
     }
   | {
       readonly kind: 'dragon_damage_split'
@@ -1025,6 +1045,8 @@ export type LogEntry =
       readonly slot: TerrainSlot
       readonly dice: readonly DieRoll[]
       readonly totals: { readonly melee: number; readonly missile: number; readonly save: number }
+      /** Flaming Shields: saves the owner moved to melee. Omitted when none. */
+      readonly flamingShields?: number
     }
   | {
       /** Back to the pool, the only two ways a dragon leaves a terrain. */
@@ -1118,6 +1140,12 @@ export type LogEntry =
       /** Counter/Volley: damage this roll sent back the other way, assigned
        *  separately. Omitted when zero. */
       readonly riposte?: number
+      /**
+       * Flaming Shields (Phase 8): melee inside `attackTotal` that the dice rolled as
+       * saves. Omitted when zero, like the two above -- and for the same reason: a
+       * Firewalker's save face in a melee attack is otherwise a number from nowhere.
+       */
+      readonly flamingShields?: number
       /** The dice themselves, so the UI can show what landed rather than only the sum.
        *  Log-only: a saved game is `{ setup, actions }`, so this costs nothing on disk. */
       readonly attackDice: readonly DieRoll[]
@@ -1264,6 +1292,20 @@ export type LogEntry =
    * `units_killed` entry immediately before it.
    */
   | { readonly kind: 'units_risen'; readonly player: PlayerId; readonly unitIds: readonly UnitId[] }
+  /**
+   * Replanting (Phase 8): Treefolk that were about to die at a water terrain, rolled an
+   * ID, and went to Reserves instead.
+   *
+   * **Not** a subset of `units_killed`, which is what separates it from `units_risen`:
+   * these were never killed, so they appear in no kill line at all. `slot` is where they
+   * were standing, because "at a terrain that contains water" is the whole condition.
+   */
+  | {
+      readonly kind: 'units_replanted'
+      readonly player: PlayerId
+      readonly slot: ArmyRef
+      readonly unitIds: readonly UnitId[]
+    }
   | { readonly kind: 'counter_declined'; readonly player: PlayerId }
   /**
    * A magic roll under `magic: 'spells'`, which inflicts nothing and buys spells
@@ -1357,6 +1399,8 @@ export type LogEntry =
       readonly damage: number
       readonly melee: number
       readonly dice: readonly DieRoll[]
+      /** Flaming Shields: melee inside `melee` that the dice rolled as saves. */
+      readonly flamingShields?: number
     }
   /**
    * The save roll a damaging spell allows its target (p. 29).
@@ -1456,6 +1500,15 @@ export interface RuleSet {
    */
   readonly dua: 'inert' | 'active'
   readonly dragons: boolean
+  /**
+   * The four species abilities Treefolk and Firewalkers bring (v1 Phase 8): Rapid
+   * Growth, Replanting, Air Flight and Flaming Shields. See `species.ts`.
+   *
+   * A flag of its own because two of the four draw dice -- Replanting rolls a dying
+   * unit, Rapid Growth rerolls a counter-maneuver -- and a single extra draw in a
+   * `V0_RULES` game would shift every die after it in all 25 goldens.
+   */
+  readonly speciesAbilities: boolean
 }
 
 export const V0_RULES: RuleSet = {
@@ -1464,6 +1517,7 @@ export const V0_RULES: RuleSet = {
   eighthFace: 'standard',
   dua: 'inert',
   dragons: false,
+  speciesAbilities: false,
 }
 
 /** `V0_RULES` plus the twelve result-generating SAIs. Phase 1's rung. */
@@ -1525,6 +1579,15 @@ export const DRAGON_RULES: RuleSet = { ...FULL_RULES, dragons: true }
  * is meaningless until results have elements to convert to.
  */
 export const SPELL_RULES: RuleSet = { ...DRAGON_RULES, magic: 'spells' }
+
+/**
+ * Species abilities as well: Phase 8's rung, and the last flag in `PLAN-V1.md`'s
+ * `V1_RULES` -- which is why it is exported under that name too.
+ */
+export const SPECIES_RULES: RuleSet = { ...SPELL_RULES, speciesAbilities: true }
+
+/** Every rule in the v1 plan switched on. */
+export const V1_RULES: RuleSet = SPECIES_RULES
 
 
 export interface GameState {

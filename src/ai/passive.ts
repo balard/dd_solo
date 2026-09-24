@@ -180,7 +180,9 @@ function decideAction(state: GameState, pending: Pending): GameAction {
 
     // Everything into saves. Passive has one thing it wants from a dragon attack --
     // to still have an army afterwards -- and melee and missile only kill dragons.
-    // `GreedyAI` is what should weigh a slaying against the casualties.
+    // `GreedyAI` is what should weigh a slaying against the casualties. For the same
+    // reason it converts no save through Flaming Shields: omitting `savesAsMelee` keeps
+    // every one of them a save.
     case 'dragon_allocate':
       return {
         kind: 'dragon_allocate',

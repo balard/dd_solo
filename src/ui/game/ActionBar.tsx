@@ -272,6 +272,10 @@ export function ActionBar({
     }
 
     const roll = rollOnTheTable(state)
+    // Flaming Shields (Phase 8): up to this many rolled saves may become melee. Not a
+    // pool that must be spent -- "may" -- so it never gates the confirm button.
+    const shields = pending.shields ?? 0
+    const converted = counters['shields'] ?? 0
 
     return (
       <div className="action-bar">
@@ -317,13 +321,46 @@ export function ActionBar({
             </div>
           </Fragment>
         ))}
+        {shields > 0 && (
+          <>
+            <p className="tally">
+              <b>Flaming Shields</b>: saves counted as melee <b>{converted}</b> / <b>{shields}</b>
+            </p>
+            <div className="choices">
+              <button
+                type="button"
+                className="choice secondary"
+                disabled={converted === 0}
+                onClick={() => onCount('shields', -1)}
+              >
+                −
+              </button>
+              <span className="tally">
+                save → melee <b>{converted}</b>
+              </span>
+              <button
+                type="button"
+                className="choice secondary"
+                disabled={converted >= shields}
+                onClick={() => onCount('shields', 1)}
+              >
+                +
+              </button>
+            </div>
+          </>
+        )}
         <div className="choices">
           <button
             type="button"
             className="choice"
             disabled={!ready}
             onClick={() => {
-              dispatch({ kind: 'dragon_allocate', ids: build('ids'), flexible: build('flexible') })
+              dispatch({
+                kind: 'dragon_allocate',
+                ids: build('ids'),
+                flexible: build('flexible'),
+                ...(converted > 0 ? { savesAsMelee: converted } : {}),
+              })
               onClearDraft()
             }}
           >

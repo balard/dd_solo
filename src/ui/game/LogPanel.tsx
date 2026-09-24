@@ -232,6 +232,15 @@ function Line({
             {' = '}
             <b>{entry.damage}</b> damage
           </div>
+          {/* A save face in a melee attack is otherwise a number from nowhere: the
+              strip shows a shield, the total counts it as melee, and only this line
+              says why (Phase 8). */}
+          {entry.flamingShields !== undefined && (
+            <div className="roll-sum">
+              <b>Flaming Shields</b> counts {entry.flamingShields}{' '}
+              {entry.flamingShields === 1 ? 'save' : 'saves'} as melee
+            </div>
+          )}
           {entry.riposte !== undefined && (
             <div className="roll-sum">
               {namesIn(entry, 'riposte') === null ? (
@@ -269,6 +278,22 @@ function Line({
               return unit ? unitType(unit.typeId).name : id
             })
             .join(', ')}
+        </p>
+      )
+    // Not a death: these dice rolled an ID on their way to the DUA and never got there,
+    // so no kill line names them.
+    case 'units_replanted':
+      return (
+        <p className="log-line big">
+          <b>Replanting</b>:{' '}
+          {entry.unitIds
+            .map((id) => {
+              const unit = state.units[id]
+              return unit ? unitType(unit.typeId).name : id
+            })
+            .join(', ')}{' '}
+          {entry.unitIds.length === 1 ? 'takes' : 'take'} root in{' '}
+          {entry.player === human ? 'your' : "the enemy's"} reserves instead of dying
         </p>
       )
     case 'units_risen':
@@ -547,6 +572,12 @@ function Line({
           <div className="roll-sum">
             {entry.melee} melee &rarr; <b>{entry.damage}</b> damage
           </div>
+          {entry.flamingShields !== undefined && (
+            <div className="roll-sum">
+              <b>Flaming Shields</b> counts {entry.flamingShields}{' '}
+              {entry.flamingShields === 1 ? 'save' : 'saves'} as melee
+            </div>
+          )}
         </div>
       )
 
@@ -736,6 +767,12 @@ function Line({
             <b>{entry.totals.melee}</b> melee, <b>{entry.totals.missile}</b> missile,{' '}
             <b>{entry.totals.save}</b> save
           </div>
+          {entry.flamingShields !== undefined && (
+            <div className="roll-sum">
+              <b>Flaming Shields</b> counts {entry.flamingShields}{' '}
+              {entry.flamingShields === 1 ? 'save' : 'saves'} as melee
+            </div>
+          )}
         </div>
       )
 

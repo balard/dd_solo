@@ -33,7 +33,8 @@
  * 4a seam exists for. They are on the `sai: 'full'` rung, so `state.effects` is still
  * always empty in a `DUA_RULES` game, which is what the app plays.
  */
-import { doubleIdsModifier, type Modifier } from './pipeline'
+import { doubleIdsModifier, SAVES_AS_MELEE, type Modifier } from './pipeline'
+import { hasAbility, terrainHas } from './species'
 import { terrainDie } from '../data/load'
 import type { EighthFaceIcon, ResultType } from '../data/types'
 import {
@@ -269,6 +270,18 @@ export function armyRoll(
     // than on a roll, and is read at the maneuver site by `thornsAt`.
   }
   if (doublesIds(state, player, ref)) modifiers.push(doubleIdsModifier(resultType))
+  // Flaming Shields (v1 Phase 8): a permission on every melee roll the army makes at a
+  // fire terrain -- the attack, Wall of Thorns' roll, the dragon combination roll. It
+  // rides the modifier list for the reason the Death breath does: that reaches every
+  // one of those without a call site learning about it. `resolveFaces` refuses it on a
+  // counter-attack, because only the roll knows what it is for.
+  if (
+    resultType === 'melee' &&
+    hasAbility(state, player, 'Flaming Shields') &&
+    terrainHas(state, ref, 'fire')
+  ) {
+    modifiers.push(SAVES_AS_MELEE)
+  }
 
   return {
     units: armyOf(state, player, ref).filter((unit) => !isAsleep(state, unit.id)),

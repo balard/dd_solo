@@ -399,8 +399,24 @@ export const randomAi: AiPlayer = {
        */
       case 'dragon_allocate': {
         const [ids, afterIds] = spread(rng, pending.ids)
-        const [flexible, next] = spread(afterIds, pending.flexible)
-        return [{ kind: 'dragon_allocate', ids, flexible } as GameAction, next] as const
+        const [flexible, afterFlexible] = spread(afterIds, pending.flexible)
+        // Flaming Shields (Phase 8): any number from none to all. Drawn only when the
+        // question is asked, so a fuzz run without Firewalkers at a fire terrain answers
+        // exactly as it did before.
+        const shields = pending.shields ?? 0
+        if (shields === 0) {
+          return [{ kind: 'dragon_allocate', ids, flexible } as GameAction, afterFlexible] as const
+        }
+        const [savesAsMelee, next] = nextInt(afterFlexible, shields + 1)
+        return [
+          {
+            kind: 'dragon_allocate',
+            ids,
+            flexible,
+            ...(savesAsMelee > 0 ? { savesAsMelee } : {}),
+          } as GameAction,
+          next,
+        ] as const
       }
 
       /*

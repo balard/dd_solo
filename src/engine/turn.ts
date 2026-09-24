@@ -53,7 +53,7 @@ import {
   promotionPartners,
   recruit,
 } from './dua'
-import { buryUnits, deathEntries, killAndBury, killUnits } from './death'
+import { buryUnits, deathEntries, killAndBury, killedIds, killUnits } from './death'
 import {
   armyRoll,
   flashfireBudget,
@@ -2238,6 +2238,9 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
       // entry verbatim, so an always-present field rewrites all twenty-five.
       ...(outcome.unsavable > 0 ? { unsavable: outcome.unsavable } : {}),
       ...(outcome.riposte > 0 ? { riposte: outcome.riposte } : {}),
+      ...(outcome.attackRoll.countedAs !== undefined
+        ? { flamingShields: outcome.attackRoll.countedAs }
+        : {}),
       attackDice: outcome.attackRoll.dice,
       saveDice: outcome.saveRoll?.dice ?? null,
     },
@@ -2741,14 +2744,23 @@ function applyDragonBreath(state: GameState, unitIds: readonly UnitId[]): GameSt
   if (dragon === undefined) throw new Error(`no such dragon ${pending.dragonId}`)
   const element = elementOf(dragon)
 
-  const { state: killed } = killUnits(state, unitIds)
-  const logged = withLog(killed, {
-    kind: 'dragon_breath',
-    player: attack.defender,
-    dragonId: pending.dragonId,
-    element,
-    unitIds,
-  })
+  const outcome = killUnits(state, unitIds)
+  // The breath's own line names only who really died: a replanted Treefolk (Phase 8)
+  // or a regrown one never did, and "Fire breath kills Oak" beside "Oak takes root in
+  // your reserves" is a log contradicting itself. Those get their own lines after it.
+  const logged = withLog(
+    outcome.state,
+    {
+      kind: 'dragon_breath',
+      player: attack.defender,
+      dragonId: pending.dragonId,
+      element,
+      unitIds: killedIds(outcome, unitIds),
+    },
+    ...deathEntries(outcome, attack.defender, attack.slot, unitIds).filter(
+      (entry) => entry.kind !== 'units_killed',
+    ),
+  )
 
   // Fire alone needs the dead to roll again; the other four are a duration effect
   // on the army and take no decision at all.
@@ -2887,10 +2899,19 @@ function armyRollPending(state: GameState, attack: DragonAttackState): Pending |
   const dice = attack.armyDice
   if (dice === undefined) throw new Error('the army has not rolled yet')
 
-  const { ids, flexible } = rollPools(dice, dragonRollSpec(state, attack), state.ruleSet)
-  if (ids === 0 && flexible === 0) return null
+  const { ids, flexible, shields } = rollPools(dice, dragonRollSpec(state, attack), state.ruleSet)
+  if (ids === 0 && flexible === 0 && shields === 0) return null
 
-  return { kind: 'dragon_allocate', player: attack.defender, slot: attack.slot, ids, flexible }
+  return {
+    kind: 'dragon_allocate',
+    player: attack.defender,
+    slot: attack.slot,
+    ids,
+    flexible,
+    // Flaming Shields (Phase 8): the one roll where converting saves costs something,
+    // so the one place it is asked. Omitted when there is nothing to convert.
+    ...(shields > 0 ? { shields } : {}),
+  }
 }
 
 /**
@@ -2921,6 +2942,9 @@ function dragonRollSpec(
     context: { purpose: { kind: 'dragon_attack' }, isCounter: false },
     idAllocation: answer?.ids ?? { melee: 0, missile: 0, save: 0 },
     ...(answer?.flexible !== undefined ? { saiResults: answer.flexible } : {}),
+    ...(answer?.savesAsMelee !== undefined && answer.savesAsMelee > 0
+      ? { savesAsMelee: answer.savesAsMelee }
+      : {}),
   }
 }
 
@@ -2943,6 +2967,12 @@ function applyDragonAllocate(
     )
   }
   // `allocateIds` enforces the ID pool being spent exactly, and says so better.
+  const converted = action.savesAsMelee ?? 0
+  if (!Number.isInteger(converted) || converted < 0 || converted > (pending.shields ?? 0)) {
+    throw new IllegalActionError(
+      `Flaming Shields can count ${pending.shields ?? 0} saves as melee here, not ${converted}`,
+    )
+  }
 
   return resolveArmyRoll(state, attack, action)
 }
@@ -2975,6 +3005,7 @@ function resolveArmyRoll(
     slot: attack.slot,
     dice: outcome.dice,
     totals,
+    ...(outcome.countedAs !== undefined ? { flamingShields: outcome.countedAs } : {}),
   })
 
   return withDragonAttack(logged, { ...attack, step: 'damage', totals })
@@ -3195,9 +3226,7 @@ function stepDragonAttack(state: GameState): GameState {
   if (attack === undefined) {
     const left = dragonsLeft(state)
     const only = left[0]
-    if (only === undefined) {
-      return withTurn(state, { phase: 'march', marchIndex: 0, marchStep: 'select_army' })
-    }
+    if (only === undefined) return withTurn(state, { phase: 'species_abilities' })
     // "If dragons attack at more than one terrain, the marching player chooses the
     // order" (p. 18). With one terrain there is nothing to choose, so nothing is asked.
     if (left.length > 1) {
@@ -3365,10 +3394,15 @@ export function stepGame(state: GameState): GameState {
     // Real since Phase 6, and still a no-op when the rules have no dragons -- which
     // is every `V0_RULES` game, so the 25 goldens never enter it.
     case 'dragon_attack':
-      if (!state.ruleSet.dragons) {
-        return withTurn(state, { phase: 'march', marchIndex: 0, marchStep: 'select_army' })
-      }
+      if (!state.ruleSet.dragons) return withTurn(state, { phase: 'species_abilities' })
       return stepDragonAttack(state)
+
+    // v1 Phase 8. Ungated, like `effects_expire` was in v0: none of the four abilities
+    // in this box acts here -- they fire on a counter-maneuver, a death, the Retreat
+    // Step and a melee roll -- so the phase takes no decision and moves straight on.
+    // Every game passes through it, the 25 goldens included, and none rests on it.
+    case 'species_abilities':
+      return withTurn(state, { phase: 'march', marchIndex: 0, marchStep: 'select_army' })
 
     case 'march':
       return stepMarch(state)
@@ -3566,6 +3600,7 @@ function stepThorns(state: GameState): GameState {
     damage,
     melee: roll.total,
     dice: roll.dice,
+    ...(roll.countedAs !== undefined ? { flamingShields: roll.countedAs } : {}),
   })
 
   // Damage too small to kill anything is dropped rather than asked about, exactly as

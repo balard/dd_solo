@@ -3,8 +3,8 @@
  *
  * v0 had no such moment: `applyDamage` moved units to the DUA and that was the end
  * of them. Under `dua: 'active'` a death is a place where a rule can intervene, and
- * Rise from the Ashes is the first one to (Phase 8's Treefolk Replanting is the
- * next, and it plugs in here).
+ * Rise from the Ashes was the first one to. Accelerated Growth (Phase 7e) and the
+ * Treefolk's Replanting (Phase 8) are the other two, and all three plug in here.
  *
  * > "Whenever a unit with this SAI is killed or buried, roll the unit. If **Rise
  * > from the Ashes** is rolled, the unit is moved to your Reserve Area. If an effect
@@ -30,7 +30,9 @@ import { unitType } from '../data/load'
 import { applyDamage } from './damage'
 import { bury, exchangeWithDua } from './dua'
 import { regrows } from './effects'
+import { faceOf, rollFaces } from './roll'
 import { rollDie } from './rng'
+import { hasAbility, terrainHas } from './species'
 import {
   deadUnits,
   type ArmyRef,
@@ -65,6 +67,15 @@ export interface DeathOutcome {
    * `killedIds` is for.
    */
   readonly regrown: readonly PromotionPair[]
+  /**
+   * Replanting: Treefolk that rolled an ID on their way to the DUA and went to Reserves
+   * instead (Phase 8).
+   *
+   * **Never killed**, like `regrown` and unlike `risen`: "any units that roll an ID icon
+   * are not killed". So they are left out of `units_killed` too, and no other death
+   * trigger ever sees them.
+   */
+  readonly replanted: readonly UnitId[]
 }
 
 /** What a caller should actually report as killed, given what it asked for. */
@@ -72,9 +83,9 @@ export function killedIds(
   outcome: DeathOutcome,
   requested: readonly UnitId[],
 ): readonly UnitId[] {
-  if (outcome.regrown.length === 0) return requested
-  const swapped = new Set(outcome.regrown.map((pair) => pair.unitId))
-  return requested.filter((id) => !swapped.has(id))
+  if (outcome.regrown.length === 0 && outcome.replanted.length === 0) return requested
+  const spared = new Set([...outcome.regrown.map((pair) => pair.unitId), ...outcome.replanted])
+  return requested.filter((id) => !spared.has(id))
 }
 
 /**
@@ -93,6 +104,11 @@ export function deathEntries(
 ): readonly LogEntry[] {
   const killed = killedIds(outcome, requested)
   return [
+    // First, and not a subset of anything: these were rolled *before* going to the DUA
+    // and never got there.
+    ...(outcome.replanted.length > 0
+      ? [{ kind: 'units_replanted', player, slot, unitIds: outcome.replanted } as const]
+      : []),
     ...(killed.length > 0
       ? [{ kind: 'units_killed', player, slot, unitIds: killed } as const]
       : []),
@@ -126,7 +142,7 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
   const candidates = Object.values(state.units).filter(
     (unit) => unitIds.includes(unit.id) && hasRiseFace(unit),
   )
-  if (candidates.length === 0) return { state, risen: [], regrown: [] }
+  if (candidates.length === 0) return { state, risen: [], regrown: [], replanted: [] }
 
   const units = { ...state.units }
   const risen: UnitId[] = []
@@ -147,7 +163,58 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
     risen.push(unit.id)
   }
 
-  return { state: { ...state, units, rng }, risen, regrown: [] }
+  return { state: { ...state, units, rng }, risen, regrown: [], replanted: [] }
+}
+
+/**
+ * Replanting: "when at a terrain that contains water, Treefolk units that are killed
+ * should be rolled before being moved to the DUA. Any units that roll an ID icon are
+ * not killed and are instead moved to your Reserve Area."
+ *
+ *  - **Before the DUA**, so before Accelerated Growth as well: a replanted unit never
+ *    reaches the point where an exchange could be made, and keeps the small die in the
+ *    DUA that the exchange would have spent. The rules do not order two things that
+ *    both say "instead", and this is the order the owner would pick every time -- a
+ *    house rule, `RULES-V0.md` section 16.
+ *  - **"Should be rolled"**, not "may": no decision, which is what lets it live inside
+ *    `killUnits` at all.
+ *  - **A face, not a total**: "roll an ID icon" is Seize's question, so it is
+ *    `rollFaces` and a look at the icon, never a resolved roll.
+ *  - **Where the unit is standing**: a unit killed in the Reserve Area -- a Tower's
+ *    missile -- is at no terrain, which contains no water.
+ *
+ * Board order, like `riseFromTheAshes`, and a unit that does not qualify draws nothing.
+ * Gated on `speciesAbilities` alone (via `hasAbility`), not on `dua`: it moves a unit
+ * to Reserves and touches the DUA not at all.
+ */
+function replanting(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
+  const none: DeathOutcome = { state, risen: [], regrown: [], replanted: [] }
+  if (!state.ruleSet.speciesAbilities) return none
+
+  const candidates = Object.values(state.units).filter(
+    (unit) =>
+      unitIds.includes(unit.id) &&
+      unit.location.kind === 'terrain' &&
+      hasAbility(state, unit.owner, 'Replanting') &&
+      terrainHas(state, unit.location.slot, 'water'),
+  )
+  if (candidates.length === 0) return none
+
+  const units = { ...state.units }
+  const replanted: UnitId[] = []
+  let rng = state.rng
+
+  for (const unit of candidates) {
+    const [rolled, next] = rollFaces([unit], rng)
+    rng = next
+    const die = rolled[0]
+    if (die === undefined || faceOf(die).icon !== 'ID') continue
+
+    units[unit.id] = { ...unit, location: { kind: 'reserve' } }
+    replanted.push(unit.id)
+  }
+
+  return { state: { ...state, units, rng }, risen: [], regrown: [], replanted }
 }
 
 /**
@@ -158,15 +225,21 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
  * does, because the win check runs after every state change.
  */
 export function killUnits(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
-  // Accelerated Growth intercepts first: a unit it saves never reaches `applyDamage`,
+  // Replanting rolls first -- "before being moved to the DUA" -- and a unit it saves is
+  // not killed at all, so nothing below ever sees it.
+  const planted = replanting(state, unitIds)
+  const { replanted } = planted
+  const remaining = unitIds.filter((id) => !replanted.includes(id))
+
+  // Accelerated Growth intercepts next: a unit it saves never reaches `applyDamage`,
   // so it is never killed and no death trigger fires on it.
-  const regrown = acceleratedGrowth(state, unitIds)
-  const grown = regrown.length === 0 ? state : exchangeWithDua(state, regrown)
-  const dying = killedIds({ state: grown, risen: [], regrown }, unitIds)
+  const regrown = acceleratedGrowth(planted.state, remaining)
+  const grown = regrown.length === 0 ? planted.state : exchangeWithDua(planted.state, regrown)
+  const dying = killedIds({ state: grown, risen: [], regrown, replanted: [] }, remaining)
 
   const killed = applyDamage(grown, dying)
-  if (state.ruleSet.dua !== 'active') return { state: killed, risen: [], regrown }
-  return { ...riseFromTheAshes(killed, dying), regrown }
+  if (state.ruleSet.dua !== 'active') return { state: killed, risen: [], regrown, replanted }
+  return { ...riseFromTheAshes(killed, dying), regrown, replanted }
 }
 
 /**
@@ -220,8 +293,12 @@ function acceleratedGrowth(
  */
 export function buryUnits(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
   const buried = bury(state, unitIds)
-  if (state.ruleSet.dua !== 'active') return { state: buried, risen: [], regrown: [] }
-  return { ...riseFromTheAshes(buried, unitIds), regrown: [] }
+  if (state.ruleSet.dua !== 'active') {
+    return { state: buried, risen: [], regrown: [], replanted: [] }
+  }
+  // No Replanting here: it is a rule about being *killed*, and a unit being buried out
+  // of the DUA was killed some time ago.
+  return { ...riseFromTheAshes(buried, unitIds), regrown: [], replanted: [] }
 }
 
 /**
@@ -242,13 +319,20 @@ export function buryUnits(state: GameState, unitIds: readonly UnitId[]): DeathOu
  */
 export function killAndBury(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
   const killed = killUnits(state, unitIds)
-  const survivors = unitIds.filter((id) => !killed.risen.includes(id))
+  // Only what actually reached the DUA can be buried. A risen unit and a replanted one
+  // are both in Reserves, and `bury` throws on a unit that is still in play -- which is
+  // what a Flame on a Treefolk at a water terrain would have done the day Replanting
+  // landed, had this subtracted only the Phoenix's rescues.
+  const survivors = unitIds.filter(
+    (id) => !killed.risen.includes(id) && !killed.replanted.includes(id),
+  )
   const buried = buryUnits(killed.state, survivors)
 
   return {
     state: buried.state,
     risen: [...killed.risen, ...buried.risen],
     regrown: killed.regrown,
+    replanted: killed.replanted,
   }
 }
 

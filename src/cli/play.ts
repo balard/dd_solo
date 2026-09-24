@@ -130,7 +130,9 @@ function effectsOn(state: GameState, player: PlayerId, slot: TerrainSlot): reado
               ? `${m.resultType} ÷ ${m.by}`
               : m.kind === 'ignore_ids'
                 ? `no ${m.resultType} from IDs`
-                : `${m.resultType} × ${m.by}`,
+                : m.kind === 'counts_as'
+                  ? `${m.from} counts as ${m.resultType}`
+                  : `${m.resultType} × ${m.by}`,
       )
       .join(', ')
     out.push(`${effect.source} ${what} ${dim(`(until ${effect.expiresAtStartOfTurnOf}'s turn)`)}`)
@@ -189,6 +191,10 @@ function board(state: GameState, human: PlayerId): string {
 
   return lines.join('\n')
 }
+
+/** Flaming Shields' share of a melee number, so the line says where it came from. */
+const shields = (n: number | undefined): string =>
+  n === undefined ? '' : dim(` (${n} of it saves counted as melee by ${bold('Flaming Shields')})`)
 
 function describe(entry: LogEntry, state: GameState): string | null {
   switch (entry.kind) {
@@ -257,7 +263,7 @@ function describe(entry: LogEntry, state: GameState): string | null {
         entry.riposte === undefined
           ? ''
           : ` (${bold(String(entry.riposte))} straight back${from('riposte')}, no save)`
-      return `  ${arrow}: ${sum} = ${bold(String(entry.damage))} damage${back}`
+      return `  ${arrow}: ${sum} = ${bold(String(entry.damage))} damage${back}${shields(entry.flamingShields)}`
 
     }
     case 'units_killed':
@@ -265,6 +271,12 @@ function describe(entry: LogEntry, state: GameState): string | null {
         `  ${entry.player} loses ${entry.unitIds
           .map((id) => (state.units[id] ? name(state.units[id]!) : id))
           .join(', ')}`,
+      )
+    case 'units_replanted':
+      return green(
+        `  ${bold('Replanting')}: ${entry.unitIds
+          .map((id) => (state.units[id] ? name(state.units[id]!) : id))
+          .join(', ')} take root in ${entry.player}'s reserves instead of dying`,
       )
     case 'units_risen':
       return green(
@@ -413,7 +425,8 @@ function describe(entry: LogEntry, state: GameState): string | null {
     case 'thorns':
       return yellow(
         `  ${bold('Wall of Thorns')} at ${SLOT_LABEL[entry.slot]}: ` +
-          `${entry.melee} melee — ${bold(String(entry.damage))} damage`,
+          `${entry.melee} melee — ${bold(String(entry.damage))} damage` +
+          shields(entry.flamingShields),
       )
 
     case 'spell_saves':
@@ -488,6 +501,7 @@ function describe(entry: LogEntry, state: GameState): string | null {
       return (
         `  ${entry.player} answers: ${bold(String(entry.totals.melee))} melee, ` +
         `${bold(String(entry.totals.missile))} missile, ${bold(String(entry.totals.save))} save` +
+        shields(entry.flamingShields) +
         (entry.dice.length > 0 ? dim(`\n    ${entry.dice.map(shown).join('  ')}`) : '')
       )
 
@@ -931,7 +945,13 @@ async function askDragonAllocate(pending: Pending): Promise<GameAction> {
   console.log(bold('  Your dragon roll counts melee, missile and save at once.'))
   const ids = await split(pending.ids, 'ID results')
   const flexible = await split(pending.flexible, 'Create Fireminions results')
-  return { kind: 'dragon_allocate', ids, flexible }
+  const shields = pending.shields ?? 0
+  if (shields === 0) return { kind: 'dragon_allocate', ids, flexible }
+
+  // Flaming Shields: a trade here, saves against the dragon for melee against its hide.
+  console.log(dim(`  ${bold('Flaming Shields')}: count how many of ${shields} saves as melee?`))
+  const savesAsMelee = Math.max(0, Math.min(shields, Number((await ask('> ')).trim()) || 0))
+  return { kind: 'dragon_allocate', ids, flexible, ...(savesAsMelee > 0 ? { savesAsMelee } : {}) }
 }
 
 /** Which dragons the melee and missile go to. Ten kills one, or five past a belly. */

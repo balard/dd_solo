@@ -193,6 +193,8 @@ export interface RollResult {
    * computed correctly and then dropped on the floor, with every test still green.
    */
   readonly effects: readonly RollEffect[]
+  /** `RollOutcome.countedAs`, carried through for the log. Omitted when none. */
+  readonly countedAs?: number
 }
 
 export interface RollSpec {
@@ -240,12 +242,29 @@ export interface RollSpec {
    * like every new field near the digest -- `false` is the only value written.
    */
   readonly countIds?: false
+  /**
+   * Flaming Shields in a roll that counts saves as well as melee -- the dragon
+   * combination roll, and nothing else in scope: how many of the rolled save results
+   * the owner moves to melee (v1 Phase 8).
+   *
+   * In a roll that counts melee and not saves there is nothing to choose -- converting
+   * only adds -- so every rolled save converts and this stays omitted. Here it is a
+   * real trade, saves against the dragon's damage for melee against its hide, which is
+   * why it is the owner's number rather than a rule. Omitted means none.
+   */
+  readonly savesAsMelee?: number
 }
 
 export interface RollOutcome {
   readonly dice: readonly DieRoll[]
   readonly totals: Readonly<Partial<Record<ResultType, number>>>
   readonly effects: readonly RollEffect[]
+  /**
+   * Results a "counts as" moved into this roll's melee at step 10 -- Flaming Shields.
+   * Omitted when none, so the log can say where a number came from without every roll
+   * in every golden carrying a zero.
+   */
+  readonly countedAs?: number
 }
 
 /** One face, sorted into the pipeline steps it feeds. */
@@ -317,7 +336,15 @@ function classify(face: Face, spec: RollSpec, ruleSet: RuleSet): Contribution {
  * rolled four saves reported zero -- so the strip greyed it out as a blank while its
  * saves were being counted in the total right beside it.
  */
-function perDieResults(face: Face, contribution: Contribution, spec: RollSpec): number {
+function perDieResults(
+  face: Face,
+  contribution: Contribution,
+  spec: RollSpec,
+  /** Flaming Shields: this die's save results, counted as melee in a roll that does not
+   *  count saves. Without it a save face in a Firewalker's melee attack would draw as a
+   *  blank beside a total that was counting it -- the Phase 6 bug, a third way. */
+  converted = 0,
+): number {
   // `flexible` is counted too: a Create Fireminions in a dragon roll really did
   // generate X results and the player is only choosing their *type*, so leaving it
   // out greys the die out as a blank next to the pool it just contributed to.
@@ -326,7 +353,9 @@ function perDieResults(face: Face, contribution: Contribution, spec: RollSpec): 
     contribution.flexible
 
   if (face.icon !== 'ID') {
-    return spec.kinds.reduce((sum, kind) => sum + (contribution.normals[kind] ?? 0), 0) + sai
+    return (
+      spec.kinds.reduce((sum, kind) => sum + (contribution.normals[kind] ?? 0), 0) + sai + converted
+    )
   }
   if (spec.countIds === false) return sai
 
@@ -337,6 +366,31 @@ function perDieResults(face: Face, contribution: Contribution, spec: RollSpec): 
   )
   const by = doubles !== undefined && doubles.kind === 'multiply' ? doubles.by : 1
   return contribution.idPool * by + sai
+}
+
+/**
+ * Whether this roll converts saves to melee: Flaming Shields' permission is on it, the
+ * roll counts melee, and it is not a counter-attack -- "Flaming Shields does not apply
+ * when making a counter-attack". Decided here rather than in `armyRoll` because this is
+ * the one place that knows what the roll is for.
+ */
+function convertsSaves(spec: RollSpec): boolean {
+  if (spec.context.isCounter) return false
+  if (!spec.kinds.includes('melee')) return false
+  return spec.modifiers.some((m) => m.kind === 'counts_as' && m.from === 'save')
+}
+
+/**
+ * The save results one die *rolled*: a save icon's count, or an SAI's save results.
+ *
+ * Never an ID -- in a melee roll an ID is already melee, and in a combination roll the
+ * owner allocates it directly -- and never a `flexible` result, for the same reason.
+ * Nothing a spell or an effect adds is here either, because none of that is on a die.
+ */
+function rolledSaves(face: Face, contribution: Contribution, ruleSet: RuleSet): number {
+  if (face.icon === 'ID') return 0
+  if (face.icon === 'SAI') return contribution.saiResults.save ?? 0
+  return faceResults(face, 'save', ruleSet)
 }
 
 /**
@@ -429,15 +483,21 @@ export function rollPools(
   dice: readonly RawDie[],
   spec: RollSpec,
   ruleSet: RuleSet,
-): { readonly ids: number; readonly flexible: number } {
+): { readonly ids: number; readonly flexible: number; readonly shields: number } {
   let ids = 0
   let flexible = 0
+  let shields = 0
+  const converts = convertsSaves(spec)
   for (const die of dice) {
-    const contribution = classify(faceOf(die), spec, ruleSet)
+    const face = faceOf(die)
+    const contribution = classify(face, spec, ruleSet)
     ids += contribution.idPool
     flexible += contribution.flexible
+    if (converts) shields += rolledSaves(face, contribution, ruleSet)
   }
-  return { ids, flexible }
+  // Only a roll that also counts saves has anything to choose. In one that does not,
+  // every rolled save converts and nobody is asked.
+  return { ids, flexible, shields: spec.kinds.includes('save') ? shields : 0 }
 }
 
 /**
@@ -461,10 +521,17 @@ export function resolveFaces(
   )
   const effects: RollEffect[] = []
   let idPool = 0
+  const converts = convertsSaves(spec)
+  // A roll that does not count saves converts every one it rolled; a roll that does
+  // (the dragon's) converts only what its owner chose.
+  const convertsAll = converts && !spec.kinds.includes('save')
+  let convertible = 0
 
   for (const die of dice) {
     const face = faceOf(die)
     const contribution = classify(face, spec, ruleSet)
+    const saves = converts ? rolledSaves(face, contribution, ruleSet) : 0
+    convertible += saves
 
     idPool += contribution.idPool
     for (const kind of spec.kinds) {
@@ -480,7 +547,7 @@ export function resolveFaces(
       typeId: die.typeId,
       faceIndex: die.faceIndex,
       face,
-      results: perDieResults(face, contribution, spec),
+      results: perDieResults(face, contribution, spec, convertsAll ? saves : 0),
       ...(die.reroll === true ? { reroll: true as const } : {}),
       ...(contribution.effects.length > 0 ? { effects: contribution.effects } : {}),
     })
@@ -492,19 +559,37 @@ export function resolveFaces(
   const allocation = spec.countIds === false ? new Map() : allocateIds(idPool, spec.kinds, spec.idAllocation)
   const totals: Partial<Record<ResultType, number>> = {}
 
-  for (const kind of spec.kinds) {
-    totals[kind] = applyModifiers(
-      {
-        id: allocation.get(kind) ?? 0,
-        normal: normals.get(kind) ?? 0,
-        sai: saiResults.get(kind) ?? 0,
-      },
-      kind,
-      spec.modifiers,
+  // Flaming Shields: how many rolled saves become melee, which step 10 adds.
+  const chosen = spec.savesAsMelee ?? 0
+  if (chosen > 0 && (!converts || convertsAll)) {
+    throw new Error(
+      `${chosen} saves counted as melee, but this roll ` +
+        (converts ? 'converts every save it rolled' : 'has no Flaming Shields to convert with'),
     )
   }
+  if (!Number.isInteger(chosen) || chosen < 0 || chosen > convertible) {
+    throw new Error(`${chosen} saves counted as melee, from ${convertible} rolled`)
+  }
+  const countedAs = convertsAll ? convertible : chosen
+  const modifiers: readonly Modifier[] =
+    countedAs > 0
+      ? [...spec.modifiers, { kind: 'add', resultType: 'melee', amount: countedAs }]
+      : spec.modifiers
 
-  return { dice: shown, totals, effects }
+  for (const kind of spec.kinds) {
+    let normal = normals.get(kind) ?? 0
+    let sai = saiResults.get(kind) ?? 0
+    // Converted results stop being saves: they leave the save share before step 6, so
+    // a Galeforce's minus four is not charged against results that are melee now.
+    if (kind === 'save' && !convertsAll && countedAs > 0) {
+      const fromNormal = Math.min(normal, countedAs)
+      normal -= fromNormal
+      sai -= countedAs - fromNormal
+    }
+    totals[kind] = applyModifiers({ id: allocation.get(kind) ?? 0, normal, sai }, kind, modifiers)
+  }
+
+  return { dice: shown, totals, effects, ...(countedAs > 0 ? { countedAs } : {}) }
 }
 
 /**
@@ -669,6 +754,7 @@ export function asResult(outcome: RollOutcome, resultType: ResultType): RollResu
     dice: outcome.dice,
     total: outcome.totals[resultType] ?? 0,
     effects: outcome.effects,
+    ...(outcome.countedAs !== undefined ? { countedAs: outcome.countedAs } : {}),
   }
 }
 
