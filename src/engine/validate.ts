@@ -190,6 +190,16 @@ export function validateState(state: GameState): string[] {
     }
   }
 
+  // Rapid Growth's parked contest (Phase 8) lives exactly as long as its question.
+  // Dropped by omission in `finishContest`; checked here rather than trusted, for the
+  // reason `combat.attack` is.
+  if ((state.turn.contest !== undefined) !== (state.turn.marchStep === 'rapid_growth' && state.turn.phase === 'march')) {
+    problems.push(
+      `turn.contest is ${state.turn.contest === undefined ? 'missing' : 'present'} at march ` +
+        `step ${state.turn.marchStep}, but exists exactly while Rapid Growth is being asked`,
+    )
+  }
+
   const marched = state.turn.armiesMarched
   if (new Set(marched).size !== marched.length) {
     problems.push(`armiesMarched has a repeat: ${marched.join(', ')} -- each march needs a different army`)

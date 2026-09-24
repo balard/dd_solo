@@ -407,6 +407,12 @@ function describe(entry: LogEntry, state: GameState): string | null {
           dim('thrown again'),
       )
 
+    case 'rapid_growth':
+      return cyan(
+        `  ${bold('Rapid Growth')}: ${entry.unitIds.map((id) => nameOf(state, id)).join(', ')} ` +
+          dim('thrown again'),
+      )
+
     case 'units_regrown':
       return green(
         `  ${bold('Accelerated Growth')}: ` +
@@ -660,6 +666,7 @@ function choicesFor(state: GameState, pending: Pending): Choice[] {
       }))
 
     case 'flashfire':
+    case 'rapid_growth':
     case 'announce_spells':
     case 'temple_bury':
     case 'dragon_breath':
@@ -782,6 +789,31 @@ async function askFlashfire(
 
   const picked = pick(units, (await ask('> ')).trim()).slice(0, pending.budget)
   return { kind: 'flashfire', unitIds: picked.map((u) => u.id) }
+}
+
+/** Rapid Growth: which dice that did not roll an SAI to throw again, all together. */
+async function askRapidGrowth(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'rapid_growth' }>,
+): Promise<GameAction> {
+  const units = pending.options
+    .map((id) => state.units[id])
+    .filter((u): u is UnitInstance => u !== undefined)
+  const roll = rollOnTheTable(state)
+
+  console.log(
+    `\n${bold('Rapid Growth')} ${dim(
+      `— they maneuvered ${pending.marcher}, you ${pending.defender}. ` +
+        'Space-separated numbers to throw again together, or enter to keep the roll',
+    )}`,
+  )
+  units.forEach((unit, i) => {
+    const die = roll?.dice.find((d) => d.unitId === unit.id)
+    console.log(`  ${i + 1}) ${name(unit)}${die === undefined ? '' : dim(` — ${shown(die)}`)}`)
+  })
+
+  const picked = pick(units, (await ask('> ')).trim())
+  return { kind: 'rapid_growth', unitIds: picked.map((u) => u.id) }
 }
 
 /** A spell target in the terminal's own vocabulary. The join lives in `magic.ts`, so
@@ -1310,6 +1342,7 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
   if (pending.kind === 'temple_bury') return askTempleBury(state, pending)
   if (pending.kind === 'announce_spells') return askSpells(state, pending)
   if (pending.kind === 'flashfire') return askFlashfire(state, pending)
+  if (pending.kind === 'rapid_growth') return askRapidGrowth(state, pending)
 
   const choices = choicesFor(state, pending)
   for (;;) {

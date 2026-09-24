@@ -135,6 +135,14 @@ export type MarchStep =
   | 'select_army'
   | 'declare_maneuver'
   | 'contest_maneuver'
+  /**
+   * Rapid Growth (v1 Phase 8), between the contest's dice landing and its result.
+   *
+   * The only pause inside a maneuver. The counter-maneuvering Treefolk may reroll the
+   * dice that did not roll an SAI, having seen both rolls -- so both are parked on
+   * `turn.contest` and the contest is decided only once the answer is in.
+   */
+  | 'rapid_growth'
   | 'choose_direction'
   | 'action'
   // Combat, once an action is chosen. The `resolve_*` steps take no decision --
@@ -453,6 +461,15 @@ export interface TurnState {
    * which `endTurn` now does by building rather than spreading.
    */
   readonly floodedSlots?: readonly TerrainSlot[]
+  /**
+   * A contested maneuver's two rolls, parked while Rapid Growth is asked about
+   * (Phase 8). Present only at the `rapid_growth` step -- `validateState` checks --
+   * and dropped by omission when the contest is decided.
+   */
+  readonly contest?: {
+    readonly marcher: readonly RawDie[]
+    readonly defender: readonly RawDie[]
+  }
 }
 
 /**
@@ -679,6 +696,22 @@ export type Pending =
     }
   | { readonly kind: 'reinforce'; readonly player: PlayerId }
   | { readonly kind: 'retreat'; readonly player: PlayerId }
+  /**
+   * Rapid Growth (Phase 8): which of the counter-maneuvering army's dice to throw
+   * again, ignoring what they showed. Asked of the counter-maneuvering player, and only
+   * while they are not already winning -- a reroll cannot help an army that has won.
+   * An empty answer is always legal: "may be re-rolled".
+   */
+  | {
+      readonly kind: 'rapid_growth'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      /** The dice that did not roll an SAI, in board order. */
+      readonly options: readonly UnitId[]
+      /** Both totals as they stand, so the question can say what it has to beat. */
+      readonly marcher: number
+      readonly defender: number
+    }
   /**
    * City (Phase 5e): recruit a 1-health unit from the DUA, or promote one unit in
    * the controlling army -- one or the other, and "may", so both lists can offer
@@ -923,6 +956,8 @@ export type GameAction =
     }
   | { readonly kind: 'reinforce'; readonly moves: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[] }
   | { readonly kind: 'retreat'; readonly unitIds: readonly UnitId[] }
+  /** Rapid Growth: the dice rerolled together. Empty keeps the roll as it is. */
+  | { readonly kind: 'rapid_growth'; readonly unitIds: readonly UnitId[] }
   /** City: one or the other, or neither -- "may" both ways. */
   | {
       readonly kind: 'eighth_face_city'
@@ -1069,6 +1104,17 @@ export type LogEntry =
        *  numbers. Log-only, like `combat_resolved`. */
       readonly marcherDice: readonly DieRoll[]
       readonly defenderDice: readonly DieRoll[]
+    }
+  /**
+   * Rapid Growth: dice the counter-maneuvering Treefolk threw again (Phase 8). Logged
+   * before the `maneuver_contested` it changed, which shows the faces they landed on
+   * -- the first ones are gone, exactly as a Flashfire's are.
+   */
+  | {
+      readonly kind: 'rapid_growth'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly unitIds: readonly UnitId[]
     }
   | {
       readonly kind: 'terrain_moved'

@@ -15,6 +15,7 @@ import type { Element, ResultType, TerrainFaceNumber } from '../../data/types'
 
 import { rollOnTheTable } from '../../engine/turn'
 import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../../engine/sai'
+import { ABILITY_TEXT } from '../../engine/species'
 import {
   armyRefOf,
   livingUnits,
@@ -535,7 +536,9 @@ function SaiHeader({
     <>
       {roll !== null && roll.dice.length > 0 && (
         <div className="sai-roll">
-          <div className="roll-head">{roll.kind === 'save' ? 'saves' : 'the roll'}</div>
+          <div className="roll-head">
+            {roll.kind === 'save' ? 'saves' : roll.kind === 'maneuver' ? 'your maneuver roll' : 'the roll'}
+          </div>
           <RollStrip dice={roll.dice} {...(pick === undefined ? {} : { pick })} />
         </div>
       )}
@@ -1011,6 +1014,43 @@ function SaiHeader({
             }}
           >
             {chosen.length === 0 ? 'Keep them' : `Throw ${chosen.length} again`}
+          </button>
+          {chosen.length > 0 && (
+            <button type="button" className="choice secondary" onClick={onClearSelection}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Rapid Growth (Phase 8): Flashfire's sheet with no budget -- every die that did not
+  // roll an SAI may go again, "selected and re-rolled together".
+  if (prompt.custom === 'rapid_growth' && pending.kind === 'rapid_growth') {
+    const chosen = [...selection].filter((id) => pending.options.includes(id))
+
+    return (
+      <div className="action-bar">
+        <p className="question">
+          {prompt.question}
+          <span className="muted"> — tap the dice to throw again, all at once</span>
+        </p>
+        <SaiHeader
+          state={state}
+          rule={ABILITY_TEXT['Rapid Growth']}
+          pick={{ options: new Set(pending.options), selected: selection, onToggle }}
+        />
+        <div className="choices">
+          <button
+            type="button"
+            className={chosen.length === 0 ? 'choice secondary' : 'choice'}
+            onClick={() => {
+              dispatch({ kind: 'rapid_growth', unitIds: chosen })
+              onClearSelection()
+            }}
+          >
+            {chosen.length === 0 ? 'Keep the roll' : `Throw ${chosen.length} again`}
           </button>
           {chosen.length > 0 && (
             <button type="button" className="choice secondary" onClick={onClearSelection}>

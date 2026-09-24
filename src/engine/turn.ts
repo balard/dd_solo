@@ -77,12 +77,14 @@ import {
   rollFaces,
   rollPools,
   rollUnits,
+  rerollSweep,
   type DieRoll,
   type RawDie,
   type RollSpec,
 } from './roll'
 import { doubleIdsModifier, ignoreIdsModifiers, type Modifier } from './pipeline'
 import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
+import { hasAbility, terrainHas } from './species'
 import { delayedTasks, targetTasks, type TargetTask } from './targeting'
 import { unitType } from '../data/load'
 import { spell } from '../data/spells'
@@ -323,6 +325,25 @@ function stepMarch(state: GameState): GameState {
           slot: marchingSlot(state),
         },
       }
+
+    // Rapid Growth (Phase 8). The dice are already on the table; `applyContest` only
+    // stops here when there is something worth asking, so this always asks.
+    case 'rapid_growth': {
+      const contest = requireContest(state)
+      const slot = marchingSlot(state)
+      const totals = contestTotals(state, contest.marcher, contest.defender)
+      return {
+        ...state,
+        pending: {
+          kind: 'rapid_growth',
+          player: opponentOf(player),
+          slot,
+          options: rapidGrowthOptions(state, contest.defender),
+          marcher: totals.marcher.total,
+          defender: totals.defender.total,
+        },
+      }
+    }
 
     case 'choose_direction': {
       const slot = marchingSlot(state)
@@ -2290,7 +2311,18 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
  */
 export function rollOnTheTable(
   state: GameState,
-): { readonly dice: readonly DieRoll[]; readonly kind: 'attack' | 'save' | 'dragon' } | null {
+): {
+  readonly dice: readonly DieRoll[]
+  readonly kind: 'attack' | 'save' | 'dragon' | 'maneuver'
+} | null {
+  // Rapid Growth (Phase 8): the counter-maneuvering army's own dice, which are what
+  // it is choosing among. Found by the Phase 7e lesson -- a Flashfire sheet that asked
+  // which dice to throw away without showing what they came up as.
+  const contest = state.turn.contest
+  if (contest !== undefined && state.turn.marchStep === 'rapid_growth') {
+    return { dice: contestTotals(state, contest.marcher, contest.defender).defender.dice, kind: 'maneuver' }
+  }
+
   // A dragon roll pauses for its allocation, and the player cannot choose sensibly
   // without seeing what landed: how many IDs there are to spend is the whole
   // question, and which dice already gave melee or saves is what decides where they
@@ -3497,23 +3529,93 @@ function applyContest(state: GameState, contest: boolean): GameState {
     })
   }
 
+  // Steps 1 and 3 for each army, in the order `rollArmy` drew them before Phase 8 --
+  // marcher, then contester -- so a game with no Rapid Growth in it draws die for die
+  // what it always did. The goldens are what prove it.
   const marcher = armyRoll(state, player, slot, 'maneuver')
-  const [marcherRoll, afterMarcher] = rollArmy(
-    marcher.units,
-    'maneuver',
-    state.rng,
-    state.ruleSet,
-    marcher.modifiers,
-    MANEUVER_ROLL,
-  )
   const contester = armyRoll(state, opponentOf(player), slot, 'maneuver')
-  const [defenderRoll, afterDefender] = rollArmy(
-    contester.units,
-    'maneuver',
-    afterMarcher,
+  const [marcherFaces, afterMarcher] = rollFaces(marcher.units, state.rng)
+  const [marcherDice, afterMarcherSweep] = rerollSweep(
+    marcherFaces,
+    maneuverSpec(marcher.modifiers),
     state.ruleSet,
-    contester.modifiers,
-    MANEUVER_ROLL,
+    afterMarcher,
+  )
+  const [defenderFaces, afterDefender] = rollFaces(contester.units, afterMarcherSweep)
+  const [defenderDice, afterDefenderSweep] = rerollSweep(
+    defenderFaces,
+    maneuverSpec(contester.modifiers),
+    state.ruleSet,
+    afterDefender,
+  )
+  const rolled: GameState = { ...state, rng: afterDefenderSweep }
+
+  // Rapid Growth: worth asking only when there is a die to reroll and the contester
+  // is not already winning -- the marcher wins a tie, so a tie is still losing. A
+  // reroll cannot improve a roll that has won, and an army that has won has nothing
+  // to ask about (house rule, `RULES-V0.md` section 16).
+  const totals = contestTotals(rolled, marcherDice, defenderDice)
+  if (
+    totals.defender.total <= totals.marcher.total &&
+    rapidGrowthOptions(rolled, defenderDice).length > 0
+  ) {
+    return withTurn(rolled, {
+      marchStep: 'rapid_growth',
+      contest: { marcher: marcherDice, defender: defenderDice },
+    })
+  }
+
+  return finishContest(rolled, marcherDice, defenderDice)
+}
+
+const maneuverSpec = (modifiers: readonly Modifier[]): RollSpec => ({
+  kinds: ['maneuver'],
+  modifiers,
+  context: MANEUVER_ROLL,
+})
+
+/**
+ * Both sides of a contest, resolved from the dice on the table. Pure: the same dice
+ * resolve to the same totals whenever they are asked, which is what lets Rapid Growth
+ * read them at the pause and `finishContest` read them again after it.
+ */
+function contestTotals(
+  state: GameState,
+  marcherDice: readonly RawDie[],
+  defenderDice: readonly RawDie[],
+) {
+  const player = state.turn.marching
+  const slot = marchingSlot(state)
+  const marcher = armyRoll(state, player, slot, 'maneuver')
+  const contester = armyRoll(state, opponentOf(player), slot, 'maneuver')
+  return {
+    marcher: asResult(
+      resolveFaces(marcherDice, maneuverSpec(marcher.modifiers), state.ruleSet),
+      'maneuver',
+    ),
+    defender: asResult(
+      resolveFaces(defenderDice, maneuverSpec(contester.modifiers), state.ruleSet),
+      'maneuver',
+    ),
+  }
+}
+
+/**
+ * Decides the contest from the dice as they finally stand, logs it, and moves on.
+ *
+ * Where `applyContest` used to end. Split out so the Rapid Growth pause can come back
+ * to exactly the same place, and drops `turn.contest` by omission on the way.
+ */
+function finishContest(
+  state: GameState,
+  marcherDice: readonly RawDie[],
+  defenderDice: readonly RawDie[],
+): GameState {
+  const slot = marchingSlot(state)
+  const { marcher: marcherRoll, defender: defenderRoll } = contestTotals(
+    state,
+    marcherDice,
+    defenderDice,
   )
 
   // No SAI that applies to a maneuver roll produces an effect in Phase 1, and a
@@ -3525,7 +3627,7 @@ function applyContest(state: GameState, contest: boolean): GameState {
   // "The highest total wins (the marching army wins a tie)."
   const marcherWins = marcherRoll.total >= defenderRoll.total
 
-  const rolled = withLog({ ...state, rng: afterDefender }, {
+  const logged = withLog(state, {
     kind: 'maneuver_contested',
     slot,
     marcher: marcherRoll.total,
@@ -3535,7 +3637,99 @@ function applyContest(state: GameState, contest: boolean): GameState {
     defenderDice: defenderRoll.dice,
   })
 
-  return withTurn(rolled, { marchStep: marcherWins ? 'choose_direction' : 'action' })
+  const { contest: _decided, ...turn } = logged.turn
+  return {
+    ...logged,
+    turn: { ...turn, marchStep: marcherWins ? 'choose_direction' : 'action' },
+  }
+}
+
+const requireContest = (state: GameState): NonNullable<GameState['turn']['contest']> => {
+  const contest = state.turn.contest
+  if (contest === undefined) throw new Error('no contested maneuver is parked')
+  return contest
+}
+
+/**
+ * Rapid Growth: "when at a terrain that contains earth, Treefolk units that do not roll
+ * an SAI result may be re-rolled once when making a counter-maneuver."
+ *
+ * Every die the contester threw that did not come up an SAI, in board order. Empty
+ * unless the contester has the ability and the terrain contains earth -- which, under
+ * any ruleset without the flag, is always.
+ *
+ * Only a first throw can qualify. A die with a step-3 reroll after it rolled Rend to
+ * get one, and Rend is an SAI, so the chain is out by construction; checking the
+ * `reroll` mark as well says so rather than leaving it to the data.
+ */
+function rapidGrowthOptions(state: GameState, defenderDice: readonly RawDie[]): readonly UnitId[] {
+  const contester = opponentOf(state.turn.marching)
+  const slot = marchingSlot(state)
+  if (!hasAbility(state, contester, 'Rapid Growth') || !terrainHas(state, slot, 'earth')) {
+    return []
+  }
+  const chained = new Set(defenderDice.filter((die) => die.reroll === true).map((d) => d.unitId))
+  const eligible = defenderDice
+    .filter((die) => die.reroll !== true && !chained.has(die.unitId))
+    .filter((die) => faceOf(die).icon !== 'SAI')
+    .map((die) => die.unitId)
+  return inBoardOrder(state, eligible)
+}
+
+/**
+ * Throws the chosen dice again, **replacing** their faces -- "the previous results are
+ * ignored" -- and decides the contest.
+ *
+ * Flashfire's mechanism, not Rend's: a step-3 reroll appends a die and both faces
+ * count, this one takes the old face off the table. The dice are "selected and
+ * re-rolled together", which is one decision rather than one per die, and they roll in
+ * board order whatever order they were named in.
+ *
+ * **House rule:** this does not restart the reroll sweep, for Flashfire's reason
+ * (`RULES-V0.md` section 16). Nothing in a maneuver roll rerolls today, so it is a
+ * statement rather than a behaviour.
+ */
+function applyRapidGrowth(state: GameState, unitIds: readonly UnitId[]): GameState {
+  if (state.turn.marchStep !== 'rapid_growth') {
+    throw new IllegalActionError(`no Rapid Growth is waiting (march step ${state.turn.marchStep})`)
+  }
+  const contest = requireContest(state)
+  const options = rapidGrowthOptions(state, contest.defender)
+  for (const id of unitIds) {
+    if (!options.includes(id)) {
+      throw new IllegalActionError(
+        `${id} cannot be re-rolled by Rapid Growth -- it rolled an SAI, or did not roll at all`,
+      )
+    }
+  }
+  if (new Set(unitIds).size !== unitIds.length) {
+    throw new IllegalActionError('Rapid Growth re-rolls each die once')
+  }
+
+  if (unitIds.length === 0) return finishContest(state, contest.marcher, contest.defender)
+
+  let rng = state.rng
+  const replaced = new Map<UnitId, RawDie>()
+  for (const id of inBoardOrder(state, unitIds)) {
+    const unit = state.units[id]
+    if (unit === undefined) continue
+    const [rolled, next] = rollFaces([unit], rng)
+    rng = next
+    const die = rolled[0]
+    if (die !== undefined) replaced.set(id, die)
+  }
+
+  const defender = contest.defender.map((die) => replaced.get(die.unitId) ?? die)
+  const logged = withLog(
+    { ...state, rng },
+    {
+      kind: 'rapid_growth',
+      player: opponentOf(state.turn.marching),
+      slot: marchingSlot(state),
+      unitIds: inBoardOrder(state, unitIds),
+    },
+  )
+  return finishContest(logged, contest.marcher, defender)
 }
 
 function applyDirection(state: GameState, direction: Direction): GameState {
@@ -3963,6 +4157,8 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyDragonTarget(cleared, action.targets)
     case 'flashfire':
       return applyFlashfire(cleared, action.unitIds)
+    case 'rapid_growth':
+      return applyRapidGrowth(cleared, action.unitIds)
     case 'dispel_magic':
       return applyDispelMagic(cleared, action.roll)
     case 'spell_move':

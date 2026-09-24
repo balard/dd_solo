@@ -115,6 +115,7 @@ export interface Prompt {
     | 'dragon_damage_split'
     | 'announce_spells'
     | 'flashfire'
+    | 'rapid_growth'
 }
 
 const stepFace = (face: TerrainFace, direction: Direction): TerrainFace =>
@@ -399,6 +400,16 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
           `Flashfire: throw ${pending.budget === 1 ? 'a die' : `up to ${pending.budget} dice`} again?`,
         choices: [],
         custom: 'flashfire',
+      }
+
+    // Flashfire's sheet, for the same reason: the answer is a set of your own dice.
+    case 'rapid_growth':
+      return {
+        question:
+          `Rapid Growth: they maneuvered ${pending.marcher}, you ${pending.defender}` +
+          ` — throw dice again to beat ${pending.marcher}?`,
+        choices: [],
+        custom: 'rapid_growth',
       }
 
     case 'dispel_magic':
@@ -827,6 +838,9 @@ export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): Sele
       return { side: 'mine', slot: pending.slot }
     // Your own dice, at the terrain that just rolled them.
     case 'flashfire':
+      return { side: 'mine', slot: pending.slot }
+    // The counter-maneuvering army's own dice, at the terrain being contested.
+    case 'rapid_growth':
       return { side: 'mine', slot: pending.slot }
     case 'retreat':
       return { side: 'mine', slot: null }

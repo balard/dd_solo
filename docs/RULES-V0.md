@@ -790,6 +790,18 @@ moved to your Reserve Area."
   sees it, and a kill-and-bury does not bury it.
 - It does **not** trigger on a burial out of the DUA. That unit was killed some time ago.
 
+**Rapid Growth** -- "when at a terrain that contains earth, Treefolk units that do not roll an SAI
+result may be re-rolled once when making a counter-maneuver. The previous results are ignored. Any
+units you wish to re-roll in this way must be selected and re-rolled together."
+
+- Only the **counter-maneuvering** army has it, never the one maneuvering. The question comes after
+  both armies have rolled, because a contest is decided by comparing the two, and before the
+  totals are compared.
+- It **replaces** a face ("the previous results are ignored"). That is Flashfire's mechanism, not
+  Rend's, whose reroll adds a die and counts both faces.
+- One decision for all the dice, "selected and re-rolled together", and an empty answer keeps the
+  roll.
+
 ### House rules this rung adds
 
 - **Flaming Shields is automatic wherever it can only help.** In a melee attack or Wall of Thorns'
@@ -801,6 +813,12 @@ moved to your Reserve Area."
   saves keeps the one-health die in the DUA that the exchange would have spent. Accelerated Growth
   itself stays automatic; §15 records what undoing that would cost, and nothing in this phase
   changes it.
+- **Rapid Growth is asked only when it could help:** when the counter-maneuvering army has a die
+  that did not roll an SAI, and is losing or tied (the marcher wins a tie). A reroll cannot improve
+  a contest already won, and asking would be a question with one sensible answer.
+- **A Rapid Growth reroll does not restart the reroll sweep**, for Flashfire's reason (§15). It is a
+  step-3 reroll arriving after step 3 has finished. Nothing in a maneuver roll rerolls today, so
+  this is a statement rather than a behaviour.
 
 ### What is not a house rule, and is easy to misread as one
 

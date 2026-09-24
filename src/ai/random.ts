@@ -149,6 +149,16 @@ export const randomAi: AiPlayer = {
         ] as const
       }
 
+      // Any subset, none included: Flashfire's reasoning, with no budget to cap it.
+      case 'rapid_growth': {
+        const [howMany, afterCount] = nextInt(rng, pending.options.length + 1)
+        const [shuffled, next] = shuffle(afterCount, pending.options)
+        return [
+          { kind: 'rapid_growth', unitIds: shuffled.slice(0, howMany) } as GameAction,
+          next,
+        ] as const
+      }
+
       // Declining is legal and free, so both answers stay in the pool -- a fuzz that
       // always rolled would never exercise a spell landing unopposed.
       case 'dispel_magic': {

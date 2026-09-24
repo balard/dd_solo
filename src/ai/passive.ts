@@ -15,6 +15,7 @@
  * all when this player actually has an army at the contested terrain.
  */
 import { damageOptions } from '../engine/damage'
+import { rollOnTheTable } from '../engine/turn'
 import type { RngState } from '../engine/rng'
 import type { GameAction, GameState, Pending, TerrainSlot } from '../engine/types'
 import { army as armyRef } from '../engine/types'
@@ -59,6 +60,16 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     // forfeit.
     case 'flashfire':
       return { kind: 'flashfire', unitIds: [] }
+
+    // It contests maneuvers because the dice have no other use, and it is asked only
+    // while losing -- so it throws again the dice that gave it nothing, which can only
+    // help, and keeps the ones that did. The same reason it counter-attacks.
+    case 'rapid_growth': {
+      const blanks = (rollOnTheTable(state)?.dice ?? [])
+        .filter((die) => die.results === 0 && pending.options.includes(die.unitId))
+        .map((die) => die.unitId)
+      return { kind: 'rapid_growth', unitIds: blanks }
+    }
 
     // It rolls, for the reason it contests and counter-attacks: the die has no other
     // use this roll, and letting every spell through unopposed is not passivity.

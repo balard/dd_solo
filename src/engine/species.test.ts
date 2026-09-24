@@ -509,3 +509,169 @@ describe('Replanting', () => {
     }
   })
 })
+
+// --- Rapid Growth ----------------------------------------------------------------
+
+describe('Rapid Growth', () => {
+  /** Treefolk at the Frontier facing a Firewalker march there -- or the reverse. */
+  const armies = (treefolkContest: boolean): Spec[] => {
+    const treefolk: PlayerId = treefolkContest ? 'p1' : 'p2'
+    const firewalkers: PlayerId = treefolkContest ? 'p2' : 'p1'
+    return [
+      { id: 't1', typeId: OAKLING, owner: treefolk, at: at('frontier') },
+      { id: 't2', typeId: 'treefolk.willowling', owner: treefolk, at: at('frontier') },
+      // Smite on four of its six faces: the die that tests "did not roll an SAI".
+      { id: 't3', typeId: 'treefolk.oak_lord', owner: treefolk, at: at('frontier') },
+      { id: 'f1', typeId: WATCHER, owner: firewalkers, at: at('frontier') },
+      { id: 'f2', typeId: GUARDIAN, owner: firewalkers, at: at('frontier') },
+    ]
+  }
+
+  /** A board paused where the opponent decides whether to contest p2's maneuver. */
+  function contestable(ruleSet: RuleSet, frontier: string, seed: number, treefolkContest = true): GameState {
+    const base = board(ruleSet, frontier, rngFrom(seed), ...armies(treefolkContest))
+    return {
+      ...base,
+      turn: {
+        ...base.turn,
+        marching: 'p2',
+        phase: 'march',
+        marchIndex: 0,
+        marchStep: 'contest_maneuver',
+        marchingArmy: 'frontier',
+        armiesMarched: ['frontier'],
+        combat: null,
+      },
+      pending: { kind: 'contest_maneuver', player: 'p1', slot: 'frontier' },
+    }
+  }
+
+  const contested = (state: GameState) => reduce(state, { kind: 'contest_maneuver', contest: true })
+
+  /** The first seed whose contest pauses for Rapid Growth. */
+  function paused(ruleSet = SPECIES_RULES, frontier = 'swampland_tower'): GameState {
+    for (let seed = 1; seed <= 300; seed++) {
+      const state = contested(contestable(ruleSet, frontier, seed))
+      if (state.pending?.kind === 'rapid_growth') return state
+    }
+    throw new Error('no contest paused for Rapid Growth in 300 seeds')
+  }
+
+  it('asks the losing Treefolk which dice to throw again, at a terrain containing earth', () => {
+    const state = paused()
+    const pending = state.pending
+    if (pending?.kind !== 'rapid_growth') throw new Error('not paused')
+
+    expect(pending.player).toBe('p1')
+    expect(state.turn.marchStep).toBe('rapid_growth')
+    // Still losing (the marcher wins a tie), or it would not have been asked.
+    expect(pending.defender).toBeLessThanOrEqual(pending.marcher)
+    expect(validateState(state)).toEqual([])
+    // Nothing is decided yet: no contest line until the answer is in.
+    expect(state.log.some((e) => e.kind === 'maneuver_contested')).toBe(false)
+  })
+
+  it('offers only the dice that did not roll an SAI', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const state = contested(contestable(SPECIES_RULES, 'swampland_tower', seed))
+      const pending = state.pending
+      if (pending?.kind !== 'rapid_growth') continue
+      const parked = state.turn.contest?.defender ?? []
+      for (const die of parked) {
+        const face = unitType(die.typeId).faces[die.faceIndex]
+        expect(pending.options.includes(die.unitId), `seed ${seed} ${die.unitId}`).toBe(face?.icon !== 'SAI')
+      }
+    }
+  })
+
+  it('replaces the chosen faces rather than adding dice, and then decides the contest', () => {
+    const state = paused()
+    const pending = state.pending
+    if (pending?.kind !== 'rapid_growth') throw new Error('not paused')
+
+    const answered = reduce(state, { kind: 'rapid_growth', unitIds: pending.options })
+    expect(answered.rng.counter).toBe(state.rng.counter + pending.options.length)
+    expect(answered.turn.contest).toBeUndefined()
+    expect(validateState(answered)).toEqual([])
+
+    const kinds = answered.log.slice(state.log.length).map((e) => e.kind)
+    expect(kinds.slice(0, 2)).toEqual(['rapid_growth', 'maneuver_contested'])
+    const contest = answered.log.find((e) => e.kind === 'maneuver_contested')
+    if (contest?.kind !== 'maneuver_contested') throw new Error('no contest logged')
+    // As many dice as the army threw: replaced, not appended.
+    expect(contest.defenderDice).toHaveLength(state.turn.contest?.defender.length ?? -1)
+  })
+
+  it('keeps the roll, drawing nothing, when declined', () => {
+    const state = paused()
+    const pending = state.pending
+    if (pending?.kind !== 'rapid_growth') throw new Error('not paused')
+
+    const kept = reduce(state, { kind: 'rapid_growth', unitIds: [] })
+    expect(kept.rng).toEqual(state.rng)
+    const contest = kept.log.find((e) => e.kind === 'maneuver_contested')
+    if (contest?.kind !== 'maneuver_contested') throw new Error('no contest logged')
+    expect(contest.marcher).toBe(pending.marcher)
+    expect(contest.defender).toBe(pending.defender)
+    expect(contest.marcherWins).toBe(true)
+    expect(kept.log.some((e) => e.kind === 'rapid_growth')).toBe(false)
+  })
+
+  it('refuses a die that rolled an SAI, or one that is not in the roll', () => {
+    const state = paused()
+    const pending = state.pending
+    if (pending?.kind !== 'rapid_growth') throw new Error('not paused')
+    expect(() => reduce(state, { kind: 'rapid_growth', unitIds: ['f1'] })).toThrow(/Rapid Growth/)
+    const sai = (state.turn.contest?.defender ?? []).find(
+      (die) => unitType(die.typeId).faces[die.faceIndex]?.icon === 'SAI',
+    )
+    if (sai !== undefined) {
+      expect(() => reduce(state, { kind: 'rapid_growth', unitIds: [sai.unitId] })).toThrow(/Rapid Growth/)
+    }
+  })
+
+  /** Every seed in the range plays its contest through without a Rapid Growth pause. */
+  const neverAsks = (make: (seed: number) => GameState) => {
+    let contests = 0
+    for (let seed = 1; seed <= 150; seed++) {
+      const state = contested(make(seed))
+      expect(state.pending?.kind, `seed ${seed}`).not.toBe('rapid_growth')
+      if (state.log.some((e) => e.kind === 'maneuver_contested')) contests++
+    }
+    expect(contests).toBe(150)
+  }
+
+  it('is not offered at a terrain without earth', () => {
+    neverAsks((seed) => contestable(SPECIES_RULES, 'coastland_tower', seed))
+    neverAsks((seed) => contestable(SPECIES_RULES, 'feyland_tower', seed))
+  })
+
+  it('is not offered to the maneuvering army, only to the one counter-maneuvering', () => {
+    neverAsks((seed) => contestable(SPECIES_RULES, 'swampland_tower', seed, false))
+  })
+
+  it('is not offered with the flag off', () => {
+    neverAsks((seed) => contestable(SPELL_RULES, 'swampland_tower', seed))
+  })
+
+  it('is not offered to a contester already winning', () => {
+    let winning = 0
+    let asked = 0
+    for (let seed = 1; seed <= 300; seed++) {
+      const state = contested(contestable(SPECIES_RULES, 'swampland_tower', seed))
+      const pending = state.pending
+      if (pending?.kind === 'rapid_growth') {
+        asked++
+        // Every question is put to an army that is losing or tied.
+        expect(pending.defender, `seed ${seed}`).toBeLessThanOrEqual(pending.marcher)
+        continue
+      }
+      const contest = state.log.find((e) => e.kind === 'maneuver_contested')
+      if (contest?.kind === 'maneuver_contested' && !contest.marcherWins) winning++
+    }
+    // Both happened: contests the Treefolk won outright were decided on the spot,
+    // without a question, and the rest were asked about.
+    expect(winning).toBeGreaterThan(0)
+    expect(asked).toBeGreaterThan(0)
+  })
+})

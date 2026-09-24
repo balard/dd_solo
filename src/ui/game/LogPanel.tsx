@@ -525,6 +525,17 @@ function Line({
         </p>
       )
 
+    case 'rapid_growth':
+      return (
+        <p className="log-line">
+          <b>Rapid Growth</b>: {whoLower(entry.player)} {verb(entry.player, 'throws', 'throw')}{' '}
+          {entry.unitIds
+            .map((id) => (state.units[id] ? unitType(state.units[id]!.typeId).name : id))
+            .join(', ')}{' '}
+          again
+        </p>
+      )
+
     case 'flashfire':
       return (
         <p className="log-line">

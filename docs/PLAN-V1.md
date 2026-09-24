@@ -1941,7 +1941,7 @@ wrong (the write-up lands with 8c):
 | Slice | Scope | State |
 |---|---|---|
 | **8a** | The flag, the phase (a pass-through: no ability in this box acts in it), Flaming Shields as a new step-10 `counts_as`, Replanting in `killUnits` | ✅ landed |
-| **8b** | Rapid Growth: a pause inside the contested maneuver, replacing faces the way Flashfire does | |
+| **8b** | Rapid Growth: a pause inside the contested maneuver, replacing faces the way Flashfire does | ✅ landed |
 | **8c** | Air Flight in the Retreat Step, the flip to `SPECIES_RULES`, the fuzz, the write-up | |
 
 **Exit criterion.** Each ability fires only at a terrain with the right element and only in the
