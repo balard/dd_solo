@@ -112,6 +112,7 @@ import {
   livingUnits,
   opponentOf,
   type ActionKind,
+  type AirFlightOffer,
   type AnnouncedSpell,
   type ArmyRef,
   type CombatState,
@@ -3446,8 +3447,14 @@ export function stepGame(state: GameState): GameState {
       return { ...state, pending: { kind: 'reinforce', player } }
     }
 
-    case 'reserves_retreat':
-      return { ...state, pending: { kind: 'retreat', player: state.turn.marching } }
+    case 'reserves_retreat': {
+      const player = state.turn.marching
+      const flights = airFlightOffers(state, player)
+      return {
+        ...state,
+        pending: { kind: 'retreat', player, ...(flights.length > 0 ? { flights } : {}) },
+      }
+    }
 
     case 'game_over':
       return state
@@ -4073,9 +4080,74 @@ function applyAnnounceSpells(state: GameState, casts: readonly AnnouncedSpell[])
   })
 }
 
-function applyRetreat(state: GameState, unitIds: readonly UnitId[]): GameState {
+/**
+ * Air Flight: "during the Retreat Step of the Reserves Phase, Firewalker units may move
+ * from any terrain that contains air to any other terrain that contains air and where
+ * you have at least one Firewalker unit."
+ *
+ * **Judged once, against the board as the step begins** -- a house rule, `RULES-V0.md`
+ * section 16. The moves are one decision, so they are simultaneous: a terrain that
+ * empties because everybody flew out of it still counted as holding a Firewalker for
+ * the units flying *in*, and two armies may swap places. A force is one species, so
+ * "a Firewalker unit" there is any unit of yours.
+ *
+ * A sleeping unit "cannot ... leave the terrain", so it is not offered -- and it still
+ * counts as a Firewalker standing at its terrain, which it is.
+ */
+function airFlightOffers(state: GameState, player: PlayerId): readonly AirFlightOffer[] {
+  if (!hasAbility(state, player, 'Air Flight')) return []
+  const airy = TERRAIN_SLOTS.filter(
+    (slot) => terrainHas(state, slot, 'air') && armyAt(state, player, slot).length > 0,
+  )
+  if (airy.length < 2) return []
+
+  const offers: AirFlightOffer[] = []
+  for (const slot of airy) {
+    const options = airy.filter((other) => other !== slot)
+    for (const unit of armyAt(state, player, slot)) {
+      if (isAsleep(state, unit.id)) continue
+      offers.push({ unitId: unit.id, options })
+    }
+  }
+  return offers
+}
+
+function applyRetreat(
+  state: GameState,
+  unitIds: readonly UnitId[],
+  flights: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[] = [],
+): GameState {
   const player = state.turn.marching
   const units = { ...state.units }
+
+  // Air Flight first, against the board as it stood: validated before anything moves,
+  // because the offers are a fact about the start of the step.
+  const offers = airFlightOffers(state, player)
+  const flown: { unitId: UnitId; from: TerrainSlot; to: TerrainSlot }[] = []
+  for (const flight of flights) {
+    const offer = offers.find((o) => o.unitId === flight.unitId)
+    if (offer === undefined) {
+      throw new IllegalActionError(
+        `${flight.unitId} cannot fly -- Air Flight takes Firewalkers from one terrain containing ` +
+          'air to another where you already have a unit',
+      )
+    }
+    if (!offer.options.includes(flight.slot)) {
+      throw new IllegalActionError(`${flight.unitId} cannot fly to ${flight.slot}`)
+    }
+    if (unitIds.includes(flight.unitId)) {
+      throw new IllegalActionError(`${flight.unitId} cannot both retreat and fly`)
+    }
+    if (flown.some((f) => f.unitId === flight.unitId)) {
+      throw new IllegalActionError(`${flight.unitId} flies once`)
+    }
+    const unit = units[flight.unitId]
+    if (unit === undefined || unit.location.kind !== 'terrain') {
+      throw new Error(`${flight.unitId} was offered a flight but is not at a terrain`)
+    }
+    flown.push({ unitId: flight.unitId, from: unit.location.slot, to: flight.slot })
+    units[flight.unitId] = { ...unit, location: { kind: 'terrain', slot: flight.slot } }
+  }
 
   for (const id of unitIds) {
     const unit = units[id]
@@ -4093,9 +4165,11 @@ function applyRetreat(state: GameState, unitIds: readonly UnitId[]): GameState {
     units[id] = { ...unit, location: { kind: 'reserve' } }
   }
 
-  const moved = unitIds.length === 0 ? state : { ...state, units }
-  const logged =
+  const moved = unitIds.length === 0 && flown.length === 0 ? state : { ...state, units }
+  const retreated =
     unitIds.length === 0 ? moved : withLog(moved, { kind: 'retreated', player, unitIds })
+  const logged =
+    flown.length === 0 ? retreated : withLog(retreated, { kind: 'air_flight', player, moves: flown })
   return endTurn(logged)
 }
 
@@ -4134,7 +4208,7 @@ export function applyAction(state: GameState, action: GameAction): GameState {
     case 'reinforce':
       return applyReinforce(cleared, action.moves)
     case 'retreat':
-      return applyRetreat(cleared, action.unitIds)
+      return applyRetreat(cleared, action.unitIds, action.flights ?? [])
     case 'eighth_face_city':
       return applyEighthFaceCity(cleared, action.choice)
     case 'eighth_face_temple':

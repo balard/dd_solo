@@ -22,6 +22,7 @@ import {
   armyAt,
   army as armyRef,
   armyRefOf,
+  livingUnits,
   reserveArmy,
   type ArmyRef,
   type Direction,
@@ -780,6 +781,57 @@ export function reinforcePlan(
         .filter((unit): unit is UnitInstance => unit !== undefined),
     })).filter((group) => group.units.length > 0),
   }
+}
+
+/**
+ * The Retreat Step as a draft (Phase 8): which dice go back to reserve, and which fly.
+ *
+ * Air Flight gave the step a second destination, so it gained the Reinforce Step's
+ * shape: a destination button *stages* the chosen dice rather than dispatching, and
+ * one action still reaches the engine. The retreat half stays what it always was --
+ * the dice selected when the player confirms -- so a force with nothing to fly sees
+ * the same sheet it always did.
+ */
+export interface RetreatPlan {
+  /** Selected dice that are not already flying: what "Pull back" would send. */
+  readonly retreats: readonly UnitId[]
+  /** Staged flights, each still legal against the pending's offers. */
+  readonly flights: readonly ReinforceMove[]
+  /** Terrains every selected die could fly to -- the fly buttons. Empty when any
+   *  selected die cannot fly, or nothing is selected. */
+  readonly flyTo: readonly TerrainSlot[]
+}
+
+export function retreatPlan(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'retreat' }>,
+  selection: ReadonlySet<UnitId>,
+  staged: readonly ReinforceMove[],
+): RetreatPlan {
+  const offers = pending.flights ?? []
+  // Filtered against the live offers rather than trusted, like `reinforcePlan`.
+  const flights = staged.filter((move) =>
+    offers.some((offer) => offer.unitId === move.unitId && offer.options.includes(move.slot)),
+  )
+  const flying = new Set(flights.map((move) => move.unitId))
+
+  const movable = new Set(
+    livingUnits(state, pending.player)
+      .filter((unit) => unit.location.kind === 'terrain')
+      .map((unit) => unit.id),
+  )
+  const retreats = [...selection].filter((id) => movable.has(id) && !flying.has(id))
+
+  const flyTo =
+    retreats.length === 0
+      ? []
+      : TERRAIN_SLOTS.filter((slot) =>
+          retreats.every((id) =>
+            offers.some((offer) => offer.unitId === id && offer.options.includes(slot)),
+          ),
+        )
+
+  return { retreats, flights, flyTo }
 }
 
 /**

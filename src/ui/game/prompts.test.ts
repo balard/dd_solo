@@ -25,6 +25,7 @@ import {
   pendingKey,
   promptFor,
   reinforcePlan,
+  retreatPlan,
   saiTargetSelection,
   selectModeFor,
   selectableAt,
@@ -857,5 +858,54 @@ describe("the decisions a spell owes part-way through resolving", () => {
       kind: 'dragon_target',
       targets: { mine: 'a' },
     })
+  })
+})
+
+/**
+ * The Retreat Step's draft (Phase 8). Air Flight gave the step a second destination,
+ * so fly buttons stage and one action still reaches the engine -- and a force with
+ * nothing to fly must see exactly the sheet it always did.
+ */
+describe('retreatPlan', () => {
+  const retreatPending = (
+    flights?: Extract<Pending, { kind: 'retreat' }>['flights'],
+  ): Extract<Pending, { kind: 'retreat' }> => ({
+    kind: 'retreat',
+    player: 'p1',
+    ...(flights === undefined ? {} : { flights }),
+  })
+  const deployed = (state: GameState) =>
+    Object.values(state.units).filter((u) => u.owner === 'p1' && u.location.kind === 'terrain')
+
+  it('is the old retreat sheet when nothing can fly', () => {
+    const state = fresh()
+    const [a, b] = deployed(state)
+    const plan = retreatPlan(state, retreatPending(), new Set([a!.id, b!.id]), [])
+    expect(plan.retreats).toEqual([a!.id, b!.id])
+    expect(plan.flights).toEqual([])
+    expect(plan.flyTo).toEqual([])
+  })
+
+  it('offers only the terrains every chosen die could fly to', () => {
+    const state = fresh()
+    const [a, b] = deployed(state)
+    const pending = retreatPending([
+      { unitId: a!.id, options: ['frontier', 'p2_home'] },
+      { unitId: b!.id, options: ['frontier'] },
+    ])
+    expect(retreatPlan(state, pending, new Set([a!.id]), []).flyTo).toEqual(['frontier', 'p2_home'])
+    expect(retreatPlan(state, pending, new Set([a!.id, b!.id]), []).flyTo).toEqual(['frontier'])
+  })
+
+  it('takes a staged flyer out of the retreat, and drops a flight no longer offered', () => {
+    const state = fresh()
+    const [a, b] = deployed(state)
+    const pending = retreatPending([{ unitId: a!.id, options: ['frontier'] }])
+    const plan = retreatPlan(state, pending, new Set([a!.id, b!.id]), [
+      { unitId: a!.id, slot: 'frontier' },
+      { unitId: b!.id, slot: 'frontier' },
+    ])
+    expect(plan.flights).toEqual([{ unitId: a!.id, slot: 'frontier' }])
+    expect(plan.retreats).toEqual([b!.id])
   })
 })

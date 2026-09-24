@@ -350,10 +350,30 @@ export const randomAi: AiPlayer = {
             u.location.kind === 'terrain' &&
             !isAsleep(state, u.id),
         )
-        const [count, next] = nextInt(rng, Math.min(deployed.length, 4) + 1)
+        const [count, afterCount] = nextInt(rng, Math.min(deployed.length, 4) + 1)
+        const unitIds = deployed.slice(0, count).map((u) => u.id)
+
+        // Air Flight (Phase 8): some of the dice that stayed fly, each to a random
+        // legal terrain. A second dimension of the same decision, so the fuzz learns
+        // it or never produces a flight at all -- the reinforce lesson. Drawn only when
+        // flights are offered, so a game without them plays exactly as before.
+        const offers = (pending.flights ?? []).filter((o) => !unitIds.includes(o.unitId))
+        if (offers.length === 0) {
+          return [{ kind: 'retreat', unitIds } as GameAction, afterCount] as const
+        }
+        let draw = afterCount
+        const flights: { unitId: string; slot: TerrainSlot }[] = []
+        for (const offer of offers) {
+          const [flies, afterCoin] = coin(draw)
+          draw = afterCoin
+          if (!flies) continue
+          const [slot, afterPick] = pick(draw, offer.options)
+          draw = afterPick
+          flights.push({ unitId: offer.unitId, slot })
+        }
         return [
-          { kind: 'retreat', unitIds: deployed.slice(0, count).map((u) => u.id) } as GameAction,
-          next,
+          { kind: 'retreat', unitIds, ...(flights.length > 0 ? { flights } : {}) } as GameAction,
+          draw,
         ] as const
       }
 

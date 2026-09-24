@@ -93,8 +93,19 @@ const KEY = 'dd_solo.save'
  *    `magic: 'simplified'` in its own `SetupOptions`, so it would replay correctly
  *    under the old rules for as long as the engine kept them. The version is not
  *    protecting that -- `setupGame` still does. It is protecting the live one.
+ *
+ * 10: species abilities, Phase 8. Decision order: a contested maneuver may stop for
+ *    Rapid Growth, the Retreat Step's answer gains Air Flight's `flights`, and the
+ *    dragon allocation may carry Flaming Shields' `savesAsMelee`. And dice
+ *    consumption: Replanting rolls a dying Treefolk at a water terrain, Rapid Growth
+ *    rerolls. The app moves from `SPELL_RULES` to `SPECIES_RULES`.
+ *
+ *    **And one hazard the version-5 note predicted, arriving for real**: `RuleSet`
+ *    gained a key. A version-9 record stores `SPELL_RULES` as JSON with no
+ *    `speciesAbilities`, which reads `undefined` -- off, and by accident rather than
+ *    by decision. It would replay correctly, but only because `undefined` is falsy.
  */
-export const SAVE_VERSION = 9
+export const SAVE_VERSION = 10
 
 
 export interface SavedGame {

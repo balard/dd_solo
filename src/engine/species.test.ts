@@ -4,7 +4,9 @@
  */
 import { describe, expect, it } from 'vitest'
 
+import { passiveAi } from '../ai/passive'
 import { randomAi } from '../ai/random'
+import { runGame } from '../ai/run'
 import { SPECIES, UNIT_TYPES, unitType } from '../data/load'
 
 import { buryUnits, deathEntries, killAndBury, killedIds, killUnits } from './death'
@@ -14,7 +16,7 @@ import { begin, reduce } from './reduce'
 import { rngFrom, rollDie, type RngState } from './rng'
 import { resolveFaces, rollPools, type RawDie, type RollSpec } from './roll'
 import { DRAGON_ROLL_KINDS } from './sai'
-import { setupGame, STARTER_FORCES } from './setup'
+import { BESTIARY_FORCES, setupGame, STARTER_FORCES, type ForceSpec } from './setup'
 import {
   ABILITY_TEXT,
   SPECIES_ABILITIES,
@@ -673,5 +675,223 @@ describe('Rapid Growth', () => {
     // without a question, and the rest were asked about.
     expect(winning).toBeGreaterThan(0)
     expect(asked).toBeGreaterThan(0)
+  })
+})
+
+// --- Air Flight ------------------------------------------------------------------
+
+describe('Air Flight', () => {
+  /**
+   * The Firewalkers' Retreat Step with all three terrains pinned: Frontier a
+   * Wasteland (air, fire), their home a Coastland (air, water), the other home a
+   * Swampland (no air). Units as given; the Treefolk get one die so their species
+   * can be read.
+   */
+  function retreatStep(
+    ruleSet: RuleSet,
+    terrains: { p1_home: string; frontier: string; p2_home: string },
+    ...specs: readonly Spec[]
+  ): GameState {
+    const base = setupGame({ seed: 1, forces: STARTER_FORCES, ruleSet, terrains })
+    const units: Record<string, UnitInstance> = {
+      t: { id: 't', typeId: OAKLING, owner: 'p1', location: at('p1_home') },
+    }
+    for (const spec of specs) {
+      units[spec.id] = { id: spec.id, typeId: spec.typeId, owner: spec.owner, location: spec.at }
+    }
+    const ready: GameState = {
+      ...base,
+      units,
+      pending: null,
+      turn: { ...base.turn, marching: 'p2', phase: 'reserves_retreat', marchStep: 'select_army' },
+    }
+    return stepGame(ready)
+  }
+
+  const TERRAINS = { p1_home: 'swampland_tower', frontier: 'wasteland_tower', p2_home: 'coastland_tower' }
+  const fliers: Spec[] = [
+    { id: 'g', typeId: GUARDIAN, owner: 'p2', at: at('frontier') },
+    { id: 'w', typeId: WATCHER, owner: 'p2', at: at('p2_home') },
+    // At a terrain with no air: it may retreat, and it may not fly.
+    { id: 's', typeId: GUARDIAN, owner: 'p2', at: at('p1_home') },
+  ]
+
+  it('offers each Firewalker at an air terrain the other air terrains holding a Firewalker', () => {
+    const state = retreatStep(SPECIES_RULES, TERRAINS, ...fliers)
+    const pending = state.pending
+    if (pending?.kind !== 'retreat') throw new Error('not at the Retreat Step')
+    expect(pending.flights).toEqual([
+      { unitId: 'g', options: ['p2_home'] },
+      { unitId: 'w', options: ['frontier'] },
+    ])
+  })
+
+  it('moves the flyers, logs both ends, and still retreats the rest', () => {
+    const state = retreatStep(SPECIES_RULES, TERRAINS, ...fliers)
+    const done = reduce(state, {
+      kind: 'retreat',
+      unitIds: ['s'],
+      flights: [{ unitId: 'g', slot: 'p2_home' }],
+    })
+    expect(done.units['g']?.location).toEqual(at('p2_home'))
+    expect(done.units['s']?.location).toEqual(reserve)
+    const entries = done.log.slice(state.log.length).map((e) => e.kind)
+    expect(entries.slice(0, 2)).toEqual(['retreated', 'air_flight'])
+    const flight = done.log.find((e) => e.kind === 'air_flight')
+    expect(flight).toEqual({
+      kind: 'air_flight',
+      player: 'p2',
+      moves: [{ unitId: 'g', from: 'frontier', to: 'p2_home' }],
+    })
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('judges destinations at the start of the step, so two armies may swap', () => {
+    const state = retreatStep(SPECIES_RULES, TERRAINS, ...fliers)
+    const done = reduce(state, {
+      kind: 'retreat',
+      unitIds: [],
+      flights: [
+        { unitId: 'g', slot: 'p2_home' },
+        { unitId: 'w', slot: 'frontier' },
+      ],
+    })
+    expect(done.units['g']?.location).toEqual(at('p2_home'))
+    expect(done.units['w']?.location).toEqual(at('frontier'))
+  })
+
+  it('refuses a flight to a terrain without air, or with no Firewalker there', () => {
+    const noFirewalker = { ...TERRAINS, p1_home: 'flatland_tower' }
+    const state = retreatStep(SPECIES_RULES, noFirewalker, fliers[0]!, fliers[1]!)
+    const pending = state.pending
+    if (pending?.kind !== 'retreat') throw new Error('not at the Retreat Step')
+    // Flatland has air, but none of their dice stand there.
+    expect(pending.flights?.find((o) => o.unitId === 'g')?.options).toEqual(['p2_home'])
+    expect(() =>
+      reduce(state, { kind: 'retreat', unitIds: [], flights: [{ unitId: 'g', slot: 'p1_home' }] }),
+    ).toThrow(/cannot fly to/)
+  })
+
+  it('refuses a unit that would both retreat and fly, and one at a terrain without air', () => {
+    const state = retreatStep(SPECIES_RULES, TERRAINS, ...fliers)
+    expect(() =>
+      reduce(state, { kind: 'retreat', unitIds: ['g'], flights: [{ unitId: 'g', slot: 'p2_home' }] }),
+    ).toThrow(/both retreat and fly/)
+    expect(() =>
+      reduce(state, { kind: 'retreat', unitIds: [], flights: [{ unitId: 's', slot: 'frontier' }] }),
+    ).toThrow(/cannot fly/)
+  })
+
+  it('does not offer a sleeping unit, which "cannot leave the terrain"', () => {
+    const awake = retreatStep(SPECIES_RULES, TERRAINS, ...fliers)
+    const slept: GameState = {
+      ...awake,
+      effects: [
+        {
+          source: 'Sleep',
+          target: { kind: 'unit', unitId: 'g' },
+          modifiers: [],
+          asleep: true,
+          expiresAtStartOfTurnOf: 'p1',
+        },
+      ],
+      pending: null,
+    }
+    const pending = stepGame(slept).pending
+    if (pending?.kind !== 'retreat') throw new Error('not at the Retreat Step')
+    expect(pending.flights?.map((o) => o.unitId)).toEqual(['w'])
+  })
+
+  it('offers nothing with one air terrain, to Treefolk, or with the flag off', () => {
+    const oneAir = { ...TERRAINS, p2_home: 'highland_tower' }
+    const single = retreatStep(SPECIES_RULES, oneAir, ...fliers).pending
+    expect(single?.kind === 'retreat' && single.flights).toBeUndefined()
+
+    const off = retreatStep(SPELL_RULES, TERRAINS, ...fliers).pending
+    expect(off?.kind === 'retreat' && off.flights).toBeUndefined()
+
+    // The same board with the forces swapped: Treefolk have no Air Flight.
+    const treefolk = retreatStep(
+      SPECIES_RULES,
+      TERRAINS,
+      { id: 'a', typeId: OAKLING, owner: 'p2', at: at('frontier') },
+      { id: 'b', typeId: OAKLING, owner: 'p2', at: at('p2_home') },
+    )
+    const swapped: GameState = {
+      ...treefolk,
+      units: { ...treefolk.units, t: { id: 't', typeId: GUARDIAN, owner: 'p1', location: at('p1_home') } },
+      pending: null,
+    }
+    const asked = stepGame(swapped).pending
+    expect(asked?.kind === 'retreat' && asked.flights).toBeUndefined()
+  })
+})
+
+// --- the fuzz --------------------------------------------------------------------
+
+describe('the fuzz', () => {
+  /**
+   * 200 `SPECIES_RULES` games, and a counter for every ability -- a clean run over
+   * rules nothing reached would prove nothing.
+   *
+   * Three force sets rather than two: a rolled force puts dice on boards the named
+   * ones never make, and Air Flight in particular needs two air terrains holding
+   * Firewalkers, which is a fact about the board more than the force. Every fifth
+   * game gives p1 to `PassiveAI`, whose Rapid Growth answer ("the dice that gave it
+   * nothing") is a different path from `RandomAI`'s.
+   *
+   * Two things this cannot reach often enough to prove, and each has a named test
+   * above instead: Flaming Shields in Wall of Thorns' roll, and the dragon roll's
+   * choice.
+   */
+  it('plays 200 SPECIES_RULES games with every ability firing', () => {
+    let stuck = 0
+    let replanted = 0
+    let shields = 0
+    let growthTaken = 0
+    let growthDeclined = 0
+    let flights = 0
+    let longest = 0
+
+    const sets: readonly [ForceSpec, number][] = [
+      [STARTER_FORCES, 70],
+      [BESTIARY_FORCES, 70],
+      [{ kind: 'random' }, 60],
+    ]
+    for (const [forces, games] of sets) {
+      for (let seed = 1; seed <= games; seed++) {
+        const result = runGame({
+          setup: { seed, forces, ruleSet: SPECIES_RULES },
+          players: { p1: seed % 5 === 0 ? passiveAi : randomAi, p2: randomAi },
+          aiSeed: seed,
+          // The spell fuzz's cap and reason (Reserve magic tripled a game's length);
+          // the longest game here is recorded below so a raise is measured, not guessed.
+          maxDecisions: 20_000,
+        })
+        if (result.stoppedBecause === 'stuck') stuck += 1
+        expect(result.stoppedBecause, `seed ${seed}`).not.toBe('cap')
+        longest = Math.max(longest, result.record.actions.length)
+        for (const action of result.record.actions) {
+          if (action.kind === 'rapid_growth') {
+            if (action.unitIds.length > 0) growthTaken += 1
+            else growthDeclined += 1
+          }
+        }
+        for (const entry of result.state.log) {
+          if (entry.kind === 'units_replanted') replanted += entry.unitIds.length
+          if (entry.kind === 'combat_resolved' && entry.flamingShields !== undefined) shields += 1
+          if (entry.kind === 'air_flight') flights += entry.moves.length
+        }
+      }
+    }
+
+    expect(stuck).toBe(0)
+    expect(replanted).toBeGreaterThan(0)
+    expect(shields).toBeGreaterThan(0)
+    // Both answers to Rapid Growth, or the path that keeps the roll is unproven.
+    expect(growthTaken).toBeGreaterThan(0)
+    expect(growthDeclined).toBeGreaterThan(0)
+    expect(flights).toBeGreaterThan(0)
+    expect(longest).toBeLessThan(20_000)
   })
 })

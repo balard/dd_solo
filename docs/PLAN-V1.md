@@ -70,7 +70,7 @@ G  Golden files: 25 recorded v0 games          DONE  cut before anything moves
                                    |
                         7 Spells   DONE -- completed Cantrip, Dispel Magic, Standing Stones
                                    |
-                        8 Species abilities
+                        8 Species abilities   DONE -- no ability acts in its own phase
                                    |
                         9 UI and AI for v1
 ```
@@ -1913,7 +1913,14 @@ either client since Phase 1, and that is why a Firewalkers-only spell could not 
 browser — the human plays p1 and `bestiary` puts Treefolk there. They are mirrors in `FORCE_SETS`
 now. A fixture only a test can load is a fixture that cannot help when a test is not the problem.
 
-## Phase 8 — Species abilities
+## Phase 8 — Species abilities — **landed**
+
+**Delivered.** `speciesAbilities: true`. The Species Abilities Phase, and the four abilities the full
+rules give Treefolk and Firewalkers. The app and the CLI play `SPECIES_RULES` (= `V1_RULES`, every
+flag in this plan on); `SAVE_VERSION` is 10. **The 25 goldens replay byte-identical and unregenerated
+through all three slices.**
+
+The original section follows, then what it got wrong.
 
 **Deliverable.** The missing seventh turn phase, and four abilities.
 
@@ -1935,17 +1942,96 @@ pipeline step 3. All three were built in earlier phases; this phase is mostly wi
 
 Add `'species_abilities'` to `Phase`, between `dragon_attack` and `march`.
 
-**In progress, in three slices** -- cut around the parts of the paragraph above that turned out to be
-wrong (the write-up lands with 8c):
+**Landed in three slices, one commit each**, cut around the parts of the paragraph above that turned
+out to be wrong:
 
 | Slice | Scope | State |
 |---|---|---|
 | **8a** | The flag, the phase (a pass-through: no ability in this box acts in it), Flaming Shields as a new step-10 `counts_as`, Replanting in `killUnits` | ✅ landed |
 | **8b** | Rapid Growth: a pause inside the contested maneuver, replacing faces the way Flashfire does | ✅ landed |
-| **8c** | Air Flight in the Retreat Step, the flip to `SPECIES_RULES`, the fuzz, the write-up | |
+| **8c** | Air Flight in the Retreat Step, the flip to `SPECIES_RULES`, the fuzz, the write-up | ✅ landed |
 
 **Exit criterion.** Each ability fires only at a terrain with the right element and only in the
 right roll, and each has a test proving it does *not* fire otherwise.
+
+### Where this section was wrong
+
+- **The Species Abilities Phase has nothing to do for these two species.** "A turn phase to apply
+  them in" is true of the rulebook and false of this box. Rapid Growth fires on a counter-maneuver,
+  Replanting on a death, Air Flight in the Retreat Step and Flaming Shields in a melee roll. The
+  phase went in anyway, because the turn has seven phases. It is an ungated pass-through, like
+  `effects_expire` in v0, and the goldens pass through it without ever resting there. The abilities
+  that *do* live in it (Feralization, Winter's Fortitude, Mutate) belong to species outside this plan.
+- **"Counts as … already exists" was false.** `pipeline.ts` names step 10 as "including every
+  'counts as' conversion", but no `Modifier` expressed one. It also cannot be a plain `add`: how
+  many save results the dice rolled is only known once they land. So `counts_as` is a *permission*,
+  like `countIds` became a spec field rather than a `subtract`. `armyRoll` gathers it onto the melee
+  type, and `resolveFaces`, the one function that can read the dice, turns it into the `add` it
+  becomes. Riding the modifier list reaches the melee attack, Wall of Thorns' roll and the dragon
+  combination roll with no call site changing, which is the Death breath's precedent.
+- **Flaming Shields is a choice in exactly one roll.** In a melee attack or Wall of Thorns, saves do
+  not count, so converting them only helps and is automatic. The dragon combination roll counts
+  both, so there it is a trade and the owner picks how many, through the existing `dragon_allocate`
+  (`shields` / `savesAsMelee`).
+- **Rapid Growth is not "a reroll, pipeline step 3".** A step-3 reroll *appends* a die and both
+  faces count; Rapid Growth *replaces* the face ("the previous results are ignored"), which is
+  Flashfire's mechanism, not Rend's. It also needs a decision halfway through `applyContest`, which
+  rolled both armies inside one action. `applyContest` is now `rollFaces` + `rerollSweep` per army,
+  drawing in the same order `rollArmy` did, plus a shared `finishContest` that the pause returns to.
+  The goldens are what prove the split draws nothing new.
+- **Air Flight was not in the "all three were built in earlier phases" list, and it is the one that
+  was closest to built.** It is the Retreat Step gaining a second destination: the `reinforce`
+  lesson again, from the other end. The pending carries each flyer's legal terrains, the action an
+  optional `flights`, and the sheet became a staged draft.
+
+### Three things that would have shipped silently
+
+1. **`killAndBury` would have thrown on a replanted unit** (8a). Its survivors list subtracted only
+   `risen`, so a Flame on a Treefolk at a water terrain would have handed `bury` a unit standing in
+   Reserves. That is a crash rather than a silent failure, but it sits on a path no fuzz reaches
+   often: Flame is Firewalkers-only and needs a water terrain. It has a test now.
+2. **A save face in a Firewalker's melee attack drew as a blank** beside a total that was counting
+   it (8a), because `perDieResults` knew nothing about conversions. It is the Phase 6 dragon-roll
+   bug a third way.
+3. **The dragon breath's log line said "kills" of a unit that Replanting saved** (8a). The line took
+   the requested ids rather than `killedIds`, which was already wrong for an Accelerated Growth
+   exchange and had never been visible. It names only the real dead now, and the breath gets
+   `deathEntries` like every other kill site.
+
+### The fuzz
+
+200 `SPECIES_RULES` games (70 starter, 70 bestiary, 60 rolled forces; every fifth game gives p1 to
+`PassiveAI`), `maxDecisions: 20_000`, `stuck === 0` and no game stopped on the cap. Counters from
+the run the commit was made with: Replanting saved 180 dice, Flaming Shields added to 284 melee
+attacks, Rapid Growth was taken 834 times and declined 377, and Air Flight moved 17,252 dice. The
+longest game took 13,581 decisions, under the spell fuzz's longest, so the cap did not need
+raising. The dragon roll's Shields choice turned up 7 times and Wall of Thorns' never, so each of
+those has a named test instead, which is the Phase 7 rule.
+
+**Air Flight's number is `RandomAI` flipping a coin per eligible die at every Retreat Step**, not a
+statement about the rule. It is the reinforce lesson applied on purpose: a fuzz opponent that never
+flew would never produce the board states flying makes.
+
+### What playing it found
+
+Nothing that needed fixing, which is the first time this plan can say so. Three things were checked
+in a browser:
+
+- **Flaming Shields** in the Genie mirror (`?forces=firewalkers_genie&seed=36`, where all three
+  terrains contain air and the Frontier is a Wasteland). The first melee attack reads "8 melee −
+  0 saves = 8 damage / **Flaming Shields** counts 4 saves as melee", with the save die at full
+  opacity.
+- **Air Flight** on the same board: "Fly 1 to Enemy home" stages, the confirm reads "Fly 1, pull
+  back none", and the log says "Air Flight: Genie Frontier → Enemy home".
+- **Rapid Growth** is only reachable when the opponent maneuvers, and `PassiveAI` never does. It was
+  checked with the app's opponent pointed at `RandomAI` (a scaffold, reverted before the commit) on
+  `?forces=starter&seed=21`, where every terrain contains earth. The sheet asked "they maneuvered
+  9, you 9 — throw dice again to beat 9?". The Noble Willow that rolled Wild Growth was drawn but
+  not pickable. Throwing the Willow logged "Rapid Growth: you throw Willow again" ahead of the
+  contest line.
+
+Replanting was not seen in a browser: a skip-every-march game against `RandomAI` went 29 turns
+without losing a die. The fuzz's 180 and the named tests are its proof.
 
 ---
 
@@ -2032,7 +2118,7 @@ export const V1_RULES: RuleSet = {
   eighthFace: 'full',       // Phase 5 -- landed
   dua: 'active',            // Phase 2 -- landed
   dragons: true,            // Phase 6 -- landed
-  speciesAbilities: true,   // new flag, Phase 8 -- the only one left
+  speciesAbilities: true,   // Phase 8 -- landed; `V1_RULES` is exported under this name
 }
 
 ```

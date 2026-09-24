@@ -18,7 +18,6 @@ import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../../engine/sai'
 import { ABILITY_TEXT } from '../../engine/species'
 import {
   armyRefOf,
-  livingUnits,
   type GameAction,
   type GameState,
   type Pending,
@@ -47,6 +46,7 @@ import {
   plainLabel,
   promptFor,
   reinforcePlan,
+  retreatPlan,
   slotLabel,
   spellTargetLabel,
   type FaceHint,
@@ -1062,10 +1062,13 @@ function SaiHeader({
     )
   }
 
-  if (prompt.custom === 'retreat') {
-
-    const movable = livingUnits(state, human).filter((u) => u.location.kind === 'terrain')
-    const chosen = [...selection].filter((id) => movable.some((u) => u.id === id))
+  if (prompt.custom === 'retreat' && pending.kind === 'retreat') {
+    // Air Flight (Phase 8) makes this a draft, the Reinforce Step's shape: "Fly to"
+    // stages the chosen dice, and one action still reaches the engine. With nothing
+    // able to fly the fly buttons never appear and the sheet is the one it always was.
+    const plan = retreatPlan(state, pending, selection, staged)
+    const chosen = plan.retreats
+    const flying = plan.flights.length
 
     return (
       <div className="action-bar">
@@ -1076,19 +1079,50 @@ function SaiHeader({
             — tap units below{chosen.length > 0 ? ` (${chosen.length} chosen)` : ''}
           </span>
         </p>
+        {flying > 0 && (
+          <p className="staged muted">
+            <b>Air Flight</b>{' '}
+            {plan.flights
+              .map((move) => `${nameOf(state, move.unitId)} → ${slotLabel(move.slot, human)}`)
+              .join(', ')}
+          </p>
+        )}
         <div className="choices">
+          {plan.flyTo.map((slot) => (
+            <button
+              key={slot}
+              type="button"
+              className="choice secondary"
+              onClick={() => {
+                onStage(chosen.map((unitId) => ({ unitId, slot })))
+                onClearSelection()
+              }}
+            >
+              Fly {chosen.length} to {slotLabel(slot, human)}
+            </button>
+          ))}
           <button
             type="button"
             className="choice"
             onClick={() => {
-              dispatch({ kind: 'retreat', unitIds: chosen })
-              onClearSelection()
+              dispatch({
+                kind: 'retreat',
+                unitIds: chosen,
+                ...(flying > 0 ? { flights: plan.flights } : {}),
+              })
+              onClearDraft()
             }}
           >
-            {chosen.length === 0 ? 'Keep everyone deployed' : `Pull back ${chosen.length}`}
+            {chosen.length === 0
+              ? flying === 0
+                ? 'Keep everyone deployed'
+                : `Fly ${flying}, pull back none`
+              : flying === 0
+                ? `Pull back ${chosen.length}`
+                : `Pull back ${chosen.length}, fly ${flying}`}
           </button>
-          {chosen.length > 0 && (
-            <button type="button" className="choice secondary" onClick={onClearSelection}>
+          {(chosen.length > 0 || flying > 0) && (
+            <button type="button" className="choice secondary" onClick={onClearDraft}>
               Clear
             </button>
           )}

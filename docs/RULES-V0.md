@@ -47,7 +47,7 @@ below together with the phase that retires it. **This document stays normative r
 | ~~**Buried Unit Area (BUA)**~~ | **Now in**, under `dua: 'active'` — see §9. `V0_RULES` still has no way to bury anything, and neither does the live rung until Phase 4's Flame. | — |
 | ~~**Promotion / recruitment**~~ | **The machinery is in**, under `dua: 'active'` — see §9. Nothing calls it in a game until the City lands in Phase 5. | — |
 
-| ~~**Species abilities**~~ | **Coming in, §16** — under `speciesAbilities: true` (v1 Phase 8). The *starter* book grants Treefolk/Firewalkers none; the full rules give each two, plus a turn phase of their own, which `Phase` now models. `V0_RULES` has none. | — |
+| ~~**Species abilities**~~ | **Now in, §16** — under `speciesAbilities: true` (v1 Phase 8), which is what the app plays. The *starter* book grants Treefolk/Firewalkers none; the full rules give each two, plus a turn phase of their own, which `Phase` now models. `V0_RULES` has none. | — |
 | **Items, minor terrains, Dragonkin, Eldarim, multiplayer** | Advanced rules, far out of scope. | later |
 | **Effects Expire phase** | Nothing in v0 creates a lasting effect. Kept as a no-op phase so the turn structure is already correct. | v1 |
 
@@ -802,6 +802,17 @@ units you wish to re-roll in this way must be selected and re-rolled together."
 - One decision for all the dice, "selected and re-rolled together", and an empty answer keeps the
   roll.
 
+**Air Flight** -- "during the Retreat Step of the Reserves Phase, Firewalker units may move from any
+terrain that contains air to any other terrain that contains air and where you have at least one
+Firewalker unit."
+
+- It is a second destination in the Retreat Step: a die may retreat, fly, or stay, and not both
+  retreat and fly.
+- A sleeping unit may not fly, because Sleep says it "cannot … leave the terrain". It still counts
+  as a Firewalker standing where it is.
+- A force is one species, so "where you have at least one Firewalker unit" means "where you have
+  any unit".
+
 ### House rules this rung adds
 
 - **Flaming Shields is automatic wherever it can only help.** In a melee attack or Wall of Thorns'
@@ -813,6 +824,9 @@ units you wish to re-roll in this way must be selected and re-rolled together."
   saves keeps the one-health die in the DUA that the exchange would have spent. Accelerated Growth
   itself stays automatic; §15 records what undoing that would cost, and nothing in this phase
   changes it.
+- **Air Flight is judged at the start of the Retreat Step.** The moves are one decision, so they are
+  simultaneous: a terrain that everybody flies out of still counted as holding a Firewalker for the
+  units flying in, and two armies may swap terrains.
 - **Rapid Growth is asked only when it could help:** when the counter-maneuvering army has a die
   that did not roll an SAI, and is losing or tied (the marcher wins a tie). A reroll cannot improve
   a contest already won, and asking would be a question with one sensible answer.

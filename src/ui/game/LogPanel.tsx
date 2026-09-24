@@ -657,6 +657,17 @@ function Line({
           {entry.unitIds.length === 1 ? '' : 's'} back to reserve
         </p>
       )
+    // Both ends, as an attack names both: "flew" alone would not say where the army
+    // that just appeared at the Frontier came from.
+    case 'air_flight':
+      return (
+        <p className="log-line">
+          <b>Air Flight</b>:{' '}
+          {entry.moves
+            .map((move) => `${nameOf(state, move.unitId)} ${where(move.from)} → ${where(move.to)}`)
+            .join(', ')}
+        </p>
+      )
     case 'turn_end':
       return <hr className="log-turn" />
     case 'victory':

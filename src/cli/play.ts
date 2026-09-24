@@ -34,7 +34,7 @@ import { sameSpellTarget, spellPlan, spellTargetLabel } from '../engine/magic'
 
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
 import {
-  SPELL_RULES,
+  SPECIES_RULES,
   TERRAIN_SLOTS,
   armyAt,
   army as armyRef,
@@ -405,6 +405,14 @@ function describe(entry: LogEntry, state: GameState): string | null {
       return cyan(
         `  ${bold('Flashfire')}: ${entry.unitIds.map((id) => nameOf(state, id)).join(', ')} ` +
           dim('thrown again'),
+      )
+
+    case 'air_flight':
+      return cyan(
+        `  ${bold('Air Flight')}: ` +
+          entry.moves
+            .map((m) => `${nameOf(state, m.unitId)} ${SLOT_LABEL[m.from]} -> ${SLOT_LABEL[m.to]}`)
+            .join(', '),
       )
 
     case 'rapid_growth':
@@ -1277,7 +1285,26 @@ async function askUnits(state: GameState, pending: Pending): Promise<GameAction>
   })
 
   const picked = pick(movable, (await ask('> ')).trim())
-  return { kind: 'retreat', unitIds: picked.map((u) => u.id) }
+  const unitIds = picked.map((u) => u.id)
+
+  // Air Flight: offered per die, after the retreats, for the dice that stayed.
+  const offers = (pending.kind === 'retreat' ? (pending.flights ?? []) : []).filter(
+    (offer) => !unitIds.includes(offer.unitId),
+  )
+  const flights: { unitId: string; slot: TerrainSlot }[] = []
+  if (offers.length > 0) {
+    console.log(`\n${bold('Air Flight')} ${dim('— for each die: a destination number, or enter to stay')}`)
+    for (const offer of offers) {
+      const unit = state.units[offer.unitId]
+      if (unit === undefined) continue
+      const from = unit.location.kind === 'terrain' ? SLOT_LABEL[unit.location.slot] : 'reserve'
+      const choices = offer.options.map((slot, i) => `${i + 1}) ${SLOT_LABEL[slot]}`).join('  ')
+      console.log(`  ${name(unit)} ${dim(`(at ${from})`)}  ${choices}`)
+      const slot = offer.options[Number((await ask('> ')).trim()) - 1]
+      if (slot !== undefined) flights.push({ unitId: offer.unitId, slot })
+    }
+  }
+  return { kind: 'retreat', unitIds, ...(flights.length > 0 ? { flights } : {}) }
 }
 
 const pick = (from: readonly UnitInstance[], reply: string): readonly UnitInstance[] =>
@@ -1396,7 +1423,7 @@ async function main() {
   const { seed, ai, forces }: { seed: number; ai: AiPlayer; forces: ForceSpec } = parseArgs()
   const human: PlayerId = 'p1'
 
-  let state = begin(setupGame({ seed, forces, ruleSet: SPELL_RULES }))
+  let state = begin(setupGame({ seed, forces, ruleSet: SPECIES_RULES }))
 
   // Which species you are is a roll now, so the banner reads it off the board
   // rather than stating it.

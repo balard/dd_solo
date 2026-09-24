@@ -695,7 +695,20 @@ export type Pending =
       readonly remaining: number
     }
   | { readonly kind: 'reinforce'; readonly player: PlayerId }
-  | { readonly kind: 'retreat'; readonly player: PlayerId }
+  | {
+      readonly kind: 'retreat'
+      readonly player: PlayerId
+      /**
+       * Air Flight (Phase 8): the units that may fly instead of -- or as well as
+       * others -- retreating, and the terrains each may fly to. Judged once, against
+       * the board at the start of the step.
+       *
+       * Omitted when nobody can fly, which is every retreat in every game without
+       * Firewalkers at an air terrain -- and so every retreat in the goldens, whose
+       * digest carries the pending verbatim.
+       */
+      readonly flights?: readonly AirFlightOffer[]
+    }
   /**
    * Rapid Growth (Phase 8): which of the counter-maneuvering army's dice to throw
    * again, ignoring what they showed. Asked of the counter-maneuvering player, and only
@@ -955,7 +968,13 @@ export type GameAction =
       readonly unitIds: readonly UnitId[]
     }
   | { readonly kind: 'reinforce'; readonly moves: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[] }
-  | { readonly kind: 'retreat'; readonly unitIds: readonly UnitId[] }
+  | {
+      readonly kind: 'retreat'
+      readonly unitIds: readonly UnitId[]
+      /** Air Flight: units flying to another terrain instead. Optional, so every
+       *  retreat ever recorded still parses and replays. */
+      readonly flights?: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[]
+    }
   /** Rapid Growth: the dice rerolled together. Empty keeps the roll as it is. */
   | { readonly kind: 'rapid_growth'; readonly unitIds: readonly UnitId[] }
   /** City: one or the other, or neither -- "may" both ways. */
@@ -995,6 +1014,12 @@ export type GameAction =
       readonly melee: Readonly<Record<DragonId, number>>
       readonly missile: Readonly<Record<DragonId, number>>
     }
+
+/** One unit Air Flight could move, and where to. */
+export interface AirFlightOffer {
+  readonly unitId: UnitId
+  readonly options: readonly TerrainSlot[]
+}
 
 /**
  * One unit promoted: `unitId` is in the army and goes to the DUA, `partnerId` is in
@@ -1136,6 +1161,17 @@ export type LogEntry =
       readonly moves: readonly { readonly unitId: UnitId; readonly slot: TerrainSlot }[]
     }
   | { readonly kind: 'retreated'; readonly player: PlayerId; readonly unitIds: readonly UnitId[] }
+  /** Air Flight (Phase 8): Firewalkers who flew between two air terrains during the
+   *  Retreat Step. Both ends named, for the reason an attack names both. */
+  | {
+      readonly kind: 'air_flight'
+      readonly player: PlayerId
+      readonly moves: readonly {
+        readonly unitId: UnitId
+        readonly from: TerrainSlot
+        readonly to: TerrainSlot
+      }[]
+    }
   | {
       readonly kind: 'action_chosen'
       readonly player: PlayerId

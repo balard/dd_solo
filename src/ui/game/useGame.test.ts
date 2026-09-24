@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { BESTIARY_FORCES, STARTER_FORCES } from '../../engine/setup'
-import { SPELL_RULES } from '../../engine/types'
+import { SPECIES_RULES } from '../../engine/types'
 
 import { parseGameRequest } from './useGame'
 
@@ -21,7 +21,7 @@ describe('parseGameRequest', () => {
 
   it('names a force and a seed', () => {
     const request = parseGameRequest('?forces=bestiary&seed=7', FALLBACK)
-    expect(request?.setup).toEqual({ seed: 7, forces: BESTIARY_FORCES, ruleSet: SPELL_RULES })
+    expect(request?.setup).toEqual({ seed: 7, forces: BESTIARY_FORCES, ruleSet: SPECIES_RULES })
     expect(request?.origin).toEqual({ kind: 'requested', forces: 'bestiary', seed: 7 })
   })
 
@@ -33,7 +33,7 @@ describe('parseGameRequest', () => {
 
   it('takes a seed on its own, and still rolls the forces', () => {
     const request = parseGameRequest('?seed=1234', FALLBACK)
-    expect(request?.setup).toEqual({ seed: 1234, forces: { kind: 'random' }, ruleSet: SPELL_RULES })
+    expect(request?.setup).toEqual({ seed: 1234, forces: { kind: 'random' }, ruleSet: SPECIES_RULES })
     expect(request?.origin).toEqual({ kind: 'requested', forces: null, seed: 1234 })
   })
 
@@ -65,10 +65,11 @@ describe('parseGameRequest', () => {
     expect(parseGameRequest('?forces=bestiary&seed=', FALLBACK)?.setup.seed).toBe(FALLBACK)
   })
 
-  /** Every game the app starts is played under `SPELL_RULES`, link or no link --
-   *  Phase 4e's flip, and the reason a link cannot hand somebody a weaker rung. */
+  /** Every game the app starts is played under `SPECIES_RULES`, link or no link --
+   *  Phase 4e's flip, moved up a rung by every phase since (Phase 8's is the last),
+   *  and the reason a link cannot hand somebody a weaker rung. */
   it('never starts a game on a different ruleset', () => {
-    expect(parseGameRequest('?forces=bestiary', FALLBACK)?.setup.ruleSet).toBe(SPELL_RULES)
-    expect(parseGameRequest('?forces=nope', FALLBACK)?.setup.ruleSet).toBe(SPELL_RULES)
+    expect(parseGameRequest('?forces=bestiary', FALLBACK)?.setup.ruleSet).toBe(SPECIES_RULES)
+    expect(parseGameRequest('?forces=nope', FALLBACK)?.setup.ruleSet).toBe(SPECIES_RULES)
   })
 })
