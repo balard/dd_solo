@@ -406,7 +406,7 @@ describe('Replanting', () => {
     // **Not killed**, so no kill line names it.
     expect(killedIds(outcome, ['o'])).toEqual([])
     expect(deathEntries(outcome, 'p1', 'frontier', ['o']).map((e) => e.kind)).toEqual([
-      'units_replanted',
+      'replanting',
     ])
     expect(validateState(outcome.state)).toEqual([])
   })
@@ -418,12 +418,20 @@ describe('Replanting', () => {
     expect(outcome.replanted).toEqual([])
     expect(outcome.state.units['o']?.location.kind).toBe('dua')
     expect(outcome.state.rng.counter).toBe(state.rng.counter + 1)
-    expect(deathEntries(outcome, 'p1', 'frontier', ['o']).map((e) => e.kind)).toEqual(['units_killed'])
+    // **The miss is logged too**, ahead of the death it failed to prevent. It used to
+    // leave no trace at all, so a player could not tell a failed roll from no roll.
+    const entries = deathEntries(outcome, 'p1', 'frontier', ['o'])
+    expect(entries.map((e) => e.kind)).toEqual(['replanting', 'units_killed'])
+    const roll = entries[0]
+    if (roll?.kind !== 'replanting') throw new Error('no replanting entry')
+    expect(roll.rooted).toEqual([])
+    expect(roll.dice.map((d) => [d.unitId, d.results])).toEqual([['o', 0]])
   })
 
   const drawsNothing = (state: GameState) => {
     const outcome = killUnits(state, ['o'])
     expect(outcome.replanted).toEqual([])
+    expect(outcome.replantDice).toEqual([])
     expect(outcome.state.units['o']?.location.kind).toBe('dua')
     expect(outcome.state.rng).toEqual(state.rng)
   }
@@ -847,6 +855,7 @@ describe('the fuzz', () => {
   it('plays 200 SPECIES_RULES games with every ability firing', () => {
     let stuck = 0
     let replanted = 0
+    let replantMisses = 0
     let shields = 0
     let growthTaken = 0
     let growthDeclined = 0
@@ -878,7 +887,10 @@ describe('the fuzz', () => {
           }
         }
         for (const entry of result.state.log) {
-          if (entry.kind === 'units_replanted') replanted += entry.unitIds.length
+          if (entry.kind === 'replanting') {
+            replanted += entry.rooted.length
+            replantMisses += entry.dice.length - entry.rooted.length
+          }
           if (entry.kind === 'combat_resolved' && entry.flamingShields !== undefined) shields += 1
           if (entry.kind === 'air_flight') flights += entry.moves.length
         }
@@ -887,6 +899,7 @@ describe('the fuzz', () => {
 
     expect(stuck).toBe(0)
     expect(replanted).toBeGreaterThan(0)
+    expect(replantMisses).toBeGreaterThan(0)
     expect(shields).toBeGreaterThan(0)
     // Both answers to Rapid Growth, or the path that keeps the roll is unproven.
     expect(growthTaken).toBeGreaterThan(0)

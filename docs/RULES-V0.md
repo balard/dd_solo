@@ -788,6 +788,8 @@ moved to your Reserve Area."
   draws nothing.
 - A replanted unit **was never killed**. No `units_killed` line names it, no other death trigger
   sees it, and a kill-and-bury does not bury it.
+- **Every roll is logged, hits and misses both**, as one roll strip ahead of the kill line. A miss
+  used to draw a die and leave no trace, which made a failed roll look like a rule that never fired.
 - It does **not** trigger on a burial out of the DUA. That unit was killed some time ago.
 
 **Rapid Growth** -- "when at a terrain that contains earth, Treefolk units that do not roll an SAI

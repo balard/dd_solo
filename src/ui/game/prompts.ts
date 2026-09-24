@@ -304,8 +304,18 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
     case 'reinforce':
       return { question: 'Send units from reserve?', choices: [], custom: 'reinforce' }
 
+    // Air Flight (Phase 8) gives the step a second answer, and the question has to say
+    // so: "pull back to reserve?" over a sheet offering flights reads as a sheet whose
+    // buttons do something other than what it asked.
     case 'retreat':
-      return { question: 'Pull units back to reserve?', choices: [], custom: 'retreat' }
+      return {
+        question:
+          (pending.flights ?? []).length > 0
+            ? 'Pull units back to reserve, or use Air Flight to fly them to another air terrain?'
+            : 'Pull units back to reserve?',
+        choices: [],
+        custom: 'retreat',
+      }
 
     // Compound -- recruit, or promote, or neither -- so it gets its own sheet the
     // way Wild Growth's promotion draft does, rather than a button per option.

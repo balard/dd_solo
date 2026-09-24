@@ -1375,18 +1375,25 @@ export type LogEntry =
    */
   | { readonly kind: 'units_risen'; readonly player: PlayerId; readonly unitIds: readonly UnitId[] }
   /**
-   * Replanting (Phase 8): Treefolk that were about to die at a water terrain, rolled an
-   * ID, and went to Reserves instead.
+   * Replanting (Phase 8): every roll dying Treefolk made at a water terrain, and which
+   * of them rolled an ID and went to Reserves instead.
    *
-   * **Not** a subset of `units_killed`, which is what separates it from `units_risen`:
-   * these were never killed, so they appear in no kill line at all. `slot` is where they
-   * were standing, because "at a terrain that contains water" is the whole condition.
+   * **Every roll, not only the rescues.** It began as a list of the rescued alone, so a
+   * Treefolk that rolled and failed drew a die and left no trace: a player watching a
+   * water terrain could not tell "it tried and missed" from "the rule never fired".
+   *
+   * `rooted` is **not** a subset of `units_killed`, which is what separates it from
+   * `units_risen`: those units were never killed, so no kill line names them. The rest
+   * of `dice` did die, and the `units_killed` entry after this one says so. `slot` is
+   * where they stood, because "a terrain that contains water" is the whole condition.
    */
   | {
-      readonly kind: 'units_replanted'
+      readonly kind: 'replanting'
       readonly player: PlayerId
       readonly slot: ArmyRef
-      readonly unitIds: readonly UnitId[]
+      /** One per unit that rolled, in board order. Display only, like every roll. */
+      readonly dice: readonly DieRoll[]
+      readonly rooted: readonly UnitId[]
     }
   | { readonly kind: 'counter_declined'; readonly player: PlayerId }
   /**

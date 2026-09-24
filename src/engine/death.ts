@@ -30,7 +30,7 @@ import { unitType } from '../data/load'
 import { applyDamage } from './damage'
 import { bury, exchangeWithDua } from './dua'
 import { regrows } from './effects'
-import { faceOf, rollFaces } from './roll'
+import { faceOf, rollFaces, type DieRoll } from './roll'
 import { rollDie } from './rng'
 import { hasAbility, terrainHas } from './species'
 import {
@@ -76,6 +76,11 @@ export interface DeathOutcome {
    * trigger ever sees them.
    */
   readonly replanted: readonly UnitId[]
+  /**
+   * Every Replanting roll, the misses as well as the `replanted` hits, so the log can
+   * show a Treefolk that tried and failed. Empty whenever nothing qualified.
+   */
+  readonly replantDice: readonly DieRoll[]
 }
 
 /** What a caller should actually report as killed, given what it asked for. */
@@ -104,10 +109,18 @@ export function deathEntries(
 ): readonly LogEntry[] {
   const killed = killedIds(outcome, requested)
   return [
-    // First, and not a subset of anything: these were rolled *before* going to the DUA
-    // and never got there.
-    ...(outcome.replanted.length > 0
-      ? [{ kind: 'units_replanted', player, slot, unitIds: outcome.replanted } as const]
+    // First, because the roll comes *before* the DUA: the dice that rolled an ID never
+    // got there, and the ones that missed are named again in the kill line after it.
+    ...(outcome.replantDice.length > 0
+      ? [
+          {
+            kind: 'replanting',
+            player,
+            slot,
+            dice: outcome.replantDice,
+            rooted: outcome.replanted,
+          } as const,
+        ]
       : []),
     ...(killed.length > 0
       ? [{ kind: 'units_killed', player, slot, unitIds: killed } as const]
@@ -142,7 +155,9 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
   const candidates = Object.values(state.units).filter(
     (unit) => unitIds.includes(unit.id) && hasRiseFace(unit),
   )
-  if (candidates.length === 0) return { state, risen: [], regrown: [], replanted: [] }
+  if (candidates.length === 0) {
+    return { state, risen: [], regrown: [], replanted: [], replantDice: [] }
+  }
 
   const units = { ...state.units }
   const risen: UnitId[] = []
@@ -163,7 +178,7 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
     risen.push(unit.id)
   }
 
-  return { state: { ...state, units, rng }, risen, regrown: [], replanted: [] }
+  return { state: { ...state, units, rng }, risen, regrown: [], replanted: [], replantDice: [] }
 }
 
 /**
@@ -188,7 +203,7 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
  * to Reserves and touches the DUA not at all.
  */
 function replanting(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
-  const none: DeathOutcome = { state, risen: [], regrown: [], replanted: [] }
+  const none: DeathOutcome = { state, risen: [], regrown: [], replanted: [], replantDice: [] }
   if (!state.ruleSet.speciesAbilities) return none
 
   const candidates = Object.values(state.units).filter(
@@ -202,19 +217,27 @@ function replanting(state: GameState, unitIds: readonly UnitId[]): DeathOutcome 
 
   const units = { ...state.units }
   const replanted: UnitId[] = []
+  const replantDice: DieRoll[] = []
   let rng = state.rng
 
   for (const unit of candidates) {
     const [rolled, next] = rollFaces([unit], rng)
     rng = next
     const die = rolled[0]
-    if (die === undefined || faceOf(die).icon !== 'ID') continue
+    if (die === undefined) continue
+
+    // Drawn like any roll strip: the die that rolled an ID counts its ID, the rest
+    // count nothing and grey out -- which reads as "this one made it" at a glance.
+    const face = faceOf(die)
+    const rooted = face.icon === 'ID'
+    replantDice.push({ ...die, face, results: rooted ? face.count : 0 })
+    if (!rooted) continue
 
     units[unit.id] = { ...unit, location: { kind: 'reserve' } }
     replanted.push(unit.id)
   }
 
-  return { state: { ...state, units, rng }, risen: [], regrown: [], replanted }
+  return { state: { ...state, units, rng }, risen: [], regrown: [], replanted, replantDice }
 }
 
 /**
@@ -235,11 +258,17 @@ export function killUnits(state: GameState, unitIds: readonly UnitId[]): DeathOu
   // so it is never killed and no death trigger fires on it.
   const regrown = acceleratedGrowth(planted.state, remaining)
   const grown = regrown.length === 0 ? planted.state : exchangeWithDua(planted.state, regrown)
-  const dying = killedIds({ state: grown, risen: [], regrown, replanted: [] }, remaining)
+  const dying = killedIds(
+    { state: grown, risen: [], regrown, replanted: [], replantDice: [] },
+    remaining,
+  )
 
+  const { replantDice } = planted
   const killed = applyDamage(grown, dying)
-  if (state.ruleSet.dua !== 'active') return { state: killed, risen: [], regrown, replanted }
-  return { ...riseFromTheAshes(killed, dying), regrown, replanted }
+  if (state.ruleSet.dua !== 'active') {
+    return { state: killed, risen: [], regrown, replanted, replantDice }
+  }
+  return { ...riseFromTheAshes(killed, dying), regrown, replanted, replantDice }
 }
 
 /**
@@ -294,11 +323,11 @@ function acceleratedGrowth(
 export function buryUnits(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
   const buried = bury(state, unitIds)
   if (state.ruleSet.dua !== 'active') {
-    return { state: buried, risen: [], regrown: [], replanted: [] }
+    return { state: buried, risen: [], regrown: [], replanted: [], replantDice: [] }
   }
   // No Replanting here: it is a rule about being *killed*, and a unit being buried out
   // of the DUA was killed some time ago.
-  return { ...riseFromTheAshes(buried, unitIds), regrown: [], replanted: [] }
+  return { ...riseFromTheAshes(buried, unitIds), regrown: [], replanted: [], replantDice: [] }
 }
 
 /**
@@ -333,6 +362,7 @@ export function killAndBury(state: GameState, unitIds: readonly UnitId[]): Death
     risen: [...killed.risen, ...buried.risen],
     regrown: killed.regrown,
     replanted: killed.replanted,
+    replantDice: killed.replantDice,
   }
 }
 

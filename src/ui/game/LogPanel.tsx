@@ -280,22 +280,31 @@ function Line({
             .join(', ')}
         </p>
       )
-    // Not a death: these dice rolled an ID on their way to the DUA and never got there,
-    // so no kill line names them.
-    case 'units_replanted':
+    // Every roll, the misses too: a Treefolk that rolled and failed used to leave no
+    // trace, so "it tried" and "the rule never fired" looked the same. The ID dice are
+    // the ones that made it; they never reached the DUA, and no kill line names them.
+    case 'replanting': {
+      const names = (ids: readonly string[]) =>
+        ids.map((id) => (state.units[id] ? unitType(state.units[id]!.typeId).name : id)).join(', ')
+      const missed = entry.dice.map((d) => d.unitId).filter((id) => !entry.rooted.includes(id))
+      const theirs = entry.player === human ? 'your' : "the enemy's"
       return (
-        <p className="log-line big">
-          <b>Replanting</b>:{' '}
-          {entry.unitIds
-            .map((id) => {
-              const unit = state.units[id]
-              return unit ? unitType(unit.typeId).name : id
-            })
-            .join(', ')}{' '}
-          {entry.unitIds.length === 1 ? 'takes' : 'take'} root in{' '}
-          {entry.player === human ? 'your' : "the enemy's"} reserves instead of dying
-        </p>
+        <div className="log-roll">
+          <div className="roll-head">Replanting · {where(entry.slot)}</div>
+          <RollStrip dice={entry.dice} />
+          <div className="roll-sum">
+            {entry.rooted.length > 0 && (
+              <>
+                {names(entry.rooted)} rolled an ID and {entry.rooted.length === 1 ? 'takes' : 'take'}{' '}
+                root in {theirs} reserves
+              </>
+            )}
+            {entry.rooted.length > 0 && missed.length > 0 && '; '}
+            {missed.length > 0 && <>{names(missed)} rolled no ID and {missed.length === 1 ? 'dies' : 'die'}</>}
+          </div>
+        </div>
       )
+    }
     case 'units_risen':
       return (
         <p className="log-line big">

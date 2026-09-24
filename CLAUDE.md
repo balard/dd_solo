@@ -654,7 +654,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - **Replanting runs first, and a replanted unit was never killed** (Phase 8). `DeathOutcome`
     carries three ways out of a death -- `risen` (killed, then moved), `regrown` and `replanted`
     (neither killed at all) -- and `killedIds` / `deathEntries` are what keep the second two out of
-    a kill line. **A kill-and-bury must subtract `replanted` as well as `risen`** from what it
+    a kill line. **`replantDice` holds every Replanting roll, the misses too**, and the `replanting`
+    log entry draws them all: it first shipped listing only the rescued, so a Treefolk that rolled
+    and failed looked exactly like one that never rolled. Rise from the Ashes still has that
+    silence. **A kill-and-bury must subtract `replanted` as well as `risen`** from what it
     buries, or `bury` throws on a unit standing in Reserves. That was the Phase 8 plan's missed
     crash.
   - **Rise from the Ashes triggers on a *Rise face*, not an ID**, and on **burial as well as

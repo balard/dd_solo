@@ -909,3 +909,17 @@ describe('retreatPlan', () => {
     expect(plan.retreats).toEqual([b!.id])
   })
 })
+
+describe('the retreat question', () => {
+  it('names Air Flight when a flight is on offer, and only then', () => {
+    const state = fresh()
+    const plain = promptFor({ kind: 'retreat', player: 'p1' }, 'p1', state)
+    expect(plain.question).toBe('Pull units back to reserve?')
+    const flying = promptFor(
+      { kind: 'retreat', player: 'p1', flights: [{ unitId: 'x', options: ['frontier'] }] },
+      'p1',
+      state,
+    )
+    expect(flying.question).toMatch(/Air Flight/)
+  })
+})

@@ -1077,6 +1077,10 @@ function SaiHeader({
           <span className="muted">
             {' '}
             — tap units below{chosen.length > 0 ? ` (${chosen.length} chosen)` : ''}
+            {(pending.flights ?? []).length > 0 &&
+              (chosen.length > 0 && plan.flyTo.length === 0
+                ? '; not all of these can fly, so they can only pull back'
+                : ', then pull them back or fly them')}
           </span>
         </p>
         {flying > 0 && (

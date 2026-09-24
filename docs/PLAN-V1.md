@@ -2033,6 +2033,28 @@ in a browser:
 Replanting was not seen in a browser: a skip-every-march game against `RandomAI` went 29 turns
 without losing a die. The fuzz's 180 and the named tests are its proof.
 
+### What playing it found afterwards
+
+Two reports from the first real session, and neither was a wrong rule.
+
+- **A failed Replanting roll left no trace.** A Treefolk attacked at a water terrain and lost dice
+  to the counter-attack, and nothing on screen said Replanting had been tried. Whether it had been
+  could not be told from the screen, and that was the bug: the log entry was `units_replanted`, a
+  list of the rescued alone, so a miss drew a die and wrote nothing -- and a terrain without water,
+  where nothing is rolled, wrote nothing either. "It tried and failed" and "the rule never fired" looked
+  identical. That is the same shape as the dragon allocation sheet in Phase 6 and Flashfire in 7e:
+  a roll the player cannot see. It is now `replanting`, which carries **every** roll as a strip:
+  the ID dice light up and take root, the rest grey out and are named in the kill line after it.
+  The fuzz counts misses as well as hits now. Checked on `?forces=starter&seed=119`, whose Frontier
+  is a Feyland: the first melee draws a counter-attack that takes two dice, and the log reads
+  "Darktree rolled an ID and takes root in your reserves; Naiad rolled no ID and dies".
+- **The Retreat Step still asked "Pull units back to reserve?"** over a sheet offering flights. The
+  question now names Air Flight whenever a flight is on offer, and says what to do next. When the
+  chosen dice cannot all fly, it says so rather than just leaving the fly buttons out.
+
+Rise from the Ashes has the same silence, and has had it since Phase 2: a Phoenix that rolls and
+misses logs nothing. It was left alone here, because nobody asked for it.
+
 ---
 
 ## Phase 9 — UI and AI for v1

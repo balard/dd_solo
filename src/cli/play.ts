@@ -272,12 +272,12 @@ function describe(entry: LogEntry, state: GameState): string | null {
           .map((id) => (state.units[id] ? name(state.units[id]!) : id))
           .join(', ')}`,
       )
-    case 'units_replanted':
-      return green(
-        `  ${bold('Replanting')}: ${entry.unitIds
-          .map((id) => (state.units[id] ? name(state.units[id]!) : id))
-          .join(', ')} take root in ${entry.player}'s reserves instead of dying`,
-      )
+    case 'replanting': {
+      const rolls = entry.dice
+        .map((die) => `${shown(die)} ${entry.rooted.includes(die.unitId) ? green('takes root') : dim('dies')}`)
+        .join(', ')
+      return `  ${bold('Replanting')} at ${SLOT_LABEL[entry.slot as TerrainSlot] ?? entry.slot}: ${rolls}`
+    }
     case 'units_risen':
       return green(
         `  ${entry.unitIds
@@ -1278,7 +1278,13 @@ async function askUnits(state: GameState, pending: Pending): Promise<GameAction>
 
   const movable = livingUnits(state, player).filter((u) => u.location.kind === 'terrain')
 
-  console.log(`\n${bold('Retreat')} ${dim('— space-separated numbers, or enter for none')}`)
+  const canFly = pending.kind === 'retreat' && (pending.flights ?? []).length > 0
+  console.log(
+    `\n${bold('Retreat')} ${dim(
+      '— space-separated numbers to pull back to reserve, or enter for none' +
+        (canFly ? '; Air Flight is asked next, for the dice that stay' : ''),
+    )}`,
+  )
   movable.forEach((unit, i) => {
     const where = unit.location.kind === 'terrain' ? SLOT_LABEL[unit.location.slot] : 'reserve'
     console.log(`  ${i + 1}) ${name(unit)} ${dim(`(${unitType(unit.typeId).health}h, ${where})`)}`)
