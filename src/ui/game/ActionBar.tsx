@@ -703,75 +703,45 @@ function SaiHeader({
   }
 
   /**
-   * Accelerated Growth (Phase 9b): Wild Growth's gesture with no budget. The dying dice
-   * are already in the DUA, so they are tapped there; the partner is a button, because
-   * it is the only legal answer and carries nothing to weigh but its name.
+   * Accelerated Growth (Phase 9b): every die in this answer is in the DUA, so every one of
+   * them is tapped there -- the dying dice to save and the small ones to bring back. The
+   * sheet only counts and confirms; which pairs with which is not a choice worth asking.
    */
   if (prompt.custom === 'accelerated_growth' && pending.kind === 'accelerated_growth') {
-    const draft = growthDraft(state, pending, pairs, selection)
+    const draft = growthDraft(pending, selection)
+    const saving = draft.saving.length
+    const bringing = draft.bringing.length
+    const most = Math.min(pending.dying.length, pending.partners.length)
 
     return (
       <div className="action-bar">
-        <p className="question">
-          {prompt.question}
-          <span className="muted">
-            {pending.partners.length === 1
-              ? ' (one small die to spare)'
-              : ` (${pending.partners.length} small dice to spare)`}
-          </span>
-        </p>
-
-        {pairs.length > 0 && (
-          <p className="staged muted">
-            {pairs.map((pair, i) => (
-              <Fragment key={pair.unitId}>
-                {i > 0 && ' · '}
-                {nameOf(state, pair.unitId)} &rarr; <b>{nameOf(state, pair.partnerId)}</b>
-              </Fragment>
-            ))}
-          </p>
-        )}
+        <p className="question">{prompt.question}</p>
 
         <div className="choices">
-          {draft.chosen !== undefined && draft.partners.length > 0 ? (
-            draft.partners.map((unit) => (
-              <button
-                key={unit.id}
-                type="button"
-                className="choice"
-                onClick={() => {
-                  if (draft.chosen !== undefined) {
-                    onPair({ unitId: draft.chosen.id, partnerId: unit.id })
-                  }
-                  onClearSelection()
-                }}
-              >
-                {nameOf(state, draft.chosen?.id ?? '')} &rarr; {unitType(unit.typeId).name}
-              </button>
-            ))
-          ) : (
-            <>
-              <button
-                type="button"
-                className={pairs.length > 0 ? 'choice' : 'choice secondary'}
-                onClick={() => {
-                  dispatch({ kind: 'accelerated_growth', pairs })
-                  onClearDraft()
-                }}
-              >
-                {pairs.length > 0
-                  ? `Exchange ${pairs.length}` +
-                    (draft.dying.length > 0 ? `, let ${draft.dying.length} die` : '')
-                  : pending.dying.length === 1
-                    ? 'Let it die'
-                    : 'Let them all die'}
-              </button>
-              {draft.dying.length > 0 && draft.partners.length > 0 && (
-                <span className="tally muted">tap a dying die in the Fallen area to exchange it</span>
-              )}
-            </>
-          )}
-          {(pairs.length > 0 || draft.chosen !== undefined) && (
+          <button
+            type="button"
+            className={saving > 0 ? 'choice' : 'choice secondary'}
+            disabled={draft.pairs === null}
+            onClick={() => {
+              if (draft.pairs === null) return
+              dispatch({ kind: 'accelerated_growth', pairs: draft.pairs })
+              onClearDraft()
+            }}
+          >
+            {saving === 0
+              ? pending.dying.length === 1
+                ? 'Let it die'
+                : 'Let them all die'
+              : `Exchange ${saving}` +
+                (pending.dying.length > saving ? `, let ${pending.dying.length - saving} die` : '')}
+          </button>
+          <span className="tally muted">
+            {saving === 0 && bringing === 0
+              ? `in the Fallen area, tap up to ${most} dying ${most === 1 ? 'die' : 'dice'} and as many small ones to bring back`
+              : `saving ${saving}, bringing back ${bringing}` +
+                (draft.pairs === null ? ' — the two must match' : '')}
+          </span>
+          {(saving > 0 || bringing > 0) && (
             <button type="button" className="choice secondary" onClick={onClearDraft}>
               Clear
             </button>

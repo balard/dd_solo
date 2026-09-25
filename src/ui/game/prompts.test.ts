@@ -18,6 +18,7 @@ import {
   damageSelection,
   effectsOnArmy,
   effectsOnPlayer,
+  growthDraft,
   effectsOnTerrain,
   focusedSlot,
   orderedForDisplay,
@@ -658,6 +659,40 @@ describe('display order', () => {
     const before = units.map((u) => u.id)
     orderedForDisplay(units)
     expect(units.map((u) => u.id)).toEqual(before)
+  })
+})
+
+describe('growthDraft', () => {
+  const pending = {
+    kind: 'accelerated_growth',
+    player: 'p1',
+    dying: ['p1:oak#1', 'p1:willow#8'],
+    partners: ['p1:oakling#2', 'p1:nymph#12', 'p1:pineling#13'],
+  } as const
+
+  it('answers "let them all die" with nothing selected', () => {
+    expect(growthDraft(pending, new Set())).toEqual({ saving: [], bringing: [], pairs: [] })
+  })
+
+  it('pairs the two halves itself, because which pairs with which does not matter', () => {
+    const draft = growthDraft(pending, new Set(['p1:willow#8', 'p1:pineling#13', 'p1:oak#1', 'p1:nymph#12']))
+    // In the offer's order, not the order they were tapped.
+    expect(draft.pairs).toEqual([
+      { unitId: 'p1:oak#1', partnerId: 'p1:nymph#12' },
+      { unitId: 'p1:willow#8', partnerId: 'p1:pineling#13' },
+    ])
+  })
+
+  it('has no answer while the two counts differ', () => {
+    const draft = growthDraft(pending, new Set(['p1:oak#1', 'p1:willow#8', 'p1:nymph#12']))
+    expect(draft.saving).toHaveLength(2)
+    expect(draft.bringing).toHaveLength(1)
+    expect(draft.pairs).toBeNull()
+  })
+
+  it('ignores a selected die that is in neither half', () => {
+    const draft = growthDraft(pending, new Set(['p1:oak#1', 'p1:nymph#12', 'p2:genie#0']))
+    expect(draft.pairs).toEqual([{ unitId: 'p1:oak#1', partnerId: 'p1:nymph#12' }])
   })
 })
 

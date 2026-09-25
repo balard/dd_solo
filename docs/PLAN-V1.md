@@ -2188,6 +2188,14 @@ spare)". The Fallen section opened by itself with the Willow under "Dying — ta
 Tapping it offered three partners, and "Willow → Nymph" confirmed into the log line "Accelerated
 Growth Willow → Nymph". The Replanting miss that came before it showed the new order working.
 
+**What playing it found:** the partner was still a sheet button, one per one-health die in the
+DUA. Late in a game that is a long row of look-alike buttons, and it was a second way of picking a
+die. Both halves are now tapped in the DUA. It splits into three rows: *Dying*, *Can come back*,
+and the rest. **Which dying die pairs with which small one is not asked**, because it changes
+nothing: every partner is a one-health die going where the dead one stood. The player picks two
+sets of equal size, and `growthDraft` pairs them in the offer's order. The sheet only counts and
+confirms, and Exchange stays disabled until the two counts match.
+
 `SAVE_VERSION` is 12, for decision order. The spell fuzz counts the question being asked and being
 declined, and both are above zero.
 

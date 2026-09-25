@@ -177,13 +177,15 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   const anyDuaEffect = myDuaEffects.length > 0 || theirDuaEffects.length > 0
 
   // Accelerated Growth's question (Phase 9b) is about dice already in your DUA, so the
-  // Fallen section is where it is answered: it opens itself, and the dying dice stand
-  // apart from the long dead as their own selectable grid. A die already paired leaves
-  // that grid -- the staged line in the sheet says where it went.
+  // Fallen section is where it is answered, and it opens itself. The DUA splits in three
+  // rows -- the dying dice, the small ones that could come back, and the rest -- and the
+  // first two are selectable, so both halves of the answer are tapped in one place.
   const growth = selectMode?.side === 'dua' && pending?.kind === 'accelerated_growth' ? pending : null
-  const dyingIds = new Set(growth?.dying.filter((id) => !pairs.some((p) => p.unitId === id)) ?? [])
+  const dyingIds = new Set(growth?.dying ?? [])
+  const partnerIds = new Set(growth?.partners ?? [])
   const dying = myFallen.filter((unit) => dyingIds.has(unit.id))
-  const longDead = growth === null ? myFallen : myFallen.filter((unit) => !dyingIds.has(unit.id))
+  const partners = myFallen.filter((unit) => partnerIds.has(unit.id))
+  const longDead = myFallen.filter((unit) => !dyingIds.has(unit.id) && !partnerIds.has(unit.id))
   const fallenOpen = showFallen || growth !== null
 
   const health = (units: readonly { typeId: string }[]) =>
@@ -342,9 +344,9 @@ function GameView({ game }: { readonly game: PlayingGame }) {
             )}
             {fallenOpen && (
               <div className="fallen">
-                {dying.length > 0 && (
+                {growth !== null && (
                   <>
-                    <p className="fallen-side">Dying — tap one to exchange it</p>
+                    <p className="fallen-side">Dying — tap the ones to save</p>
                     <DiceGrid
                       units={dying}
                       selectable
@@ -353,9 +355,18 @@ function GameView({ game }: { readonly game: PlayingGame }) {
                       inspecting={inspecting}
                       onInspect={setInspecting}
                     />
+                    <p className="fallen-side">Can come back — tap as many as you save</p>
+                    <DiceGrid
+                      units={partners}
+                      selectable
+                      selected={selection}
+                      onToggle={toggle}
+                      inspecting={inspecting}
+                      onInspect={setInspecting}
+                    />
                   </>
                 )}
-                <p className="fallen-side muted">Yours</p>
+                <p className="fallen-side muted">{growth === null ? 'Yours' : 'Yours, the rest'}</p>
                 <DiceGrid units={longDead} inspecting={inspecting} onInspect={setInspecting} />
                 <p className="fallen-side muted">Enemy</p>
                 <DiceGrid units={theirFallen} inspecting={inspecting} onInspect={setInspecting} />

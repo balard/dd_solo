@@ -677,30 +677,39 @@ export interface PromoteDraft {
 }
 
 /**
- * Accelerated Growth, as a staged draft of `{dying -> partner}` pairs: Wild Growth's
- * gesture with no budget. Tap a dying die, then press the small one it comes back as.
+ * Accelerated Growth, as one selection over the DUA: the dying dice to save and the
+ * small dice to bring back, both tapped where they lie.
+ *
+ * **Which dying die pairs with which small one does not matter** -- every partner is a
+ * one-health die going to the place the dead one stood, and the dead one goes to the
+ * DUA either way -- so the player picks two sets of equal size and the pairs are
+ * formed here, in the order the offer lists them. The first cut paired them one by one
+ * with the partners as sheet buttons, which with a DUA full of one-health dice was a
+ * long row of look-alike buttons and a second way of picking a die.
  */
 export interface GrowthDraft {
-  /** Dying dice not yet paired. */
-  readonly dying: readonly UnitInstance[]
-  /** Partners not yet spent -- offered only once a dying die is picked. */
-  readonly partners: readonly UnitInstance[]
-  /** The picked dying die, if the selection holds one. */
-  readonly chosen: UnitInstance | undefined
+  /** Dying dice in the selection. */
+  readonly saving: readonly UnitId[]
+  /** One-health dice in the selection. */
+  readonly bringing: readonly UnitId[]
+  /** The answer, once the two counts agree. Null while they do not. */
+  readonly pairs: readonly PromotionPair[] | null
 }
 
 export function growthDraft(
-  state: GameState,
   pending: Extract<Pending, { kind: 'accelerated_growth' }>,
-  pairs: readonly PromotionPair[],
   selection: ReadonlySet<UnitId>,
 ): GrowthDraft {
-  const live = (ids: readonly UnitId[]) =>
-    ids.map((id) => state.units[id]).filter((u): u is UnitInstance => u !== undefined)
-  const dying = live(pending.dying.filter((id) => !pairs.some((p) => p.unitId === id)))
-  const partners = live(pending.partners.filter((id) => !pairs.some((p) => p.partnerId === id)))
-  const chosen = dying.find((unit) => selection.has(unit.id))
-  return { dying, partners, chosen }
+  const saving = pending.dying.filter((id) => selection.has(id))
+  const bringing = pending.partners.filter((id) => selection.has(id))
+  return {
+    saving,
+    bringing,
+    pairs:
+      saving.length === bringing.length
+        ? saving.map((unitId, i) => ({ unitId, partnerId: bringing[i] as UnitId }))
+        : null,
+  }
 }
 
 export function promoteDraft(
