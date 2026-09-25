@@ -492,6 +492,20 @@ export function sameSpellTarget(a: SpellTarget, b: SpellTarget): boolean {
 export interface SpellAim {
   readonly spell: string
   readonly element?: Element
+  /**
+   * How many castings the next target takes (Phase 9f), set by the picker's stepper
+   * before the target is tapped -- so three Stone Skins on one army is one tap, not three
+   * trips through spell and target. Absent means one. Ignored where the count buys
+   * nothing (`Spell.countScales`) or where the target sets it (`minCount`).
+   */
+  readonly count?: number
+}
+
+/** The castings one staged target takes: the stepper's number where it scales the
+ *  spell, never less than the target's own price, and one for everything else. */
+export function castingsFor(aim: SpellAim, s: Spell, minCount: number): number {
+  const asked = s.cumulative && s.countScales ? (aim.count ?? 1) : 1
+  return Math.max(asked, minCount)
 }
 
 /** One staged cast in a client's announcement draft. */

@@ -345,6 +345,7 @@ function ArmySide({
   onToggle,
   inspecting,
   onInspect,
+  only,
 }: {
   title: string
   species: Species
@@ -357,6 +358,7 @@ function ArmySide({
   onToggle: (id: UnitId) => void
   inspecting: UnitId | null
   onInspect: (id: UnitId | null) => void
+  only?: ReadonlySet<UnitId> | undefined
 }) {
   const { dice, health } = strength(units)
   return (
@@ -389,6 +391,7 @@ function ArmySide({
         onToggle={onToggle}
         inspecting={inspecting}
         onInspect={onInspect}
+        only={only}
       />
     </section>
   )
@@ -530,6 +533,7 @@ export function Board({
               onToggle={onToggle}
               inspecting={inspecting}
               onInspect={onInspect}
+              only={selectMode?.only}
             />
             <ArmySide
               title="Yours"
@@ -542,6 +546,7 @@ export function Board({
               onToggle={onToggle}
               inspecting={inspecting}
               onInspect={onInspect}
+              only={selectMode?.only}
             />
           </section>
         )

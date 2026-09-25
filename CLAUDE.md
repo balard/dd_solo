@@ -5,9 +5,8 @@ the dice and the opponent.
 
 > **Status: v0 alpha complete; v1 Phases 0–8 landed. The app plays every SAI, every eighth-face
 > icon power, all five elemental dragons, all eighteen spells and all four species abilities --
-> every rule in `PLAN-V1.md`. What is left is Phase 9 (UI and rules polish, six slices 9a-9f,
-> each stopping for a look in the browser before the next) and Phase 10 (`GreedyAI`, a real
-> opponent).**
+> every rule in `PLAN-V1.md`. Phase 9 (UI and rules polish, six slices 9a-9f) has landed too; what
+> is left is Phase 10 (`GreedyAI`, a real opponent).**
 > All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > and installable as a PWA. It opens on a screen that picks the two forces and the seed; saving is
@@ -882,11 +881,32 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   who taps the die they are looking at is not making a mistake. The board stays selectable too --
   both toggle the same `App` selection by unit id, so a chain of rerolls picks the die rather than
   one of its faces.
-- **A unit target is named by its army, and the buttons are grouped by it** (`spellTargetLabel`'s
-  `where`, `targetGroups` in `ActionBar`). Lightning Strike, Mirage and Path offer one button per
-  unit, and a force fields several dice of one type across three armies -- so the list read "Pine,
-  Pine, Pine, Pine" and picking the right one was guesswork. Grouping only applies to unit targets:
-  an army or terrain target already names its own place.
+- **One way to pick a die** (v1 Phase 9f): every die a decision asks about is tapped where it is
+  drawn, whether on a terrain, in a reserve or in the DUA. The sheet keeps only answers that are
+  not dice (terrains, armies, spells, counts) and Confirm. This covers spell unit targets
+  (Lightning Strike, Mirage, Path, Resurrect Dead), Wild Growth's partners, City, dragon
+  treasure, the Temple's burial and Accelerated Growth.
+  - **`pickModeFor`** is which dice respond. It is `selectModeFor` plus a `SelectMode` with
+    `side: 'any'` and an `only` set, because a spell's targets can be any die anywhere and a
+    promotion pairs a board die with a DUA die. It reads the drafts: a partner lights up only
+    once the die growing into it is picked. **`tapMeaning`** is what a tap does -- toggle, a
+    radio pick within a group, a Wild Growth pair, or a spell cast -- and `App` just carries it
+    out.
+  - **Named buttons per die are gone.** They read "Pine, Pine, Pine" and needed grouping by army
+    to be usable at all (`targetGroups`, deleted), and a DUA full of one-health dice was a long
+    row of look-alikes. A picked answer is named on the Confirm button instead: "Promote
+    Hamadryad → Pine".
+  - **The Fallen section opens itself** whenever a decision picks from your DUA.
+- **The spell picker has a casting count** (Phase 9f): − N + beside the targets, so three Stone
+  Skins on one army is one tap. It shows only where the count scales the spell. That is the
+  `countScales` flag in `data/spells.json`, false on Path, Mirage and Resurrect Dead, so the
+  client knows no spell by name. `castingsFor` in `magic.ts` is the one rule both clients apply,
+  and it is never less than the target's own `minCount`.
+- **A legal-but-bad answer is drawn small** (`Choice.emphasis: 'low'`, `.choice.minor`). Holding
+  the eighth face, "Keep it" is the primary answer and "Maneuver down" the small one, where it used
+  to be the green button.
+- **Muted text inside a button takes the button's colour** (`.choice .muted`). It was grey on the
+  accent green: a spell's cost you could barely read.
 - **An effect with a duration is drawn on the army it sits on** (`.army-effects`, from
   `effectsOnArmy`). It is the one thing on the board that is true *between* rolls, and it used to be
   invisible: a Galeforced army saved at minus four with the arithmetic only in a log line that had
@@ -898,11 +918,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   until Phase 4e's polish pass, with the compiler silent throughout. Annotated, a new
   `RollEffectBody` kind is a build error there.
 - **The two friendly sheets are drafts, like reinforce's.** Wild Growth stages `{army die -> dead
-  die}` pairs the way the Reinforce Step stages `{die -> terrain}` -- tap one of your dice, then
-  press the partner it comes back as, which carries its own price. The partners are *buttons* rather
-  than a second selectable grid: they are the only legal answers, and the DUA is already on screen
-  further down the page. A free move tallies passengers against three health-worth and gates the
-  destinations, never "Stay put".
+  die}` pairs the way the Reinforce Step stages `{die -> terrain}`: tap one of your dice, then tap
+  the lit die in the DUA it grows into (Phase 9f; it was a button). The sheet lists what each
+  partner would cost, because a lit die cannot say. A free move tallies passengers against three
+  health-worth and gates the destinations, never "Stay put".
 - **Logic lives in pure functions in `prompts.ts`, not in components.** `damageSelection` is the
   example: the confirm-button rule is testable without a DOM. Keep it that way rather than
   reaching for jsdom.

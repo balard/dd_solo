@@ -16,7 +16,6 @@ import type { Element, ResultType, TerrainFaceNumber } from '../../data/types'
 import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../../engine/sai'
 import { ABILITY_TEXT } from '../../engine/species'
 import {
-  armyRefOf,
   type GameAction,
   type GameState,
   type Pending,
@@ -39,11 +38,14 @@ import {
   breathSelection,
   damageSelection,
   moveDraft,
+  cityAnswer,
   growthDraft,
   pickableIn,
+  pickModeFor,
   rollsBehind,
-  selectModeFor,
+  spellUnitOffers,
   tableRollHeading,
+  treasureAnswer,
   promoteDraft,
   saiTargetSelection,
   describeFace,
@@ -57,12 +59,12 @@ import {
   type ReinforceMove,
 } from './prompts'
 import {
+  castingsFor,
   OWN_ARMY_NOTE,
   repeatBuysNothing,
   spellPlan,
   type SpellAim,
   type SpellDraftCast,
-  type SpellTargetOffer,
 } from '../../engine/magic'
 
 import { LogLine } from './LogPanel'
@@ -98,7 +100,6 @@ export function ActionBar(props: {
   onAim: (aim: SpellAim | null) => void
   onCast: (cast: SpellDraftCast) => void
   onStage: (moves: readonly ReinforceMove[]) => void
-  onPair: (pair: PromotionPair) => void
   onCount: (key: string, by: number) => void
   /** The same toggle the board's grids use, so a die picked in either place is the
    *  one selection. */
@@ -123,7 +124,9 @@ export function ActionBar(props: {
       : { options: options as ReadonlySet<string>, selected: selection as ReadonlySet<string>, onToggle }
   // Offered whenever the answer is dice -- on the board, in the DUA or in a strip --
   // because that is exactly when a tap on a die cannot also open it.
-  const picksDice = pending?.player === human && (selectModeFor(pending, human) !== null || options !== null)
+  const picksDice =
+    pending?.player === human &&
+    (pickModeFor(state, pending, human, selection, rest.pairs, rest.aiming) !== null || options !== null)
 
   return (
     <div className="action-dock">
@@ -220,7 +223,6 @@ function Sheet({
   onAim,
   onCast,
   onStage,
-  onPair,
   onCount,
   onClearSelection,
   onClearDraft,
@@ -247,7 +249,6 @@ function Sheet({
   onAim: (aim: SpellAim | null) => void
   onCast: (cast: SpellDraftCast) => void
   onStage: (moves: readonly ReinforceMove[]) => void
-  onPair: (pair: PromotionPair) => void
   onCount: (key: string, by: number) => void
   /** The same toggle the board's grids use, so a die picked in either place is the
    *  one selection. */
@@ -616,36 +617,6 @@ function Sheet({
  * happens to the dice afterwards. `SAI_TEXT` lives beside the handlers so the sentence
  * and the behaviour cannot drift.
  */
-/**
- * A spell's targets, split into the armies they stand in.
- *
- * Only unit targets group: an army or a terrain target already names its own place,
- * so grouping those would add a heading that repeats the button under it. `head` is
- * null for the ungrouped case, which is most spells.
- */
-function targetGroups(
-  state: GameState,
-  human: PlayerId,
-  targets: readonly SpellTargetOffer[],
-): readonly { readonly head: string | null; readonly aims: readonly SpellTargetOffer[] }[] {
-  if (!targets.every((aim) => aim.target.kind === 'units')) return [{ head: null, aims: targets }]
-
-  const groups = new Map<string, SpellTargetOffer[]>()
-  for (const aim of targets) {
-    const ids = aim.target.kind === 'units' ? aim.target.unitIds : []
-    const ref = ids.map((id) => armyRefOf(state, id)).find((r) => r !== null) ?? null
-    // A unit that is nowhere on the board is in the DUA -- Resurrect Dead's targets.
-    const head = ref === null ? 'your dead' : slotLabel(ref, human)
-    const at = groups.get(head)
-    if (at === undefined) groups.set(head, [aim])
-    else at.push(aim)
-  }
-
-  // One group is no grouping: a heading over the whole list says nothing.
-  if (groups.size < 2) return [{ head: null, aims: targets }]
-  return [...groups].map(([head, aims]) => ({ head, aims }))
-}
-
 function SaiHeader({
   sai,
   rule,
@@ -765,20 +736,14 @@ function SaiHeader({
 
         <div className="choices">
           {draft.partners.length > 0 ? (
-            draft.partners.map(({ unit, cost }) => (
-              <button
-                key={unit.id}
-                type="button"
-                className="choice"
-                onClick={() => {
-                  if (chosen !== undefined) onPair({ unitId: chosen, partnerId: unit.id })
-                  onClearSelection()
-                }}
-              >
-                &rarr; {unitType(unit.typeId).name}{' '}
-                <span className="muted">({cost})</span>
-              </button>
-            ))
+            // Tapped in the Fallen area since Phase 9f; the price each would cost is
+            // said here, because a lit die in the DUA cannot say it.
+            <span className="tally muted">
+              tap what {nameOf(state, chosen ?? '')} grows into in the Fallen area —{' '}
+              {draft.partners
+                .map(({ unit, cost }) => `${unitType(unit.typeId).name} ${cost}`)
+                .join(', ')}
+            </span>
           ) : (
             <>
               <button
@@ -1010,6 +975,9 @@ function SaiHeader({
     const element = aiming?.element ?? (aimed?.castable.elements.length === 1
       ? (aimed.castable.elements[0] as Element)
       : undefined)
+    const castings = aiming?.count ?? 1
+    const aimedAim: SpellAim = { spell: aiming?.spell ?? '', count: castings }
+    const unitOffers = spellUnitOffers(pending, aiming)
 
     return (
       <div className="action-bar">
@@ -1066,45 +1034,79 @@ function SaiHeader({
           ) : aimed !== undefined && element !== undefined ? (
             <>
               {/*
-               * Grouped by the army the targets stand in, not one flat list. A spell
-               * that targets units offers one button per unit, and a force fields
-               * several dice of one type -- so Mirage in a monster mirror printed
-               * "Genie" twelve times over. The heading says which army, and the
-               * label says it again on each button, because a button read aloud on
-               * its own still has to identify what it picks.
+               * How many castings the next target takes (Phase 9f): three Stone Skins
+               * on one army is one tap on the army, not three trips through spell and
+               * target. Only where the number scales the spell -- `countScales` says
+               * which, so the client knows no spell by name.
                */}
-              {targetGroups(state, human, aimed.castable.targets).map((group) => (
-                <Fragment key={group.head ?? 'all'}>
-                  {group.head !== null && <p className="choice-group">{group.head}</p>}
-                  {group.aims.map((aim, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      className="choice"
-                      disabled={
-                        aim.minCount * aimed.castable.spell.cost > plan.remaining ||
-                        repeatBuysNothing(plan.casts, aimed.castable.spell.id, aim.target)
-                      }
-                      onClick={() => {
-                        onCast({
-                          spell: aimed.castable.spell.id,
-                          element,
-                          // The target sets the floor: Resurrect Dead's price is a
-                          // property of what it is aimed at, not a separate choice.
-                          count: aim.minCount,
-                          target: aim.target,
-                        })
-                        onAim(null)
-                      }}
-                    >
-                      {spellTargetLabel(aim.target, human, state)}
-                      {aim.minCount > 1 && (
-                        <span className="muted"> {aim.minCount * aimed.castable.spell.cost}</span>
-                      )}
-                    </button>
-                  ))}
-                </Fragment>
-              ))}
+              {aimed.castable.spell.cumulative && aimed.castable.spell.countScales && (
+                <span className="stepper">
+                  castings
+                  <button
+                    type="button"
+                    className="choice secondary minor"
+                    disabled={castings <= 1}
+                    onClick={() => onAim({ spell: aimed.castable.spell.id, element, count: castings - 1 })}
+                    aria-label="one casting fewer"
+                  >
+                    &minus;
+                  </button>
+                  <b>{castings}</b>
+                  <button
+                    type="button"
+                    className="choice secondary minor"
+                    disabled={(castings + 1) * aimed.castable.spell.cost > plan.remaining}
+                    onClick={() => onAim({ spell: aimed.castable.spell.id, element, count: castings + 1 })}
+                    aria-label="one casting more"
+                  >
+                    +
+                  </button>
+                  <span className="muted">= {castings * aimed.castable.spell.cost} magic</span>
+                </span>
+              )}
+              {/*
+               * A unit target is tapped where it stands (Phase 9f) -- on the board, in a
+               * reserve, or in the DUA for Resurrect Dead. It used to be a button per
+               * unit, grouped by army because a force fields several dice of one type,
+               * and still a second way of picking a die.
+               */}
+              {unitOffers !== null ? (
+                <span className="tally muted">
+                  {aimed.castable.spell.target === 'own_dua'
+                    ? 'tap a lit die in the Fallen area'
+                    : 'tap a lit die on the board'}
+                </span>
+              ) : (
+                aimed.castable.targets.map((aim, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className="choice"
+                    disabled={
+                      castingsFor(aimedAim, aimed.castable.spell, aim.minCount) *
+                        aimed.castable.spell.cost >
+                        plan.remaining ||
+                      repeatBuysNothing(plan.casts, aimed.castable.spell.id, aim.target)
+                    }
+                    onClick={() => {
+                      onCast({
+                        spell: aimed.castable.spell.id,
+                        element,
+                        // The target sets the floor: Resurrect Dead's price is a
+                        // property of what it is aimed at, not a separate choice.
+                        count: castingsFor(aimedAim, aimed.castable.spell, aim.minCount),
+                        target: aim.target,
+                      })
+                      onAim(null)
+                    }}
+                  >
+                    {spellTargetLabel(aim.target, human, state)}
+                    {aim.minCount > 1 && (
+                      <span className="muted"> {aim.minCount * aimed.castable.spell.cost}</span>
+                    )}
+                  </button>
+                ))
+              )}
               <button type="button" className="choice secondary" onClick={() => onAim(null)}>
                 Back
               </button>
@@ -1311,39 +1313,97 @@ function SaiHeader({
    * spend across several dice and no partner to pick afterwards, so there is
    * nothing for a draft to hold.
    */
+  // City (Phase 9f): tap a dead one-health die to recruit it, or one of yours and then
+  // what it becomes -- both where they lie. The sheet names the answer and confirms it;
+  // it used to be a row of named buttons, one per recruit and one per promotion.
   if (prompt.custom === 'eighth_face_city' && pending.kind === 'eighth_face_city') {
+    const answer = cityAnswer(pending, selection)
     return (
       <div className="action-bar">
         <p className="question">{prompt.question}</p>
         <div className="choices">
-          {pending.recruits.map((unitId) => (
-            <button
-              key={unitId}
-              type="button"
-              className="choice"
-              onClick={() =>
-                dispatch({ kind: 'eighth_face_city', choice: { kind: 'recruit', unitId } })
-              }
-            >
-              Recruit {nameOf(state, unitId)}
-            </button>
-          ))}
-          {pending.promotions.map((pair) => (
-            <button
-              key={`${pair.unitId}-${pair.partnerId}`}
-              type="button"
-              className="choice"
-              onClick={() => dispatch({ kind: 'eighth_face_city', choice: { kind: 'promote', pair } })}
-            >
-              Promote {nameOf(state, pair.unitId)} &rarr; {nameOf(state, pair.partnerId)}
-            </button>
-          ))}
+          <button
+            type="button"
+            className="choice"
+            disabled={answer === null}
+            onClick={() => {
+              dispatch({ kind: 'eighth_face_city', choice: answer })
+              onClearSelection()
+            }}
+          >
+            {answer === null
+              ? 'Recruit or promote'
+              : answer.kind === 'recruit'
+                ? `Recruit ${nameOf(state, answer.unitId)}`
+                : `Promote ${nameOf(state, answer.pair.unitId)} → ${nameOf(state, answer.pair.partnerId)}`}
+          </button>
           <button
             type="button"
             className="choice secondary"
             onClick={() => dispatch({ kind: 'eighth_face_city', choice: null })}
           >
             Do nothing
+          </button>
+          {answer === null && (
+            <span className="tally muted">
+              {pending.recruits.length > 0 ? 'tap a lit die in the Fallen area to recruit it' : ''}
+              {pending.recruits.length > 0 && pending.promotions.length > 0 ? ', or ' : ''}
+              {pending.promotions.length > 0 ? 'tap one of yours, then what it becomes' : ''}
+            </span>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (prompt.custom === 'temple_bury' && pending.kind === 'temple_bury') {
+    const chosen = pending.options.find((id) => selection.has(id))
+    return (
+      <div className="action-bar">
+        <p className="question">{prompt.question}</p>
+        <div className="choices">
+          <button
+            type="button"
+            className="choice"
+            disabled={chosen === undefined}
+            onClick={() => {
+              if (chosen === undefined) return
+              dispatch({ kind: 'temple_bury', unitId: chosen })
+              onClearSelection()
+            }}
+          >
+            {chosen === undefined ? 'Bury' : `Bury ${nameOf(state, chosen)}`}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (prompt.custom === 'dragon_treasure' && pending.kind === 'dragon_treasure') {
+    const pair = treasureAnswer(pending, selection)
+    return (
+      <div className="action-bar">
+        <p className="question">{prompt.question}</p>
+        <div className="choices">
+          <button
+            type="button"
+            className="choice"
+            disabled={pair === null}
+            onClick={() => {
+              dispatch({ kind: 'dragon_treasure', pair })
+              onClearSelection()
+            }}
+          >
+            {pair === null
+              ? 'Promote'
+              : `Promote ${nameOf(state, pair.unitId)} → ${nameOf(state, pair.partnerId)}`}
+          </button>
+          <button
+            type="button"
+            className="choice secondary"
+            onClick={() => dispatch({ kind: 'dragon_treasure', pair: null })}
+          >
+            Decline
           </button>
         </div>
       </div>
@@ -1362,7 +1422,7 @@ function SaiHeader({
           <button
             key={i}
             type="button"
-            className={`choice ${choice.passive ? 'secondary' : ''}`}
+            className={`choice ${choice.passive ? 'secondary' : ''} ${choice.emphasis === 'low' ? 'minor' : ''}`}
             // The glyphs inside reach a screen reader as nothing, so the whole
             // sentence is repeated here in words.
             aria-label={plainLabel(choice)}

@@ -148,9 +148,13 @@ export function DiceGrid({
   onToggle,
   inspecting,
   onInspect,
+  only,
 }: {
   units: readonly UnitInstance[]
   selectable?: boolean
+  /** When set, only these dice in the grid respond to a tap (Phase 9f); the rest
+   *  inspect. A spell's targets or a promotion's partners are a set, not a grid. */
+  only?: ReadonlySet<UnitId> | undefined
   /** Dice that cannot be rolled or moved. They still show, still take damage and
    *  still inspect -- they are simply not pickable, and say so. */
   asleep?: ReadonlySet<UnitId>
@@ -168,7 +172,7 @@ export function DiceGrid({
       {orderedForDisplay(units).map((unit) => {
         const type = unitType(unit.typeId)
         const isAsleep = asleep?.has(unit.id) ?? false
-        const canSelect = selectable && !isAsleep
+        const canSelect = selectable && !isAsleep && (only === undefined || only.has(unit.id))
         const isSelected = selected?.has(unit.id) ?? false
         // A sleeping die is never pickable, so tapping it inspects even while the
         // rest of the army is being selected from.

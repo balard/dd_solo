@@ -10,8 +10,11 @@ import { spell } from '../../data/spells'
 import type { TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
 import {
+  castingsFor,
   magicRolled,
   spellTargetLabel as engineSpellTargetLabel,
+  type SpellAim,
+  type SpellTargetOffer,
 } from '../../engine/magic'
 import { growthPartners, promotionGain } from '../../engine/dua'
 import { ALL_RESULT_TYPES, type Modifier } from '../../engine/pipeline'
@@ -80,6 +83,12 @@ export interface Choice {
   readonly action: GameAction
   /** Marks the "do nothing" option so it can be styled as secondary. */
   readonly passive?: boolean
+  /**
+   * The answer that is legal but almost never right (Phase 9f): drawn smaller as well as
+   * secondary. Stepping a captured terrain down off its eighth face is the case -- it
+   * gives up the capture, and it used to be the green button.
+   */
+  readonly emphasis?: 'low'
 }
 
 /**
@@ -119,6 +128,8 @@ export interface Prompt {
     | 'flashfire'
     | 'rapid_growth'
     | 'accelerated_growth'
+    | 'temple_bury'
+    | 'dragon_treasure'
 }
 
 const stepFace = (face: TerrainFace, direction: Direction): TerrainFace =>
@@ -163,6 +174,29 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         dieId,
         face: stepFace(terrain.face, direction),
       }))
+
+      // Holding the eighth face, the only way is down -- off the capture, and off the
+      // power that comes with it. Legal, and nearly always a mistake, so keeping it is
+      // the primary answer and going down is the small one (Phase 9f).
+      if (terrain.face === 8 && terrain.capturedBy === pending.player) {
+        return {
+          question: `You hold the eighth face at ${label(pending.slot)}. Keep it?`,
+          choices: [
+            {
+              label: 'Keep it at {}',
+              faces: [{ dieId, face: terrain.face }],
+              action: { kind: 'choose_maneuver', maneuver: false },
+            },
+            {
+              label: 'Maneuver down to {}',
+              faces: reachable,
+              action: { kind: 'choose_maneuver', maneuver: true },
+              passive: true,
+              emphasis: 'low',
+            },
+          ],
+        }
+      }
 
       return {
         question: `Maneuver the terrain at ${label(pending.slot)}?`,
@@ -341,18 +375,13 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         ],
       }
 
-    // "Of their choice" -- one button per unit in the DUA, the way the DUA is
-    // already shown as a plain list rather than a selectable grid.
+    // "Of their choice" -- tapped in the DUA since Phase 9f; it used to be one button
+    // per unit, named, which is a second way of picking a die.
     case 'temple_bury':
       return {
-        question: 'The Temple forces a burial. Choose one of your DUA units.',
-        choices: pending.options.map((unitId) => {
-          const unit = state.units[unitId]
-          return {
-            label: unit === undefined ? unitId : unitType(unit.typeId).name,
-            action: { kind: 'temple_bury', unitId },
-          }
-        }),
+        question: 'The Temple forces a burial — tap one of your dead dice in the Fallen area',
+        choices: [],
+        custom: 'temple_bury',
       }
 
     // The same grid as a damage assignment, for the same reason: five health-worth
@@ -364,18 +393,13 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         custom: 'dragon_breath',
       }
 
-    // One unit, one step, and the army *may* decline -- so a button each rather
-    // than the staged pairs Wild Growth needs for a budget.
+    // One unit, one step, and the army *may* decline. Picked like every other pair since
+    // Phase 9f: your die on the board, then what it becomes in the DUA.
     case 'dragon_treasure':
       return {
-        question: 'Treasure! Promote one unit',
-        choices: [
-          ...pending.promotions.map((pair) => ({
-            label: `${unitName(state, pair.unitId)} → ${unitName(state, pair.partnerId)}`,
-            action: { kind: 'dragon_treasure', pair } as GameAction,
-          })),
-          { label: 'Decline', action: { kind: 'dragon_treasure', pair: null }, passive: true },
-        ],
+        question: 'Treasure! Promote one unit — tap one of yours, then what it becomes in your DUA',
+        choices: [],
+        custom: 'dragon_treasure',
       }
 
     case 'dragon_allocate':
@@ -925,10 +949,17 @@ export interface SelectMode {
    * had to offer the *enemy's* dice: every decision before it picked from your own
    * army, so `Board` hard-coded the opposing side unselectable.
    */
-  readonly side: 'mine' | 'theirs' | 'reserve' | 'dua'
+  readonly side: 'mine' | 'theirs' | 'reserve' | 'dua' | 'any'
   /** A Reserve Army is a legal target since Phase 5d's Tower, so this is an
    *  `ArmyRef` rather than a `TerrainSlot`; `null` still means "wherever". */
   readonly slot: ArmyRef | null
+  /**
+   * With `side: 'any'` (Phase 9f): exactly these dice respond, wherever they are drawn
+   * -- a terrain, a reserve, the DUA. A spell's target can be anybody's die anywhere, and
+   * a promotion pairs a die on the board with one in the DUA, which no side-and-slot
+   * rule can say.
+   */
+  readonly only?: ReadonlySet<UnitId>
 }
 
 export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): SelectMode | null {
@@ -994,6 +1025,8 @@ export function selectableAt(
   slot: ArmyRef,
   side: 'mine' | 'theirs' = 'mine',
 ): boolean {
+  // 'any' lights whole grids and lets `only` pick the dice inside them.
+  if (mode?.side === 'any') return true
   return mode?.side === side && (mode.slot === null || mode.slot === slot)
 }
 
@@ -1051,6 +1084,164 @@ export function effectsOnArmy(
   }
 
   return out
+}
+
+/**
+ * **One way to pick a die** (v1 Phase 9f): every die a decision is asking about is
+ * tapped where it is drawn -- on the board, in a reserve, in the DUA. The sheet keeps
+ * only answers that are not dice: terrains, armies, spells, counts, and Confirm.
+ *
+ * Before this, half the decisions picked from the board and half from a row of sheet
+ * buttons named after dice ("Pine, Pine, Pine"), and a DUA full of one-health dice was
+ * a long row of look-alikes. `pickModeFor` is which dice respond, and `tapMeaning` is
+ * what a tap on one does; `App` does what it says and nothing else.
+ */
+export function pickModeFor(
+  state: GameState,
+  pending: Pending | null,
+  human: PlayerId,
+  selection: ReadonlySet<UnitId>,
+  pairs: readonly PromotionPair[],
+  aiming: SpellAim | null,
+): SelectMode | null {
+  if (pending === null || pending.player !== human) return null
+  const any = (ids: Iterable<UnitId>): SelectMode => ({ side: 'any', slot: null, only: new Set(ids) })
+
+  switch (pending.kind) {
+    case 'announce_spells': {
+      const offers = spellUnitOffers(pending, aiming)
+      return offers === null ? null : any(offers.keys())
+    }
+    // Wild Growth: your die on the board, then what it grows into in the DUA.
+    case 'sai_promote': {
+      const draft = promoteDraft(state, pending, pairs, selection)
+      return any([...draft.growable.map((u) => u.id), ...draft.partners.map((p) => p.unit.id)])
+    }
+    case 'eighth_face_city': {
+      const chosen = chosenOf(selection, pending.promotions.map((p) => p.unitId))
+      return any([
+        ...pending.promotions.map((p) => p.unitId),
+        ...pending.recruits,
+        ...partnersOf(pending.promotions, chosen),
+      ])
+    }
+    case 'dragon_treasure': {
+      const chosen = chosenOf(selection, pending.promotions.map((p) => p.unitId))
+      return any([...pending.promotions.map((p) => p.unitId), ...partnersOf(pending.promotions, chosen)])
+    }
+    case 'temple_bury':
+      return any(pending.options)
+    default:
+      return selectModeFor(pending, human)
+  }
+}
+
+/** What a tap on a die means under the current decision. */
+export type Tap =
+  /** Into or out of the selection -- a damage assignment, a retreat. */
+  | { readonly kind: 'toggle' }
+  /** The only one picked from `group`: tapping another replaces it. */
+  | { readonly kind: 'radio'; readonly group: ReadonlySet<UnitId> }
+  /** Wild Growth: this dead die is what the chosen one grows into. */
+  | { readonly kind: 'pair'; readonly pair: PromotionPair }
+  /** A spell aimed at this die, with its castings. */
+  | { readonly kind: 'cast'; readonly target: SpellTarget; readonly count: number }
+
+export function tapMeaning(
+  state: GameState,
+  pending: Pending | null,
+  selection: ReadonlySet<UnitId>,
+  pairs: readonly PromotionPair[],
+  aiming: SpellAim | null,
+  unitId: UnitId,
+): Tap {
+  if (pending === null) return { kind: 'toggle' }
+  switch (pending.kind) {
+    case 'announce_spells': {
+      const offer = spellUnitOffers(pending, aiming)?.get(unitId)
+      if (offer === undefined || aiming === null) return { kind: 'toggle' }
+      return {
+        kind: 'cast',
+        target: offer.target,
+        count: castingsFor(aiming, spell(aiming.spell), offer.minCount),
+      }
+    }
+    case 'sai_promote': {
+      const draft = promoteDraft(state, pending, pairs, selection)
+      const chosen = [...selection].find((id) => draft.growable.some((u) => u.id === id))
+      if (chosen !== undefined && draft.partners.some((p) => p.unit.id === unitId)) {
+        return { kind: 'pair', pair: { unitId: chosen, partnerId: unitId } }
+      }
+      return { kind: 'radio', group: new Set(draft.growable.map((u) => u.id)) }
+    }
+    case 'eighth_face_city':
+    case 'dragon_treasure': {
+      const board = new Set(pending.promotions.map((p) => p.unitId))
+      if (board.has(unitId)) return { kind: 'radio', group: board }
+      const dua = pending.kind === 'eighth_face_city' ? [...pending.recruits] : []
+      return { kind: 'radio', group: new Set([...dua, ...pending.promotions.map((p) => p.partnerId)]) }
+    }
+    case 'temple_bury':
+      return { kind: 'radio', group: new Set(pending.options) }
+    default:
+      return { kind: 'toggle' }
+  }
+}
+
+/** The one die in `group` that is selected, if any. */
+function chosenOf(selection: ReadonlySet<UnitId>, group: readonly UnitId[]): UnitId | undefined {
+  return group.find((id) => selection.has(id))
+}
+
+function partnersOf(promotions: readonly PromotionPair[], chosen: UnitId | undefined): UnitId[] {
+  return chosen === undefined ? [] : promotions.filter((p) => p.unitId === chosen).map((p) => p.partnerId)
+}
+
+/**
+ * The dice a spell being aimed may be tapped on, each with its offer -- or null when
+ * the spell is not aimed at units, or no element has been settled yet.
+ */
+export function spellUnitOffers(
+  pending: Extract<Pending, { kind: 'announce_spells' }>,
+  aiming: SpellAim | null,
+): ReadonlyMap<UnitId, SpellTargetOffer> | null {
+  if (aiming === null) return null
+  const castable = pending.castable.find((c) => c.spell.id === aiming.spell)
+  if (castable === undefined) return null
+  const element = aiming.element ?? (castable.elements.length === 1 ? castable.elements[0] : undefined)
+  if (element === undefined) return null
+  const offers = new Map<UnitId, SpellTargetOffer>()
+  for (const offer of castable.targets) {
+    if (offer.target.kind !== 'units') continue
+    const [only] = offer.target.unitIds
+    if (only !== undefined && offer.target.unitIds.length === 1) offers.set(only, offer)
+  }
+  return offers.size === 0 ? null : offers
+}
+
+/**
+ * City: a recruit (one dead die, alone) or a promotion (one of yours, then its partner),
+ * read off the selection. Null while neither is complete.
+ */
+export function cityAnswer(
+  pending: Extract<Pending, { kind: 'eighth_face_city' }>,
+  selection: ReadonlySet<UnitId>,
+): Extract<GameAction, { kind: 'eighth_face_city' }>['choice'] {
+  const chosen = chosenOf(selection, pending.promotions.map((p) => p.unitId))
+  if (chosen !== undefined) {
+    const pair = pending.promotions.find((p) => p.unitId === chosen && selection.has(p.partnerId))
+    return pair === undefined ? null : { kind: 'promote', pair }
+  }
+  const recruit = pending.recruits.find((id) => selection.has(id))
+  return recruit === undefined ? null : { kind: 'recruit', unitId: recruit }
+}
+
+/** Dragon treasure: the promotion the selection names, or null. */
+export function treasureAnswer(
+  pending: Extract<Pending, { kind: 'dragon_treasure' }>,
+  selection: ReadonlySet<UnitId>,
+): PromotionPair | null {
+  return pending.promotions.find((p) => selection.has(p.unitId) && selection.has(p.partnerId)) ?? null
 }
 
 /**

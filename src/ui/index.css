@@ -588,6 +588,15 @@ body {
   font-size: .85rem;
 }
 .pool-head { margin-top: 10px; }
+/* The spell picker's casting count (Phase 9f): − N + beside the targets it applies to. */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-basis: 100%;
+  font-size: .85rem;
+}
+.stepper .choice.minor { min-width: 34px; flex: none; }
 /* The reinforce draft: where each staged die is headed, before it is sent. */
 .staged { margin: -4px 0 9px; font-size: .82rem; }
 .staged b { font-weight: 600; }
@@ -639,6 +648,10 @@ body {
   flex: 0 1 auto;
 }
 .choice.secondary:hover { border-color: var(--muted); }
+/* Muted text inside a button -- a spell's cost, a partner's price -- takes the button's
+   own colour, dimmed. Plain `.muted` is grey, which on the accent green was grey on
+   green and all but unreadable (Phase 9f). `.dragon-chip .muted` did the same first. */
+.choice .muted { color: inherit; opacity: .78; }
 
 
 

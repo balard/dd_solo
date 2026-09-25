@@ -58,6 +58,10 @@
             ],
             "description": "What the caster names when announcing. The rules' five target kinds (army, unit(s), terrain, DUA, BUA), split by whose it may be. `own_army` is the house rule that a beneficial army spell reaches only your own armies (RULES-V0.md section 15); `own_dua` is units in your DUA (Resurrect Dead), `dua` the area itself (Accelerated Growth)."
           },
+          "countScales": {
+            "const": false,
+            "description": "Phase 9f: a cumulative spell whose number counts targets or is priced by its target (Path, Mirage, Resurrect Dead), so a second casting at the same target buys nothing. The spell picker offers no casting count for it. Absent means the count scales the effect."
+          },
           "cumulative": {
             "type": "boolean",
             "description": "The rulebook prints the combinable number in red, which text extraction drops -- this is that fact, read off the rendered page. Combined castings multiply the highlighted number; a non-cumulative spell cast twice on one target does nothing extra."

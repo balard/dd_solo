@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { unitType } from '../../data/load'
 import type { UnitType } from '../../data/types'
 import { ALL_RESULT_TYPES } from '../../engine/pipeline'
+import { castingsFor } from '../../engine/magic'
+import { spell } from '../../data/spells'
 import { begin } from '../../engine/reduce'
 import { BESTIARY_FORCES, setupGame, STARTER_FORCES } from '../../engine/setup'
 import {
@@ -19,8 +21,12 @@ import {
   damageSelection,
   effectsOnArmy,
   effectsOnPlayer,
+  cityAnswer,
   growthDraft,
+  pickModeFor,
   pickableIn,
+  tapMeaning,
+  treasureAnswer,
   rollsBehind,
   effectsOnTerrain,
   focusedSlot,
@@ -662,6 +668,114 @@ describe('display order', () => {
     const before = units.map((u) => u.id)
     orderedForDisplay(units)
     expect(units.map((u) => u.id)).toEqual(before)
+  })
+})
+
+describe('the eighth face (Phase 9f)', () => {
+  it('makes keeping it the answer, and going down the small one', () => {
+    // Going down gives up the capture and its power. It used to be the green button.
+    const base = fresh()
+    const state: GameState = {
+      ...base,
+      terrains: { ...base.terrains, p1_home: { ...base.terrains.p1_home, face: 8, capturedBy: 'p1' } },
+    }
+    const prompt = promptFor({ kind: 'choose_maneuver', player: 'p1', slot: 'p1_home' }, 'p1', state)
+    expect(prompt.choices[0]?.action).toEqual({ kind: 'choose_maneuver', maneuver: false })
+    expect(prompt.choices[0]?.emphasis).toBeUndefined()
+    expect(prompt.choices[1]?.action).toEqual({ kind: 'choose_maneuver', maneuver: true })
+    expect(prompt.choices[1]).toMatchObject({ passive: true, emphasis: 'low' })
+  })
+
+  it('leaves an ordinary maneuver as it was', () => {
+    const prompt = promptFor({ kind: 'choose_maneuver', player: 'p1', slot: 'frontier' }, 'p1', fresh())
+    expect(prompt.choices[0]?.action).toEqual({ kind: 'choose_maneuver', maneuver: true })
+    expect(prompt.choices.some((c) => c.emphasis === 'low')).toBe(false)
+  })
+})
+
+describe('one way to pick (Phase 9f)', () => {
+  const none = new Set<string>()
+
+  it('lights exactly the dice a City could take, wherever they lie', () => {
+    const pending = {
+      kind: 'eighth_face_city',
+      player: 'p1',
+      slot: 'p1_home',
+      recruits: ['p1:oakling#2'],
+      promotions: [{ unitId: 'p1:oak#1', partnerId: 'p1:oak_lord#0' }],
+    } as const satisfies Pending
+    const state = fresh()
+    // Before a die of yours is picked: the recruit and the die that could grow.
+    expect([...(pickModeFor(state, pending, 'p1', none, [], null)?.only ?? [])].sort()).toEqual(
+      ['p1:oak#1', 'p1:oakling#2'],
+    )
+    // After: its partner lights up too.
+    const chosen = new Set(['p1:oak#1'])
+    expect(pickModeFor(state, pending, 'p1', chosen, [], null)?.only?.has('p1:oak_lord#0')).toBe(true)
+
+    // A tap on the board die is a radio pick among board dice; on a dead one, among
+    // the dead -- so the answer never holds two of either.
+    expect(tapMeaning(state, pending, none, [], null, 'p1:oak#1')).toMatchObject({ kind: 'radio' })
+    expect(cityAnswer(pending, new Set(['p1:oakling#2']))).toEqual({ kind: 'recruit', unitId: 'p1:oakling#2' })
+    expect(cityAnswer(pending, new Set(['p1:oak#1', 'p1:oak_lord#0']))).toEqual({
+      kind: 'promote',
+      pair: { unitId: 'p1:oak#1', partnerId: 'p1:oak_lord#0' },
+    })
+    // Half a promotion is no answer yet.
+    expect(cityAnswer(pending, chosen)).toBeNull()
+  })
+
+  it('reads a treasure promotion off the two dice picked', () => {
+    const pending = {
+      kind: 'dragon_treasure',
+      player: 'p1',
+      slot: 'frontier',
+      promotions: [{ unitId: 'a', partnerId: 'b' }],
+    } as const satisfies Pending
+    expect(treasureAnswer(pending, new Set(['a']))).toBeNull()
+    expect(treasureAnswer(pending, new Set(['a', 'b']))).toEqual({ unitId: 'a', partnerId: 'b' })
+  })
+
+  it('lets a Temple burial be tapped in the DUA', () => {
+    const pending = { kind: 'temple_bury', player: 'p1', options: ['x', 'y'] } as unknown as Pending
+    expect([...(pickModeFor(fresh(), pending, 'p1', none, [], null)?.only ?? [])]).toEqual(['x', 'y'])
+  })
+
+  it('aims a unit spell with a tap on the die, castings and all', () => {
+    const castable = {
+      spell: spell('lightning_strike'),
+      elements: ['air'],
+      maxCount: 1,
+      targets: [{ target: { kind: 'units', unitIds: ['p2:genie#0'] }, minCount: 1 }],
+    } as const
+    const pending = {
+      kind: 'announce_spells',
+      player: 'p1',
+      slot: 'frontier',
+      pool: { points: 6, elements: ['air'] },
+      castable: [castable],
+    } as unknown as Pending
+    const aiming = { spell: 'lightning_strike' }
+    expect([...(pickModeFor(fresh(), pending, 'p1', none, [], aiming)?.only ?? [])]).toEqual(['p2:genie#0'])
+    expect(tapMeaning(fresh(), pending, none, [], aiming, 'p2:genie#0')).toEqual({
+      kind: 'cast',
+      target: { kind: 'units', unitIds: ['p2:genie#0'] },
+      count: 1,
+    })
+    // Nothing is aimed yet: no die answers.
+    expect(pickModeFor(fresh(), pending, 'p1', none, [], null)).toBeNull()
+  })
+})
+
+describe('castingsFor (Phase 9f)', () => {
+  it('takes the stepper where the count scales the spell, and never less than the target asks', () => {
+    expect(castingsFor({ spell: 'stone_skin', count: 3 }, spell('stone_skin'), 1)).toBe(3)
+    // Path moves one unit a casting: a second casting at one target buys nothing.
+    expect(castingsFor({ spell: 'path', count: 3 }, spell('path'), 1)).toBe(1)
+    // Resurrect Dead's price is its target's health.
+    expect(castingsFor({ spell: 'resurrect_dead', count: 5 }, spell('resurrect_dead'), 2)).toBe(2)
+    // Not cumulative at all.
+    expect(castingsFor({ spell: 'lightning_strike', count: 2 }, spell('lightning_strike'), 1)).toBe(1)
   })
 })
 

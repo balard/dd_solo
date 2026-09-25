@@ -2087,7 +2087,7 @@ screen before the next begins. This phase is judged by looking at it.
 | **9c** | Every modifier explicit: named steps in each roll's arithmetic, and the dragon attack's math | ✅ landed |
 | **9d** | The roll behind every decision, the enemy's included; Confuse shown and logged | ✅ landed |
 | **9e** | Board surfaces: both reserves, both summoning pools, a selectable DUA, a floating inspector, "look" mode | ✅ landed |
-| **9f** | One way to pick a die, the spell picker's count and colour, the 8th-face emphasis | |
+| **9f** | One way to pick a die, the spell picker's count and colour, the 8th-face emphasis | ✅ landed |
 
 **The 25 goldens stay byte-identical and unregenerated throughout.** Everything here is gated behind
 a flag `V0_RULES` has off, or is a display-only field the digest excludes (9c).
@@ -2340,8 +2340,40 @@ City partners, Resurrect Dead, Temple and treasure all move off sheet buttons.
 - **At the eighth face, keeping it is the primary answer** and stepping down to 7 is the small,
   secondary one. It used to be the other way round.
 
+#### Where 9f was wrong
+
+- **"While aiming, its offered units become selectable" needed a selection model the board did not
+  have.** `SelectMode` was a side and a slot. A Mirage target can be any die on any terrain,
+  either player's, and a promotion is one die on the board plus one in the DUA. So `SelectMode`
+  gained `side: 'any'` with an `only` set, and every grid (board, reserves, DUA) takes it. What a
+  tap *means* then differs by decision, which is `tapMeaning`, pure and tested.
+- **"A tap stages the target" was right for spells and Wild Growth, not for City, treasure and
+  the Temple.** Those commit something irreversible, so a tap *selects* (a radio pick within its
+  group) and the Confirm button names the answer: "Promote Hamadryad → Pine", "Bury Oak".
+- **"`countScales: false` on Path and Mirage" also needed Resurrect Dead.** Its count is set by
+  its target's health, so a stepper there would only overspend.
+- **Not planned: the 8th-face question changed as well as the buttons.** "Maneuver the terrain?"
+  over "Keep it" read as a trick question, so holding the eighth face now asks "You hold the
+  eighth face at Your home. Keep it?".
+
+**Checked in a browser.** Starter seed 24:
+- "castings − 3 + = 6 magic", then one tap staged "Stone Skin ×3 at your army at Your home".
+- Aiming Path lit 14 of your dice, with no stepper, and tapping the Oak Lord staged "Path at Oak
+  Lord at Your home".
+
+With the replay scaffold (reverted):
+- **Starter seed 1:** "Keep it at [8]" is the green button, "Maneuver down to [7]" the small white
+  one.
+- **Starter seed 13:** City lit three board dice and a recruit in the DUA. Tapping the Hamadryad lit
+  Pine and Dryad, "Promote Hamadryad → Pine" confirmed, and the log reads "City Hamadryad → Pine".
+- **Starter seed 2:** Wild Growth took the Oakling, then a tap on the lit Dryad in the DUA staged
+  "Oakling → Dryad".
+
 **Exit criterion.** Every number in a game explains itself on screen. Every decision shows the roll
 behind it. Every die is picked the same way. All of it is checked in a browser at phone width.
+
+**Phase 9 is landed.** The exit criterion is met with one reservation: "at phone width" was checked
+for the inspector and the dock, not for every sheet.
 
 ---
 

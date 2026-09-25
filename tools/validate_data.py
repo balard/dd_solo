@@ -246,6 +246,13 @@ def check_spells():
                 err(f"spell {sid}: {flag} must be a boolean")
         if not s["text"].strip():
             err(f"spell {sid}: empty rules text")
+        # Phase 9f: a cumulative spell whose handler ignores the count -- the picker offers
+        # no stepper for it. Only meaningful on a cumulative spell.
+        if "countScales" in s:
+            if s["countScales"] is not False:
+                err(f"spell {sid}: countScales is only ever written as false")
+            if not s["cumulative"]:
+                err(f"spell {sid}: countScales false on a spell that is not cumulative")
 
         # A spell carries at most one of these. Neither means transcribed but not yet
         # implemented, which is a real state until Phase 7f -- reported, not an error.

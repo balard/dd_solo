@@ -84,6 +84,13 @@ export interface Spell {
    * red text, which no extraction preserves, so it is transcribed by eye.
    */
   readonly cumulative: boolean
+  /**
+   * False for a cumulative spell whose count buys nothing at one target (Phase 9f):
+   * Path and Mirage move one unit per casting, and Resurrect Dead's count is its
+   * target's health. The picker's casting-count stepper asks this rather than
+   * knowing the three names -- a rule the clients do not know is a rule both break.
+   */
+  readonly countScales: boolean
   /** The `R` column: castable by an army in the Reserve Area. */
   readonly reserves: boolean
   /** The `C` column: castable with magic the Cantrip SAI generated outside a magic
@@ -182,6 +189,7 @@ function load(): readonly Spell[] {
       species: s.species,
       target: oneOf<SpellTargetKind>(s.target, SPELL_TARGETS, 'target', context),
       cumulative: s.cumulative,
+      countScales: (s as { countScales?: boolean }).countScales !== false,
       reserves: s.reserves,
       cantrip: s.cantrip,
       text: s.text,

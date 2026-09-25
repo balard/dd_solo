@@ -33,8 +33,9 @@ import {
   effectsOnPlayer,
   focusedSlot,
   pendingKey,
+  pickModeFor,
   reinforcePlan,
-  selectModeFor,
+  tapMeaning,
   type ReinforceMove,
 } from './game/prompts'
 import { stageCast, type SpellAim, type SpellDraftCast } from '../engine/magic'
@@ -142,6 +143,43 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   const count = (key_: string, by: number) =>
     setCounters((current) => ({ ...current, [key_]: Math.max(0, (current[key_] ?? 0) + by) }))
 
+  /**
+   * A tap on any die that is part of the answer (Phase 9f). What it means is
+   * `tapMeaning`'s to say -- in or out of the selection, the only pick in its group,
+   * a promotion's partner, a spell's target -- and this only does it.
+   */
+  const onTap = (id: UnitId) => {
+    const tap = tapMeaning(state, pending, selection, pairs, aiming, id)
+    switch (tap.kind) {
+      case 'toggle':
+        return toggle(id)
+      case 'radio':
+        return setSelection((current) => {
+          const next = new Set([...current].filter((x) => !tap.group.has(x)))
+          if (!current.has(id)) next.add(id)
+          return next
+        })
+      case 'pair':
+        setPairs((current) => [...current, tap.pair])
+        return setSelection(new Set())
+      case 'cast': {
+        if (pending?.kind !== 'announce_spells' || aiming === null) return
+        const castable = pending.castable.find((c) => c.spell.id === aiming.spell)
+        const element = aiming.element ?? castable?.elements[0]
+        if (castable === undefined || element === undefined) return
+        setCasts((current) => [
+          ...stageCast(pending.castable, current, {
+            spell: aiming.spell,
+            element,
+            count: tap.count,
+            target: tap.target,
+          }),
+        ])
+        return setAiming(null)
+      }
+    }
+  }
+
   const toggle = (id: UnitId) =>
 
     setSelection((current) => {
@@ -154,7 +192,12 @@ function GameView({ game }: { readonly game: PlayingGame }) {
 
   // Which grid is selectable depends on what is being asked. The rule itself lives
   // in prompts.ts, where it is testable without a DOM.
-  const asked = useMemo(() => selectModeFor(pending, human), [pending, human])
+  // Which dice a tap reaches, wherever they are drawn (Phase 9f). It reads the drafts,
+  // because a promotion's partners light up only once the die growing into them is picked.
+  const asked = useMemo(
+    () => pickModeFor(state, pending, human, selection, pairs, aiming),
+    [state, pending, human, selection, pairs, aiming],
+  )
   // Looking suspends selecting everywhere: every tile becomes a way to open its faces.
   const selectMode = looking ? null : asked
 
@@ -176,11 +219,14 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // (Phase 5d), which is the same grid as reinforce's, just a different reason to
   // be selectable.
   const mineReserveSelectable =
-    selectMode?.side === 'reserve' || (selectMode?.side === 'mine' && selectMode.slot === 'reserve')
+    selectMode?.side === 'reserve' ||
+    selectMode?.side === 'any' ||
+    (selectMode?.side === 'mine' && selectMode.slot === 'reserve')
 
   // Or a `sai_target` -- Flame, Bullseye, Seize -- can aim at the *enemy's*
   // Reserve Army, which nothing before Tower ever needed to show at all.
-  const theirReserveSelectable = selectMode?.side === 'theirs' && selectMode.slot === 'reserve'
+  const theirReserveSelectable =
+    selectMode?.side === 'any' || (selectMode?.side === 'theirs' && selectMode.slot === 'reserve')
   const theirReserve = livingUnits(state, enemy).filter((u) => u.location.kind === 'reserve')
   // Dragons waiting in each Summoning Pool (Phase 9e). Only a `Summon Dragon` brings one
   // out, so which colours are still in a pool is what the spell is choosing among.
@@ -211,7 +257,11 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   const dying = myFallen.filter((unit) => dyingIds.has(unit.id))
   const partners = myFallen.filter((unit) => partnerIds.has(unit.id))
   const longDead = myFallen.filter((unit) => !dyingIds.has(unit.id) && !partnerIds.has(unit.id))
-  const fallenOpen = showFallen || growth !== null
+  // A decision that picks from the DUA -- a promotion's partner, a recruit, a burial, a
+  // Resurrect Dead -- opens the Fallen section itself, the way Accelerated Growth does.
+  const picksDead =
+    selectMode?.side === 'any' && myFallen.some((unit) => selectMode.only?.has(unit.id) === true)
+  const fallenOpen = showFallen || growth !== null || picksDead
 
   const health = (units: readonly { typeId: string }[]) =>
     units.reduce((n, u) => n + unitType(u.typeId).health, 0)
@@ -289,7 +339,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
           }
           selectMode={selectMode}
           selected={selection}
-          onToggle={toggle}
+          onToggle={onTap}
           inspecting={inspecting}
           onInspect={onInspect}
           mySpecies={mySpecies}
@@ -313,8 +363,9 @@ function GameView({ game }: { readonly game: PlayingGame }) {
             <DiceGrid
               units={theirReserve}
               selectable={theirReserveSelectable}
+              only={selectMode?.only}
               selected={selection}
-              onToggle={toggle}
+              onToggle={onTap}
               inspecting={inspecting}
               onInspect={onInspect}
             />
@@ -325,8 +376,9 @@ function GameView({ game }: { readonly game: PlayingGame }) {
             <DiceGrid
               units={reserveShown}
               selectable={mineReserveSelectable}
+              only={selectMode?.only}
               selected={selection}
-              onToggle={toggle}
+              onToggle={onTap}
               inspecting={inspecting}
               onInspect={onInspect}
             />
@@ -404,7 +456,15 @@ function GameView({ game }: { readonly game: PlayingGame }) {
                   </>
                 )}
                 <p className="fallen-side muted">{growth === null ? 'Yours' : 'Yours, the rest'}</p>
-                <DiceGrid units={longDead} inspecting={inspecting} onInspect={onInspect} />
+                <DiceGrid
+                  units={longDead}
+                  selectable={picksDead}
+                  only={selectMode?.only}
+                  selected={selection}
+                  onToggle={onTap}
+                  inspecting={inspecting}
+                  onInspect={onInspect}
+                />
                 <p className="fallen-side muted">Enemy</p>
                 <DiceGrid units={theirFallen} inspecting={inspecting} onInspect={onInspect} />
                 {myBuried.length > 0 && (
@@ -450,7 +510,6 @@ function GameView({ game }: { readonly game: PlayingGame }) {
           )
         }
         onStage={(moves) => setStaged((current) => [...current, ...moves])}
-        onPair={(pair) => setPairs((current) => [...current, pair])}
         onCount={count}
         onToggle={toggle}
         onClearSelection={() => setSelection(new Set())}
