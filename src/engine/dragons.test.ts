@@ -339,8 +339,11 @@ describe('dragon self-play', () => {
           }
         }
         if (entry.kind === 'units_buried' && entry.source === 'dragon_fire') {
+          // Right before it -- or before the Rise from the Ashes line a Phoenix rolls on its
+          // way to the BUA, which sits between the two.
           const i = result.state.log.indexOf(entry)
-          const before = result.state.log[i - 1]
+          const prior = result.state.log[i - 1]
+          const before = prior?.kind === 'units_risen' ? result.state.log[i - 2] : prior
           const shown = before?.kind === 'sai_sub_roll' && before.fate === 'bury' ? before : undefined
           if (shown === undefined || !entry.unitIds.every((id) => shown.dice.some((d) => d.unitId === id))) {
             unshownBurials.push(`seed ${seed}: ${entry.unitIds.join(', ')}`)

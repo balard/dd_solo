@@ -56,7 +56,7 @@ import {
   promotionPartners,
   recruit,
 } from './dua'
-import { buryUnits, deathEntries, killAndBury, killedIds, killUnits } from './death'
+import { buryEntries, buryUnits, deathEntries, killAndBury, killedIds, killUnits } from './death'
 import {
   armyRoll,
   flashfireBudget,
@@ -2655,13 +2655,10 @@ function applyTempleBury(state: GameState, unitId: UnitId): GameState {
     throw new IllegalActionError(`${unitId} is not in ${pending.player}'s DUA`)
   }
 
-  const { state: buried } = buryUnits(state, [unitId])
-  const logged = withLog(buried, {
-    kind: 'units_buried',
-    player: pending.player,
-    unitIds: [unitId],
-    source: 'temple',
-  })
+  // A Phoenix rolls Rise from the Ashes on the way; if it rises it was never buried,
+  // and `buryEntries` says so rather than writing "buried" over a die in Reserves.
+  const outcome = buryUnits(state, [unitId])
+  const logged = withLog(outcome.state, ...buryEntries(outcome, pending.player, [unitId], 'temple'))
 
   // Built field by field rather than spread over the old turn, the way
   // `finishExchange` drops `combat.attack`: `eighthFaceStep` is omitted-or-present
@@ -3013,7 +3010,8 @@ function resolveBreathBury(state: GameState): GameState {
   const [rolls, rng] = rollUnits(inputs, 'save', SAVE_SUB_ROLL, state.rng, state.ruleSet)
 
   const doomed = rolls.filter((sub) => (sub.roll?.total ?? 0) === 0).map((sub) => sub.unitId)
-  const { state: buried } = doomed.length > 0 ? buryUnits({ ...state, rng }, doomed) : { state: { ...state, rng } }
+  const burial = doomed.length > 0 ? buryUnits({ ...state, rng }, doomed) : null
+  const buried = burial?.state ?? { ...state, rng }
 
   // The roll itself, saved dice and failed ones alike. It used to be logged only
   // through its consequence: a failure wrote "buried" with no dice, and a success
@@ -3037,15 +3035,9 @@ function resolveBreathBury(state: GameState): GameState {
       : []),
   )
 
+  // A Phoenix that fails the save still rolls Rise from the Ashes on its way to the BUA.
   const logged =
-    doomed.length > 0
-      ? withLog(rolled, {
-          kind: 'units_buried',
-          player: attack.defender,
-          unitIds: doomed,
-          source: 'dragon_fire',
-        })
-      : rolled
+    burial === null ? rolled : withLog(rolled, ...buryEntries(burial, attack.defender, doomed, 'dragon_fire'))
 
   const withEffect = withBreathEffect(logged, attack, 'fire')
   const next = withDragonAttack(withEffect, { ...attack, step: 'breath', resolved: attack.resolved + 1 })
@@ -4070,17 +4062,7 @@ function settleGrowth(
   if (toBury.length === 0) return settled
 
   const buried = buryUnits(settled, toBury)
-  return withLog(
-    buried.state,
-    ...(buried.risen.length > 0
-      ? [{ kind: 'units_risen', player: offer.player, unitIds: buried.risen } as const]
-      : []),
-    {
-      kind: 'units_buried',
-      player: offer.player,
-      unitIds: toBury.filter((id) => !buried.risen.includes(id)),
-    },
-  )
+  return withLog(buried.state, ...buryEntries(buried, offer.player, toBury))
 }
 
 function applyDirection(state: GameState, direction: Direction): GameState {

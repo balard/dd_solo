@@ -676,8 +676,11 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     (neither killed at all) -- and `killedIds` / `deathEntries` are what keep the second two out of
     a kill line. **`replantDice` holds every Replanting roll, the misses too**, and the `replanting`
     log entry draws them all: it first shipped listing only the rescued, so a Treefolk that rolled
-    and failed looked exactly like one that never rolled. Rise from the Ashes still has that
-    silence. **A kill-and-bury must subtract `replanted` as well as `risen`** from what it
+    and failed looked exactly like one that never rolled. Rise from the Ashes had the same
+    silence until after Phase 9: `DeathOutcome.riseDice` now holds every roll and `units_risen`
+    carries them, misses included. **Burials log through `buryEntries`**, which names a Phoenix
+    that rose on the way rather than calling it buried -- the Temple, Dragon Fire and a declined
+    Accelerated Growth under Flame all wrote "buried" over a die in Reserves. **A kill-and-bury must subtract `replanted` as well as `risen`** from what it
     buries, or `bury` throws on a unit standing in Reserves. That was the Phase 8 plan's missed
     crash.
   - **Rise from the Ashes triggers on a *Rise face*, not an ID**, and on **burial as well as

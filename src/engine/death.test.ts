@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 import { unitType } from '../data/load'
 
-import { buryUnits, killAndBury, killUnits, RISE_FROM_THE_ASHES } from './death'
+import { buryEntries, buryUnits, killAndBury, killUnits, RISE_FROM_THE_ASHES } from './death'
 import { reduce } from './reduce'
 
 import { rngFrom, rollDie, type RngState } from './rng'
@@ -185,6 +185,25 @@ describe('buryUnits', () => {
     expect(buriedUnits(after, 'p2')).toEqual([])
   })
 
+  /**
+   * The Temple, Dragon Fire and a declined Accelerated Growth under Flame each logged
+   * "buried" for every unit they asked to bury -- including a Phoenix that had just
+   * risen into Reserves on its way there. `buryEntries` names the rise and buries only
+   * the rest.
+   */
+  it('logs a Phoenix that rises on its way to the BUA as risen, not buried', () => {
+    const risenState = board(DUA_RULES, rises(PHOENIX), { id: 'phoenix', typeId: PHOENIX, at: { kind: 'dua' } })
+    const rose = buryUnits(risenState, ['phoenix'])
+    expect(buryEntries(rose, 'p2', ['phoenix'], 'temple').map((e) => e.kind)).toEqual(['units_risen'])
+
+    const deadState = board(DUA_RULES, staysDead(PHOENIX), { id: 'phoenix', typeId: PHOENIX, at: { kind: 'dua' } })
+    const stayed = buryUnits(deadState, ['phoenix'])
+    expect(buryEntries(stayed, 'p2', ['phoenix'], 'temple')).toMatchObject([
+      { kind: 'units_risen', unitIds: [] },
+      { kind: 'units_buried', unitIds: ['phoenix'], source: 'temple' },
+    ])
+  })
+
   it('buries without a roll under dua: inert', () => {
     const rng = rises(PHOENIX)
     const state = board(V0_RULES, rng, { id: 'phoenix', typeId: PHOENIX, at: { kind: 'dua' } })
@@ -297,22 +316,28 @@ describe('the reducer', () => {
     expect(entries(after, 'units_killed')).toEqual([
       { kind: 'units_killed', player: 'p2', slot: 'frontier', unitIds: ['phoenix'] },
     ])
-    expect(entries(after, 'units_risen')).toEqual([
+    expect(entries(after, 'units_risen')).toMatchObject([
       { kind: 'units_risen', player: 'p2', unitIds: ['phoenix'] },
     ])
+    // The roll itself rides along, so the line can show the face that rose.
+    const [risen] = entries(after, 'units_risen')
+    expect(risen?.kind === 'units_risen' ? risen.dice?.map((d) => d.unitId) : []).toEqual(['phoenix'])
     expect(reserveArmy(after, 'p2').map((u) => u.id)).toEqual(['phoenix'])
     expect(validateState(after)).toEqual([])
   })
 
-  it('writes no units_risen entry at all when nothing rises', () => {
-    // Omitted rather than logged empty, for the same reason `CombatState`'s optional
-    // fields are: every golden digest carries every log entry verbatim.
+  it('logs the roll even when nothing rises', () => {
+    // A Phoenix that rolled and failed used to leave no trace at all, which looked the
+    // same as one that never rolled -- the Replanting silence, fixed after Phase 9. The
+    // goldens never see this line: `V0_RULES` has no Rise from the Ashes roll.
     const after = reduce(awaitingDamage(staysDead(PHOENIX)), {
       kind: 'assign_damage',
       unitIds: ['phoenix'],
     })
 
-    expect(entries(after, 'units_risen')).toEqual([])
+    const [rolled] = entries(after, 'units_risen')
+    expect(rolled).toMatchObject({ kind: 'units_risen', player: 'p2', unitIds: [] })
+    expect(rolled?.kind === 'units_risen' ? rolled.dice?.length : 0).toBe(1)
     expect(deadUnits(after, 'p2').map((u) => u.id)).toEqual(['phoenix'])
   })
 })

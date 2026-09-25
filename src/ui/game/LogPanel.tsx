@@ -311,19 +311,33 @@ export function LogLine({
         </div>
       )
     }
-    case 'units_risen':
-      return (
-        <p className="log-line big">
-          {entry.unitIds
-            .map((id) => {
-              const unit = state.units[id]
-              return unit ? unitType(unit.typeId).name : id
-            })
-            .join(', ')}{' '}
-          rises from the ashes into {entry.player === human ? 'your' : "the enemy's"} reserves
-
-        </p>
+    // Every roll, hits and misses (fix after Phase 9): a Phoenix that rolled and failed
+    // used to leave no trace at all -- the Replanting silence, which Phase 8 noted here
+    // and left.
+    case 'units_risen': {
+      const names = (ids: readonly string[]) =>
+        ids.map((id) => (state.units[id] ? unitType(state.units[id]!.typeId).name : id)).join(', ')
+      const missed = [...new Set((entry.dice ?? []).map((d) => d.unitId))].filter(
+        (id) => !entry.unitIds.includes(id),
       )
+      const theirs = entry.player === human ? 'your' : "the enemy's"
+      return (
+        <div className="log-roll">
+          <div className="roll-head">Rise from the Ashes</div>
+          {entry.dice !== undefined && <RollStrip dice={entry.dice} />}
+          <div className="roll-sum">
+            {entry.unitIds.length > 0 && (
+              <b>
+                {names(entry.unitIds)} {entry.unitIds.length === 1 ? 'rises' : 'rise'} from the ashes
+                into {theirs} reserves
+              </b>
+            )}
+            {entry.unitIds.length > 0 && missed.length > 0 && '; '}
+            {missed.length > 0 && <>{names(missed)} rolled no Rise from the Ashes</>}
+          </div>
+        </div>
+      )
+    }
     // Logged before the kill it causes: without it a Flame reads as dice dying from
     // nowhere, which is the Fireshadow-that-Smote-for-4 problem from Phase 1.
     case 'sai_resolved':

@@ -2058,8 +2058,9 @@ Two reports from the first real session, and neither was a wrong rule.
   question now names Air Flight whenever a flight is on offer, and says what to do next. When the
   chosen dice cannot all fly, it says so rather than just leaving the fly buttons out.
 
-Rise from the Ashes has the same silence, and has had it since Phase 2: a Phoenix that rolls and
-misses logs nothing. It was left alone here, because nobody asked for it.
+Rise from the Ashes had the same silence, and had had it since Phase 2: a Phoenix that rolled and
+missed logged nothing. It was left alone here, because nobody asked for it -- and fixed after
+Phase 9, when somebody did (see "What playing it found afterwards" under Phase 9).
 
 ---
 
@@ -2400,6 +2401,18 @@ silence of Phase 8, and the Rise from the Ashes one Phase 8 noted and left, a th
 is now a `sai_sub_roll` with `fate: 'bury'`, which reads "Dragon Fire · a save or be buried", and
 it appears whatever the result. The dragon self-play checks that every Dragon Fire burial follows
 its roll, and that both saves and burials occur.
+
+**Rise from the Ashes, the same fix, and a wrong burial line found doing it.**
+- **Every roll is logged now, misses too.** `units_risen` carries its dice and is written whenever
+  a Phoenix rolls; before, a miss wrote nothing.
+- **Three burials had been logging a Phoenix that rose as buried.** The Temple, Dragon Fire and a
+  declined Accelerated Growth under Flame each wrote `units_buried` for every unit they *asked*
+  to bury, and ignored the Rise from the Ashes roll `buryUnits` had just made. A Phoenix that rose
+  on its way to the BUA sat in Reserves under a line calling it buried. All three now go through
+  `buryEntries`.
+- **One more near miss while writing it.** A blanket replace briefly overwrote `buryUnits`' own
+  rise dice with an empty list. Nothing would have failed, and the new line would simply never
+  have appeared on a burial.
 
 **Phase 9 is landed.** The exit criterion is met with one reservation: "at phone width" was checked
 for the inspector and the dock, not for every sheet.

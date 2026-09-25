@@ -316,12 +316,16 @@ function describe(entry: LogEntry, state: GameState): string | null {
         .join(', ')
       return `  ${bold('Replanting')} at ${SLOT_LABEL[entry.slot as TerrainSlot] ?? entry.slot}: ${rolls}`
     }
-    case 'units_risen':
+    case 'units_risen': {
+      const rolls = (entry.dice ?? [])
+        .map((die) => `${shown(die)} ${entry.unitIds.includes(die.unitId) ? green('rises') : dim('no Rise')}`)
+        .join(', ')
+      const rose = entry.unitIds.map((id) => (state.units[id] ? name(state.units[id]!) : id)).join(', ')
       return green(
-        `  ${entry.unitIds
-          .map((id) => (state.units[id] ? name(state.units[id]!) : id))
-          .join(', ')} rises from the ashes into ${entry.player}'s reserves`,
+        `  ${bold('Rise from the Ashes')}: ${rolls}` +
+          (rose === '' ? '' : ` — ${rose} into ${entry.player}'s reserves`),
       )
+    }
     // Before the kill it causes, so the line reads as cause and then effect.
     case 'sai_resolved':
       return yellow(

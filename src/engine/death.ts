@@ -82,6 +82,13 @@ export interface DeathOutcome {
    * show a Treefolk that tried and failed. Empty whenever nothing qualified.
    */
   readonly replantDice: readonly DieRoll[]
+  /**
+   * Every Rise from the Ashes roll, the misses as well as the `risen` hits -- the same
+   * rule `replantDice` follows, for the same reason: a Phoenix that rolled and failed
+   * used to leave no trace, which is indistinguishable from one that never rolled.
+   * On a kill-and-bury it holds both rolls, the kill's and the burial's.
+   */
+  readonly riseDice: readonly DieRoll[]
 }
 
 /** What a caller should actually report as killed, given what it asked for. */
@@ -126,10 +133,9 @@ export function deathEntries(
     ...(killed.length > 0
       ? [{ kind: 'units_killed', player, slot, unitIds: killed } as const]
       : []),
-    // A subset of the line above: the unit really was killed, and then moved.
-    ...(outcome.risen.length > 0
-      ? [{ kind: 'units_risen', player, unitIds: outcome.risen } as const]
-      : []),
+    // The Rise from the Ashes rolls, hits and misses: the risen are a subset of the line
+    // above -- really killed, and then moved -- and the rest stay dead.
+    ...riseEntries(outcome, player),
     // Accelerated Growth's offers are logged by the answer, not here: nobody knows yet
     // whether they died.
   ]
@@ -155,11 +161,12 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
     (unit) => unitIds.includes(unit.id) && hasRiseFace(unit),
   )
   if (candidates.length === 0) {
-    return { state, risen: [], offered: [], replanted: [], replantDice: [] }
+    return { state, risen: [], offered: [], replanted: [], replantDice: [], riseDice: [] }
   }
 
   const units = { ...state.units }
   const risen: UnitId[] = []
+  const riseDice: DieRoll[] = []
   let rng = state.rng
 
   for (const unit of candidates) {
@@ -171,13 +178,47 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
     if (face === undefined) {
       throw new Error(`${unit.typeId}: rolled face ${faceIndex} of ${type.faces.length}`)
     }
-    if (face.icon !== 'SAI' || face.sai !== RISE_FROM_THE_ASHES) continue
+    const rose = face.icon === 'SAI' && face.sai === RISE_FROM_THE_ASHES
+    // Drawn like Replanting's strip: the die that rose lights up, the rest grey out.
+    riseDice.push({ unitId: unit.id, typeId: unit.typeId, faceIndex, face, results: rose ? face.count : 0 })
+    if (!rose) continue
 
     units[unit.id] = { ...unit, location: { kind: 'reserve' } }
     risen.push(unit.id)
   }
 
-  return { state: { ...state, units, rng }, risen, offered: [], replanted: [], replantDice: [] }
+  return { state: { ...state, units, rng }, risen, offered: [], replanted: [], replantDice: [], riseDice }
+}
+
+/** The `units_risen` line for an outcome: every roll, and who rose. Nothing when no
+ *  Phoenix rolled at all. */
+export function riseEntries(outcome: DeathOutcome, player: PlayerId): readonly LogEntry[] {
+  return outcome.riseDice.length === 0
+    ? []
+    : [{ kind: 'units_risen', player, unitIds: outcome.risen, dice: outcome.riseDice }]
+}
+
+/**
+ * The log a burial writes: the Rise from the Ashes rolls it caused, and a
+ * `units_buried` line naming only who really went to the BUA.
+ *
+ * Three burials -- the Temple, Dragon Fire and a declined Accelerated Growth under a
+ * Flame -- each wrote `units_buried` for every unit they were *asked* to bury. A
+ * Phoenix that rose on the way was in Reserves while its line said "buried".
+ */
+export function buryEntries(
+  outcome: DeathOutcome,
+  player: PlayerId,
+  requested: readonly UnitId[],
+  source?: Extract<LogEntry, { kind: 'units_buried' }>['source'],
+): readonly LogEntry[] {
+  const buried = requested.filter((id) => !outcome.risen.includes(id))
+  return [
+    ...riseEntries(outcome, player),
+    ...(buried.length > 0
+      ? [{ kind: 'units_buried', player, unitIds: buried, ...(source === undefined ? {} : { source }) } as const]
+      : []),
+  ]
 }
 
 /**
@@ -202,7 +243,7 @@ function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOu
  * to Reserves and touches the DUA not at all.
  */
 function replanting(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
-  const none: DeathOutcome = { state, risen: [], offered: [], replanted: [], replantDice: [] }
+  const none: DeathOutcome = { state, risen: [], offered: [], replanted: [], replantDice: [], riseDice: [] }
   if (!state.ruleSet.speciesAbilities) return none
 
   const candidates = Object.values(state.units).filter(
@@ -236,7 +277,7 @@ function replanting(state: GameState, unitIds: readonly UnitId[]): DeathOutcome 
     replanted.push(unit.id)
   }
 
-  return { state: { ...state, units, rng }, risen: [], offered: [], replanted, replantDice }
+  return { state: { ...state, units, rng }, risen: [], offered: [], replanted, replantDice, riseDice: [] }
 }
 
 /**
@@ -277,7 +318,7 @@ export function killUnits(
         }
 
   if (state.ruleSet.dua !== 'active') {
-    return { state: recorded, risen: [], offered, replanted, replantDice }
+    return { state: recorded, risen: [], offered, replanted, replantDice, riseDice: [] }
   }
   return { ...riseFromTheAshes(recorded, dying), offered, replanted, replantDice }
 }
@@ -346,7 +387,7 @@ function growthOffers(
 export function buryUnits(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
   const buried = bury(state, unitIds)
   if (state.ruleSet.dua !== 'active') {
-    return { state: buried, risen: [], offered: [], replanted: [], replantDice: [] }
+    return { state: buried, risen: [], offered: [], replanted: [], replantDice: [], riseDice: [] }
   }
   // No Replanting here: it is a rule about being *killed*, and a unit being buried out
   // of the DUA was killed some time ago.
@@ -391,6 +432,7 @@ export function killAndBury(state: GameState, unitIds: readonly UnitId[]): Death
     offered: killed.offered,
     replanted: killed.replanted,
     replantDice: killed.replantDice,
+    riseDice: [...killed.riseDice, ...buried.riseDice],
   }
 }
 

@@ -1492,7 +1492,16 @@ export type LogEntry =
    * log has to be able to say both. The ids here are always a subset of the
    * `units_killed` entry immediately before it.
    */
-  | { readonly kind: 'units_risen'; readonly player: PlayerId; readonly unitIds: readonly UnitId[] }
+  | {
+      readonly kind: 'units_risen'
+      readonly player: PlayerId
+      /** Who rose. May be empty since the fix after Phase 9: the line is written for
+       *  every Rise from the Ashes roll, and a miss rises nobody. */
+      readonly unitIds: readonly UnitId[]
+      /** Every roll, hits and misses, as a strip. Omitted only on entries from before
+       *  the rolls were logged. */
+      readonly dice?: readonly DieRoll[]
+    }
   /**
    * Replanting (Phase 8): every roll dying Treefolk made at a water terrain, and which
    * of them rolled an ID and went to Reserves instead.
