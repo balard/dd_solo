@@ -129,6 +129,7 @@ import {
   type PendingAttack,
   type PendingSaves,
   type PromotionPair,
+  type GrowthOffer,
   type PlayerId,
   type SpellChoice,
   type SpellTarget,
@@ -3385,6 +3386,14 @@ function applyDragonOrder(state: GameState, slot: TerrainSlot): GameState {
  * decision, which is how the advance loop knows to stop.
  */
 export function stepGame(state: GameState): GameState {
+  // Accelerated Growth (Phase 9b), **before everything below**. A kill has already
+  // moved the dying dice to the DUA, and the answer may bring a partner up in their
+  // place: pruning first would end a Stone Skin on an army that is about to have a unit
+  // again, and the victory check first could end the game on an army its owner was
+  // about to refill. Nothing here rolls or moves before the offer is answered.
+  const growth = growthStep(state)
+  if (growth !== state) return growth
+
   // "The effect ends if there are no units remaining in the army. This is checked at
   // the end of each action" (p. 28). `applyAction` never sets `pending`, so this runs
   // after every action. Like `syncCaptures` it must return the same object when there
@@ -3742,6 +3751,141 @@ function applyRapidGrowth(state: GameState, unitIds: readonly UnitId[]): GameSta
     },
   )
   return finishContest(logged, contest.marcher, defender)
+}
+
+// --- Accelerated Growth (Phase 9b) -------------------------------------------
+
+/** The offer at the head of the queue, with its partners re-checked: an earlier offer's
+ *  answer may have brought one of them up already. */
+function liveGrowthPartners(state: GameState, offer: GrowthOffer): readonly UnitId[] {
+  return offer.partners.filter((id) => state.units[id]?.location.kind === 'dua')
+}
+
+/**
+ * Raise the oldest Accelerated Growth offer, or settle it with nobody to ask.
+ *
+ * Returns `state` itself when there is no offer, so `stepGame` can fall through. An
+ * offer whose partners have all been spent by an earlier answer is not a question --
+ * the dice simply die -- so it is settled here as an empty answer, which draws nothing.
+ */
+function growthStep(state: GameState): GameState {
+  const offer = state.turn.growthOffers?.[0]
+  if (offer === undefined) return state
+  if (state.pending !== null) return state
+
+  const partners = liveGrowthPartners(state, offer)
+  if (partners.length === 0) return settleGrowth(state, offer, [])
+
+  return {
+    ...state,
+    pending: {
+      kind: 'accelerated_growth',
+      player: offer.player,
+      dying: offer.dying.map((d) => d.unitId),
+      partners,
+    },
+  }
+}
+
+function applyAcceleratedGrowth(state: GameState, pairs: readonly PromotionPair[]): GameState {
+  const offer = state.turn.growthOffers?.[0]
+  if (offer === undefined) throw new IllegalActionError('no Accelerated Growth is waiting')
+
+  const dying = offer.dying.map((d) => d.unitId)
+  const partners = liveGrowthPartners(state, offer)
+  const seen = new Set<UnitId>()
+  for (const pair of pairs) {
+    if (!dying.includes(pair.unitId)) {
+      throw new IllegalActionError(`${pair.unitId} is not dying under Accelerated Growth`)
+    }
+    if (!partners.includes(pair.partnerId)) {
+      throw new IllegalActionError(`${pair.partnerId} is not a one-health unit in the DUA`)
+    }
+    if (seen.has(pair.unitId) || seen.has(pair.partnerId)) {
+      throw new IllegalActionError('each dying unit and each partner is exchanged at most once')
+    }
+    seen.add(pair.unitId)
+    seen.add(pair.partnerId)
+  }
+
+  return settleGrowth(state, offer, pairs)
+}
+
+/**
+ * The answer: partners come up where the dead stood, and the rest are killed -- logged
+ * now, because until now nobody knew whether they died. Declined units under a Flame
+ * are buried as well; exchanged ones were never killed and are not.
+ */
+function settleGrowth(
+  state: GameState,
+  offer: GrowthOffer,
+  pairs: readonly PromotionPair[],
+): GameState {
+  const units = { ...state.units }
+  for (const pair of pairs) {
+    const partner = units[pair.partnerId]
+    const from = offer.dying.find((d) => d.unitId === pair.unitId)?.from
+    if (partner === undefined || from === undefined) continue
+    units[pair.partnerId] = {
+      ...partner,
+      location: from === 'reserve' ? { kind: 'reserve' } : { kind: 'terrain', slot: from },
+    }
+  }
+
+  const exchanged = pairs.map((pair) => pair.unitId)
+  const declined = offer.dying.filter((d) => !exchanged.includes(d.unitId))
+
+  // One kill line per place, the shape every other kill site writes.
+  const bySlot = new Map<ArmyRef, UnitId[]>()
+  for (const d of declined) bySlot.set(d.from, [...(bySlot.get(d.from) ?? []), d.unitId])
+  const killLines: LogEntry[] = [...bySlot].map(([slot, unitIds]) => ({
+    kind: 'units_killed',
+    player: offer.player,
+    slot,
+    unitIds,
+  }))
+
+  const rest = (state.turn.growthOffers ?? []).slice(1)
+  const { growthOffers: _answered, ...turn } = state.turn
+
+  // Fire breath rolls "the units killed by this dragon's breath" for burial, and an
+  // exchanged unit was not killed -- so it leaves that list here, where the question of
+  // whether it died is settled.
+  const attack = turn.dragonAttack
+  const dragonAttack =
+    attack?.burning === undefined || exchanged.length === 0
+      ? attack
+      : { ...attack, burning: attack.burning.filter((id) => !exchanged.includes(id)) }
+
+  const settled: GameState = withLog(
+    {
+      ...state,
+      units,
+      turn: {
+        ...turn,
+        ...(dragonAttack === undefined ? {} : { dragonAttack }),
+        ...(rest.length > 0 ? { growthOffers: rest } : {}),
+      },
+    },
+    ...(pairs.length > 0 ? [{ kind: 'units_regrown', player: offer.player, pairs } as const] : []),
+    ...killLines,
+  )
+
+  const toBury = offer.bury === true ? declined.map((d) => d.unitId) : []
+  if (toBury.length === 0) return settled
+
+  const buried = buryUnits(settled, toBury)
+  return withLog(
+    buried.state,
+    ...(buried.risen.length > 0
+      ? [{ kind: 'units_risen', player: offer.player, unitIds: buried.risen } as const]
+      : []),
+    {
+      kind: 'units_buried',
+      player: offer.player,
+      unitIds: toBury.filter((id) => !buried.risen.includes(id)),
+    },
+  )
 }
 
 function applyDirection(state: GameState, direction: Direction): GameState {
@@ -4238,6 +4382,8 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyFlashfire(cleared, action.unitIds)
     case 'rapid_growth':
       return applyRapidGrowth(cleared, action.unitIds)
+    case 'accelerated_growth':
+      return applyAcceleratedGrowth(cleared, action.pairs)
     case 'dispel_magic':
       return applyDispelMagic(cleared, action.roll)
     case 'spell_move':

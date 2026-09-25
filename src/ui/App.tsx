@@ -176,6 +176,16 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   const theirDuaEffects = effectsOnPlayer(state, enemy, human)
   const anyDuaEffect = myDuaEffects.length > 0 || theirDuaEffects.length > 0
 
+  // Accelerated Growth's question (Phase 9b) is about dice already in your DUA, so the
+  // Fallen section is where it is answered: it opens itself, and the dying dice stand
+  // apart from the long dead as their own selectable grid. A die already paired leaves
+  // that grid -- the staged line in the sheet says where it went.
+  const growth = selectMode?.side === 'dua' && pending?.kind === 'accelerated_growth' ? pending : null
+  const dyingIds = new Set(growth?.dying.filter((id) => !pairs.some((p) => p.unitId === id)) ?? [])
+  const dying = myFallen.filter((unit) => dyingIds.has(unit.id))
+  const longDead = growth === null ? myFallen : myFallen.filter((unit) => !dyingIds.has(unit.id))
+  const fallenOpen = showFallen || growth !== null
+
   const health = (units: readonly { typeId: string }[]) =>
     units.reduce((n, u) => n + unitType(u.typeId).health, 0)
 
@@ -310,7 +320,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
 
                 onClick={() => setShowFallen((v) => !v)}
               >
-                {showFallen ? '▾' : '▸'} Fallen
+                {fallenOpen ? '▾' : '▸'} Fallen
                 <span className="muted">
                   {' '}
                   you {myFallen.length} · enemy {theirFallen.length}
@@ -330,10 +340,23 @@ function GameView({ game }: { readonly game: PlayingGame }) {
                 <EffectList effects={theirDuaEffects} />
               </>
             )}
-            {showFallen && (
+            {fallenOpen && (
               <div className="fallen">
+                {dying.length > 0 && (
+                  <>
+                    <p className="fallen-side">Dying — tap one to exchange it</p>
+                    <DiceGrid
+                      units={dying}
+                      selectable
+                      selected={selection}
+                      onToggle={toggle}
+                      inspecting={inspecting}
+                      onInspect={setInspecting}
+                    />
+                  </>
+                )}
                 <p className="fallen-side muted">Yours</p>
-                <DiceGrid units={myFallen} inspecting={inspecting} onInspect={setInspecting} />
+                <DiceGrid units={longDead} inspecting={inspecting} onInspect={setInspecting} />
                 <p className="fallen-side muted">Enemy</p>
                 <DiceGrid units={theirFallen} inspecting={inspecting} onInspect={setInspecting} />
                 {myBuried.length > 0 && (

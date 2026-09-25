@@ -475,7 +475,25 @@ describe('Replanting', () => {
     expect(outcome.state.rng).toEqual(state.rng)
   })
 
-  it('rolls before Accelerated Growth, so a replanted die keeps the small one in the DUA', () => {
+  /**
+   * Two things that both say "instead", which the rules do not order. Since Phase 9b
+   * that is no house rule: Replanting rolls, and the owner is asked about the exchange
+   * having seen it -- a hit is never offered, a miss still is.
+   */
+  const growing = (state: GameState): GameState => ({
+    ...state,
+    effects: [
+      {
+        source: 'Accelerated Growth',
+        target: { kind: 'player', player: 'p1' },
+        modifiers: [],
+        trigger: 'accelerated_growth',
+        expiresAtStartOfTurnOf: 'p1',
+      },
+    ],
+  })
+
+  it('rolls before Accelerated Growth is offered, so a replanted die is never offered', () => {
     const oak = 'treefolk.oak'
     const base = board(
       SPECIES_RULES,
@@ -485,22 +503,27 @@ describe('Replanting', () => {
       { id: 'small', typeId: OAKLING, owner: 'p1', at: { kind: 'dua' } },
       other,
     )
-    const growing: GameState = {
-      ...base,
-      effects: [
-        {
-          source: 'Accelerated Growth',
-          target: { kind: 'player', player: 'p1' },
-          modifiers: [],
-          trigger: 'accelerated_growth',
-          expiresAtStartOfTurnOf: 'p1',
-        },
-      ],
-    }
-    const outcome = killUnits(growing, ['o'])
+    const outcome = killUnits(growing(base), ['o'])
     expect(outcome.replanted).toEqual(['o'])
-    expect(outcome.regrown).toEqual([])
+    expect(outcome.offered).toEqual([])
+    expect(outcome.state.turn.growthOffers).toBeUndefined()
     expect(outcome.state.units['small']?.location.kind).toBe('dua')
+  })
+
+  it('still offers the exchange for a die whose Replanting roll missed', () => {
+    const oak = 'treefolk.oak'
+    const base = board(
+      SPECIES_RULES,
+      'swampland_tower',
+      seedRolling(oak, notId(oak)),
+      { id: 'o', typeId: oak, owner: 'p1', at: at('frontier') },
+      { id: 'small', typeId: OAKLING, owner: 'p1', at: { kind: 'dua' } },
+      other,
+    )
+    const outcome = killUnits(growing(base), ['o'])
+    expect(outcome.replanted).toEqual([])
+    expect(outcome.replantDice).toHaveLength(1)
+    expect(outcome.offered).toEqual(['o'])
   })
 
   /**

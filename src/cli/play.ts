@@ -50,6 +50,7 @@ import {
   type GameState,
   type LogEntry,
   type Pending,
+  type PromotionPair,
   type PlayerId,
   type SpellTarget,
   type TerrainSlot,
@@ -274,7 +275,7 @@ function describe(entry: LogEntry, state: GameState): string | null {
       )
     case 'replanting': {
       const rolls = entry.dice
-        .map((die) => `${shown(die)} ${entry.rooted.includes(die.unitId) ? green('takes root') : dim('dies')}`)
+        .map((die) => `${shown(die)} ${entry.rooted.includes(die.unitId) ? green('takes root') : dim('no ID')}`)
         .join(', ')
       return `  ${bold('Replanting')} at ${SLOT_LABEL[entry.slot as TerrainSlot] ?? entry.slot}: ${rolls}`
     }
@@ -677,6 +678,7 @@ function choicesFor(state: GameState, pending: Pending): Choice[] {
 
     case 'flashfire':
     case 'rapid_growth':
+    case 'accelerated_growth':
     case 'announce_spells':
     case 'temple_bury':
     case 'dragon_breath':
@@ -820,6 +822,30 @@ async function askRapidGrowth(
 
   const picked = pick(units, (await ask('> ')).trim())
   return { kind: 'rapid_growth', unitIds: picked.map((u) => u.id) }
+}
+
+/**
+ * Accelerated Growth: one question per dying die, in turn -- which small one comes up
+ * in its place, or enter to let it die. A partner once taken is not offered again.
+ */
+async function askAcceleratedGrowth(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'accelerated_growth' }>,
+): Promise<GameAction> {
+  console.log(
+    `
+${bold('Accelerated Growth')} ${dim('— a dying die may swap with a one-health die from your DUA')}`,
+  )
+  const pairs: PromotionPair[] = []
+  for (const unitId of pending.dying) {
+    const left = pending.partners.filter((id) => !pairs.some((p) => p.partnerId === id))
+    if (left.length === 0) break
+    console.log(`  ${nameOf(state, unitId)} is dying. Exchange it with:`)
+    left.forEach((id, i) => console.log(`    ${i + 1}) ${nameOf(state, id)}`))
+    const partnerId = left[Number((await ask('> (enter to let it die) ')).trim()) - 1]
+    if (partnerId !== undefined) pairs.push({ unitId, partnerId })
+  }
+  return { kind: 'accelerated_growth', pairs }
 }
 
 /** A spell target in the terminal's own vocabulary. The join lives in `magic.ts`, so
@@ -1374,6 +1400,7 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
   if (pending.kind === 'announce_spells') return askSpells(state, pending)
   if (pending.kind === 'flashfire') return askFlashfire(state, pending)
   if (pending.kind === 'rapid_growth') return askRapidGrowth(state, pending)
+  if (pending.kind === 'accelerated_growth') return askAcceleratedGrowth(state, pending)
 
   const choices = choicesFor(state, pending)
   for (;;) {

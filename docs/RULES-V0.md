@@ -687,26 +687,14 @@ rules to go.
   would be a decision with nowhere to live. `RollContext.isTrigger` is what suppresses them, and
   it is a sibling of `isSubRoll` rather than a reuse of it: there a die rolls for its life with no
   army behind it, here an army really is rolling. Only the consequence is shared.
-- **Accelerated Growth is taken automatically, not offered.** "You **may** instead exchange it with
-  a one health Treefolk unit from your DUA" -- but `killUnits` is a pure transform called from eight
-  places, and none of them can stop to ask. The "may" is exercised by choosing to cast the spell.
-
-  Everything else about the spell is the rule as written: the trigger, the partner, one partner per
-  dying die, the duration, and that an exchange is **not a death** -- no `units_killed` entry and no
-  death trigger, which `deathEntries` enforces at every call site.
-
-  *What undoing this would cost*, recorded so the decision stays legible: `killUnits` would return
-  candidates rather than performing the exchange, and the choice would have to be raised by a step
-  -- a new parked field, a `MarchStep`, a `DragonAttackStep` (dragon deaths are in that phase), a
-  pending, an action, both AIs and both clients, with all eight callers routed through it. Folding
-  it into the decision that caused the death is **not** a shortcut: only five of the eight have the
-  victim deciding at all (the damage assignments, thorns, Hailstorm, a breath), and the other three
-  -- Flame and the targeting sub-rolls, Choke, Lightning Strike -- are chosen by the attacker, so
-  that route would leave three sites silently automatic and be worse than doing it uniformly.
-
-  The choice being given up is small: the big die goes to the DUA either way, so the exchange buys a
-  1-health die on the board for a 1-health die out of the DUA. That die is never a promotion partner
-  (promotion takes one *larger*), only a City recruit or a Resurrect Dead target.
+- **Accelerated Growth's partners are the DUA as it stood before the kill** (v1 Phase 9b). "Exchange
+  it with a one health Treefolk unit from your DUA" does not say whether a one-health die dying in
+  the same assignment counts. It does not here: the big die cannot come back as a die that died
+  beside it.
+- **An exchanged unit is not buried by an effect that kills and buries** (Flame, Fire breath). It
+  was never killed -- "you may *instead* exchange it" -- and the rules already say the same of a
+  Phoenix that rises on the kill: "if the first roll is successful, the unit is not buried".
+  Phase 7e buried it anyway, which went unnoticed while the exchange was automatic.
 - **The dragon combination roll offers no promotion, free move or cantrip.** Wild Growth's `Applies`
   column is "Non-Maneuver", which a dragon attack is -- but the Dragon Attack Phase has no targeting
   queue to hang a decision on. Wild Growth still generates its save results there (the roll counts
@@ -726,6 +714,13 @@ rules to go.
 
 ### What is not a house rule, and is easy to misread as one
 
+- **Accelerated Growth is a question** (v1 Phase 9b; automatic from 7e until then). "You **may**
+  instead exchange it" is asked of the dying dice's owner after the kill, and the answer can take
+  any of them, or none. `killUnits` cannot stop to ask: it is called from eight places. So the
+  kill moves the dice to the DUA and records an offer, and `stepGame` raises it before anything
+  else, including the victory check. An army the kill emptied is not lost while its owner may
+  still refill it. The state is "killed unless exchanged". The kill line is written with the
+  answer, and it names only the dice that were declined.
 - **Hailstorm allows a save roll, although its own sentence does not say so.** "When a unit takes
   damage it is permitted to make a save roll unless an effect states otherwise", and "attacks or
   spells that target an army allow the entire army to make a save roll" (p. 29). The general rule
@@ -831,11 +826,6 @@ Firewalker unit."
   roll, saves do not count, so converting them costs nothing and every rolled save converts. In the
   dragon combination roll, saves defend the army against the dragon, so converting is a real trade:
   there the owner chooses how many, as part of the same decision that splits the ID results.
-- **Replanting rolls before Accelerated Growth.** Both say "instead" and the rules do not order
-  them. This is the order the owner would pick every time: Replanting costs nothing, and a unit it
-  saves keeps the one-health die in the DUA that the exchange would have spent. Accelerated Growth
-  itself stays automatic; §15 records what undoing that would cost, and nothing in this phase
-  changes it.
 - **Air Flight is judged at the start of the Retreat Step.** The moves are one decision, so they are
   simultaneous: a terrain that everybody flies out of still counted as holding a Firewalker for the
   units flying in, and two armies may swap terrains.
@@ -848,6 +838,11 @@ Firewalker unit."
 
 ### What is not a house rule, and is easy to misread as one
 
+- **Replanting and Accelerated Growth are not ordered by a house rule any more** (v1 Phase 9b).
+  Both say "instead" and the rules do not order them. Replanting rolls first, and its owner is then
+  *asked* about the exchange with the roll in front of them. A hit is never offered, and a miss
+  still is. That is every option either order could give, so there is nothing left to decide by
+  house rule. Until 9b the exchange was automatic, and "Replanting first" was a house rule.
 - **A sleeping Treefolk cannot come up.** Sleep is on Treefolk dice only and targets an opponent's
   unit, so no Treefolk is ever asleep, and "does a sleeping die replant?" has no case. `species.test.ts`
   checks that against the data.

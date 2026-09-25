@@ -40,6 +40,7 @@ import {
   breathSelection,
   damageSelection,
   moveDraft,
+  growthDraft,
   promoteDraft,
   saiTargetSelection,
   describeFace,
@@ -692,6 +693,85 @@ function SaiHeader({
             </>
           )}
           {(pairs.length > 0 || chosen !== undefined) && (
+            <button type="button" className="choice secondary" onClick={onClearDraft}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  /**
+   * Accelerated Growth (Phase 9b): Wild Growth's gesture with no budget. The dying dice
+   * are already in the DUA, so they are tapped there; the partner is a button, because
+   * it is the only legal answer and carries nothing to weigh but its name.
+   */
+  if (prompt.custom === 'accelerated_growth' && pending.kind === 'accelerated_growth') {
+    const draft = growthDraft(state, pending, pairs, selection)
+
+    return (
+      <div className="action-bar">
+        <p className="question">
+          {prompt.question}
+          <span className="muted">
+            {pending.partners.length === 1
+              ? ' (one small die to spare)'
+              : ` (${pending.partners.length} small dice to spare)`}
+          </span>
+        </p>
+
+        {pairs.length > 0 && (
+          <p className="staged muted">
+            {pairs.map((pair, i) => (
+              <Fragment key={pair.unitId}>
+                {i > 0 && ' · '}
+                {nameOf(state, pair.unitId)} &rarr; <b>{nameOf(state, pair.partnerId)}</b>
+              </Fragment>
+            ))}
+          </p>
+        )}
+
+        <div className="choices">
+          {draft.chosen !== undefined && draft.partners.length > 0 ? (
+            draft.partners.map((unit) => (
+              <button
+                key={unit.id}
+                type="button"
+                className="choice"
+                onClick={() => {
+                  if (draft.chosen !== undefined) {
+                    onPair({ unitId: draft.chosen.id, partnerId: unit.id })
+                  }
+                  onClearSelection()
+                }}
+              >
+                {nameOf(state, draft.chosen?.id ?? '')} &rarr; {unitType(unit.typeId).name}
+              </button>
+            ))
+          ) : (
+            <>
+              <button
+                type="button"
+                className={pairs.length > 0 ? 'choice' : 'choice secondary'}
+                onClick={() => {
+                  dispatch({ kind: 'accelerated_growth', pairs })
+                  onClearDraft()
+                }}
+              >
+                {pairs.length > 0
+                  ? `Exchange ${pairs.length}` +
+                    (draft.dying.length > 0 ? `, let ${draft.dying.length} die` : '')
+                  : pending.dying.length === 1
+                    ? 'Let it die'
+                    : 'Let them all die'}
+              </button>
+              {draft.dying.length > 0 && draft.partners.length > 0 && (
+                <span className="tally muted">tap a dying die in the Fallen area to exchange it</span>
+              )}
+            </>
+          )}
+          {(pairs.length > 0 || draft.chosen !== undefined) && (
             <button type="button" className="choice secondary" onClick={onClearDraft}>
               Clear
             </button>

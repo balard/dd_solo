@@ -300,7 +300,9 @@ function Line({
               </>
             )}
             {entry.rooted.length > 0 && missed.length > 0 && '; '}
-            {missed.length > 0 && <>{names(missed)} rolled no ID and {missed.length === 1 ? 'dies' : 'die'}</>}
+            {/* "Rolled no ID", not "and dies": since Phase 9b an Accelerated Growth may
+                still take the die, and the kill or exchange line after this one says which. */}
+            {missed.length > 0 && <>{names(missed)} rolled no ID</>}
           </div>
         </div>
       )

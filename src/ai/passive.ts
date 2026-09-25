@@ -14,6 +14,7 @@
  * "Passive" here means "starts nothing", not "never acts". The engine only asks at
  * all when this player actually has an army at the contested terrain.
  */
+import { unitType } from '../data/load'
 import { damageOptions } from '../engine/damage'
 import { rollOnTheTable } from '../engine/turn'
 import type { RngState } from '../engine/rng'
@@ -69,6 +70,20 @@ function decideAction(state: GameState, pending: Pending): GameAction {
         .filter((die) => die.results === 0 && pending.options.includes(die.unitId))
         .map((die) => die.unitId)
       return { kind: 'rapid_growth', unitIds: blanks }
+    }
+
+    // Takes every exchange it can, heaviest dying die first: it cast the spell for this,
+    // and a die on the board beats a die in the DUA whoever is playing.
+    case 'accelerated_growth': {
+      const heaviest = [...pending.dying].sort(
+        (a, b) => healthOf(state, b) - healthOf(state, a),
+      )
+      return {
+        kind: 'accelerated_growth',
+        pairs: heaviest
+          .slice(0, pending.partners.length)
+          .map((unitId, i) => ({ unitId, partnerId: pending.partners[i] as string })),
+      }
     }
 
     // It rolls, for the reason it contests and counter-attacks: the die has no other
@@ -221,4 +236,9 @@ function decideAction(state: GameState, pending: Pending): GameAction {
       return { kind: 'dragon_damage_split', melee, missile }
     }
   }
+}
+
+function healthOf(state: GameState, unitId: string): number {
+  const unit = state.units[unitId]
+  return unit === undefined ? 0 : unitType(unit.typeId).health
 }

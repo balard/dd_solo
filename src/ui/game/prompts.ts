@@ -117,6 +117,7 @@ export interface Prompt {
     | 'announce_spells'
     | 'flashfire'
     | 'rapid_growth'
+    | 'accelerated_growth'
 }
 
 const stepFace = (face: TerrainFace, direction: Direction): TerrainFace =>
@@ -423,6 +424,18 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         custom: 'rapid_growth',
       }
 
+    case 'accelerated_growth':
+      return {
+        question:
+          pending.dying.length === 1
+            ? `Accelerated Growth: ${unitName(state, pending.dying[0] as UnitId)} is dying` +
+              ' — exchange it for a one-health die from your DUA?'
+            : `Accelerated Growth: ${pending.dying.length} of your dice are dying` +
+              ' — exchange any for one-health dice from your DUA?',
+        choices: [],
+        custom: 'accelerated_growth',
+      }
+
     case 'dispel_magic':
       return {
         question:
@@ -663,6 +676,33 @@ export interface PromoteDraft {
   readonly partners: readonly { readonly unit: UnitInstance; readonly cost: number }[]
 }
 
+/**
+ * Accelerated Growth, as a staged draft of `{dying -> partner}` pairs: Wild Growth's
+ * gesture with no budget. Tap a dying die, then press the small one it comes back as.
+ */
+export interface GrowthDraft {
+  /** Dying dice not yet paired. */
+  readonly dying: readonly UnitInstance[]
+  /** Partners not yet spent -- offered only once a dying die is picked. */
+  readonly partners: readonly UnitInstance[]
+  /** The picked dying die, if the selection holds one. */
+  readonly chosen: UnitInstance | undefined
+}
+
+export function growthDraft(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'accelerated_growth' }>,
+  pairs: readonly PromotionPair[],
+  selection: ReadonlySet<UnitId>,
+): GrowthDraft {
+  const live = (ids: readonly UnitId[]) =>
+    ids.map((id) => state.units[id]).filter((u): u is UnitInstance => u !== undefined)
+  const dying = live(pending.dying.filter((id) => !pairs.some((p) => p.unitId === id)))
+  const partners = live(pending.partners.filter((id) => !pairs.some((p) => p.partnerId === id)))
+  const chosen = dying.find((unit) => selection.has(unit.id))
+  return { dying, partners, chosen }
+}
+
 export function promoteDraft(
   state: GameState,
   pending: Extract<Pending, { kind: 'sai_promote' }>,
@@ -875,7 +915,7 @@ export interface SelectMode {
    * had to offer the *enemy's* dice: every decision before it picked from your own
    * army, so `Board` hard-coded the opposing side unselectable.
    */
-  readonly side: 'mine' | 'theirs' | 'reserve'
+  readonly side: 'mine' | 'theirs' | 'reserve' | 'dua'
   /** A Reserve Army is a legal target since Phase 5d's Tower, so this is an
    *  `ArmyRef` rather than a `TerrainSlot`; `null` still means "wherever". */
   readonly slot: ArmyRef | null
@@ -908,6 +948,9 @@ export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): Sele
       return { side: 'mine', slot: null }
     case 'reinforce':
       return { side: 'reserve', slot: null }
+    // The dying dice are already in the DUA, so that is where they are tapped.
+    case 'accelerated_growth':
+      return { side: 'dua', slot: null }
     default:
       return null
   }

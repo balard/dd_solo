@@ -200,6 +200,25 @@ export function validateState(state: GameState): string[] {
     )
   }
 
+  // Accelerated Growth's offers (Phase 9b): the dying dice are in the DUA until the
+  // answer, which is what makes "killed unless exchanged" the state as it stands. An
+  // empty list is omitted, never stored, near the digest.
+  const offers = state.turn.growthOffers
+  if (offers !== undefined && offers.length === 0) {
+    problems.push('turn.growthOffers is present but empty; it is omitted when there is none')
+  }
+  for (const offer of offers ?? []) {
+    for (const { unitId } of offer.dying) {
+      const where = state.units[unitId]?.location.kind
+      if (where !== 'dua') {
+        problems.push(`${unitId} is offered to Accelerated Growth from the ${where ?? 'void'}, not the DUA`)
+      }
+    }
+  }
+  if (state.pending?.kind === 'accelerated_growth' && offers === undefined) {
+    problems.push('an Accelerated Growth question is pending with no offer behind it')
+  }
+
   const marched = state.turn.armiesMarched
   if (new Set(marched).size !== marched.length) {
     problems.push(`armiesMarched has a repeat: ${marched.join(', ')} -- each march needs a different army`)

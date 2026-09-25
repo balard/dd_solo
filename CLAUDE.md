@@ -283,13 +283,17 @@ These are the things that break the project if violated:
   Dragon Attack Phase is real; under `magic: 'spells'` (Phase 7, §15) all eighteen spells cast, and
   `Summon Dragon` is how a dragon reaches the board. `V0_RULES` has neither, and promotion and
   burying -- machinery since v1 Phase 2 -- stay out of its reach.
-- **Species abilities are in** (`speciesAbilities: true`, v1 Phase 8, `RULES-V0.md` §16). Three
-  house rules, all in §16:
+- **Species abilities are in** (`speciesAbilities: true`, v1 Phase 8, `RULES-V0.md` §16). Two
+  house rules in §16, and one that 9b retired:
   - **Flaming Shields is automatic wherever it can only help.** In a melee attack and Wall of
     Thorns' roll every rolled save converts. In the dragon combination roll, which counts saves as
     well, converting is a trade, so the owner picks how many in `dragon_allocate`.
-  - **Replanting rolls before Accelerated Growth**, which stays automatic (§15 costs the
-    alternative).
+  - **Accelerated Growth is a question, not a house rule** (Phase 9b). Replanting rolls, then the
+    owner is asked about the exchange with the roll in front of them, so the old "Replanting
+    first" rule has nothing left to decide. `killUnits` moves the dying dice to the DUA and
+    records a `GrowthOffer` on the turn, and **`stepGame` raises it before pruning and before the
+    victory check**, because the answer may refill an army the kill emptied. An exchanged die
+    was never killed, so a Flame does not bury it.
   - **Air Flight is judged at the start of the Retreat Step**, and **Rapid Growth is asked only
     while the counter-maneuvering army is losing or tied** and has a die that did not roll an SAI.
 - **A beneficial army spell targets only your own armies** (v1 Phase 9a, `RULES-V0.md` §15). It

@@ -476,6 +476,35 @@ export interface TurnState {
     readonly marcher: readonly RawDie[]
     readonly defender: readonly RawDie[]
   }
+  /**
+   * Accelerated Growth exchanges waiting to be offered (v1 Phase 9b), oldest first.
+   *
+   * `killUnits` records one per player per kill, and `stepGame` raises them **before
+   * anything else** -- before an emptied army's effects are pruned and before the
+   * victory check, because the answer may put a unit back where the dead one stood.
+   * Omitted when empty, near the digest.
+   */
+  readonly growthOffers?: readonly GrowthOffer[]
+}
+
+/**
+ * One kill's worth of Accelerated Growth: the dying dice that could be exchanged, and
+ * the one-health dice that were in the DUA before the kill.
+ *
+ * The dying dice are **already in the DUA** -- `killUnits` moved them there -- so the
+ * state is exactly "killed unless exchanged", and an exchange is the partner coming up
+ * to `from`. They are left out of the kill's `units_killed` line; the answer writes
+ * that line for the ones declined, and `units_regrown` for the rest.
+ */
+export interface GrowthOffer {
+  readonly player: PlayerId
+  readonly dying: readonly { readonly unitId: UnitId; readonly from: ArmyRef }[]
+  /** Measured before the kill, so a die dying in the same assignment is never its own
+   *  partner's replacement. Re-checked against the DUA when asked. */
+  readonly partners: readonly UnitId[]
+  /** The kill also buries (Flame): what is declined is buried with the answer. An
+   *  exchanged die was never killed, so -- like a Phoenix that rose -- it is not. */
+  readonly bury?: true
 }
 
 /**
@@ -858,6 +887,17 @@ export type Pending =
       readonly options: readonly UnitId[]
     }
   /**
+   * Accelerated Growth (v1 Phase 9b): "you **may** instead exchange it with a one health
+   * Treefolk unit from your DUA". Asked of the dying dice's owner, whoever is marching.
+   * An empty answer lets them all die. One partner per dying die, each at most once.
+   */
+  | {
+      readonly kind: 'accelerated_growth'
+      readonly player: PlayerId
+      readonly dying: readonly UnitId[]
+      readonly partners: readonly UnitId[]
+    }
+  /**
    * Dispel Magic: one unit, one yes-or-no, before any announced spell resolves.
    *
    * Asked of the unit's owner, who need not be the marching player -- most of the time
@@ -983,6 +1023,9 @@ export type GameAction =
     }
   /** Rapid Growth: the dice rerolled together. Empty keeps the roll as it is. */
   | { readonly kind: 'rapid_growth'; readonly unitIds: readonly UnitId[] }
+  /** Accelerated Growth: which dying dice come back as which small ones. Empty lets
+   *  every one of them die. */
+  | { readonly kind: 'accelerated_growth'; readonly pairs: readonly PromotionPair[] }
   /** City: one or the other, or neither -- "may" both ways. */
   | {
       readonly kind: 'eighth_face_city'

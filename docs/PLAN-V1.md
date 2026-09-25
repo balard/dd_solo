@@ -2083,7 +2083,7 @@ screen before the next begins. This phase is judged by looking at it.
 | Slice | Scope | State |
 |---|---|---|
 | **9a** | House rule: beneficial army spells target only your own armies. Four spell-announcement bugs | ✅ landed |
-| **9b** | Accelerated Growth becomes a decision; the "Replanting before AG" house rule retires with it | |
+| **9b** | Accelerated Growth becomes a decision; the "Replanting before AG" house rule retires with it | ✅ landed |
 | **9c** | Every modifier explicit: named steps in each roll's arithmetic, and the dragon attack's math | |
 | **9d** | The roll behind every decision, the enemy's included; Confuse shown and logged | |
 | **9e** | Board surfaces: both reserves, both summoning pools, a selectable DUA, a floating inspector, "look" mode | |
@@ -2161,6 +2161,35 @@ offer, and buries whichever are declined.
 **The "Replanting before Accelerated Growth" house rule (§16) retires as a side effect.** Replanting
 rolls first, and the owner decides on the exchange having seen it -- which is every option either
 order would have given.
+
+#### Where this slice was wrong
+
+- **"Defer the exchange" held, and the victory check was not the only thing it had to beat.**
+  `pruneEffects` runs first in `stepGame` too. An army the kill emptied would have lost its Stone
+  Skin before the answer put a unit back. So the offer is raised ahead of both.
+- **An exchanged die was buried by a Flame, and had been since Phase 7e.** `killAndBury` subtracted
+  `risen` and `replanted` from what it buried, and not `regrown`. That was invisible while the
+  exchange was automatic. The rules settle it for the Phoenix: a unit rescued at the kill "is not
+  buried". An exchange is the same kind of rescue. Fire breath's burial roll had the same hole, and
+  the answer now takes exchanged dice off its list.
+- **"Measure the partners at the kill" was a rule nobody had written down.** The automatic version
+  read the DUA *before* `applyDamage`, so a 1-health die dying in the same assignment was never a
+  partner. Deferring the question would have quietly changed that, since by the time the question
+  is asked that die *is* in the DUA. It is a house rule now, recorded in §15, and the offer carries
+  its partners.
+- **The Replanting miss line said "and dies".** Since 9b a miss may still be exchanged, so the line
+  says "rolled no ID". The kill or exchange line that follows says what happened.
+
+**Checked in a browser with a scaffold.** `?forces=starter&seed=73` reaches the question after 56 of
+the human's decisions (played by `RandomAI`, against `PassiveAI`). That is too many to click, so a
+localStorage replay hook in `useGame` loaded the record, and it was reverted before the commit. The
+sheet asked "Willow is dying — exchange it for a one-health die from your DUA? (3 small dice to
+spare)". The Fallen section opened by itself with the Willow under "Dying — tap one to exchange it".
+Tapping it offered three partners, and "Willow → Nymph" confirmed into the log line "Accelerated
+Growth Willow → Nymph". The Replanting miss that came before it showed the new order working.
+
+`SAVE_VERSION` is 12, for decision order. The spell fuzz counts the question being asked and being
+declined, and both are above zero.
 
 ### 9c — every modifier is explicit
 
@@ -2270,7 +2299,7 @@ a phone, against an opponent that marches, maneuvers, casts and recruits. A 200-
 | Two hand-authored 30-health forces, fixed race per player | Phase 0a |
 | The Frontier is a constant, and both forces must propose the same die | Phase 0a |
 | The roll-off winner marches first and the loser sets the Frontier (Phase 0a's own house rule) | Phase 10 |
-| Accelerated Growth is taken automatically, and Replanting always rolls before it | Phase 9b |
+| Accelerated Growth is taken automatically, and Replanting always rolls before it | Phase 9b ✅ |
 
 **Two of these are replaced by another house rule, not by the real rule** — the only entries in this
 table that move twice.

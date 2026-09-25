@@ -159,6 +159,24 @@ export const randomAi: AiPlayer = {
         ] as const
       }
 
+      // Any number of exchanges, none included, each with a random partner -- so the
+      // fuzz sees both a declined kill line and a Flame burying what was declined.
+      case 'accelerated_growth': {
+        const most = Math.min(pending.dying.length, pending.partners.length)
+        const [howMany, afterCount] = nextInt(rng, most + 1)
+        const [dying, afterDying] = shuffle(afterCount, pending.dying)
+        const [partners, next] = shuffle(afterDying, pending.partners)
+        return [
+          {
+            kind: 'accelerated_growth',
+            pairs: dying
+              .slice(0, howMany)
+              .map((unitId, i) => ({ unitId, partnerId: partners[i] as string })),
+          } as GameAction,
+          next,
+        ] as const
+      }
+
       // Declining is legal and free, so both answers stay in the pool -- a fuzz that
       // always rolled would never exercise a spell landing unopposed.
       case 'dispel_magic': {

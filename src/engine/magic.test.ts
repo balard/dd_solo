@@ -20,7 +20,7 @@ import { saiEffects, type RollContext } from './sai'
 import type { DieRoll } from './roll'
 import { marchableArmies } from './turn'
 import { armyRoll, flashfireBudget, pruneEffects, thornsAt, type Effect } from './effects'
-import { deathEntries, killUnits, killedIds } from './death'
+import { deathEntries, killAndBury, killUnits, killedIds } from './death'
 import {
   announcementProblem,
   castableSpells,
@@ -964,30 +964,82 @@ describe('Accelerated Growth', () => {
     ],
   })
 
-  it('exchanges a dying die for a small one instead of killing it', () => {
+  /** Kill these under an Accelerated Growth, then let the machine raise the offer. */
+  const offerAfter = (state: GameState, ids: readonly string[]) => {
+    const outcome = killUnits(growing(state, 'p1'), ids)
+    return { outcome, asked: advance({ ...outcome.state, pending: null }) }
+  }
+
+  it('offers the exchange rather than taking it, and the dying die waits in the DUA', () => {
+    // "You **may** instead exchange it" -- a house rule took it automatically from
+    // Phase 7e until 9b. Now the kill only records an offer, and the machine asks.
     const base = withDua(gameAt('p1'), 'p1', 1)
     const small = deadUnits(base, 'p1')[0]!
     const doomed = armyAt(base, 'p1', 'p1_home').find((u) => unitType(u.typeId).health >= 2)!
 
-    const outcome = killUnits(growing(base, 'p1'), [doomed.id])
+    const { outcome, asked } = offerAfter(base, [doomed.id])
 
-    expect(outcome.regrown).toEqual([{ unitId: doomed.id, partnerId: small.id }])
-    // They swapped places: the big one is in the DUA, the small one is on the board.
+    expect(outcome.offered).toEqual([doomed.id])
     expect(outcome.state.units[doomed.id]?.location.kind).toBe('dua')
-    expect(outcome.state.units[small.id]?.location).toEqual({ kind: 'terrain', slot: 'p1_home' })
-    // **Not a death.** `killedIds` is what keeps it out of the caller's log entry.
+    // Not in any kill line yet: whether it died is the answer's to say.
     expect(killedIds(outcome, [doomed.id])).toEqual([])
-    expect(deathEntries(outcome, 'p1', 'p1_home', [doomed.id]).map((e) => e.kind)).toEqual([
-      'units_regrown',
-    ])
+    expect(deathEntries(outcome, 'p1', 'p1_home', [doomed.id])).toEqual([])
+
+    expect(asked.pending).toEqual({
+      kind: 'accelerated_growth',
+      player: 'p1',
+      dying: [doomed.id],
+      partners: [small.id],
+    })
   })
 
-  it('does nothing without a one-health die in the DUA', () => {
+  it('brings the partner up where the dead die stood, and kills nobody', () => {
+    const base = withDua(gameAt('p1'), 'p1', 1)
+    const small = deadUnits(base, 'p1')[0]!
+    const doomed = armyAt(base, 'p1', 'p1_home').find((u) => unitType(u.typeId).health >= 2)!
+    const { asked } = offerAfter(base, [doomed.id])
+    const before = asked.log.length
+
+    const after = reduce(asked, {
+      kind: 'accelerated_growth',
+      pairs: [{ unitId: doomed.id, partnerId: small.id }],
+    })
+
+    expect(after.units[doomed.id]?.location.kind).toBe('dua')
+    expect(after.units[small.id]?.location).toEqual({ kind: 'terrain', slot: 'p1_home' })
+    const written = after.log.slice(before).map((e) => e.kind)
+    expect(written).toContain('units_regrown')
+    expect(written).not.toContain('units_killed')
+    // Omitted, not emptied: `digestState` renders the turn.
+    expect(Object.keys(after.turn)).not.toContain('growthOffers')
+  })
+
+  it('writes the kill line when the exchange is declined', () => {
+    const base = withDua(gameAt('p1'), 'p1', 1)
+    const doomed = armyAt(base, 'p1', 'p1_home').find((u) => unitType(u.typeId).health >= 2)!
+    const { asked } = offerAfter(base, [doomed.id])
+    const before = asked.log.length
+
+    const after = reduce(asked, { kind: 'accelerated_growth', pairs: [] })
+
+    expect(after.units[doomed.id]?.location.kind).toBe('dua')
+    const written = after.log.slice(before)
+    expect(written.some((e) => e.kind === 'units_regrown')).toBe(false)
+    expect(written).toContainEqual({
+      kind: 'units_killed',
+      player: 'p1',
+      slot: 'p1_home',
+      unitIds: [doomed.id],
+    })
+  })
+
+  it('offers nothing without a one-health die in the DUA', () => {
     const base = withDua(gameAt('p1'), 'p1', 2)
     const doomed = armyAt(base, 'p1', 'p1_home').find((u) => unitType(u.typeId).health >= 2)!
 
     const outcome = killUnits(growing(base, 'p1'), [doomed.id])
-    expect(outcome.regrown).toEqual([])
+    expect(outcome.offered).toEqual([])
+    expect(outcome.state.turn.growthOffers).toBeUndefined()
     expect(outcome.state.units[doomed.id]?.location.kind).toBe('dua')
   })
 
@@ -996,18 +1048,88 @@ describe('Accelerated Growth', () => {
     const doomed = armyAt(base, 'p1', 'p1_home').find((u) => unitType(u.typeId).health === 1)
     if (doomed === undefined) return
 
-    expect(killUnits(growing(base, 'p1'), [doomed.id]).regrown).toEqual([])
+    expect(killUnits(growing(base, 'p1'), [doomed.id]).offered).toEqual([])
+  })
+
+  it('never lets a die that dies in the same kill be a partner', () => {
+    // Partners are measured before the kill: a one-health die dying beside the big one
+    // is not something the big one can come back as.
+    const base = gameAt('p1')
+    const army = armyAt(base, 'p1', 'p1_home')
+    const big = army.find((u) => unitType(u.typeId).health >= 2)!
+    const small = army.find((u) => unitType(u.typeId).health === 1)
+    if (small === undefined) return
+
+    expect(killUnits(growing(base, 'p1'), [big.id, small.id]).offered).toEqual([])
   })
 
   it('spends each partner once, so two deaths cannot claim the same die', () => {
     const base = withDua(gameAt('p1'), 'p1', 1)
+    const small = deadUnits(base, 'p1')[0]!
     const doomed = armyAt(base, 'p1', 'p1_home')
       .filter((u) => unitType(u.typeId).health >= 2)
       .slice(0, 2)
     if (doomed.length < 2) return
 
-    const outcome = killUnits(growing(base, 'p1'), doomed.map((u) => u.id))
-    expect(outcome.regrown).toHaveLength(1)
+    const { asked } = offerAfter(base, doomed.map((u) => u.id))
+    expect(asked.pending).toMatchObject({ kind: 'accelerated_growth', partners: [small.id] })
+    expect(() =>
+      reduce(asked, {
+        kind: 'accelerated_growth',
+        pairs: doomed.map((u) => ({ unitId: u.id, partnerId: small.id })),
+      }),
+    ).toThrow(/at most once/)
+  })
+
+  it('does not declare an emptied army lost before its owner is asked', () => {
+    // The kill takes every die p1 has in play, and a one-health die waits in the DUA.
+    // The victory check must not run before the offer: the answer may put a unit back,
+    // and here it does.
+    const base = withDua(gameAt('p1'), 'p1', 1)
+    const small = deadUnits(base, 'p1')[0]!
+    const everyone = Object.values(base.units)
+      .filter((u) => u.owner === 'p1' && (u.location.kind === 'terrain' || u.location.kind === 'reserve'))
+      .map((u) => u.id)
+    const { asked } = offerAfter(base, everyone)
+
+    expect(asked.winner).toBeNull()
+    expect(asked.pending?.kind).toBe('accelerated_growth')
+
+    const dying = asked.pending?.kind === 'accelerated_growth' ? asked.pending.dying : []
+    const saved = advance(
+      reduce(asked, {
+        kind: 'accelerated_growth',
+        pairs: [{ unitId: dying[0]!, partnerId: small.id }],
+      }),
+    )
+    expect(saved.winner).toBeNull()
+
+    const lost = advance(reduce(asked, { kind: 'accelerated_growth', pairs: [] }))
+    expect(lost.winner).toBe('p2')
+  })
+
+  it('holds an offered die back from a kill-and-bury, and buries it only if declined', () => {
+    // Flame "kills and buries". An exchanged die was never killed -- like a Phoenix
+    // that rose, it is not buried. A declined one was, and is.
+    const base = withDua(gameAt('p1'), 'p1', 1)
+    const small = deadUnits(base, 'p1')[0]!
+    const doomed = armyAt(base, 'p1', 'p1_home').find((u) => unitType(u.typeId).health >= 2)!
+
+    const outcome = killAndBury(growing(base, 'p1'), [doomed.id])
+    expect(outcome.offered).toEqual([doomed.id])
+    expect(outcome.state.units[doomed.id]?.location.kind).toBe('dua')
+    expect(outcome.state.turn.growthOffers?.[0]?.bury).toBe(true)
+
+    const asked = advance({ ...outcome.state, pending: null })
+    const kept = reduce(asked, {
+      kind: 'accelerated_growth',
+      pairs: [{ unitId: doomed.id, partnerId: small.id }],
+    })
+    expect(kept.units[doomed.id]?.location.kind).toBe('dua')
+
+    const burnt = reduce(asked, { kind: 'accelerated_growth', pairs: [] })
+    expect(burnt.units[doomed.id]?.location.kind).toBe('bua')
+    expect(burnt.log.at(-1)).toMatchObject({ kind: 'units_buried', unitIds: [doomed.id] })
   })
 
   it('can never meet Rise from the Ashes, which is a fact about the data', () => {
@@ -1321,6 +1443,8 @@ describe('the fuzz', () => {
     let fromReserves = 0
     let declined = 0
     let regrown = 0
+    let growthAsked = 0
+    let growthDeclined = 0
 
     // Both force sets, because the two species reach different spell lists: Treefolk
     // can never cast an air or fire spell and Firewalkers never a water or earth one,
@@ -1343,6 +1467,9 @@ describe('the fuzz', () => {
         declined += result.record.actions.filter(
           (a) => a.kind === 'flashfire' && a.unitIds.length === 0,
         ).length
+        const growth = result.record.actions.filter((a) => a.kind === 'accelerated_growth')
+        growthAsked += growth.length
+        growthDeclined += growth.filter((a) => a.pairs.length === 0).length
         for (const entry of result.state.log) {
           if (entry.kind === 'magic_rolled') magicActions += 1
           if (entry.kind === 'spell_cast') cast.set(entry.spell, (cast.get(entry.spell) ?? 0) + 1)
@@ -1381,6 +1508,10 @@ describe('the fuzz', () => {
     expect(flashfires).toBeGreaterThan(0)
     expect(declined).toBeGreaterThan(0)
     expect(regrown).toBeGreaterThan(0)
+    // Accelerated Growth is a question since 9b, and a fuzz that always took it would
+    // never write the declined kill line or bury a declined Flame victim.
+    expect(growthAsked).toBeGreaterThan(0)
+    expect(growthDeclined).toBeGreaterThan(0)
     // The three things 7f closed: a Cantrip window mid-roll, a Dispel Magic roll that
     // actually stopped something, and a spell cast from the Reserve Area.
     expect(dispelled).toBeGreaterThan(0)

@@ -111,8 +111,13 @@ const KEY = 'dd_solo.save'
  *    target -- all four now refused, so the record would throw part-way through its
  *    replay rather than replay differently. No `RuleSet` key moved: the rule is in the
  *    data, which a record does not carry.
+ *
+ * 12: Accelerated Growth becomes a question, Phase 9b. Decision order: a kill under the
+ *    spell now stops for `accelerated_growth` where it used to exchange on the spot, so
+ *    a version-11 record would be answering the question after it with the wrong
+ *    action. No dice move.
  */
-export const SAVE_VERSION = 11
+export const SAVE_VERSION = 12
 
 
 export interface SavedGame {
