@@ -1341,6 +1341,8 @@ function castSite(target: SpellTarget): {
       return { slot: 'reserve', ...(target.unitIds[0] !== undefined ? { unitId: target.unitIds[0] } : {}) }
     case 'none':
       return { slot: 'reserve' }
+    case 'dua':
+      return { target: target.player, slot: 'reserve' }
   }
 }
 
@@ -2218,6 +2220,9 @@ function spellTargetPresent(state: GameState, target: SpellTarget): boolean {
     case 'none':
       return true
     case 'terrain':
+      return true
+    // An area, like a terrain: it cannot be gone.
+    case 'dua':
       return true
     case 'army':
       return armyRef(state, target.player, target.army).length > 0

@@ -36,7 +36,7 @@ import {
   selectModeFor,
   type ReinforceMove,
 } from './game/prompts'
-import { sameSpellTarget, type SpellAim, type SpellDraftCast } from '../engine/magic'
+import { stageCast, type SpellAim, type SpellDraftCast } from '../engine/magic'
 
 import { NewGameScreen } from './game/NewGameScreen'
 import { useGame, type PlayingGame } from './game/useGame'
@@ -354,15 +354,11 @@ function GameView({ game }: { readonly game: PlayingGame }) {
         // Two castings of one spell at one target are *one* combined spell with its
         // number multiplied, not two spells -- so staging merges rather than appends.
         onCast={(cast) =>
-          setCasts((current) => {
-            const at = current.findIndex(
-              (c) => c.spell === cast.spell && sameSpellTarget(c.target, cast.target),
-            )
-            if (at === -1) return [...current, cast]
-            const merged = [...current]
-            merged[at] = { ...cast, count: (current[at]?.count ?? 0) + cast.count }
-            return merged
-          })
+          setCasts((current) =>
+            pending?.kind === 'announce_spells'
+              ? [...stageCast(pending.castable, current, cast)]
+              : current,
+          )
         }
         onStage={(moves) => setStaged((current) => [...current, ...moves])}
         onPair={(pair) => setPairs((current) => [...current, pair])}

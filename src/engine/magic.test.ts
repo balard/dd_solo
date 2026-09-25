@@ -29,6 +29,10 @@ import {
   castingElements,
   magicPool,
   magicRolled,
+  repeatBuysNothing,
+  spellPlan,
+  spellTargets,
+  stageCast,
   type MagicPool,
 } from './magic'
 import { advance, begin, reduce } from './reduce'
@@ -647,6 +651,123 @@ describe('the sub-roll spells', () => {
     const entry = twice.state.log.find((e) => e.kind === 'flash_flood')
     expect(entry).toMatchObject({ needed: 12 })
     expect(twice.choice).toEqual({ kind: 'flood', slot: 'frontier' })
+  })
+})
+
+describe('the targeting house rule and the announcement fixes (Phase 9a)', () => {
+  const OWN_ARMY = ['wind_walk', 'flashfire', 'fiery_weapon', 'watery_double', 'stone_skin']
+
+  it('aims every beneficial army spell at the caster\'s own armies only', () => {
+    // The house rule: a Stone Skin on an enemy army is legal by the letter and only
+    // ever matters with a third player at the table.
+    const state = gameAt('p1')
+    for (const id of OWN_ARMY) {
+      expect(spell(id).target).toBe('own_army')
+      const targets = spellTargets(state, 'p1', spell(id)).map((t) => t.target)
+      expect(targets.length).toBeGreaterThan(0)
+      for (const target of targets) expect(target).toMatchObject({ kind: 'army', player: 'p1' })
+    }
+  })
+
+  it('leaves no spell in this box aimed at "any army"', () => {
+    // `army` stays in the vocabulary because the rulebook says it; if a spell lands on
+    // it again, that is a decision about the house rule and belongs in RULES-V0.md.
+    expect(SPELLS.filter((s) => s.target === 'army').map((s) => s.id)).toEqual([])
+  })
+
+  it('still aims every harmful army spell at the enemy only', () => {
+    const state = gameAt('p1')
+    for (const id of ['hailstorm', 'dancing_lights', 'transmute_rock_to_mud']) {
+      const targets = spellTargets(state, 'p1', spell(id)).map((t) => t.target)
+      expect(targets.length).toBeGreaterThan(0)
+      for (const target of targets) expect(target).toMatchObject({ kind: 'army', player: 'p2' })
+    }
+  })
+
+  it('keeps Mirage wide, on purpose: aimed at your own dice it is a retreat', () => {
+    const state = gameAt('p1')
+    const owners = new Set(
+      spellTargets(state, 'p1', spell('mirage')).flatMap((t) =>
+        t.target.kind === 'units' ? t.target.unitIds.map((id) => state.units[id]!.owner) : [],
+      ),
+    )
+    expect([...owners].sort()).toEqual(['p1', 'p2'])
+  })
+
+  it('aims Accelerated Growth at the DUA itself, once, at one casting', () => {
+    // It borrowed Resurrect Dead's per-unit offers, price included: a 2-health die in
+    // the DUA made a non-cumulative spell cost two castings, and `reduce` threw.
+    const state = withDua(gameAt('p1'), 'p1', 2)
+    const offer = castableSpells(state, 'p1', magicPool(state, 'p1', 'p1_home', 9), SPELL_RULES).find(
+      (c) => c.spell.id === 'accelerated_growth',
+    )
+    expect(offer?.targets).toEqual([{ target: { kind: 'dua', player: 'p1' }, minCount: 1 }])
+  })
+
+  it('does not offer Accelerated Growth with an empty DUA', () => {
+    const state = gameAt('p1')
+    expect(deadUnits(state, 'p1')).toEqual([])
+    expect(spellTargets(state, 'p1', spell('accelerated_growth'))).toEqual([])
+  })
+
+  it('does not offer Wall of Thorns at a terrain on its eighth face', () => {
+    // "Target any terrain not at its eighth face."
+    const base = gameAt('p1')
+    const state: GameState = {
+      ...base,
+      terrains: { ...base.terrains, frontier: { ...base.terrains.frontier, face: 8, capturedBy: 'p1' } },
+    }
+    const slots = spellTargets(state, 'p1', spell('wall_of_thorns')).map((t) =>
+      t.target.kind === 'terrain' ? t.target.slot : null,
+    )
+    expect(slots).not.toContain('frontier')
+    expect(slots).toHaveLength(2)
+    // Every other terrain spell still reaches it.
+    expect(spellTargets(state, 'p1', spell('ash_storm'))).toHaveLength(3)
+  })
+
+  it('refuses the same spell twice at one target, which used to resolve twice', () => {
+    const at = { kind: 'terrain', slot: 'frontier' } as const
+    const flood = (target: SpellTarget): AnnouncedSpell => ({
+      spell: 'flash_flood', element: 'water', count: 1, target,
+    })
+    expect(announcementProblem([flood(at), flood(at)])).toMatch(/twice at one target/)
+    // Two targets are two spells, which the rules allow for anything cumulative.
+    expect(announcementProblem([flood(at), flood({ kind: 'terrain', slot: 'p1_home' })])).toBeNull()
+  })
+
+  it('merges a repeat casting of a cumulative spell, and refuses one of a non-cumulative spell', () => {
+    const state = withDua(gameAt('p1'), 'p1', 1)
+    const castable = castableSpells(state, 'p1', magicPool(state, 'p1', 'p1_home', 12), SPELL_RULES)
+    const army = { kind: 'army', player: 'p1', army: 'p1_home' } as const
+    const skin = { spell: 'stone_skin', element: 'earth' as const, count: 1, target: army }
+
+    const twice = stageCast(castable, stageCast(castable, [], skin), skin)
+    expect(twice).toEqual([{ ...skin, count: 2 }])
+
+    const growth = {
+      spell: 'accelerated_growth',
+      element: 'water' as const,
+      count: 1,
+      target: { kind: 'dua', player: 'p1' } as const,
+    }
+    const once = stageCast(castable, [], growth)
+    // Same object back: nothing to stage, and a client can tell by identity.
+    expect(stageCast(castable, once, growth)).toBe(once)
+    expect(repeatBuysNothing(once, 'accelerated_growth', growth.target)).toBe(true)
+    expect(repeatBuysNothing(twice, 'stone_skin', army)).toBe(false)
+  })
+
+  it('drops a non-cumulative cast staged above one casting from the plan', () => {
+    // The belt to `stageCast`'s braces: whatever a draft holds, the plan never hands
+    // `reduce` a count it will throw on.
+    const state = withDua(gameAt('p1'), 'p1', 1)
+    const pool = magicPool(state, 'p1', 'p1_home', 12)
+    const castable = castableSpells(state, 'p1', pool, SPELL_RULES)
+    const plan = spellPlan(castable, pool, [
+      { spell: 'accelerated_growth', element: 'water', count: 2, target: { kind: 'dua', player: 'p1' } },
+    ])
+    expect(plan.casts).toEqual([])
   })
 })
 

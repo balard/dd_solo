@@ -47,14 +47,16 @@
           "target": {
             "enum": [
               "army",
+              "own_army",
               "opposing_army",
               "own_unit",
               "opposing_unit",
               "units",
               "terrain",
-              "own_dua"
+              "own_dua",
+              "dua"
             ],
-            "description": "What the caster names when announcing. The rules' five target kinds (army, unit(s), terrain, DUA, BUA), split by whose it may be."
+            "description": "What the caster names when announcing. The rules' five target kinds (army, unit(s), terrain, DUA, BUA), split by whose it may be. `own_army` is the house rule that a beneficial army spell reaches only your own armies (RULES-V0.md section 15); `own_dua` is units in your DUA (Resurrect Dead), `dua` the area itself (Accelerated Growth)."
           },
           "cumulative": {
             "type": "boolean",

@@ -53,6 +53,8 @@ import {
   type ReinforceMove,
 } from './prompts'
 import {
+  OWN_ARMY_NOTE,
+  repeatBuysNothing,
   spellPlan,
   type SpellAim,
   type SpellDraftCast,
@@ -876,6 +878,11 @@ function SaiHeader({
         )}
 
         {aimed !== undefined && <p className="rule-text muted">{aimed.castable.spell.text}</p>}
+        {/* The text is the rulebook's, verbatim, and says "any army"; the buttons below
+            say otherwise, so the difference is named rather than left to look like a bug. */}
+        {aimed !== undefined && aimed.castable.spell.target === 'own_army' && (
+          <p className="rule-text muted">{OWN_ARMY_NOTE}</p>
+        )}
 
         <div className="choices">
           {aimed !== undefined && element === undefined ? (
@@ -912,7 +919,10 @@ function SaiHeader({
                       key={i}
                       type="button"
                       className="choice"
-                      disabled={aim.minCount * aimed.castable.spell.cost > plan.remaining}
+                      disabled={
+                        aim.minCount * aimed.castable.spell.cost > plan.remaining ||
+                        repeatBuysNothing(plan.casts, aimed.castable.spell.id, aim.target)
+                      }
                       onClick={() => {
                         onCast({
                           spell: aimed.castable.spell.id,

@@ -2082,7 +2082,7 @@ screen before the next begins. This phase is judged by looking at it.
 
 | Slice | Scope | State |
 |---|---|---|
-| **9a** | House rule: beneficial army spells target only your own armies. Four spell-announcement bugs | |
+| **9a** | House rule: beneficial army spells target only your own armies. Four spell-announcement bugs | ✅ landed |
 | **9b** | Accelerated Growth becomes a decision; the "Replanting before AG" house rule retires with it | |
 | **9c** | Every modifier explicit: named steps in each roll's arithmetic, and the dragon attack's math | |
 | **9d** | The roll behind every decision, the enemy's included; Confuse shown and logged | |
@@ -2116,6 +2116,26 @@ Every harmful army spell was already `opposing_army`, and every SAI already obey
    a bigger number, so two Hailstorm entries meant two save rolls, and two Flash Floods two bars of
    six instead of one of twelve. Both clients merge, so only a hand-built action reached it; the
    engine refuses it now.
+
+#### Where this slice was wrong
+
+- **"Cap `affordable` at 0 when a non-cumulative spell is staged there" was the wrong layer.**
+  `affordable` is a number per *spell*, but the no-op is a fact about one *target*: after a
+  Lightning Strike at one unit, a second one at another unit is still a legal spell. So there is
+  now `stageCast`, one merge both clients call, which refuses the repeat. `repeatBuysNothing` is
+  what greys out that one button. `spellPlan` also drops such a cast, as a second line of defence.
+- **Accelerated Growth's target is not "the army the effect protects".** The handler puts the effect
+  on the *player*, since "target your DUA" names neither an army nor a unit. So `SpellTarget` gained
+  a `dua` kind. It is offered once, at one casting, while the DUA holds anybody.
+- **The duplicate check had to go after the Lightning Strike rule.** Both refuse two Lightning
+  Strikes at one unit, and the named rule gives the better message. An existing test caught it.
+- **Not planned: the sheet quoted the rulebook against itself.** Stone Skin's text says "target any
+  army" in the line directly above three buttons that are all yours. Both clients now print
+  `OWN_ARMY_NOTE` under a spell whose data says `own_army`.
+
+`SAVE_VERSION` is 11, for legality rather than dice: a version-10 record may hold any of the four
+announcements now refused. That record would throw part-way through its replay rather than replay
+differently.
 
 ### 9b — Accelerated Growth becomes a decision
 

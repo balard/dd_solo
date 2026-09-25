@@ -656,6 +656,16 @@ rules to go.
 
 ### House rules this rung adds
 
+- **A beneficial army spell targets only your own armies** (v1 Phase 9a). Wind Walk, Flashfire,
+  Fiery Weapon, Watery Double and Stone Skin say "target any army", so by the letter a Stone Skin
+  may land on the enemy. That only ever matters with a third player, which this game does not
+  have, so the data gives the five an `own_army` target. Every harmful army spell was already
+  "any *opposing* army", and every SAI already obeys the same split. Three kinds are left wide on
+  purpose:
+  - **The four terrain spells stay "any terrain"** -- Ash Storm, Wall of Fog, Wall of Thorns and
+    Flash Flood. They are aimed at a place, and whether a place helps is the caster's judgement.
+  - **Mirage keeps "any unit at any terrain".** Aimed at your own dice it is a retreat.
+  - **Summon Dragon keeps "any pool or terrain".**
 - **Fiery Weapon gives both halves of "melee or missile" on a combination roll.** "Add two melee or
   missile results to any roll the target makes" is a choice, and every roll in the game counts
   exactly one result type -- so on a melee, missile, save or maneuver roll exactly one of the two
@@ -664,7 +674,7 @@ rules to go.
   additions rather than picking one. Expressing the real rule would need a fourth thing the roller
   allocates at `dragon_allocate`, for a case the rulebook does not call out.
 - **A spell may be cast on a Reserve Army.** "Target any army" names it, and the Reserve Army is an
-  army. Wind Walk on one is legal and useless, which is the player's business.
+  army. Wind Walk on your own is legal and useless, which is the player's business.
 - **A spell whose cumulative number counts *targets* is offered one target at a time.** Path moves
   "one of your units" and Resurrect Dead returns "one health-worth"; combining castings on a single
   named target does nothing extra for Path, and buys a heavier unit for Resurrect Dead. Two units

@@ -29,15 +29,25 @@ export type SpellElement = Element | 'elemental'
  * The rules give five target kinds -- army, unit(s), terrain, DUA, BUA -- and this
  * splits them by whose they may be, because "target any opposing army" and "target
  * any army" are different questions to put to a player.
+ *
+ * `own_army` is a house rule (v1 Phase 9a, `RULES-V0.md` section 15): a beneficial
+ * army spell reaches only the caster's own armies. The rules let a Stone Skin land on
+ * an enemy army, which only ever matters with more than two players. `army` stays in
+ * the vocabulary because it is what the rulebook says; no spell in this box uses it.
+ *
+ * `own_dua` is units in your DUA (Resurrect Dead: one health-worth per casting);
+ * `dua` is the area itself (Accelerated Growth: "target your DUA").
  */
 export type SpellTargetKind =
   | 'army'
+  | 'own_army'
   | 'opposing_army'
   | 'own_unit'
   | 'opposing_unit'
   | 'units'
   | 'terrain'
   | 'own_dua'
+  | 'dua'
 
 /** Who a declarative spell's modifiers reach. The last three are terrain-scoped. */
 export type SpellScope = 'army' | 'unit' | 'all_armies' | 'attackers' | 'maneuverers'
@@ -91,12 +101,14 @@ export interface Spell {
 const SPELL_ELEMENTS: readonly string[] = ['air', 'water', 'earth', 'fire', 'death', 'elemental']
 const SPELL_TARGETS: readonly string[] = [
   'army',
+  'own_army',
   'opposing_army',
   'own_unit',
   'opposing_unit',
   'units',
   'terrain',
   'own_dua',
+  'dua',
 ]
 const SPELL_SCOPES: readonly string[] = ['army', 'unit', 'all_armies', 'attackers', 'maneuverers']
 const MODIFIER_KINDS: readonly string[] = ['add', 'subtract', 'divide', 'multiply', 'ignore_ids']

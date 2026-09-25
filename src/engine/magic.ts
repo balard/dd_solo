@@ -170,10 +170,23 @@ export function spellTargets(
   switch (s.target) {
     case 'army':
       return [...armies(caster), ...armies(opponentOf(caster))]
+    // The house rule (v1 Phase 9a): a beneficial army spell reaches only your own.
+    case 'own_army':
+      return armies(caster)
     case 'opposing_army':
       return armies(opponentOf(caster))
     case 'terrain':
-      return TERRAIN_SLOTS.map((slot) => once({ kind: 'terrain', slot }))
+      return TERRAIN_SLOTS
+        // Wall of Thorns: "target any terrain not at its eighth face". Offered there
+        // until Phase 9a, because the target list was every terrain for every spell.
+        .filter((slot) => s.id !== 'wall_of_thorns' || state.terrains[slot].face !== 8)
+        .map((slot) => once({ kind: 'terrain', slot }))
+
+    // Accelerated Growth: "target your DUA" -- the area, not a unit in it, so one
+    // target at one casting. Offered only while the DUA holds somebody: an empty DUA
+    // has no partner to exchange with, which is the condition for the effect to occur.
+    case 'dua':
+      return deadUnits(state, caster).length > 0 ? [once({ kind: 'dua', player: caster })] : []
 
     // Path. One unit per target rather than a set: the rules let a cumulative spell be
     // "cast multiple separate times, with a different target each time", which is how
@@ -230,6 +243,9 @@ export function dispelNegates(state: GameState, cast: AnnouncedSpell, unitId: Un
   switch (cast.target.kind) {
     case 'none':
       return false
+    // A DUA is not a unit, its army or the terrain it occupies.
+    case 'dua':
+      return false
     case 'units':
       return cast.target.unitIds.includes(unitId)
     case 'army':
@@ -276,6 +292,18 @@ export function announcementProblem(casts: readonly AnnouncedSpell[]): string | 
     for (const id of cast.target.unitIds) {
       if (struck.has(id)) return 'a unit may not be targeted by more than one Lightning Strike'
       struck.add(id)
+    }
+  }
+
+  // "Combined castings are one spell with a bigger number" -- so one spell at one
+  // target is one entry with a count. Two entries resolved twice: two Hailstorms made
+  // two save rolls, and two Flash Floods set two bars of six rather than one of twelve.
+  // Both clients merge a repeat through `stageCast`, so only a hand-built action ever
+  // reached this; it is refused rather than quietly resolved the wrong way. After the
+  // Lightning Strike rule, which says the same thing about one spell more precisely.
+  for (const [i, cast] of casts.entries()) {
+    if (casts.slice(0, i).some((c) => c.spell === cast.spell && sameSpellTarget(c.target, cast.target))) {
+      return `${spell(cast.spell).name} is announced twice at one target; combine the castings instead`
     }
   }
   return null
@@ -415,6 +443,13 @@ export function magicRolled(pool: MagicPool): string {
 }
 
 /**
+ * What both clients print under a spell whose rulebook text says "target any army" and
+ * whose data says `own_army` -- the house rule (Phase 9a). One sentence, here, so the
+ * browser and the terminal cannot explain it two ways.
+ */
+export const OWN_ARMY_NOTE = 'House rule: a helpful spell targets only your own armies.'
+
+/**
  * Two announced targets naming the same thing.
  *
  * One copy, in the engine, because three things ask it: the applier validating an
@@ -431,6 +466,8 @@ export function sameSpellTarget(a: SpellTarget, b: SpellTarget): boolean {
       return b.kind === 'army' && a.player === b.player && a.army === b.army
     case 'terrain':
       return b.kind === 'terrain' && a.slot === b.slot
+    case 'dua':
+      return b.kind === 'dua' && a.player === b.player
     case 'units':
       return (
         b.kind === 'units' &&
@@ -506,6 +543,7 @@ export function spellPlan(
     return (
       offer !== undefined &&
       cast.count >= 1 &&
+      (offer.spell.cumulative || cast.count === 1) &&
       offer.elements.includes(cast.element) &&
       offer.targets.some((t) => sameSpellTarget(t.target, cast.target) && cast.count >= t.minCount)
     )
@@ -528,6 +566,46 @@ export function spellPlan(
     })),
     casts,
   }
+}
+
+/**
+ * Stage one more casting into a draft: a repeat of a spell at a target it is already
+ * aimed at *merges* into that entry's count, because combined castings are one spell
+ * with a bigger number rather than two spells.
+ *
+ * A second casting of a **non-cumulative** spell at the same target buys nothing, so
+ * the draft comes back unchanged. Until Phase 9a both clients merged blindly -- and a
+ * second tap on the same Lightning Strike target staged `count: 2`, which `reduce`
+ * refuses with a throw the browser does not catch. One copy, here, for the reason
+ * `sameSpellTarget` has one.
+ */
+export function stageCast(
+  castable: readonly Castable[],
+  staged: readonly SpellDraftCast[],
+  cast: SpellDraftCast,
+): readonly SpellDraftCast[] {
+  const at = staged.findIndex((c) => c.spell === cast.spell && sameSpellTarget(c.target, cast.target))
+  if (at === -1) return [...staged, cast]
+
+  const offer = castable.find((c) => c.spell.id === cast.spell)
+  if (offer === undefined || !offer.spell.cumulative) return staged
+
+  const merged = [...staged]
+  merged[at] = { ...cast, count: (staged[at]?.count ?? 0) + cast.count }
+  return merged
+}
+
+/** Whether a non-cumulative spell is already staged at this target, so that a second
+ *  casting would buy nothing -- what a client greys out rather than offers. */
+export function repeatBuysNothing(
+  staged: readonly SpellDraftCast[],
+  spellId: string,
+  target: SpellTarget,
+): boolean {
+  return (
+    !spell(spellId).cumulative &&
+    staged.some((c) => c.spell === spellId && sameSpellTarget(c.target, target))
+  )
 }
 
 /**
@@ -559,6 +637,8 @@ export function spellTargetLabel(
   switch (target.kind) {
     case 'none':
       return 'no target'
+    case 'dua':
+      return `${target.player === human ? 'your' : "the enemy's"} DUA`
     case 'terrain':
       return name(target.slot)
     case 'army':

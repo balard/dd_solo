@@ -407,6 +407,12 @@ export type SpellTarget =
   | { readonly kind: 'army'; readonly player: PlayerId; readonly army: ArmyRef }
   | { readonly kind: 'units'; readonly unitIds: readonly UnitId[] }
   | { readonly kind: 'terrain'; readonly slot: TerrainSlot }
+  /**
+   * A player's DUA as an area, not the units in it: Accelerated Growth's "target your
+   * DUA". It used to be offered as one dead *unit* per target with Resurrect Dead's
+   * price on it, which made a non-cumulative spell cost two castings and throw.
+   */
+  | { readonly kind: 'dua'; readonly player: PlayerId }
 
 export interface TurnState {
   readonly marching: PlayerId

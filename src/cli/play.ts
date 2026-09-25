@@ -29,7 +29,7 @@ import { rngFrom, type RngState } from '../engine/rng'
 import { saiPhrase, type DieRoll } from '../engine/roll'
 import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../engine/sai'
 import { rollOnTheTable } from '../engine/turn'
-import { sameSpellTarget, spellPlan, spellTargetLabel } from '../engine/magic'
+import { OWN_ARMY_NOTE, spellPlan, spellTargetLabel, stageCast } from '../engine/magic'
 
 
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
@@ -696,7 +696,7 @@ async function askSpells(
   state: GameState,
   pending: Extract<Pending, { kind: 'announce_spells' }>,
 ): Promise<GameAction> {
-  const casts: AnnouncedSpell[] = []
+  let casts: readonly AnnouncedSpell[] = []
 
   for (;;) {
     const plan = spellPlan(pending.castable, pending.pool, casts)
@@ -723,6 +723,7 @@ ${bold('Magic')} ${dim(`— ${plan.remaining} of ${pending.pool.points} left`)}`
       const s = offer.castable.spell
       console.log(`  ${i + 1}) ${s.name} ${dim(`(${s.cost} ${offer.castable.elements.join('/')})`)}`)
       console.log(dim(`     ${s.text}`))
+      if (s.target === 'own_army') console.log(dim(`     ${OWN_ARMY_NOTE}`))
     })
     console.log(`  0) ${casts.length > 0 ? `cast ${casts.length}` : 'cast nothing'}`)
 
@@ -762,20 +763,15 @@ ${bold('Magic')} ${dim(`— ${plan.remaining} of ${pending.pool.points} left`)}`
     const which = aimed.target
 
     // Two castings of one spell at one target are one combined spell with its number
-    // multiplied, not two spells -- so this merges rather than appending.
-    const at = casts.findIndex(
-      (c) => c.spell === offer.castable.spell.id && sameSpellTarget(c.target, which),
-    )
-    if (at === -1) {
-      casts.push({
-        spell: offer.castable.spell.id,
-        element,
-        count: aimed.minCount,
-        target: which,
-      })
-    } else {
-      casts[at] = { ...(casts[at] as AnnouncedSpell), count: (casts[at] as AnnouncedSpell).count + 1 }
+    // multiplied, not two spells -- so this merges rather than appending, and a second
+    // casting of a non-cumulative spell there is refused rather than staged.
+    const cast = { spell: offer.castable.spell.id, element, count: aimed.minCount, target: which }
+    const next = stageCast(pending.castable, casts, cast)
+    if (next === casts) {
+      console.log(red(`  ${offer.castable.spell.name} is already aimed there; a second casting buys nothing`))
+      continue
     }
+    casts = [...next]
   }
 }
 

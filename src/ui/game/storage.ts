@@ -104,8 +104,15 @@ const KEY = 'dd_solo.save'
  *    gained a key. A version-9 record stores `SPELL_RULES` as JSON with no
  *    `speciesAbilities`, which reads `undefined` -- off, and by accident rather than
  *    by decision. It would replay correctly, but only because `undefined` is falsy.
+ *
+ * 11: the targeting house rule, Phase 9a. Legality, not dice: a version-10 record may
+ *    hold a Stone Skin cast on an enemy army, an Accelerated Growth aimed at a dead
+ *    unit, a Wall of Thorns at an eighth face, or one spell announced twice at one
+ *    target -- all four now refused, so the record would throw part-way through its
+ *    replay rather than replay differently. No `RuleSet` key moved: the rule is in the
+ *    data, which a record does not carry.
  */
-export const SAVE_VERSION = 10
+export const SAVE_VERSION = 11
 
 
 export interface SavedGame {

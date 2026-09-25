@@ -292,6 +292,11 @@ These are the things that break the project if violated:
     alternative).
   - **Air Flight is judged at the start of the Retreat Step**, and **Rapid Growth is asked only
     while the counter-maneuvering army is losing or tied** and has a die that did not roll an SAI.
+- **A beneficial army spell targets only your own armies** (v1 Phase 9a, `RULES-V0.md` §15). It
+  lives in the data, not in code: five spells carry `own_army`, and a test says no spell carries
+  `army` any more. Terrain spells, Mirage and Summon Dragon stay wide on purpose. One spell at one
+  target is **one** announcement with a count -- `stageCast` is the one merge both clients use, and
+  `announcementProblem` refuses a duplicate that used to resolve twice.
 
 
 ## Die data

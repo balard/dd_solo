@@ -212,7 +212,8 @@ def check_dragons():
 # these checks guard a transcription rather than an importer.
 SPELL_ELEMENTS = {"air", "water", "earth", "fire", "death", "elemental"}
 SPELL_TARGETS = {
-    "army", "opposing_army", "own_unit", "opposing_unit", "units", "terrain", "own_dua",
+    "army", "own_army", "opposing_army", "own_unit", "opposing_unit", "units", "terrain",
+    "own_dua", "dua",
 }
 RESULT_TYPES = {"melee", "missile", "magic", "save", "maneuver", "*"}
 MODIFIER_KINDS = {"add", "subtract", "divide", "multiply", "ignore_ids"}
