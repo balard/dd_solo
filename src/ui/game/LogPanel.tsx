@@ -382,7 +382,9 @@ function Line({
       return (
         <p className="log-line">
           <strong>{entry.source}</strong> settles on{' '}
-          {unit
+          {entry.onDua === true
+            ? `${entry.target === human ? 'your' : "the enemy's"} DUA`
+            : unit
             ? unitType(unit.typeId).name
             : entry.target === undefined
               ? slotLabel(entry.slot, human)

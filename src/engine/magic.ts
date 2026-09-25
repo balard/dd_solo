@@ -183,10 +183,13 @@ export function spellTargets(
         .map((slot) => once({ kind: 'terrain', slot }))
 
     // Accelerated Growth: "target your DUA" -- the area, not a unit in it, so one
-    // target at one casting. Offered only while the DUA holds somebody: an empty DUA
-    // has no partner to exchange with, which is the condition for the effect to occur.
+    // target at one casting. Offered **whatever the DUA holds**: the effect lasts until
+    // your next turn, and a DUA empty now fills with the first 1-health die that dies,
+    // which is exactly when the effect is waiting to be used. The area always exists,
+    // and that is all p. 13 asks of a target. (Phase 9a first shipped this requiring a
+    // dead die, carried over from the per-unit offers it replaced.)
     case 'dua':
-      return deadUnits(state, caster).length > 0 ? [once({ kind: 'dua', player: caster })] : []
+      return [once({ kind: 'dua', player: caster })]
 
     // Path. One unit per target rather than a set: the rules let a cumulative spell be
     // "cast multiple separate times, with a different target each time", which is how

@@ -1001,6 +1001,43 @@ export function effectsOnArmy(
 }
 
 /**
+ * Effects that sit on a *player* rather than an army -- Accelerated Growth, whose
+ * "target your DUA" names neither an army nor a terrain. Drawn on the DUA, in the Fallen
+ * section, because that is where its partners come from; before Phase 9a's follow-up it
+ * was drawn nowhere at all, so a cast spell left no sign on the board that it was live.
+ */
+export function effectsOnPlayer(
+  state: GameState,
+  player: PlayerId,
+  human: PlayerId,
+): readonly ArmyEffect[] {
+  return state.effects.flatMap((effect): ArmyEffect[] => {
+    if (effect.target.kind !== 'player' || effect.target.player !== player) return []
+    return [
+      {
+        source: effect.source,
+        what: playerEffectText(effect.trigger, effect.modifiers),
+        until: effect.expiresAtStartOfTurnOf === human ? 'your next turn' : "the enemy's next turn",
+      },
+    ]
+  })
+}
+
+/** A player effect's rule in words. Exhaustive on the trigger, for `describeModifiers`'
+ *  reason: a new trigger with no sentence is a build error, not an empty line. */
+function playerEffectText(
+  trigger: Effect['trigger'],
+  modifiers: readonly Modifier[],
+): string {
+  switch (trigger) {
+    case 'accelerated_growth':
+      return 'a dying unit of 2+ health swaps with a 1-health unit from this DUA'
+    case undefined:
+      return describeModifiers(modifiers)
+  }
+}
+
+/**
  * `-4 save, -4 maneuver`, or "no arithmetic" for a status like Sleep.
  *
  * **The callback is annotated `: string`, and that is load-bearing** -- the same rule

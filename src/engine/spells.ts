@@ -636,6 +636,7 @@ const acceleratedGrowth: SpellHandler = (state, ctx) => ({
         source: 'Accelerated Growth',
         target: ctx.caster,
         slot: ctx.army,
+        onDua: true,
       },
     ],
   },

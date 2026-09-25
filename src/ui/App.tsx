@@ -25,11 +25,12 @@ import {
 } from '../engine/types'
 
 import { ActionBar } from './game/ActionBar'
-import { Board } from './game/Board'
+import { Board, EffectList } from './game/Board'
 import { DiceGrid } from './game/DiceGrid'
 import { speciesInfo } from './game/Elements'
 import { LogPanel } from './game/LogPanel'
 import {
+  effectsOnPlayer,
   focusedSlot,
   pendingKey,
   reinforcePlan,
@@ -169,6 +170,11 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   const myBuried = buriedUnits(state, human)
   const theirBuried = buriedUnits(state, enemy)
   const anyBuried = myBuried.length > 0 || theirBuried.length > 0
+  // Accelerated Growth sits on a player's DUA, and is live whether or not anybody is
+  // in it yet -- so it opens the section on its own, and stays outside the collapse.
+  const myDuaEffects = effectsOnPlayer(state, human, human)
+  const theirDuaEffects = effectsOnPlayer(state, enemy, human)
+  const anyDuaEffect = myDuaEffects.length > 0 || theirDuaEffects.length > 0
 
   const health = (units: readonly { typeId: string }[]) =>
     units.reduce((n, u) => n + unitType(u.typeId).health, 0)
@@ -295,7 +301,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
           </section>
         )}
 
-        {(myFallen.length > 0 || theirFallen.length > 0 || anyBuried) && (
+        {(myFallen.length > 0 || theirFallen.length > 0 || anyBuried || anyDuaEffect) && (
           <section className="army off-board">
             <h3>
               <button
@@ -312,6 +318,18 @@ function GameView({ game }: { readonly game: PlayingGame }) {
                 </span>
               </button>
             </h3>
+            {myDuaEffects.length > 0 && (
+              <>
+                <p className="fallen-side muted">Your DUA</p>
+                <EffectList effects={myDuaEffects} />
+              </>
+            )}
+            {theirDuaEffects.length > 0 && (
+              <>
+                <p className="fallen-side muted">Enemy DUA</p>
+                <EffectList effects={theirDuaEffects} />
+              </>
+            )}
             {showFallen && (
               <div className="fallen">
                 <p className="fallen-side muted">Yours</p>

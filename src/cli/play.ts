@@ -313,7 +313,9 @@ function describe(entry: LogEntry, state: GameState): string | null {
     // thing in the log that is still true on the next line.
     case 'effect_cast': {
       const unit = entry.unitId === undefined ? undefined : state.units[entry.unitId]
-      const what = unit
+      const what = entry.onDua === true
+        ? `${entry.target}'s DUA`
+        : unit
         ? name(unit)
         : entry.target === undefined
           ? (SLOT_LABEL[entry.slot as TerrainSlot] ?? String(entry.slot))

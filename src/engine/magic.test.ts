@@ -174,9 +174,11 @@ describe('the magic pool', () => {
     // Water and earth only, plus Summon Dragon -- an Elemental spell any element may
     // pay for, and the pools are full even though nothing is seeded on the board.
     // Resurrect Dead is absent for the opposite reason: the DUA is empty at setup, and
-    // a spell with no target is not offered.
+    // a spell with no target is not offered. Accelerated Growth is *present* on an
+    // empty DUA -- it targets the area, and waits for somebody to die.
     // Lightning Strike is absent for the same reason Hailstorm is: both are air.
     expect(castable.map((c) => c.spell.id).sort()).toEqual([
+      'accelerated_growth',
       'flash_flood',
       'path',
       'stone_skin',
@@ -704,10 +706,19 @@ describe('the targeting house rule and the announcement fixes (Phase 9a)', () =>
     expect(offer?.targets).toEqual([{ target: { kind: 'dua', player: 'p1' }, minCount: 1 }])
   })
 
-  it('does not offer Accelerated Growth with an empty DUA', () => {
+  it('offers Accelerated Growth with an empty DUA, because it waits for one to fill', () => {
+    // It lasts until your next turn, so the DUA it will draw a partner from is the one
+    // the rest of this turn and the enemy's are about to fill. Refusing it on an empty
+    // DUA refused it in exactly the position it is cast for.
     const state = gameAt('p1')
     expect(deadUnits(state, 'p1')).toEqual([])
-    expect(spellTargets(state, 'p1', spell('accelerated_growth'))).toEqual([])
+    expect(spellTargets(state, 'p1', spell('accelerated_growth'))).toEqual([
+      { target: { kind: 'dua', player: 'p1' }, minCount: 1 },
+    ])
+    const offer = castableSpells(state, 'p1', magicPool(state, 'p1', 'p1_home', 3), SPELL_RULES).find(
+      (c) => c.spell.id === 'accelerated_growth',
+    )
+    expect(offer).toBeDefined()
   })
 
   it('does not offer Wall of Thorns at a terrain on its eighth face', () => {

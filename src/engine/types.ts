@@ -1369,6 +1369,12 @@ export type LogEntry =
       readonly slot: ArmyRef
       /** Omitted when the effect sits on the whole army rather than one die. */
       readonly unitId?: UnitId
+      /**
+       * The effect sits on `target`'s DUA, not on an army: Accelerated Growth, whose
+       * "target your DUA" names neither. `slot` is then the casting army and says
+       * nothing about where the effect is. Optional-and-omitted, near the digest.
+       */
+      readonly onDua?: true
     }
   /**
    * Rise from the Ashes: units that were killed and then rolled their way into

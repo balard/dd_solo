@@ -306,6 +306,26 @@ function jawsFace(dieId: string): DragonFaceNumber {
 
 type Species = ReturnType<typeof speciesInfo>
 
+/**
+ * Effects with a duration, as one line each: the source, what it does, and when it ends.
+ * Shared by an army's heading and the DUA in the Fallen section, so an effect reads the
+ * same wherever it sits.
+ */
+export function EffectList({ effects }: { effects: readonly ArmyEffect[] }) {
+  if (effects.length === 0) return null
+  return (
+    <ul className="army-effects">
+      {effects.map((effect, i) => (
+        <li key={`${effect.source}-${i}`}>
+          <b>{effect.source}</b>
+          {effect.what !== '' && <> {effect.what}</>}
+          <span className="muted"> &middot; until {effect.until}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function ArmySide({
   title,
   species,
@@ -352,17 +372,7 @@ function ArmySide({
        * four with nothing on screen to say so, because the only mention of it was a
        * log line that had already scrolled away.
        */}
-      {effects.length > 0 && (
-        <ul className="army-effects">
-          {effects.map((effect, i) => (
-            <li key={`${effect.source}-${i}`}>
-              <b>{effect.source}</b>
-              {effect.what !== '' && <> {effect.what}</>}
-              <span className="muted"> &middot; until {effect.until}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <EffectList effects={effects} />
       <DiceGrid
         units={units}
         selectable={selectable}

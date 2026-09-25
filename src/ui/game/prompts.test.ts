@@ -17,6 +17,7 @@ import {
 import {
   damageSelection,
   effectsOnArmy,
+  effectsOnPlayer,
   effectsOnTerrain,
   focusedSlot,
   orderedForDisplay,
@@ -657,6 +658,37 @@ describe('display order', () => {
     const before = units.map((u) => u.id)
     orderedForDisplay(units)
     expect(units.map((u) => u.id)).toEqual(before)
+  })
+})
+
+describe('effectsOnPlayer', () => {
+  it('draws Accelerated Growth on the DUA it waits on, even an empty one', () => {
+    // "Target your DUA" names neither an army nor a terrain, so no army heading could
+    // carry it -- and until 9a's follow-up nothing did, so a live spell left no trace.
+    const base = fresh()
+    const state: GameState = {
+      ...base,
+      effects: [
+        {
+          source: 'Accelerated Growth',
+          target: { kind: 'player', player: 'p1' },
+          modifiers: [],
+          trigger: 'accelerated_growth',
+          expiresAtStartOfTurnOf: 'p1',
+        },
+      ],
+    }
+
+    expect(effectsOnPlayer(state, 'p1', 'p1')).toEqual([
+      {
+        source: 'Accelerated Growth',
+        what: 'a dying unit of 2+ health swaps with a 1-health unit from this DUA',
+        until: 'your next turn',
+      },
+    ])
+    expect(effectsOnPlayer(state, 'p2', 'p1')).toEqual([])
+    // Not an army effect, so no army heading claims it.
+    expect(effectsOnArmy(state, 'p1', 'p1_home', 'p1')).toEqual([])
   })
 })
 

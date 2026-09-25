@@ -2133,6 +2133,18 @@ Every harmful army spell was already `opposing_army`, and every SAI already obey
   army" in the line directly above three buttons that are all yours. Both clients now print
   `OWN_ARMY_NOTE` under a spell whose data says `own_army`.
 
+#### What playing it found
+
+- **9a shipped Accelerated Growth uncastable on an empty DUA**, keeping the rule its old per-unit
+  offers had. That was wrong: the effect lasts until your next turn, and an empty DUA is the
+  normal position to cast it from, because it fills with the first 1-health die that dies. The
+  area is always a target now.
+- **A live Accelerated Growth was drawn nowhere.** It sits on a player, and only army effects had a
+  place on screen. `effectsOnPlayer` puts it under "Your DUA" in the Fallen section. That line
+  stays visible when the section is collapsed, and it opens the section on its own. The log line
+  said it "settles on your army at Your home", reading the casting army as the target. `effect_cast`
+  gained an optional `onDua`, so the line now reads "settles on your DUA".
+
 `SAVE_VERSION` is 11, for legality rather than dice: a version-10 record may hold any of the four
 announcements now refused. That record would throw part-way through its replay rather than replay
 differently.
