@@ -340,12 +340,21 @@ function describe(entry: LogEntry, state: GameState): string | null {
       const asked =
         entry.test === 'id' ? 'an ID icon' : entry.test === 'save' ? 'a save' : 'a maneuver'
       const got =
-        entry.escaped.length === 0
-          ? 'none get away'
-          : entry.toReserve === true
-            ? `${who} escape${one} to ${entry.player}'s reserves`
-            : `${who} get${one} away`
-      return yellow(`  ${bold(entry.source)}: ${asked} or die — ${got}`)
+        entry.fate === 'bury'
+          ? entry.escaped.length === 0
+            ? 'none save, all buried'
+            : `${who} save${one} and stay${one} in the DUA`
+          : entry.escaped.length === 0
+            ? 'none get away'
+            : entry.toReserve === true
+              ? `${who} escape${one} to ${entry.player}'s reserves`
+              : `${who} get${one} away`
+      const stake = entry.fate === 'bury' ? 'be buried' : 'die'
+      return yellow(
+        `  ${bold(entry.source)}: ${asked} or ${stake} — ${got}` +
+          (entry.dice.length > 0 ? dim(`
+    ${entry.dice.map(shown).join('  ')}`) : ''),
+      )
     }
     // Says when it ends as well as what it hit: an effect with a duration is the one
     // thing in the log that is still true on the next line.

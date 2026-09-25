@@ -2393,6 +2393,14 @@ check now waits for the offer too.
 `SAVE_VERSION` is 13, for dice order. The goldens did not move: a `V0_RULES` roll never holds a
 die.
 
+**Dragon Fire's burial roll was logged only through its consequence.** A Treefolk killed by the
+breath failed its Replanting roll, and nothing on screen showed the save against burial. It was
+rolled, but a success wrote nothing and a failure wrote a bare "buried". That is the Replanting
+silence of Phase 8, and the Rise from the Ashes one Phase 8 noted and left, a third time. The roll
+is now a `sai_sub_roll` with `fate: 'bury'`, which reads "Dragon Fire · a save or be buried", and
+it appears whatever the result. The dragon self-play checks that every Dragon Fire burial follows
+its roll, and that both saves and burials occur.
+
 **Phase 9 is landed.** The exit criterion is met with one reservation: "at phone width" was checked
 for the inspector and the dock, not for every sheet.
 

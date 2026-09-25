@@ -360,11 +360,22 @@ export function LogLine({
       return (
         <div className="log-roll">
           <div className="roll-head">
-            <strong>{entry.source}</strong> &middot; {asked} or die &middot; {where(entry.slot)}
+            <strong>{entry.source}</strong> &middot; {asked} or {entry.fate === 'bury' ? 'be buried' : 'die'}{' '}
+            &middot; {where(entry.slot)}
           </div>
           <RollStrip dice={entry.dice} />
           <div className="roll-sum">
-            {entry.escaped.length === 0 ? (
+            {entry.fate === 'bury' ? (
+              // Already dead: a save keeps them in the DUA rather than getting them away.
+              entry.escaped.length === 0 ? (
+                <span className="muted">none save — all buried</span>
+              ) : (
+                <>
+                  {names(entry.escaped)} {entry.escaped.length === 1 ? 'saves and stays' : 'save and stay'} in the
+                  DUA
+                </>
+              )
+            ) : entry.escaped.length === 0 ? (
               <span className="muted">none get away</span>
             ) : (
               <>

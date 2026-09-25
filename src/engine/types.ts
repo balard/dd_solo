@@ -1394,6 +1394,11 @@ export type LogEntry =
       /** Seize: the escapees went to their Reserve Area rather than staying put.
        *  Omitted otherwise, like every other optional field in the log. */
       readonly toReserve?: true
+      /**
+       * What failing costs, when it is not death: Dragon Fire's dice are already dead,
+       * and a failed save buries them. Omitted means "or die".
+       */
+      readonly fate?: 'bury'
     }
   /**
    * Wild Growth: what the budget was spent on.

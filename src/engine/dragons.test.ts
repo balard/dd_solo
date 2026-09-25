@@ -288,6 +288,7 @@ describe('dragon self-play', () => {
   const counters: Record<string, number> = {}
   let stuck = 0
   const badMath: string[] = []
+  const unshownBurials: string[] = []
 
   for (const [label, forces] of [
     ['starter', STARTER_FORCES],
@@ -314,6 +315,10 @@ describe('dragon self-play', () => {
         if (entry.kind === 'units_buried' && entry.source !== undefined) {
           counters[`bury_${entry.source}`] = (counters[`bury_${entry.source}`] ?? 0) + 1
         }
+        if (entry.kind === 'sai_sub_roll' && entry.fate === 'bury') {
+          counters['fire_roll'] = (counters['fire_roll'] ?? 0) + 1
+          if (entry.escaped.length > 0) counters['fire_saved'] = (counters['fire_saved'] ?? 0) + 1
+        }
         if (entry.kind === 'dragon_damage') {
           const { incoming, answered, duels } = entry
           if (incoming !== undefined) {
@@ -331,6 +336,14 @@ describe('dragon self-play', () => {
           for (const d of duels ?? []) {
             counters['math_duel'] = (counters['math_duel'] ?? 0) + 1
             if (d.slain !== d.damage >= d.threshold) badMath.push(`seed ${seed}: ${JSON.stringify(d)}`)
+          }
+        }
+        if (entry.kind === 'units_buried' && entry.source === 'dragon_fire') {
+          const i = result.state.log.indexOf(entry)
+          const before = result.state.log[i - 1]
+          const shown = before?.kind === 'sai_sub_roll' && before.fate === 'bury' ? before : undefined
+          if (shown === undefined || !entry.unitIds.every((id) => shown.dice.some((d) => d.unitId === id))) {
+            unshownBurials.push(`seed ${seed}: ${entry.unitIds.join(', ')}`)
           }
         }
         if (entry.kind === 'dragon_attack') {
@@ -385,6 +398,17 @@ describe('dragon self-play', () => {
   /** Fire's conditional burial -- the one breath that is not a duration effect. */
   it('buries what a Fire breath kills and a save roll does not spare', () => {
     expect(counters['bury_dragon_fire'] ?? 0).toBeGreaterThan(0)
+  })
+
+  /**
+   * And the roll that decides it is on the log, both ways. It used to be logged only
+   * through its consequence: a burial with no dice, and a save with nothing at all --
+   * reported from a game where a Treefolk killed by Dragon Fire showed no roll.
+   */
+  it('logs the Dragon Fire save roll, saves and burials alike', () => {
+    expect(unshownBurials).toEqual([])
+    expect(counters['fire_roll'] ?? 0).toBeGreaterThan(0)
+    expect(counters['fire_saved'] ?? 0).toBeGreaterThan(0)
   })
 
   /**

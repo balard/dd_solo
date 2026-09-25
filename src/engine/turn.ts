@@ -3015,15 +3015,37 @@ function resolveBreathBury(state: GameState): GameState {
   const doomed = rolls.filter((sub) => (sub.roll?.total ?? 0) === 0).map((sub) => sub.unitId)
   const { state: buried } = doomed.length > 0 ? buryUnits({ ...state, rng }, doomed) : { state: { ...state, rng } }
 
+  // The roll itself, saved dice and failed ones alike. It used to be logged only
+  // through its consequence: a failure wrote "buried" with no dice, and a success
+  // wrote nothing -- so a Treefolk that saved looked like one that was never rolled,
+  // which is the Replanting silence of Phase 8 a second time.
+  const rolled = withLog(
+    buried,
+    ...(inDua.length > 0
+      ? [
+          {
+            kind: 'sai_sub_roll',
+            player: attack.defender,
+            source: BREATH_NAME.fire,
+            slot: attack.slot,
+            test: 'save',
+            dice: rolls.flatMap((sub) => sub.roll?.dice ?? []),
+            escaped: rolls.filter((sub) => (sub.roll?.total ?? 0) > 0).map((sub) => sub.unitId),
+            fate: 'bury',
+          } as const,
+        ]
+      : []),
+  )
+
   const logged =
     doomed.length > 0
-      ? withLog(buried, {
+      ? withLog(rolled, {
           kind: 'units_buried',
           player: attack.defender,
           unitIds: doomed,
           source: 'dragon_fire',
         })
-      : buried
+      : rolled
 
   const withEffect = withBreathEffect(logged, attack, 'fire')
   const next = withDragonAttack(withEffect, { ...attack, step: 'breath', resolved: attack.resolved + 1 })
