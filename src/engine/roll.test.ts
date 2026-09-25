@@ -9,6 +9,7 @@ import {
   RESULT_TYPES,
   faceResults,
   maxArmyResults,
+  mathPhrase,
   maxResults,
   rerollSweep,
   resolveFaces,
@@ -319,5 +320,117 @@ describe('countIds', () => {
     const result = resolveFaces([idDie, missileDie], missileSpec({ countIds: false }), V0_RULES)
     expect(result.dice.find((d) => d.unitId === 'a')?.results).toBe(0)
     expect(result.dice.find((d) => d.unitId === 'b')?.results).toBe(4)
+  })
+})
+
+describe('the named arithmetic (Phase 9c)', () => {
+  const army = armyOf('treefolk.oak_lord', 'treefolk.oak', 'firewalkers.guardian', 'firewalkers.sentinel')
+  const spec = (kind: ResultType, modifiers: Modifier[] = []): RollSpec => ({
+    kinds: [kind],
+    modifiers,
+    context: { purpose: { kind: 'save', against: null }, isCounter: false },
+  })
+  const galeforce: Modifier = { kind: 'subtract', resultType: 'save', amount: 4, source: 'Galeforce' }
+  const stoneSkin: Modifier = { kind: 'add', resultType: 'save', amount: 2, source: 'Stone Skin' }
+  const halving: Modifier = { kind: 'divide', resultType: 'save', by: 2, source: 'Water breath' }
+  const blind: Modifier = { kind: 'ignore_ids', resultType: 'save', source: 'Death breath' }
+  const doubling: Modifier = { kind: 'multiply', resultType: 'save', by: 2, share: 'id', source: 'Eighth face' }
+
+  const sets: Modifier[][] = [
+    [galeforce],
+    [stoneSkin],
+    [galeforce, stoneSkin],
+    [halving, stoneSkin],
+    [doubling, galeforce],
+    [doubling, halving, stoneSkin],
+    [blind, doubling, galeforce],
+    [blind, galeforce, halving, stoneSkin],
+  ]
+
+  it('always adds up: the dice, plus every step, is the total', () => {
+    // The steps are recomputed through `applyModifiers` one modifier at a time, so this
+    // holds by construction -- and a second implementation of the pipeline would be
+    // exactly how it stopped holding.
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const [dice] = rollFaces(army, rngFrom(seed))
+      for (const modifiers of sets) {
+        for (const bonus of [undefined, 3]) {
+          const rollSpec: RollSpec = {
+            ...spec('save', modifiers),
+            ...(bonus === undefined ? {} : { saiResults: { save: bonus }, saiResultsSource: 'Wild Growth' }),
+          }
+          const outcome = resolveFaces(dice, rollSpec, SAI_RULES)
+          const math = outcome.math?.save
+          if (math === undefined) throw new Error(`seed ${seed}: no math for ${JSON.stringify(modifiers)}`)
+          const sum = math.base + math.steps.reduce((acc, step) => acc + step.delta, 0)
+          expect(sum, `seed ${seed}`).toBe(outcome.totals.save)
+          // The base is what the dice show -- doubling included, the player's share not.
+          expect(math.base).toBe(outcome.dice.reduce((acc, die) => acc + die.results, 0))
+        }
+      }
+    }
+  })
+
+  it('names every step, in the order the rules apply them', () => {
+    const [dice] = rollFaces(army, rngFrom(6))
+    const math = resolveFaces(dice, spec('save', [stoneSkin, galeforce]), SAI_RULES).math?.save
+    expect(math?.steps.map((s) => s.source)).toEqual(['Galeforce', 'Stone Skin'])
+  })
+
+  it('names the Wild Growth share, which is not on any die', () => {
+    const [dice] = rollFaces(army, rngFrom(6))
+    const math = resolveFaces(
+      dice,
+      { ...spec('save'), saiResults: { save: 3 }, saiResultsSource: 'Wild Growth' },
+      SAI_RULES,
+    ).math?.save
+    expect(math?.steps).toEqual([{ source: 'Wild Growth', delta: 3 }])
+  })
+
+  it('says nothing about a roll nothing modified', () => {
+    const [dice] = rollFaces(army, rngFrom(6))
+    expect(resolveFaces(dice, spec('save'), SAI_RULES).math).toBeUndefined()
+  })
+
+  it('notes doubled IDs rather than subtracting them twice', () => {
+    // The doubling is on the dice already -- each ID die shows its doubled number, and the
+    // golden digest records it that way -- so it is a note, not a step.
+    const idDie: RawDie = { unitId: 'a', typeId: 'treefolk.oak', faceIndex: 0 }
+    const math = resolveFaces([idDie], spec('save', [doubling]), SAI_RULES).math?.save
+    expect(math?.steps).toEqual([])
+    expect(math?.notes).toEqual(['IDs doubled (Eighth face)'])
+  })
+
+  it('reads as one sentence, the same in both clients', () => {
+    expect(
+      mathPhrase(
+        { base: 14, steps: [{ source: 'Galeforce', delta: -4 }, { source: 'Stone Skin', delta: 2 }], notes: [] },
+        12,
+      ),
+    ).toBe('14 on the dice − 4 Galeforce + 2 Stone Skin = 12')
+    // A Galeforce with nothing left to take still happened, and says so.
+    expect(mathPhrase({ base: 0, steps: [{ source: 'Galeforce', delta: 0 }], notes: [] }, 0)).toBe(
+      '0 on the dice ± 0 Galeforce = 0',
+    )
+  })
+})
+
+describe('the named arithmetic, two castings', () => {
+  it('folds two castings of one effect into one step', () => {
+    const army = armyOf('treefolk.oak_lord', 'treefolk.oak', 'firewalkers.guardian', 'firewalkers.sentinel')
+    const galeforce: Modifier = { kind: 'subtract', resultType: 'save', amount: 4, source: 'Galeforce' }
+    const [dice] = rollFaces(army, rngFrom(6))
+    const outcome = resolveFaces(
+      dice,
+      {
+        kinds: ['save'],
+        modifiers: [galeforce, galeforce],
+        context: { purpose: { kind: 'save', against: null }, isCounter: false },
+      },
+      SAI_RULES,
+    )
+    const math = outcome.math?.save
+    expect(math?.steps.map((s) => s.source)).toEqual(['Galeforce'])
+    expect((math?.base ?? 0) + (math?.steps[0]?.delta ?? 0)).toBe(outcome.totals.save)
   })
 })

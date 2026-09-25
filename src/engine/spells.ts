@@ -232,7 +232,15 @@ function spellSaveRoll(
       ...{ ...state, rng },
       log: [
         ...state.log,
-        { kind: 'spell_saves', player, source, slot: ref, saves: roll.total, dice: roll.dice },
+        {
+          kind: 'spell_saves',
+          player,
+          source,
+          slot: ref,
+          saves: roll.total,
+          dice: roll.dice,
+          ...(roll.math !== undefined ? { math: roll.math } : {}),
+        },
       ],
     },
     saves: roll.total,

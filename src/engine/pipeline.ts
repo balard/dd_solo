@@ -35,8 +35,16 @@ import type { ResultType } from '../data/types'
  */
 export type ModifierShare = 'all' | 'id'
 
-/** A roll modifier, named by the step that applies it. */
-export type Modifier =
+/**
+ * A roll modifier, named by the step that applies it.
+ *
+ * `source` is **display only** (v1 Phase 9c): the spell, SAI, breath or rule that put it
+ * there, stamped by `armyRoll` from `Effect.source`. Nothing in the arithmetic reads it.
+ * It exists so a roll can say "− 4 Galeforce" instead of an unexplained `12 → 8`.
+ */
+export type Modifier = ModifierBody & { readonly source?: string }
+
+type ModifierBody =
   | { readonly kind: 'subtract'; readonly resultType: ResultType; readonly amount: number }
   | { readonly kind: 'divide'; readonly resultType: ResultType; readonly by: number }
   | {
@@ -75,11 +83,16 @@ export type Modifier =
   | { readonly kind: 'counts_as'; readonly from: 'save'; readonly resultType: 'melee' }
 
 /** Flaming Shields' permission, as `armyRoll` gathers it. */
-export const SAVES_AS_MELEE: Modifier = { kind: 'counts_as', from: 'save', resultType: 'melee' }
+export const SAVES_AS_MELEE: Modifier = {
+  kind: 'counts_as',
+  from: 'save',
+  resultType: 'melee',
+  source: 'Flaming Shields',
+}
 
 /** The eighth-face holder's doubled ID results, as the step-9 modifier it is. */
 export function doubleIdsModifier(resultType: ResultType): Modifier {
-  return { kind: 'multiply', resultType, by: 2, share: 'id' }
+  return { kind: 'multiply', resultType, by: 2, share: 'id', source: 'Eighth face' }
 }
 
 /** Every result type, for an effect that speaks about a roll rather than a type. */

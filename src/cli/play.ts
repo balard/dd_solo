@@ -26,7 +26,7 @@ import { growthPartners, promotionGain } from '../engine/dua'
 import { isAsleep } from '../engine/effects'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
-import { saiPhrase, type DieRoll } from '../engine/roll'
+import { mathPhrase, saiPhrase, type DieRoll, type RollMath } from '../engine/roll'
 import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../engine/sai'
 import { rollOnTheTable } from '../engine/turn'
 import { OWN_ARMY_NOTE, spellPlan, spellTargetLabel, stageCast } from '../engine/magic'
@@ -196,6 +196,43 @@ function board(state: GameState, human: PlayerId): string {
 /** Flaming Shields' share of a melee number, so the line says where it came from. */
 const shields = (n: number | undefined): string =>
   n === undefined ? '' : dim(` (${n} of it saves counted as melee by ${bold('Flaming Shields')})`)
+
+/**
+ * A roll's arithmetic, named (Phase 9c), as the lines under the entry that carries it --
+ * the same sentence the browser draws under a roll strip, from the same `mathPhrase`.
+ */
+function mathLines(entry: LogEntry): readonly string[] {
+  const line = (label: string, math: RollMath | undefined, total: number | null): string[] => {
+    if (math === undefined || total === null) return []
+    const phrase = mathPhrase(math, total)
+    const said = [phrase, ...math.notes].filter((s) => s !== '').join(' · ')
+    return said === '' ? [] : [dim(`    ${label}: ${said}`)]
+  }
+  switch (entry.kind) {
+    case 'combat_resolved':
+      return [
+        ...line(entry.action, entry.attackMath, entry.attackTotal),
+        ...line('saves', entry.saveMath, entry.saveTotal),
+      ]
+    case 'maneuver_contested':
+      return [
+        ...line('marcher', entry.marcherMath, entry.marcher),
+        ...line('defender', entry.defenderMath, entry.defender),
+      ]
+    case 'magic_rolled':
+      return line('magic', entry.math, entry.total)
+    case 'thorns':
+      return line('melee', entry.math, entry.melee)
+    case 'spell_saves':
+      return line('saves', entry.math, entry.saves)
+    case 'dragon_roll':
+      return (['melee', 'missile', 'save'] as const).flatMap((kind) =>
+        line(kind, entry.math?.[kind], entry.totals[kind]),
+      )
+    default:
+      return []
+  }
+}
 
 function describe(entry: LogEntry, state: GameState): string | null {
   switch (entry.kind) {
@@ -521,6 +558,31 @@ function describe(entry: LogEntry, state: GameState): string | null {
         shields(entry.flamingShields) +
         (entry.dice.length > 0 ? dim(`\n    ${entry.dice.map(shown).join('  ')}`) : '')
       )
+
+    // The subtraction both ways (Phase 9c): what reached the army, and what the army
+    // put on each dragon against the number that kills it.
+    case 'dragon_damage': {
+      const lines: string[] = []
+      if (entry.incoming !== undefined) {
+        lines.push(
+          `  dragons deal ${entry.incoming.inflicted} − ${entry.incoming.saves} saves = ` +
+            `${bold(String(entry.incoming.damage))} damage to ${entry.player} at ${SLOT_LABEL[entry.slot]}`,
+        )
+      }
+      for (const a of entry.answered ?? []) {
+        lines.push(
+          `  ${a.melee} melee, ${a.missile} missile vs ${a.threshold} -> ` +
+            `${dragonNameOf(state, a.dragonId)} ${a.slain ? bold('is slain') : 'survives'}`,
+        )
+      }
+      for (const d of entry.duels ?? []) {
+        lines.push(
+          `  ${dragonNameOf(state, d.dragonId)} deals ${d.damage} vs ${d.threshold} -> ` +
+            `${dragonNameOf(state, d.targetId)} ${d.slain ? bold('is slain') : 'survives'}`,
+        )
+      }
+      return magenta(lines.join('\n'))
+    }
 
     case 'dragon_home':
       return magenta(
@@ -1477,6 +1539,7 @@ async function main() {
     for (const entry of state.log.slice(shown)) {
       const line = describe(entry, state)
       if (line !== null) console.log(line)
+      for (const extra of mathLines(entry)) console.log(extra)
     }
     shown = state.log.length
   }

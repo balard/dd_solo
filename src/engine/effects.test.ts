@@ -263,7 +263,7 @@ describe('modifiers on a roll', () => {
     // Two subtracts from Galeforce, and the eighth face's one multiplier.
     expect(modifiers.filter((m) => m.kind === 'subtract')).toHaveLength(2)
     expect(modifiers.filter((m) => m.kind === 'multiply')).toEqual([
-      { kind: 'multiply', resultType: 'save', by: 2, share: 'id' },
+      { kind: 'multiply', resultType: 'save', by: 2, share: 'id', source: 'Eighth face' },
     ])
   })
 

@@ -392,7 +392,8 @@ function saveRollSpec(
     // It is also where Counter and Volley hit back, which is why it needs to know what
     // it is saving against.
     context: { purpose: { kind: 'save', against: spec.action }, isCounter: spec.isCounter },
-    ...(bonus === undefined ? {} : { saiResults: { save: bonus } }),
+    // Not on any die -- the player chose them -- so the arithmetic names them.
+    ...(bonus === undefined ? {} : { saiResults: { save: bonus }, saiResultsSource: 'Wild Growth' }),
   }
 }
 

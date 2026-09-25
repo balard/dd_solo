@@ -129,6 +129,7 @@ import {
   type PendingAttack,
   type PendingSaves,
   type PromotionPair,
+  type DragonAnswer,
   type GrowthOffer,
   type PlayerId,
   type SpellChoice,
@@ -1877,6 +1878,7 @@ function beginSpellcasting(
     total: pool.points,
     elements: pool.elements,
     dice: outcome.attackRoll.dice,
+    ...(outcome.attackRoll.math !== undefined ? { math: outcome.attackRoll.math } : {}),
   })
 
   return withTurn(withMagic(logged, { army, pool }), {
@@ -2269,6 +2271,8 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
       ...(outcome.attackRoll.countedAs !== undefined
         ? { flamingShields: outcome.attackRoll.countedAs }
         : {}),
+      ...(outcome.attackRoll.math !== undefined ? { attackMath: outcome.attackRoll.math } : {}),
+      ...(outcome.saveRoll?.math !== undefined ? { saveMath: outcome.saveRoll.math } : {}),
       attackDice: outcome.attackRoll.dice,
       saveDice: outcome.saveRoll?.dice ?? null,
     },
@@ -3045,6 +3049,7 @@ function resolveArmyRoll(
     dice: outcome.dice,
     totals,
     ...(outcome.countedAs !== undefined ? { flamingShields: outcome.countedAs } : {}),
+    ...(outcome.math !== undefined ? { math: outcome.math } : {}),
   })
 
   return withDragonAttack(logged, { ...attack, step: 'damage', totals })
@@ -3090,11 +3095,26 @@ function damageSplitPending(state: GameState, attack: DragonAttackState): Pendin
  * The one-dragon case, worked out rather than asked: everything the army rolled
  * goes at the only dragon present, and the two types are still never combined.
  */
-function loneDragonSlain(state: GameState, attack: DragonAttackState): readonly DragonId[] {
+function loneDragonAnswer(state: GameState, attack: DragonAttackState): readonly DragonAnswer[] {
   const totals = attack.totals
   const [only] = splitTargets(state, attack)
   if (only === undefined || totals === undefined) return []
-  return totals.melee >= only.threshold || totals.missile >= only.threshold ? [only.dragonId] : []
+  return [answerOf(only, totals.melee, totals.missile)]
+}
+
+/** One dragon fighting another, as `dragon_damage` logs it. */
+type DragonDuel = NonNullable<Extract<LogEntry, { kind: 'dragon_damage' }>['duels']>[number]
+
+/** "Either melee or missile results -- they may not be combined": each against the
+ *  threshold on its own. */
+function answerOf(target: DragonDamageTarget, melee: number, missile: number): DragonAnswer {
+  return {
+    dragonId: target.dragonId,
+    melee,
+    missile,
+    threshold: target.threshold,
+    slain: melee >= target.threshold || missile >= target.threshold,
+  }
 }
 
 function applyDragonDamageSplit(
@@ -3131,15 +3151,11 @@ function applyDragonDamageSplit(
 
   // "The damage to slay a dragon must come from either melee or missile results --
   // they may not be combined", so each type is compared to the threshold on its own.
-  const slain = pending.targets
-    .filter(
-      (target) =>
-        (action.melee[target.dragonId] ?? 0) >= target.threshold ||
-        (action.missile[target.dragonId] ?? 0) >= target.threshold,
-    )
-    .map((target) => target.dragonId)
+  const answered = pending.targets.map((target) =>
+    answerOf(target, action.melee[target.dragonId] ?? 0, action.missile[target.dragonId] ?? 0),
+  )
 
-  return finishDragonDamage(state, attack, slain)
+  return finishDragonDamage(state, attack, answered)
 }
 
 /**
@@ -3153,20 +3169,22 @@ function applyDragonDamageSplit(
 function finishDragonDamage(
   state: GameState,
   attack: DragonAttackState,
-  slainByArmy: readonly DragonId[],
+  answered: readonly DragonAnswer[],
 ): GameState {
   const totals = attack.totals
   const save = totals?.save ?? 0
+  const slainByArmy = answered.filter((a) => a.slain).map((a) => a.dragonId)
 
   // Incoming: every dragon attacking the army, less the army's own saves.
-  const inflicted = armyAttackers(state, attack).reduce(
+  const attackers = armyAttackers(state, attack)
+  const inflicted = attackers.reduce(
     (sum, id) => sum + dragonTotals(state, rollsOf(attack, id), false).damage,
     0,
   )
   const armyDamage = Math.max(0, inflicted - save)
 
   // Dragon against dragon: each one's damage against the other's threshold.
-  const slainByDragon: DragonId[] = []
+  const duels: DragonDuel[] = []
   for (const dragon of dragonsAt(state, attack.slot)) {
     const target = attack.targets[dragon.id]
     if (target?.kind !== 'dragon') continue
@@ -3174,11 +3192,26 @@ function finishDragonDamage(
     if (victim === undefined) continue
     const damage = dragonTotals(state, rollsOf(attack, dragon.id), true).damage
     const threshold = killThreshold(dragonTotals(state, rollsOf(attack, victim.id), true).bellyUp)
-    if (damage >= threshold) slainByDragon.push(victim.id)
+    duels.push({ dragonId: dragon.id, targetId: victim.id, damage, threshold, slain: damage >= threshold })
   }
+  const slainByDragon = duels.filter((d) => d.slain).map((d) => d.targetId)
+
+  // The arithmetic, logged before anybody is sent home -- the dragons slain here still
+  // did what they rolled, and the line says so in the order it happened.
+  const shown =
+    attackers.length > 0 || answered.length > 0 || duels.length > 0
+      ? withLog(state, {
+          kind: 'dragon_damage',
+          player: attack.defender,
+          slot: attack.slot,
+          ...(attackers.length > 0 ? { incoming: { inflicted, saves: save, damage: armyDamage } } : {}),
+          ...(answered.length > 0 ? { answered } : {}),
+          ...(duels.length > 0 ? { duels } : {}),
+        })
+      : state
 
   const slain = [...new Set([...slainByArmy, ...slainByDragon])]
-  let next = state
+  let next = shown
   for (const dragonId of slain) {
     next = sendDragonHome(next, dragonId, 'slain')
   }
@@ -3345,7 +3378,7 @@ function stepDragonAttack(state: GameState): GameState {
     case 'damage': {
       const pending = damageSplitPending(state, attack)
       if (pending !== null) return { ...state, pending }
-      return finishDragonDamage(state, attack, loneDragonSlain(state, attack))
+      return finishDragonDamage(state, attack, loneDragonAnswer(state, attack))
     }
 
     case 'assign': {
@@ -3656,6 +3689,8 @@ function finishContest(
     marcherWins,
     marcherDice: marcherRoll.dice,
     defenderDice: defenderRoll.dice,
+    ...(marcherRoll.math !== undefined ? { marcherMath: marcherRoll.math } : {}),
+    ...(defenderRoll.math !== undefined ? { defenderMath: defenderRoll.math } : {}),
   })
 
   const { contest: _decided, ...turn } = logged.turn
@@ -3951,6 +3986,7 @@ function stepThorns(state: GameState): GameState {
     melee: roll.total,
     dice: roll.dice,
     ...(roll.countedAs !== undefined ? { flamingShields: roll.countedAs } : {}),
+    ...(roll.math !== undefined ? { math: roll.math } : {}),
   })
 
   // Damage too small to kill anything is dropped rather than asked about, exactly as

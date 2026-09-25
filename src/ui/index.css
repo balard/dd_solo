@@ -481,6 +481,14 @@ body {
 }
 .roll-modified b { color: var(--fg); }
 
+/* The named arithmetic under a strip (Phase 9c): "14 on the dice − 4 Galeforce = 10".
+   Its own line, full width, because a sentence does not fit beside the dice. */
+.roll-math {
+  flex-basis: 100%;
+  font-size: .85em;
+  color: var(--fg);
+}
+
 /* A die in a decision sheet's roll strip that is itself the answer (Flashfire). It
    has to look pressable next to dice that are only evidence. */
 .roll-strip.is-pickable .rolled-pickable {

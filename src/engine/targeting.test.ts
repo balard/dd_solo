@@ -546,10 +546,12 @@ describe('Galeforce', () => {
       { kind: 'subtract', resultType: 'save', amount: 4 },
       { kind: 'subtract', resultType: 'maneuver', amount: 4 },
     ])
+    // The stored effect keeps its modifiers bare; the roll gets them named.
     expect(armyRoll(done, 'p2', 'frontier', 'maneuver').modifiers).toContainEqual({
       kind: 'subtract',
       resultType: 'maneuver',
       amount: 4,
+      source: 'Galeforce',
     })
   })
 

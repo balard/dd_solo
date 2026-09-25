@@ -50,8 +50,22 @@ function isDieRoll(value: unknown): value is { unitId: string; faceIndex: number
 }
 
 /**
+ * A log field that explains a number rather than recording one: `math`, `attackMath`,
+ * `saveMath` and the rest (v1 Phase 9c).
+ *
+ * Left out of the digest because it is presentation, derived from modifiers whose effect
+ * is already in the totals the digest *does* carry -- and because leaving it in would
+ * rewrite every golden with a capture, since `V0_RULES` has eighth-face ID doubling and
+ * the explanation notes it. The one exception to "everything not derivable is included",
+ * and it is derivable.
+ */
+function isDisplayOnly(key: string): boolean {
+  return key === 'math' || key.endsWith('Math')
+}
+
+/**
  * Stable JSON: object keys in sorted order whatever order they were built in, and
- * dice as `unitId@faceIndex=results`.
+ * dice as `unitId@faceIndex=results`. Display-only fields are dropped.
  */
 export function stableJson(value: unknown): string {
   return JSON.stringify(value, (_key, raw: unknown) => {
@@ -63,9 +77,9 @@ export function stableJson(value: unknown): string {
           )
         : raw
     }
-    const entries = Object.entries(raw as Record<string, unknown>).sort(([a], [b]) =>
-      a < b ? -1 : a > b ? 1 : 0,
-    )
+    const entries = Object.entries(raw as Record<string, unknown>)
+      .filter(([key]) => !isDisplayOnly(key))
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     return Object.fromEntries(entries)
   })
 }

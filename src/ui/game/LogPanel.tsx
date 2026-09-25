@@ -12,13 +12,14 @@ import { Fragment, type ReactElement } from 'react'
 import { dragonDie, dragonName, unitType } from '../../data/load'
 import { spell } from '../../data/spells'
 import { BREATH_NAME, DRAGON_ICON_TEXT } from '../../engine/dragons'
-import { saiPhrase, saisBehind } from '../../engine/roll'
+import { mathPhrase, saiPhrase, saisBehind, type RollMath } from '../../engine/roll'
 
 
 import {
   TERRAIN_SLOTS,
   type ArmyRef,
   type GameState,
+  type DragonAnswer,
   type LogEntry,
   type PlayerId,
   type UnitId,
@@ -131,9 +132,9 @@ function Line({
       return (
         <div className="log-roll">
           <div className="roll-head">maneuver</div>
-          <RollStrip dice={entry.marcherDice} total={entry.marcher} />
+          <RollStrip dice={entry.marcherDice} total={entry.marcher} {...withMath(entry.marcherMath)} />
           <div className="roll-head">opposing maneuver</div>
-          <RollStrip dice={entry.defenderDice} total={entry.defender} />
+          <RollStrip dice={entry.defenderDice} total={entry.defender} {...withMath(entry.defenderMath)} />
           <div className="roll-sum">
             {entry.marcher} vs {entry.defender} maneuver;{' '}
             <b>{entry.marcherWins ? 'the marcher wins' : 'the marcher loses'}</b>
@@ -204,13 +205,14 @@ function Line({
               </>
             )}
           </div>
-          <RollStrip dice={entry.attackDice} total={entry.attackTotal} />
+          <RollStrip dice={entry.attackDice} total={entry.attackTotal} {...withMath(entry.attackMath)} />
           {entry.saveDice !== null && (
             <>
               <div className="roll-head">saves</div>
               <RollStrip
                 dice={entry.saveDice}
                 {...(entry.saveTotal === null ? {} : { total: entry.saveTotal })}
+                {...withMath(entry.saveMath)}
               />
             </>
           )}
@@ -469,7 +471,7 @@ function Line({
       return (
         <div className="log-roll">
           <div className="roll-head">magic at {where(entry.slot)}</div>
-          <RollStrip dice={entry.dice} total={entry.total} />
+          <RollStrip dice={entry.dice} total={entry.total} {...withMath(entry.math)} />
           <div className="roll-sum">
             <b>{entry.total}</b> magic <span className="muted">({entry.elements.join(' or ')})</span>
           </div>
@@ -592,7 +594,7 @@ function Line({
       return (
         <div className="log-roll">
           <div className="roll-head">Wall of Thorns at {where(entry.slot)}</div>
-          <RollStrip dice={entry.dice} total={entry.melee} />
+          <RollStrip dice={entry.dice} total={entry.melee} {...withMath(entry.math)} />
           <div className="roll-sum">
             {entry.melee} melee &rarr; <b>{entry.damage}</b> damage
           </div>
@@ -615,7 +617,7 @@ function Line({
             {entry.source} — {whoLower(entry.player)} {verb(entry.player, 'saves', 'save')} at{' '}
             {where(entry.slot)}
           </div>
-          <RollStrip dice={entry.dice} total={entry.saves} />
+          <RollStrip dice={entry.dice} total={entry.saves} {...withMath(entry.math)} />
           <div className="roll-sum">
             <b>{entry.saves}</b> saves
           </div>
@@ -802,12 +804,60 @@ function Line({
             <b>{entry.totals.melee}</b> melee, <b>{entry.totals.missile}</b> missile,{' '}
             <b>{entry.totals.save}</b> save
           </div>
+          {/* One line per type a modifier touched: a combination roll has three totals,
+              and a halving breath or a Galeforce changes one of them, not "the roll". */}
+          {DRAGON_KINDS.map((kind) => {
+            const math = entry.math?.[kind]
+            if (math === undefined) return null
+            const phrase = mathPhrase(math, entry.totals[kind])
+            return (
+              <div className="roll-math" key={kind}>
+                {kind}: {phrase}
+                {math.notes.map((note) => (
+                  <span key={note} className="muted">
+                    {phrase === '' ? '' : ' · '}
+                    {note}
+                  </span>
+                ))}
+              </div>
+            )
+          })}
           {entry.flamingShields !== undefined && (
             <div className="roll-sum">
               <b>Flaming Shields</b> counts {entry.flamingShields}{' '}
               {entry.flamingShields === 1 ? 'save' : 'saves'} as melee
             </div>
           )}
+        </div>
+      )
+
+    /*
+     * The Dragon Attack Phase's subtraction (Phase 9c), both ways. Before this the log
+     * showed what each side rolled and then who died, and "12 damage" against an army
+     * that lost 8 health was left for the reader to reconcile.
+     */
+    case 'dragon_damage':
+      return (
+        <div className="log-roll">
+          {entry.incoming !== undefined && (
+            <div className="roll-sum">
+              Dragons deal <b>{entry.incoming.inflicted}</b> damage − {entry.incoming.saves} saves ={' '}
+              <b>{entry.incoming.damage}</b> damage to {entry.player === human ? 'your' : "the enemy's"} army at{' '}
+              {where(entry.slot)}
+            </div>
+          )}
+          {entry.answered?.map((answer) => (
+            <div className="roll-sum" key={answer.dragonId}>
+              {answerPhrase(answer)} &rarr; {dragonLabel(state, answer.dragonId)}{' '}
+              {answer.slain ? <b>is slain</b> : 'survives'}
+            </div>
+          ))}
+          {entry.duels?.map((duel) => (
+            <div className="roll-sum" key={duel.dragonId}>
+              {dragonLabel(state, duel.dragonId)} deals <b>{duel.damage}</b> vs {duel.threshold} &rarr;{' '}
+              {dragonLabel(state, duel.targetId)} {duel.slain ? <b>is slain</b> : 'survives'}
+            </div>
+          ))}
         </div>
       )
 
@@ -822,6 +872,29 @@ function Line({
     case 'terrain_placed':
       return null
   }
+}
+
+/** `math` only when the entry has one: `exactOptionalPropertyTypes` will not take an
+ *  `undefined` for an optional prop. */
+function withMath(math: RollMath | undefined): { math?: RollMath } {
+  return math === undefined ? {} : { math }
+}
+
+const DRAGON_KINDS = ['melee', 'missile', 'save'] as const
+
+/** "7 melee, 3 missile vs 10" -- the two are never combined, so both are shown against
+ *  the one threshold. A type the army put nothing into is left out. */
+function answerPhrase(answer: DragonAnswer): string {
+  const parts = [
+    ...(answer.melee > 0 ? [`${answer.melee} melee`] : []),
+    ...(answer.missile > 0 ? [`${answer.missile} missile`] : []),
+  ]
+  return `${parts.length === 0 ? 'nothing' : parts.join(', ')} vs ${answer.threshold}`
+}
+
+function dragonLabel(state: GameState, dragonId: string): string {
+  const dragon = state.dragons[dragonId]
+  return dragon === undefined ? dragonId : dragonName(dragon.dieId)
 }
 
 export function LogPanel({ state, human }: { state: GameState; human: PlayerId }) {

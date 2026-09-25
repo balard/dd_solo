@@ -179,6 +179,36 @@ export function saiPhrase(
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
+/**
+ * One named modifier's share of a roll's arithmetic: "− 4 **Galeforce**".
+ *
+ * `delta` is what it changed the total by, given the ones before it -- not its printed
+ * amount. A Galeforce on a roll of two takes two, and a halving takes whatever half was.
+ * So the steps always add up: `base + Σ delta = total`, whatever the pipeline did.
+ */
+export interface RollStep {
+  readonly source: string
+  readonly delta: number
+}
+
+/**
+ * Why a roll's total is what it is (v1 Phase 9c): the number on the dice, each named
+ * modifier in pipeline order, and the notes that are not arithmetic.
+ *
+ * **Display only.** Every number here is derived from modifiers already reflected in
+ * the totals, and `digestState` leaves the `...Math` log fields out -- which is also
+ * what keeps the goldens byte-identical, since `V0_RULES` has eighth-face doubling.
+ */
+export interface RollMath {
+  /** What the dice show: step 5, plus the two things drawn on the dice themselves --
+   *  an eighth face's doubled IDs and Flaming Shields' converted saves. */
+  readonly base: number
+  readonly steps: readonly RollStep[]
+  /** Facts about the roll that change what the dice show rather than the total:
+   *  "IDs doubled (Eighth face)", "Tower: ID results do not count". */
+  readonly notes: readonly string[]
+}
+
 export interface RollResult {
 
 
@@ -195,6 +225,8 @@ export interface RollResult {
   readonly effects: readonly RollEffect[]
   /** `RollOutcome.countedAs`, carried through for the log. Omitted when none. */
   readonly countedAs?: number
+  /** `RollOutcome.math` for this roll's type. Omitted when there is nothing to say. */
+  readonly math?: RollMath
 }
 
 export interface RollSpec {
@@ -232,6 +264,13 @@ export interface RollSpec {
    */
   readonly saiResults?: Readonly<Partial<Record<ResultType, number>>>
   /**
+   * Names `saiResults` when they are **not on the dice** -- Wild Growth's unpromoted
+   * save share, which the player chose rather than a face showed -- so the roll's
+   * arithmetic can say "+ 2 Wild Growth". Absent means they are on the dice: a dragon
+   * roll's flexible results are, and are only being given a type.
+   */
+  readonly saiResultsSource?: string
+  /**
    * Tower's "only count non-ID missile results" against a Reserve Army (Phase 5d):
    * a counting rule at step 5, not a modifier. It cannot be a `subtract` -- the
    * amount is not known until the dice land, and step 6 removes ID results last --
@@ -265,6 +304,9 @@ export interface RollOutcome {
    * in every golden carrying a zero.
    */
   readonly countedAs?: number
+  /** Per counted type, why its total is what it is. Omitted when no type has a named
+   *  modifier or a note -- which is most rolls. */
+  readonly math?: Readonly<Partial<Record<ResultType, RollMath>>>
 }
 
 /** One face, sorted into the pipeline steps it feeds. */
@@ -571,10 +613,13 @@ export function resolveFaces(
     throw new Error(`${chosen} saves counted as melee, from ${convertible} rolled`)
   }
   const countedAs = convertsAll ? convertible : chosen
-  const modifiers: readonly Modifier[] =
+  const converted: Modifier | null =
     countedAs > 0
-      ? [...spec.modifiers, { kind: 'add', resultType: 'melee', amount: countedAs }]
-      : spec.modifiers
+      ? { kind: 'add', resultType: 'melee', amount: countedAs, source: 'Flaming Shields' }
+      : null
+  const modifiers: readonly Modifier[] =
+    converted === null ? spec.modifiers : [...spec.modifiers, converted]
+  const math: Partial<Record<ResultType, RollMath>> = {}
 
   for (const kind of spec.kinds) {
     let normal = normals.get(kind) ?? 0
@@ -586,10 +631,107 @@ export function resolveFaces(
       normal -= fromNormal
       sai -= countedAs - fromNormal
     }
-    totals[kind] = applyModifiers({ id: allocation.get(kind) ?? 0, normal, sai }, kind, modifiers)
+    const share = { id: allocation.get(kind) ?? 0, normal, sai }
+    totals[kind] = applyModifiers(share, kind, modifiers)
+
+    const explained = explainRoll(share, kind, modifiers, converted, spec)
+    if (explained !== null) math[kind] = explained
   }
 
-  return { dice: shown, totals, effects, ...(countedAs > 0 ? { countedAs } : {}) }
+  return {
+    dice: shown,
+    totals,
+    effects,
+    ...(countedAs > 0 ? { countedAs } : {}),
+    ...(Object.keys(math).length > 0 ? { math } : {}),
+  }
+}
+
+/** Where each named modifier falls in steps 6 to 10, so the arithmetic reads in the
+ *  order the rulebook applies it. The off-dice step-8 results sit between divide and
+ *  multiply, exactly where `applyModifiers` joins them. */
+const STEP_ORDER: Readonly<Record<Modifier['kind'], number>> = {
+  ignore_ids: 0,
+  subtract: 1,
+  divide: 2,
+  multiply: 4,
+  add: 5,
+  counts_as: 6,
+}
+
+/**
+ * One counted type's `RollMath`, or null when there is nothing to explain.
+ *
+ * **Recomputed through `applyModifiers`, never re-derived.** The base is the pipeline
+ * run with only the modifiers the dice already show -- the eighth face's doubling,
+ * Flaming Shields' conversion -- and then each named modifier is added one at a time in
+ * step order, its `delta` the change in the total. The sum telescopes to the real total
+ * by construction, so the line can never disagree with the number beside it: a second
+ * implementation of the pipeline is exactly how it would have.
+ */
+function explainRoll(
+  share: { readonly id: number; readonly normal: number; readonly sai: number },
+  kind: ResultType,
+  modifiers: readonly Modifier[],
+  converted: Modifier | null,
+  spec: RollSpec,
+): RollMath | null {
+  const own = modifiers.filter((m) => m.resultType === kind)
+  const onDice = own.filter(
+    (m) => m === converted || (m.kind === 'multiply' && m.share === 'id'),
+  )
+  const named = own
+    .filter((m) => !onDice.includes(m) && m.kind !== 'counts_as')
+    .sort((a, b) => STEP_ORDER[a.kind] - STEP_ORDER[b.kind])
+
+  const offDice = spec.saiResultsSource !== undefined ? (spec.saiResults?.[kind] ?? 0) : 0
+  const without = { ...share, sai: share.sai - offDice }
+
+  const notes: string[] = []
+  const doubling = onDice.find((m) => m.kind === 'multiply')
+  if (doubling !== undefined && share.id > 0) {
+    notes.push(`IDs doubled (${doubling.source ?? 'eighth face'})`)
+  }
+  if (spec.countIds === false) notes.push('Tower: ID results do not count')
+
+  if (named.length === 0 && offDice === 0 && notes.length === 0) return null
+
+  const base = applyModifiers(without, kind, onDice)
+  const steps: RollStep[] = []
+  let applied: Modifier[] = [...onDice]
+  let current = without
+  let running = base
+  let offDiceDone = offDice === 0
+
+  // Two castings of one effect are one step, not two: "− 8 Galeforce" reads as what
+  // happened, "− 4 Galeforce − 4 Galeforce" as a stutter. Adjacent only, so a name that
+  // turns up at two different pipeline steps still shows at both.
+  const add = (source: string) => {
+    const next = applyModifiers(current, kind, applied)
+    const last = steps.at(-1)
+    if (last !== undefined && last.source === source) {
+      steps[steps.length - 1] = { source, delta: last.delta + (next - running) }
+    } else {
+      steps.push({ source, delta: next - running })
+    }
+    running = next
+  }
+
+  for (const modifier of named) {
+    if (!offDiceDone && STEP_ORDER[modifier.kind] > 3) {
+      current = share
+      offDiceDone = true
+      add(spec.saiResultsSource ?? 'SAI')
+    }
+    applied = [...applied, modifier]
+    add(modifier.source ?? modifier.kind)
+  }
+  if (!offDiceDone) {
+    current = share
+    add(spec.saiResultsSource ?? 'SAI')
+  }
+
+  return { base, steps, notes }
 }
 
 /**
@@ -755,7 +897,29 @@ export function asResult(outcome: RollOutcome, resultType: ResultType): RollResu
     total: outcome.totals[resultType] ?? 0,
     effects: outcome.effects,
     ...(outcome.countedAs !== undefined ? { countedAs: outcome.countedAs } : {}),
+    ...(outcome.math?.[resultType] !== undefined ? { math: outcome.math[resultType] } : {}),
   }
+}
+
+/**
+ * "14 on the dice − 4 Galeforce + 2 Stone Skin = 12" -- a roll's arithmetic as one
+ * sentence, for both clients.
+ *
+ * Beside `saiPhrase`, for its reason: the first draft of a shared sentence gets written
+ * twice, and that is how the browser and the terminal start describing one roll
+ * differently. A step that changed nothing still prints, as "± 0": a Galeforce on a
+ * roll with nothing left to take is still a Galeforce, and leaving it out is the silence
+ * this whole field exists to end.
+ */
+export function mathPhrase(math: RollMath, total: number): string {
+  const steps = math.steps.map((step) =>
+    step.delta < 0
+      ? ` − ${-step.delta} ${step.source}`
+      : step.delta > 0
+        ? ` + ${step.delta} ${step.source}`
+        : ` ± 0 ${step.source}`,
+  )
+  return math.steps.length === 0 ? '' : `${math.base} on the dice${steps.join('')} = ${total}`
 }
 
 /** The most one die can generate for a result type. Used by the property tests and,

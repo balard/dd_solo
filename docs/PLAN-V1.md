@@ -2084,7 +2084,7 @@ screen before the next begins. This phase is judged by looking at it.
 |---|---|---|
 | **9a** | House rule: beneficial army spells target only your own armies. Four spell-announcement bugs | ✅ landed |
 | **9b** | Accelerated Growth becomes a decision; the "Replanting before AG" house rule retires with it | ✅ landed |
-| **9c** | Every modifier explicit: named steps in each roll's arithmetic, and the dragon attack's math | |
+| **9c** | Every modifier explicit: named steps in each roll's arithmetic, and the dragon attack's math | ✅ landed |
 | **9d** | The roll behind every decision, the enemy's included; Confuse shown and logged | |
 | **9e** | Board surfaces: both reserves, both summoning pools, a selectable DUA, a floating inspector, "look" mode | |
 | **9f** | One way to pick a die, the spell picker's count and colour, the 8th-face emphasis | |
@@ -2213,6 +2213,41 @@ or a sheet header, nothing at all.
 - The strip reads `14 on the dice − 4 Galeforce + 2 Stone Skin = 12 saves`, in both clients.
 - **The dragon attack gets its arithmetic**: "12 damage − 4 saves = 8 damage" for the army, and
   "7 melee + 3 missile vs 10 → slain" for the dragon.
+
+#### Where this slice was wrong
+
+- **"`applyModifiers` becomes `explainModifiers(...).total`" would have explained the wrong
+  number.** The pipeline walks from `{id, normal, sai}`, but the strip shows each ID die
+  *doubled* (the digest binds that, `V0_RULES` included). A line that starts where the pipeline
+  starts begins at a number nobody can see. Worse, the pipeline removes IDs last and doubles
+  them after the divide, so "dice − 4 = total" can be false with a Galeforce and an eighth face
+  together. So `applyModifiers` is untouched. The explanation is computed *around* it: the base
+  is the pipeline with only the on-dice modifiers, and each named modifier is added one at a
+  time with its `delta` read off the real result. It telescopes to the total, and a 40-seed ×
+  16-combination property test says so.
+- **The `×2` corner mark on doubled dice was not built.** "IDs doubled (Eighth face)" rides as a
+  note on the math line instead. That puts it where the reader is already looking, and changes no
+  die tile.
+- **The dragon math is a new entry, not fields on `DragonAttackEntry`.** That entry is written at
+  the throw. The subtraction happens two steps later, after the army has rolled and, when there is
+  a choice, split its results. So `dragon_damage` is written in `finishDragonDamage`, before any
+  dragon goes home, and carries three things: the army's losses, its answer per dragon, and duels.
+- **Two castings of one effect printed twice.** A Genie mirror had "± 0 Galeforce ± 0 Galeforce".
+  Adjacent steps with one source now fold into one.
+- **Not covered, deliberately.** `order_of_play` has no modifiers. A Phase 4d sub-roll is a unit
+  roll whose total is a pass/fail, and its log line already says which. The decision sheets'
+  strips still show dice only, which is 9d's job.
+
+**Checked in a browser** with the replay scaffold (reverted before the commit):
+- **`?forces=firewalkers_genie&seed=1`, 143 decisions in.** A missile attack reads "4 on the dice
+  + 2 Fiery Weapon = 6", its saves "8 on the dice − 4 Galeforce = 4", then "6 missile − 4 saves =
+  2 damage".
+- **`?forces=starter&seed=1`, 396 decisions in.** "Dragons deal 6 damage − 2 saves = 4 damage to
+  the enemy's army at Frontier" and "4 melee vs 10 → Fire Drake survives". A Belly roll reads
+  "nothing vs 5".
+
+The dragon self-play now checks that every `dragon_damage` line adds up, and that all three kinds
+turn up.
 
 ### 9d — the roll behind every decision
 

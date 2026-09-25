@@ -839,14 +839,28 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     drift this file has been bitten by twice. `X` stays `X`: the sheet's own line says what the
     number is on this die. `sai.test.ts` asserts every SAI that can raise a pending has text, since
     a missing one renders as *nothing at all*.
-- **A roll strip says what the modifiers did to it**, via `RollStrip`'s optional `total` (the
-  post-pipeline number the log entry already carries). It draws `12 → 8` whenever that disagrees
-  with the sum on the dice. Without it a Dancing Lights, an Ash Storm or a Galeforce changed a
-  roll with nothing on screen to show for it, and the only symptom was a total that did not add
-  up -- which is what two Phase 7 bug reports turned out to be. Deliberately **not** attributed to
-  a named effect: which modifiers applied is a fact about the moment the dice were thrown, and a
-  log line scrolled back three turns cannot know it. The arithmetic is honest at any distance; the
-  board's effect list names the cause.
+- **A roll names every modifier that changed it** (v1 Phase 9c): "14 on the dice − 4 Galeforce
+  + 2 Stone Skin = 12". `armyRoll` stamps each gathered `Modifier` with its effect's `source`.
+  `resolveFaces` then writes a `RollMath` per counted type, and the log entry carries it
+  (`attackMath`, `saveMath`, `math`, ...). Two rules make it trustworthy:
+  - **The steps are recomputed through `applyModifiers`, one modifier at a time**, and each
+    step's `delta` is the change in the total. So `base + Σ delta = total` by construction. A
+    second implementation of the pipeline would be how the line and the number stopped agreeing.
+  - **The base is what the dice show.** The eighth face's doubled IDs and Flaming Shields'
+    conversions are already on the dice, and the golden digest records them there. So they are
+    *notes* ("IDs doubled (Eighth face)"), never steps. Wild Growth's save share is not on any
+    die, so it is a step, named through `RollSpec.saiResultsSource`.
+  - **`digestState` drops every `...Math` key**, because it is presentation derived from totals
+    the digest already has. Without that, every golden with a capture would have moved.
+  - It replaced a bare `12 → 8`, whose comment said naming the cause was impossible because "a
+    log line scrolled back three turns cannot know it". That was true of `state.effects`. It was
+    never true of the modifiers in hand at the moment of the roll, which is where the name is
+    read now. The arrow stays as the fallback for an entry that has a total and no math.
+    `mathPhrase` in `roll.ts` is the one sentence both clients print.
+- **The Dragon Attack Phase logs its subtraction** (`dragon_damage`, Phase 9c): "Dragons deal 6
+  damage − 2 saves = 4", "4 melee vs 10 → Fire Drake survives", and any duel. The two rolls were
+  always logged, but the arithmetic between them happened in `finishDragonDamage` and was
+  written nowhere.
 - **A decision sheet's roll strip can be the answer, not only the evidence** -- `RollStrip`'s
   `pick`, used by the Flashfire sheet. The sheet said "tap the dice you want back" directly above a
   picture of the dice, and the only thing that answered was the board further up the page; somebody

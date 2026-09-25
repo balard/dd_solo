@@ -15,6 +15,7 @@ import { Fragment } from 'react'
 import { unitType } from '../../data/load'
 import type { Face, UnitClass, UnitType } from '../../data/types'
 import type { RollEffectBody } from '../../engine/pipeline'
+import { mathPhrase, type RollMath } from '../../engine/roll'
 import type { UnitId, UnitInstance } from '../../engine/types'
 
 
@@ -370,18 +371,26 @@ export function chainRerolls(dice: readonly StripDie[]): readonly (readonly Stri
  * on the terrain or a Galeforce off an SAI all change the number without touching a
  * single face, and before this the only sign was a total that did not add up.
  *
- * Deliberately *not* attributed to a named effect. Which modifiers applied is a fact
- * about the moment the dice were thrown, and a log line scrolled back three turns
- * cannot know it -- `state.effects` says what is true now. The arithmetic is honest
- * at any distance; the board's own effect list names the cause.
+ * Since Phase 9c the entry's `math` names the cause as well ("− 4 Galeforce"), read
+ * from the modifiers in hand when the dice were thrown -- which is what an earlier
+ * comment here said a log line could never know, and was true only of `state.effects`.
+ * The bare arrow is now the fallback for an entry with a total and no explanation.
  */
 export function RollStrip({
   dice,
   total,
+  math,
   pick,
 }: {
   dice: readonly StripDie[]
   total?: number
+  /**
+   * The roll's arithmetic, named (Phase 9c): "14 on the dice − 4 Galeforce = 10". When
+   * the log entry carries it, it replaces the bare `14 → 10` below, which could say a
+   * number changed but never what changed it. The arrow stays as the fallback for an
+   * entry that has a total and no explanation.
+   */
+  math?: RollMath
   /**
    * Makes the strip the *answer* surface as well as the evidence.
    *
@@ -402,7 +411,8 @@ export function RollStrip({
 }) {
   const ruleSet = useRuleSet()
   const onTheDice = dice.reduce((sum, die) => sum + die.results, 0)
-  const modified = total !== undefined && total !== onTheDice
+  const phrase = math !== undefined && total !== undefined ? mathPhrase(math, total) : ''
+  const modified = phrase === '' && total !== undefined && total !== onTheDice
   return (
     <div className={pick === undefined ? 'roll-strip' : 'roll-strip is-pickable'}>
       {chainRerolls(dice).map((chain, c) => (
@@ -480,6 +490,17 @@ export function RollStrip({
           title={`${onTheDice} on the dice, ${total} after the modifiers on this army`}
         >
           {onTheDice} &rarr; <b>{total}</b>
+        </span>
+      )}
+      {(phrase !== '' || (math?.notes.length ?? 0) > 0) && (
+        <span className="roll-math">
+          {phrase}
+          {math?.notes.map((note) => (
+            <span key={note} className="muted">
+              {phrase === '' ? '' : ' · '}
+              {note}
+            </span>
+          ))}
         </span>
       )}
     </div>

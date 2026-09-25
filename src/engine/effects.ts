@@ -224,6 +224,16 @@ export function eighthFaceLabel(icon: EighthFaceIcon, ruleSet: RuleSet | null): 
   return `${name} — does nothing in this game`
 }
 
+/**
+ * An effect's modifiers, each stamped with the effect's name (Phase 9c) -- so a roll can
+ * say "− 4 Galeforce" rather than a number that changed with nothing on screen to say
+ * why. Stamped here, at the one door every roll goes through, and never stored: the
+ * effect in `state.effects` keeps its modifiers bare.
+ */
+function sourced(effect: Effect): readonly Modifier[] {
+  return effect.modifiers.map((modifier) => ({ ...modifier, source: effect.source }))
+}
+
 /** What `rollArmy` needs to roll one army: which of its dice may be rolled, and
  *  everything modifying the result. */
 export interface ArmyRollInput {
@@ -261,10 +271,10 @@ export function armyRoll(
 ): ArmyRollInput {
   const modifiers: Modifier[] = []
   for (const effect of state.effects) {
-    if (targetsArmy(effect, player, ref)) modifiers.push(...effect.modifiers)
-    else if (targetsTerrain(effect, ref, 'all_armies')) modifiers.push(...effect.modifiers)
+    if (targetsArmy(effect, player, ref)) modifiers.push(...sourced(effect))
+    else if (targetsTerrain(effect, ref, 'all_armies')) modifiers.push(...sourced(effect))
     else if (against !== undefined && targetsTerrain(effect, against, 'attackers')) {
-      modifiers.push(...effect.modifiers)
+      modifiers.push(...sourced(effect))
     }
     // `'maneuverers'` is deliberately absent: Wall of Thorns fires on an event rather
     // than on a roll, and is read at the maneuver site by `thornsAt`.
@@ -326,7 +336,7 @@ export function unitRoll(state: GameState, unitId: UnitId): UnitRollInput {
 
   const modifiers: Modifier[] = []
   for (const effect of state.effects) {
-    if (targetsUnit(effect, unitId)) modifiers.push(...effect.modifiers)
+    if (targetsUnit(effect, unitId)) modifiers.push(...sourced(effect))
   }
 
   return { unit, rollable: !isAsleep(state, unitId), modifiers }

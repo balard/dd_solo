@@ -10,7 +10,7 @@ import type { DragonElement, DragonIcon, Element, ResultType } from '../data/typ
 import type { DragonRoll, DragonTarget } from './dragons'
 import type { Effect } from './effects'
 import type { Castable, MagicPool } from './magic'
-import type { DieRoll, RawDie } from './roll'
+import type { DieRoll, RawDie, RollMath } from './roll'
 import type { TargetTask } from './targeting'
 import type { RngState } from './rng'
 
@@ -1078,6 +1078,19 @@ export interface AirFlightOffer {
  * imported: `GameAction` is the engine's public vocabulary and nothing in it should
  * depend on which file happens to implement a move.
  */
+/**
+ * What an army put on one dragon: melee and missile apiece, never combined -- "the
+ * damage to slay a dragon must come from either melee or missile results" -- against
+ * the dragon's threshold (10, or 5 with its Belly up).
+ */
+export interface DragonAnswer {
+  readonly dragonId: DragonId
+  readonly melee: number
+  readonly missile: number
+  readonly threshold: number
+  readonly slain: boolean
+}
+
 export interface PromotionPair {
   readonly unitId: UnitId
   readonly partnerId: UnitId
@@ -1133,6 +1146,34 @@ export type LogEntry =
        *  noise once two dragons and their rerolls are in it. */
       readonly dragons: readonly DragonAttackEntry[]
     }
+  /**
+   * The Dragon Attack Phase's arithmetic, both ways (v1 Phase 9c): what the dragons did
+   * to the army less its saves, what the army put on each dragon against the number that
+   * kills it, and any dragon fighting another. The rolls themselves are `dragon_attack`
+   * and `dragon_roll`; this is the subtraction nobody could see.
+   */
+  | {
+      readonly kind: 'dragon_damage'
+      /** The army's owner -- the marching player. */
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      /** Omitted when no dragon attacked the army (every one was duelling). */
+      readonly incoming?: {
+        readonly inflicted: number
+        readonly saves: number
+        readonly damage: number
+      }
+      /** Every dragon the army's melee and missile went at. Omitted when none. */
+      readonly answered?: readonly DragonAnswer[]
+      /** Dragon against dragon. Omitted when none. */
+      readonly duels?: readonly {
+        readonly dragonId: DragonId
+        readonly targetId: DragonId
+        readonly damage: number
+        readonly threshold: number
+        readonly slain: boolean
+      }[]
+    }
   | {
       readonly kind: 'dragon_breath'
       readonly player: PlayerId
@@ -1156,6 +1197,9 @@ export type LogEntry =
       readonly totals: { readonly melee: number; readonly missile: number; readonly save: number }
       /** Flaming Shields: saves the owner moved to melee. Omitted when none. */
       readonly flamingShields?: number
+      /** Why the total is what it is (Phase 9c). Display only: `digestState` drops every
+       *  `...Math` key, so it never moves a golden. Omitted when there is nothing to say. */
+      readonly math?: Readonly<Partial<Record<ResultType, RollMath>>>
     }
   | {
       /** Back to the pool, the only two ways a dragon leaves a terrain. */
@@ -1178,6 +1222,10 @@ export type LogEntry =
        *  numbers. Log-only, like `combat_resolved`. */
       readonly marcherDice: readonly DieRoll[]
       readonly defenderDice: readonly DieRoll[]
+      /** Why the total is what it is (Phase 9c). Display only: `digestState` drops every
+       *  `...Math` key, so it never moves a golden. Omitted when there is nothing to say. */
+      readonly marcherMath?: RollMath
+      readonly defenderMath?: RollMath
     }
   /**
    * Rapid Growth: dice the counter-maneuvering Treefolk threw again (Phase 8). Logged
@@ -1277,6 +1325,10 @@ export type LogEntry =
        * Firewalker's save face in a melee attack is otherwise a number from nowhere.
        */
       readonly flamingShields?: number
+      /** Why the total is what it is (Phase 9c). Display only: `digestState` drops every
+       *  `...Math` key, so it never moves a golden. Omitted when there is nothing to say. */
+      readonly attackMath?: RollMath
+      readonly saveMath?: RollMath
       /** The dice themselves, so the UI can show what landed rather than only the sum.
        *  Log-only: a saved game is `{ setup, actions }`, so this costs nothing on disk. */
       readonly attackDice: readonly DieRoll[]
@@ -1464,6 +1516,9 @@ export type LogEntry =
       readonly total: number
       readonly elements: readonly Element[]
       readonly dice: readonly DieRoll[]
+      /** Why the total is what it is (Phase 9c). Display only: `digestState` drops every
+       *  `...Math` key, so it never moves a golden. Omitted when there is nothing to say. */
+      readonly math?: RollMath
     }
   /** One announced cast resolving. `count` is combined castings folded into one. */
   | {
@@ -1545,6 +1600,9 @@ export type LogEntry =
       readonly dice: readonly DieRoll[]
       /** Flaming Shields: melee inside `melee` that the dice rolled as saves. */
       readonly flamingShields?: number
+      /** Why the total is what it is (Phase 9c). Display only: `digestState` drops every
+       *  `...Math` key, so it never moves a golden. Omitted when there is nothing to say. */
+      readonly math?: RollMath
     }
   /**
    * The save roll a damaging spell allows its target (p. 29).
@@ -1562,6 +1620,9 @@ export type LogEntry =
       readonly slot: ArmyRef
       readonly saves: number
       readonly dice: readonly DieRoll[]
+      /** Why the total is what it is (Phase 9c). Display only: `digestState` drops every
+       *  `...Math` key, so it never moves a golden. Omitted when there is nothing to say. */
+      readonly math?: RollMath
     }
   /** Resurrect Dead: units walking back out of the DUA into the casting army. */
   | {

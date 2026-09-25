@@ -287,6 +287,7 @@ describe('dragon self-play', () => {
 
   const counters: Record<string, number> = {}
   let stuck = 0
+  const badMath: string[] = []
 
   for (const [label, forces] of [
     ['starter', STARTER_FORCES],
@@ -313,6 +314,25 @@ describe('dragon self-play', () => {
         if (entry.kind === 'units_buried' && entry.source !== undefined) {
           counters[`bury_${entry.source}`] = (counters[`bury_${entry.source}`] ?? 0) + 1
         }
+        if (entry.kind === 'dragon_damage') {
+          const { incoming, answered, duels } = entry
+          if (incoming !== undefined) {
+            counters['math_incoming'] = (counters['math_incoming'] ?? 0) + 1
+            if (incoming.damage !== Math.max(0, incoming.inflicted - incoming.saves)) {
+              badMath.push(`seed ${seed}: ${JSON.stringify(incoming)}`)
+            }
+          }
+          for (const a of answered ?? []) {
+            counters['math_answered'] = (counters['math_answered'] ?? 0) + 1
+            if (a.slain !== (a.melee >= a.threshold || a.missile >= a.threshold)) {
+              badMath.push(`seed ${seed}: ${JSON.stringify(a)}`)
+            }
+          }
+          for (const d of duels ?? []) {
+            counters['math_duel'] = (counters['math_duel'] ?? 0) + 1
+            if (d.slain !== d.damage >= d.threshold) badMath.push(`seed ${seed}: ${JSON.stringify(d)}`)
+          }
+        }
         if (entry.kind === 'dragon_attack') {
           for (const shown of entry.dragons) {
             for (const { icon } of shown.faces) {
@@ -327,6 +347,18 @@ describe('dragon self-play', () => {
 
   it('never gets stuck', () => {
     expect(stuck).toBe(0)
+  })
+
+  /**
+   * Phase 9c: "12 damage − 4 saves = 8" and "7 melee vs 10 → survives" are written into
+   * the log now, so they had better be the arithmetic the phase actually did. All three
+   * halves -- the army's losses, its answer, and a duel -- have to turn up.
+   */
+  it('writes the damage arithmetic both ways, and it adds up', () => {
+    expect(badMath).toEqual([])
+    expect(counters['math_incoming'] ?? 0).toBeGreaterThan(0)
+    expect(counters['math_answered'] ?? 0).toBeGreaterThan(0)
+    expect(counters['math_duel'] ?? 0).toBeGreaterThan(0)
   })
 
   it('fires every dragon icon in the box', () => {
