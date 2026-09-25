@@ -5,7 +5,9 @@ the dice and the opponent.
 
 > **Status: v0 alpha complete; v1 Phases 0–8 landed. The app plays every SAI, every eighth-face
 > icon power, all five elemental dragons, all eighteen spells and all four species abilities --
-> every rule in `PLAN-V1.md`. What is left is Phase 9: the UI surfaces and a real opponent.**
+> every rule in `PLAN-V1.md`. What is left is Phase 9 (UI and rules polish, six slices 9a-9f,
+> each stopping for a look in the browser before the next) and Phase 10 (`GreedyAI`, a real
+> opponent).**
 > All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > and installable as a PWA. It opens on a screen that picks the two forces and the seed; saving is
@@ -125,7 +127,7 @@ the dice and the opponent.
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V1.md` | **The order of work now.** Eleven phases from the alpha to the complete basic game, each landed one carrying a write-up of what the plan got wrong. Start here when writing code. |
+| `docs/PLAN-V1.md` | **The order of work now.** Twelve phases from the alpha to the complete basic game, each landed one carrying a write-up of what the plan got wrong. Start here when writing code. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
 | `data/ICONS.md` | The die-face vocabulary. Required before touching `data/`. |
@@ -356,7 +358,7 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **The roll-off's two prizes are split one each**: the winner marches first, the loser draws the
   Frontier (Phase 5b). The rules give the winner the choice of one *or* the other; that is a real
   decision and `PassiveAI` could hold no opinion about it, so `GreedyAI` gets the real rule in
-  Phase 9. A house rule, recorded in `RULES-V0.md` section 7.
+  Phase 10. A house rule, recorded in `RULES-V0.md` section 7.
 - **Both Home Terrains and the Frontier are drawn, not chosen by species** (Phase 5b). Each Home
   Terrain is uniform over all 24 dice; the Frontier draws one of the loser's two elements and then
   draws uniformly among the dice carrying it, so the loser's own home type comes up about twice as

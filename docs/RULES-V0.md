@@ -192,7 +192,7 @@ die — `setupGame` throws otherwise, saying in as many words that choosing betw
 decision that does not exist yet. v1 Phase 0a makes it: the roll-off **winner marches first and the
 loser sets the Frontier** from their own second terrain, which splits step 4's two prizes one each
 without raising a decision `PassiveAI` cannot hold an opinion about. The real step 4 comes back
-with `GreedyAI` (`PLAN-V1.md` Phase 9).
+with `GreedyAI` (`PLAN-V1.md` Phase 10).
 
 For the alpha, ship **two fixed preset 30-health army lists** (one per species) so a game can be
 started in one tap. **v1 Phase 0a replaced them** with forces rolled from the seed — random race,

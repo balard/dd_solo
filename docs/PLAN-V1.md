@@ -1,6 +1,6 @@
 # Implementation plan — v1
 
-Eleven phases from the playable alpha to the **complete basic game for Treefolk vs Firewalkers**:
+Twelve phases from the playable alpha to the **complete basic game for Treefolk vs Firewalkers**:
 every SAI, every basic terrain and all four eighth-face icons, promotion and resurrection, the
 five elemental dragons, every spell those two species can cast, and their species abilities. It
 opens by replacing the two hand-authored forces with forces rolled from the seed.
@@ -72,8 +72,14 @@ G  Golden files: 25 recorded v0 games          DONE  cut before anything moves
                                    |
                         8 Species abilities   DONE -- no ability acts in its own phase
                                    |
-                        9 UI and AI for v1
+                        9 UI and rules polish   -- six slices, 9a-9f
+                                   |
+                        10 GreedyAI
 ```
+
+Phase 9 was once "UI and AI for v1". The first playtest of the complete rules turned the UI half
+into a list of its own, and the two halves share no files -- the AI is `src/ai/`, the UI is
+`src/ui/` plus two rules corrections -- so they are two phases.
 
 Phases 0a and 0b touch different files (`setup.ts` and `roll.ts`) and neither needs the other, so
 either order compiles. **Do 0b first anyway.** Its whole value is a golden file proving it changed
@@ -243,7 +249,7 @@ always picks the same way or picks at random; neither is a game. So v1 splits th
 each instead: **the winner takes the first march, the loser sets the Frontier.** No decision is
 raised and nothing needs an opinion.
 
-The real rule arrives with `GreedyAI` (Phase 9), which is the first thing in the project able to
+The real rule arrives with `GreedyAI` (Phase 10), which is the first thing in the project able to
 hold an opinion about which terrain it wants to fight on. Until then this house rule sits in
 `RULES-V0.md` §7 alongside the others.
 
@@ -2057,39 +2063,158 @@ misses logs nothing. It was left alone here, because nobody asked for it.
 
 ---
 
-## Phase 9 — UI and AI for v1
+## Phase 9 — UI and rules polish
 
-**Deliverable.** The surfaces that genuinely did not exist in v0. Every *decision* was already wired
-by its own phase; this is for the things a player needs to **see**.
+**Deliverable.** What a player needs to **see**, and two rules corrections that only playing found.
+Every *decision* was already wired by its own phase.
 
-- **A DUA / BUA / Summoning Pool panel.** Three areas that did not exist. The DUA is now a resource
-  you spend, so it needs to be as legible as the board.
-- **Active effects.** Every spell and breath effect with a duration, shown on the army or terrain it
-  targets, with what it does and when it expires. Without this, spells are invisible arithmetic.
-- **A spell picker.** Magic results per element, the castable list filtered by what you can afford,
-  and a running cost. This is the one genuinely new multi-step interaction and the only place the
-  "no wizard state in components" rule will be under real pressure — it belongs in `prompts.ts` as a
-  pure function over `pending`, like `damageSelection`.
-- **Dragons on the board.** A terrain card shows dragons present; the attack sequence is legible in
-  the log.
-- **Why a number is what it is.** With modifiers, the totals stop being obvious. The roll strip
-  should show the subtotal, each modifier, and the final — the pipeline's ten steps are the
-  explanation, so expose them. Phase 1 started this rather than waiting: `combat_resolved` carries
-  `unsavable` and `riposte` so the line adds up, and a rerolled die is drawn beside the die it came
-  from with an arrow. After Phase 2 the strip also stopped drawing an effect-only die as a blank,
-  and the log names the SAI behind each number — "**Counter** sends 4 straight back", "+ 3
-  unsavable **from Smite**" — via `saisBehind` / `saiPhrase` over `DieRoll.effects`. **That is the
-  pattern to extend, not replace**
- — each phase that can make a
-  number unexplainable pays for its own explanation, because a phase that defers it ships a log
-  that lies for however long Phase 9 takes.
-- **The AI needs a real opinion.** `PassiveAI` answering "cast nothing, target nothing" for 18
-  spells and 10 SAIs is not passive any more, it is broken. This is where `GreedyAI` — the next
-  rung of the ladder in `OVERVIEW.md` §4 — stops being optional: heuristic scoring over enumerated
-  legal actions, extended to cast the cheapest useful spell and target the most health it can kill.
+This section began as "UI and AI for v1", with a bullet list written before any of it could be
+played. Several of those bullets landed early, each with the phase that needed it: the DUA/BUA
+panel ("Fallen"), effects drawn on their army, the spell picker as a draft over `pending`, dragons
+on their terrain, and the log naming the SAI behind a number. What follows is the list the
+first playtest of the complete rules produced instead. The AI half is now Phase 10.
 
-**Exit criterion.** A full Treefolk vs Firewalkers game is playable end to end with every rule on,
-on a phone, and the log explains every number in it.
+**The pattern for numbers still holds**: each phase that can make a number unexplainable pays for
+its own explanation. 9c is where the modifiers that slipped through get paid for, all at once.
+
+**Stop after every slice.** Each slice is one commit, and each one ends by showing what changed on
+screen before the next begins. This phase is judged by looking at it.
+
+| Slice | Scope | State |
+|---|---|---|
+| **9a** | House rule: beneficial army spells target only your own armies. Four spell-announcement bugs | |
+| **9b** | Accelerated Growth becomes a decision; the "Replanting before AG" house rule retires with it | |
+| **9c** | Every modifier explicit: named steps in each roll's arithmetic, and the dragon attack's math | |
+| **9d** | The roll behind every decision, the enemy's included; Confuse shown and logged | |
+| **9e** | Board surfaces: both reserves, both summoning pools, a selectable DUA, a floating inspector, "look" mode | |
+| **9f** | One way to pick a die, the spell picker's count and colour, the 8th-face emphasis | |
+
+**The 25 goldens stay byte-identical and unregenerated throughout.** Everything here is gated behind
+a flag `V0_RULES` has off, or is a display-only field the digest excludes (9c).
+
+### 9a — targeting house rule, and the spell-announcement bugs
+
+**A new house rule: a beneficial spell targets only your own armies, and a harmful one only the
+opponent's.** The rules let Stone Skin land on an enemy army; the only use for that is in
+multiplayer, which this plan does not have. In the data it changes five spells -- Wind Walk,
+Flashfire, Fiery Weapon, Watery Double and Stone Skin -- from `army` to a new `own_army` target.
+Every harmful army spell was already `opposing_army`, and every SAI already obeys the rule.
+
+**What the rule deliberately leaves alone**, decided rather than overlooked:
+- **Terrain-targeted spells stay "any terrain"** -- Ash Storm, Wall of Fog, Wall of Thorns, Flash
+  Flood. They are aimed at a place, and whether a place helps is the caster's judgement.
+- **Mirage keeps "any unit"**, because aimed at your own dice it is a retreat.
+- **Summon Dragon keeps "any pool or terrain"**.
+
+**Four bugs found while planning this**, none reachable by the fuzz:
+1. **A non-cumulative spell could be staged at `count: 2`, and `reduce` threw.** The browser merges
+   a repeated pick into one cast, and nothing stopped it merging a second Lightning Strike.
+2. **Accelerated Growth borrowed Resurrect Dead's `own_dua` offers**, `minCount = health` included,
+   so a 2-health die in the DUA made a non-cumulative spell cost two castings and throw.
+3. **Wall of Thorns was offered at a terrain on its eighth face**, which its text forbids.
+4. **The same spell twice at the same target resolved twice.** Combined castings are one spell with
+   a bigger number, so two Hailstorm entries meant two save rolls, and two Flash Floods two bars of
+   six instead of one of twelve. Both clients merge, so only a hand-built action reached it; the
+   engine refuses it now.
+
+### 9b — Accelerated Growth becomes a decision
+
+`RULES-V0.md` §15 recorded "Accelerated Growth is taken automatically" with its cost: eight kill
+sites that cannot stop to ask. The cheaper shape is to **defer the exchange rather than suspend the
+kill**. `killUnits` records the offer on the turn; `stepGame` raises it **before the victory check**
+-- an army the kill emptied must not lose the game before its owner is asked whether a 1-health die
+takes its place -- and the answer performs the exchange. A kill-and-bury holds back the units on
+offer, and buries whichever are declined.
+
+**The "Replanting before Accelerated Growth" house rule (§16) retires as a side effect.** Replanting
+rolls first, and the owner decides on the exchange having seen it -- which is every option either
+order would have given.
+
+### 9c — every modifier is explicit
+
+Today a Flaming Shields or a Smite is named in the log, and a Galeforce, a Stone Skin, an Ash Storm,
+a Tower's uncounted IDs or a breath's halving is an unnamed `12 → 8` at best -- and on a dragon roll
+or a sheet header, nothing at all.
+
+- `Modifier` gains a display-only `source`, stamped by `armyRoll`.
+- `explainModifiers` walks steps 6-10 recording each step, and `applyModifiers` becomes its total so
+  the two cannot drift.
+- Roll log entries carry a `breakdown`. **`stableJson` drops that key**, because `V0_RULES` has
+  eighth-face ID doubling and every golden with a capture would otherwise change.
+- The strip reads `14 on the dice − 4 Galeforce + 2 Stone Skin = 12 saves`, in both clients.
+- **The dragon attack gets its arithmetic**: "12 damage − 4 saves = 8 damage" for the army, and
+  "7 melee + 3 missile vs 10 → slain" for the dragon.
+
+### 9d — the roll behind every decision
+
+A sheet shows the roll that raised it, and the one before it where that matters. **A player
+assigning damage sees the enemy's attack and their own saves**. At the delayed pause they see both
+rolls, not just the saves. And the roll stays on screen **while the enemy is deciding**, so an AI's
+Flame or Confuse is watched rather than guessed at.
+
+**Confuse was not a timing bug.** It resolves at the delayed pause, after the save roll lands, as
+the rulebook's step 2 says. It *looked* as if it fired on the attack roll for three reasons:
+- the human saw no dice while the AI chose;
+- the save faces from before the reroll were never logged;
+- the log's only strip carried the Confuse face.
+
+The save strip becomes pickable, and a `confused` entry logs each rerolled die, before → after.
+
+### 9e — board surfaces and the inspector
+
+- **Both Reserve Armies, always.** The enemy's rendered only while an SAI was aimed at it.
+- **Both summoning pools**, as inspectable dragon chips.
+- **The DUA becomes a surface you pick from**, not only a graveyard to look at.
+- **One floating inspector.** A unit, a dragon or a terrain -- opening one closes the others. It no
+  longer pushes the grid apart.
+- **"Look at dice" mode**: while a sheet is selecting dice, a toggle makes a tap inspect rather than
+  select, without losing the selection.
+
+### 9f — one way to pick
+
+**A die is picked where it is drawn**: on the board, a reserve card or the DUA panel. The sheet
+holds only answers that are not dice. Lightning Strike, Mirage and Path targets, Wild Growth and
+City partners, Resurrect Dead, Temple and treasure all move off sheet buttons.
+
+- **The spell picker gains a count** for the spells whose count scales their effect, so a triple
+  Stone Skin is one tap rather than three trips through spell → target. **The cost is readable** on
+  the accent colour.
+- **At the eighth face, keeping it is the primary answer** and stepping down to 7 is the small,
+  secondary one. It used to be the other way round.
+
+**Exit criterion.** Every number in a game explains itself on screen. Every decision shows the roll
+behind it. Every die is picked the same way. All of it is checked in a browser at phone width.
+
+---
+
+## Phase 10 — GreedyAI
+
+**Deliverable.** An opponent that plays. `PassiveAI` answering "cast nothing, target nothing" for
+18 spells and every SAI is not passive any more, it is broken -- and solo play against it has
+stopped being a test of the rules.
+
+`GreedyAI` is the next rung of the ladder in `OVERVIEW.md` §4: heuristic scoring over each
+pending's options. It scores expected damage, terrain progress and health kept, from exact face
+distributions. **It should be active even where that is not optimal**:
+- march every turn;
+- maneuver toward a useful face or the eighth;
+- attack whenever it expects damage;
+- cast spells: harmful on enemies it can reach, buffs on the army about to act, and Summon Dragon;
+- bring units back from Reserves;
+- promote and recruit whenever it is offered.
+
+An opponent that does something is a better test of the rules than one that does the best thing
+rarely.
+
+**The roll-off house rule retires here** (`RULES-V0.md` §7): the winner chooses the first turn *or*
+the Frontier, a decision that needs an opponent able to want a terrain. It is gated on the ruleset,
+so `V0_RULES` keeps the split.
+
+The app's opponent becomes `GreedyAI`, and the start screen gains an opponent picker.
+
+**Exit criterion.** A full Treefolk vs Firewalkers game is playable end to end with every rule on, on
+a phone, against an opponent that marches, maneuvers, casts and recruits. A 200-game
+`SPECIES_RULES` fuzz against `RandomAI` has `stuck === 0` and every activity counter `> 0`.
 
 ---
 
@@ -2112,15 +2237,17 @@ on a phone, and the log explains every number in it.
 | Three fixed terrains, all Towers | Phase 5 ✅ |
 | Two hand-authored 30-health forces, fixed race per player | Phase 0a |
 | The Frontier is a constant, and both forces must propose the same die | Phase 0a |
+| The roll-off winner marches first and the loser sets the Frontier (Phase 0a's own house rule) | Phase 10 |
+| Accelerated Growth is taken automatically, and Replanting always rolls before it | Phase 9b |
 
 **Two of these are replaced by another house rule, not by the real rule** — the only entries in this
 table that move twice.
 
 The Frontier stops being a constant in Phase 0a, but the rulebook's actual step 4 — the roll-off
 winner choosing between the first turn and the Frontier — needs an opponent capable of wanting a
-particular terrain. Until `GreedyAI` exists in Phase 9, v1 splits the two prizes one each: winner
+particular terrain. Until `GreedyAI` exists in Phase 10, v1 splits the two prizes one each: winner
 marches first, loser sets the Frontier. So §7 of `RULES-V0.md` gains a house rule in v1 and loses it
-again in Phase 9.
+again in Phase 10.
 
 "No dragons" does the same thing over Phases 6 and 7. The real rule is that a dragon leaves the
 Summoning Pool only via `Summon Dragon`, which is a spell — so Phase 6 on its own would build the
@@ -2225,7 +2352,7 @@ completely different, and do not treat that as a regression.
 
 **`PassiveAI` will quietly stop being a fair opponent.** It is honest in v0 because it has nothing
 to decline except attacks. Once it is declining 18 spells and every SAI target, "passive" becomes
-"handicapped", and solo play stops being a test of the rules. Phase 9's `GreedyAI` is not optional
+"handicapped", and solo play stops being a test of the rules. Phase 10's `GreedyAI` is not optional
 polish.
 
 ## Not in this plan

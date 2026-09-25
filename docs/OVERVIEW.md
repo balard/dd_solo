@@ -328,7 +328,7 @@ Rules-level open questions are in `RULES-V0.md` §12. Project-level:
   after Phase 1, when a fifth of the faces stop being blanks.
 - **`PassiveAI` has an expiry date.** It is an honest opponent in v0 because it has nothing to
   decline but attacks. Once it is declining 18 spells and every SAI target, "passive" quietly
-  becomes "handicapped" and solo play stops testing the rules. `PLAN-V1.md` Phase 9 is where
+  becomes "handicapped" and solo play stops testing the rules. `PLAN-V1.md` Phase 10 is where
   `GreedyAI` (§4) lands; the open question is whether the end of the ladder is early enough.
 - The rulebook PDFs are ~21 MB committed to git. Fine for a personal repo; worth moving to a
   release asset or Git LFS if this ever goes public.
