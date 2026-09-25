@@ -667,9 +667,10 @@ describe('the sub-rolls', () => {
 
   /**
    * Bullseye is a **missile** SAI, its X is the 4 printed on the face of a 3-health
-   * large die, and "roll this unit again" is the roller's own die at step 3 -- Rend's
-   * sentence word for word, so `rerollSweep` already does it. The reroll is what the
-   * second Firestormer draw below is.
+   * large die, and "roll this unit again" is the roller's own die at step 3 -- **after**
+   * the SAI has resolved. So the targets' save rolls are drawn first and the
+   * Firestormer's second throw last; this sequence had them the other way round until
+   * the Double Strike fix, which is the order the rules forbid.
    */
   it('asks for a save roll on a missile attack, budget off the face and not the die', () => {
     const start = advance(
@@ -678,8 +679,8 @@ describe('the sub-rolls', () => {
         defenders: ['treefolk.oak', 'treefolk.oak'],
         action: 'missile',
         rng: rngShowing(
-          ['firewalkers.firestormer', 'firewalkers.firestormer', 'treefolk.oak', 'treefolk.oak'],
-          [BULLSEYE_FACE, FIRESTORMER_ID, OAK_SAVE, OAK_MELEE],
+          ['firewalkers.firestormer', 'treefolk.oak', 'treefolk.oak', 'firewalkers.firestormer'],
+          [BULLSEYE_FACE, OAK_SAVE, OAK_MELEE, FIRESTORMER_ID],
         ),
       }),
     )
@@ -698,6 +699,81 @@ describe('the sub-rolls', () => {
   })
 
   /**
+   * The reported bug (seed 82010, turn 20): a Strangle Vine rolled Double Strike, its
+   * reroll came up Smother, and both were asked about together -- the die had been
+   * thrown again before the Double Strike was applied.
+   *
+   * Step 3: "apply these effects one at a time until all re-rolls have been made", and
+   * Double Strike says "... those that do not generate a save result are killed. Roll
+   * this unit again". So the Double Strike is asked, resolved and its deaths logged, and
+   * only then is the die thrown again; what it shows joins the roll after that.
+   */
+  it('resolves a Double Strike fully before its die is thrown again', () => {
+    /** Strangle Vine face 2 is `4 SAI:Double Strike`; Darktree face 4 is Smother. */
+    const VINE_DOUBLE_STRIKE = 2
+    const VINE_MELEE = 1
+    const start = advance(
+      stage({
+        attackers: ['treefolk.strangle_vine'],
+        defenders: ['treefolk.oak', 'treefolk.oak'],
+        rng: rngShowing(
+          ['treefolk.strangle_vine', 'treefolk.oak', 'treefolk.oak', 'treefolk.strangle_vine'],
+          [VINE_DOUBLE_STRIKE, OAK_SAVE, OAK_MELEE, VINE_MELEE],
+        ),
+      }),
+    )
+
+    // Asked about the Double Strike, and its die has not been thrown a second time.
+    expect(start.pending).toMatchObject({ kind: 'sai_target', sai: 'Double Strike' })
+    expect(start.turn.combat?.attack?.dice).toHaveLength(1)
+
+    const [saved, killed] = idsOf(start, 'treefolk.oak') as [UnitId, UnitId]
+    const answered = applyAction(start, { kind: 'sai_target', unitIds: [saved, killed] })
+    // The kill is written before the reroll exists.
+    expect(answered.units[killed]?.location).toEqual({ kind: 'dua' })
+    expect(answered.turn.combat?.attack?.dice).toHaveLength(1)
+    expect(answered.turn.combat?.attack?.rerollDue).toBeDefined()
+
+    // The next machine step throws it again, and the new face counts.
+    const done = advance(answered)
+    const resolved = done.log.find((e) => e.kind === 'combat_resolved')
+    if (resolved?.kind !== 'combat_resolved') throw new Error('no exchange resolved')
+    expect(resolved.attackDice.map((d) => d.faceIndex)).toEqual([VINE_DOUBLE_STRIKE, VINE_MELEE])
+    expect(resolved.attackDice[1]?.reroll).toBe(true)
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('asks about what the reroll shows only after the Double Strike, as the report expected', () => {
+    // The reported roll: Double Strike, and its second throw a Smother (Strangle Vine
+    // face 6). Smother is a step-4 SAI of the new die, asked once it exists.
+    const VINE_DOUBLE_STRIKE = 2
+    const VINE_SMOTHER = 6
+    const start = advance(
+      stage({
+        attackers: ['treefolk.strangle_vine'],
+        defenders: ['treefolk.oak', 'treefolk.oak', 'treefolk.oak'],
+        rng: rngShowing(
+          ['treefolk.strangle_vine', 'treefolk.oak', 'treefolk.oak', 'treefolk.strangle_vine'],
+          [VINE_DOUBLE_STRIKE, OAK_MELEE, OAK_MELEE, VINE_SMOTHER],
+        ),
+      }),
+    )
+    expect(start.pending).toMatchObject({ kind: 'sai_target', sai: 'Double Strike' })
+
+    const [a, b] = idsOf(start, 'treefolk.oak') as [UnitId, UnitId]
+    const next = advance(applyAction(start, { kind: 'sai_target', unitIds: [a, b] }))
+
+    // Both Oaks rolled melee, so both died -- before the Smother existed to be asked about.
+    expect(next.units[a]?.location).toEqual({ kind: 'dua' })
+    expect(next.units[b]?.location).toEqual({ kind: 'dua' })
+    expect(next.pending).toMatchObject({ kind: 'sai_target', sai: 'Smother' })
+    expect(next.turn.combat?.attack?.dice.map((d) => d.faceIndex)).toEqual([
+      VINE_DOUBLE_STRIKE,
+      VINE_SMOTHER,
+    ])
+  })
+
+  /**
    * The step-8 stamp, which is the one a sub-roll gets wrong by default: a die showing
    * Fly, Hoof, Counter or Rise from the Ashes *did* generate a save result, it just did
    * it at step 8 rather than step 5. Kill it and every SAI-faced target dies to a
@@ -710,8 +786,8 @@ describe('the sub-rolls', () => {
         defenders: ['firewalkers.phoenix'],
         action: 'missile',
         rng: rngShowing(
-          ['firewalkers.firestormer', 'firewalkers.firestormer', 'firewalkers.phoenix'],
-          [BULLSEYE_FACE, FIRESTORMER_ID, PHOENIX_FLY],
+          ['firewalkers.firestormer', 'firewalkers.phoenix', 'firewalkers.firestormer'],
+          [BULLSEYE_FACE, PHOENIX_FLY, FIRESTORMER_ID],
         ),
       }),
     )

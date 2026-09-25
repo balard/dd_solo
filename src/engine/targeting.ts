@@ -38,6 +38,12 @@ export type TargetTask =
       readonly fate: 'kill' | 'bury'
       /** Seize: where an escapee goes. Omitted means it stays where it stood. */
       readonly escapeTo?: 'reserve'
+      /**
+       * Bullseye and Double Strike: the die to throw again once this task has fully
+       * resolved -- "roll this unit again", which the rules put after the kill. A
+       * step-3 task, so never combined with another. Omitted on every other task.
+       */
+      readonly rerollAfter?: string
     }
   /** Sleep: one unit in the army being attacked. */
   | { readonly kind: 'sleep'; readonly sai: string }

@@ -172,7 +172,12 @@ export function validateState(state: GameState): string[] {
   // An effect whose army has emptied or whose unit has left play should have been
   // dropped at the end of the last action. Asking `pruneEffects` rather than repeating
   // its conditions means the check cannot drift away from the rule it is checking.
-  if (pruneEffects(state) !== state) {
+  //
+  // **Not while an Accelerated Growth offer is open** (Phase 9b). `stepGame` raises the
+  // offer *before* pruning on purpose: the answer may put a unit back into the army the
+  // kill emptied, and its Stone Skin must still be there when it does. Found by the
+  // spell fuzz once the Double Strike fix moved the dice onto a path that reached it.
+  if (state.turn.growthOffers === undefined && pruneEffects(state) !== state) {
     problems.push(
       `effects: ${state.effects.length - pruneEffects(state).effects.length} outlived their ` +
         `target and were not pruned`,

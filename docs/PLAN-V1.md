@@ -2372,6 +2372,27 @@ With the replay scaffold (reverted):
 **Exit criterion.** Every number in a game explains itself on screen. Every decision shows the roll
 behind it. Every die is picked the same way. All of it is checked in a browser at phone width.
 
+#### What playing it found afterwards
+
+**Double Strike was resolved in the wrong order, and had been since Phase 4d.** On a random-force
+seed (82010, turn 20) a Strangle Vine rolled Double Strike. Its reroll came up Smother, and the
+player was asked for both targets back to back before anything happened. The rules' step 3 applies
+a rerolling SAI "one at a time", and Double Strike's own text puts "roll this unit again" after
+the kill. So the Double Strike must be asked, resolved, its deaths taken and its triggers
+answered, and only then is the die thrown again. The fix holds the die out of the step-3 sweep,
+queues each Bullseye or Double Strike first with the die it owes, and throws the die on the next
+machine step, after `stepGame` has raised any Accelerated Growth the kill offered. The new face
+joins the roll where the rules put it. The two Bullseye tests had their dice scripted in the old
+order, and now script the targets' saves first.
+
+The spell fuzz found a second bug on the way, one that 9b had left behind. `validateState` insisted
+every effect's army still existed while an Accelerated Growth offer was open, but `stepGame`
+deliberately holds pruning back until the answer, because the answer may refill the army. The
+check now waits for the offer too.
+
+`SAVE_VERSION` is 13, for dice order. The goldens did not move: a `V0_RULES` roll never holds a
+die.
+
 **Phase 9 is landed.** The exit criterion is met with one reservation: "at phone width" was checked
 for the inspector and the dock, not for every sheet.
 

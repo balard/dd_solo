@@ -477,9 +477,21 @@ export function rerollSweep(
   spec: RollSpec,
   ruleSet: RuleSet,
   rng: RngState,
+  /**
+   * Leave a die whose reroll comes *with a target* where it is (post-Phase 9 fix):
+   * Bullseye and Double Strike are applied at step 3, "one at a time", and "roll this
+   * unit again" comes after the kill. So their die is not thrown again here; the
+   * exchange applies the SAI -- targets, sub-roll, deaths and whatever those trigger
+   * -- and only then rerolls it (`rerollHeld` in `combat.ts`). Rend, which targets
+   * nobody, still rerolls here, and a Rend chain that lands on a Double Strike stops
+   * on it.
+   */
+  hold = false,
 ): readonly [readonly RawDie[], RngState] {
   const out: RawDie[] = [...dice]
-  const queue: RawDie[] = dice.filter((die) => classify(faceOf(die), spec, ruleSet).reroll)
+  const rerolls = (die: RawDie) =>
+    classify(faceOf(die), spec, ruleSet).reroll && !(hold && holdsTargetedReroll(die, spec, ruleSet))
+  const queue: RawDie[] = dice.filter(rerolls)
 
   let state = rng
   let rerolled = 0
@@ -504,10 +516,20 @@ export function rerollSweep(
       reroll: true as const,
     }
     out.push(again)
-    if (classify(faceOf(again), spec, ruleSet).reroll) queue.push(again)
+    if (rerolls(again)) queue.push(again)
   }
 
   return [out, state] as const
+}
+
+/**
+ * Whether this die's face rerolls *after* targeting somebody -- Bullseye and Double
+ * Strike, "the targets make a save roll ... roll this unit again". Step 3 applies them
+ * one at a time, so the reroll waits for the SAI to resolve.
+ */
+export function holdsTargetedReroll(die: RawDie, spec: RollSpec, ruleSet: RuleSet): boolean {
+  const contribution = classify(faceOf(die), spec, ruleSet)
+  return contribution.reroll && contribution.effects.some((effect) => effect.kind === 'target_enemy')
 }
 
 /**

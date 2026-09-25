@@ -9,8 +9,12 @@ import type { TerrainFaceNumber } from '../data/types'
 
 import { armyRoll, iconAt, type ArmyRollInput } from './effects'
 import type { Modifier, RollEffect } from './pipeline'
+import { unitType } from '../data/load'
+import { rollDie } from './rng'
+import { delayedTasks, targetTasks, type TargetTask } from './targeting'
 import {
   asResult,
+  holdsTargetedReroll,
   resolveFaces,
   rerollSweep,
   rollFaces,
@@ -281,9 +285,75 @@ export function rollAttack(state: GameState, spec: AttackSpec): readonly [Attack
   const rollSpec = attackRollSpec(spec, attackers.modifiers)
 
   const [rolled, afterRoll] = rollFaces(attackers.units, state.rng)
-  const [swept, afterSweep] = rerollSweep(rolled, rollSpec, state.ruleSet, afterRoll)
+  // Held: a Bullseye or Double Strike die rolls again only once its SAI has resolved.
+  const [swept, afterSweep] = rerollSweep(rolled, rollSpec, state.ruleSet, afterRoll, true)
 
   return [{ dice: swept }, afterSweep] as const
+}
+
+/**
+ * The attack roll's targeting decisions, sorted into the rulebook's steps.
+ *
+ * - **step 3**: every die whose face rerolls after targeting -- Bullseye, Double Strike
+ *   -- as a task of its own, carrying the die to throw again once it resolves. "Apply
+ *   these effects one at a time until all re-rolls have been made", so they are never
+ *   combined, and they come before anything else.
+ * - **step 4**: every other targeting SAI, combined the ordinary way.
+ * - **delayed**: Choke and Confuse, which wait for the save dice.
+ *
+ * Until this split a Double Strike's die was thrown again in the step-3 sweep, before
+ * the Double Strike itself was applied, and the two were then asked about together
+ * with whatever the reroll had shown -- so a death the Double Strike caused, and its
+ * reactions, came after a reroll the rules put after them.
+ */
+export function splitAttackTasks(
+  state: GameState,
+  spec: AttackSpec,
+  dice: readonly RawDie[],
+): {
+  readonly stepThree: readonly TargetTask[]
+  readonly stepFour: readonly TargetTask[]
+  readonly delayed: readonly TargetTask[]
+} {
+  const rollSpec = attackRollSpec(spec, attackerRoll(state, spec).modifiers)
+  const held = dice.filter((die) => holdsTargetedReroll(die, rollSpec, state.ruleSet))
+  const rest = dice.filter((die) => !held.includes(die))
+
+  const stepThree = held.flatMap((die) =>
+    targetTasks(resolveFaces([die], rollSpec, state.ruleSet).effects).map((task) =>
+      task.kind === 'enemy' ? { ...task, rerollAfter: die.unitId } : task,
+    ),
+  )
+  const effects = rest.length === 0 ? [] : resolveFaces(rest, rollSpec, state.ruleSet).effects
+  return { stepThree, stepFour: targetTasks(effects), delayed: delayedTasks(effects) }
+}
+
+/**
+ * "Roll this unit again and apply the new result as well" -- the second half of a
+ * Bullseye or Double Strike, once the first has fully resolved.
+ *
+ * The new die is swept for Rend like any step-3 reroll, and held again if it shows
+ * another Bullseye or Double Strike. What comes back is the dice to append and the
+ * decisions they bring, already sorted into steps.
+ */
+export function rerollHeld(
+  state: GameState,
+  spec: AttackSpec,
+  unitId: string,
+): {
+  readonly dice: readonly RawDie[]
+  readonly rng: RngState
+  readonly tasks: ReturnType<typeof splitAttackTasks>
+} {
+  const unit = state.units[unitId]
+  const none = { stepThree: [], stepFour: [], delayed: [] }
+  if (unit === undefined) return { dice: [], rng: state.rng, tasks: none }
+
+  const rollSpec = attackRollSpec(spec, attackerRoll(state, spec).modifiers)
+  const [faceIndex, afterRoll] = rollDie(state.rng, unitType(unit.typeId).faces.length)
+  const again: RawDie = { unitId, typeId: unit.typeId, faceIndex, reroll: true }
+  const [dice, rng] = rerollSweep([again], rollSpec, state.ruleSet, afterRoll, true)
+  return { dice, rng, tasks: splitAttackTasks(state, spec, dice) }
 }
 
 /**

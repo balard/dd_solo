@@ -116,8 +116,14 @@ const KEY = 'dd_solo.save'
  *    spell now stops for `accelerated_growth` where it used to exchange on the spot, so
  *    a version-11 record would be answering the question after it with the wrong
  *    action. No dice move.
+ *
+ * 13: Bullseye and Double Strike resolve before their die rolls again (the fix after
+ *    Phase 9). Dice consumption *and* decision order: the reroll's draw moves after the
+ *    targets' sub-rolls, and a face the reroll shows is asked about after the SAI rather
+ *    than beside it -- so a version-12 record would roll different faces from the same
+ *    seed and answer the wrong questions.
  */
-export const SAVE_VERSION = 12
+export const SAVE_VERSION = 13
 
 
 export interface SavedGame {

@@ -14,10 +14,11 @@
  * rather than only at end of turn.
  */
 import {
-  attackEffects,
   attackFacts,
   attackRollDice,
   parkedAttackRoll,
+  rerollHeld,
+  splitAttackTasks,
   parkedSaveRoll,
   finishSaves,
   legalActions,
@@ -89,7 +90,7 @@ import {
 import { doubleIdsModifier, ignoreIdsModifiers, type Modifier } from './pipeline'
 import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
 import { hasAbility, terrainHas } from './species'
-import { delayedTasks, targetTasks, type TargetTask } from './targeting'
+import { targetTasks, type TargetTask } from './targeting'
 import { unitType } from '../data/load'
 import { spell } from '../data/spells'
 import {
@@ -699,6 +700,7 @@ function withTargets(
   combat: CombatState,
   attack: PendingAttack,
   targets: readonly TargetTask[],
+  rerollDue?: UnitId,
 ): CombatState {
   return {
     ...combat,
@@ -706,6 +708,7 @@ function withTargets(
       dice: attack.dice,
       ...(targets.length > 0 ? { targets } : {}),
       ...(attack.delayed !== undefined ? { delayed: attack.delayed } : {}),
+      ...(rerollDue !== undefined ? { rerollDue } : {}),
     },
   }
 }
@@ -757,7 +760,11 @@ function dropHeadTask(state: GameState): GameState {
   const step = state.turn.marchStep
 
   if (step === 'sai_target_attack' || step === 'sai_target_counter') {
-    return withTurn(state, { combat: withTargets(combat, requireAttack(state, combat), rest) })
+    // A Bullseye or Double Strike leaves its die owed a second throw, which the next
+    // machine step makes -- after anything its deaths triggered has been asked.
+    const head = taskQueue(state)[0]
+    const due = head?.kind === 'enemy' ? head.rerollAfter : undefined
+    return withTurn(state, { combat: withTargets(combat, requireAttack(state, combat), rest, due) })
   }
   return withTurn(state, { combat: withSaves(combat, requireSaves(state, combat), { tasks: rest }) })
 }
@@ -976,6 +983,9 @@ function taskPending(
  */
 function stepTasks(state: GameState, isCounter: boolean, delayed: boolean): GameState {
   const spec = exchangeSpec(state, isCounter)
+  const owed = delayed ? undefined : state.turn.combat?.attack?.rerollDue
+  if (owed !== undefined) return rollHeldAgain(state, spec, owed)
+
   const queue = taskQueue(state)
   const head = queue[0]
 
@@ -994,6 +1004,40 @@ function stepTasks(state: GameState, isCounter: boolean, delayed: boolean): Game
   if (head.kind === 'cantrip') return openCantripWindow(state, spec, head, delayed)
 
   return { ...state, pending: taskPending(state, spec, head, queue.length, delayed) }
+}
+
+/**
+ * The second throw of a Bullseye or Double Strike die, once its SAI has resolved.
+ *
+ * Step 3's "apply these effects one at a time until all re-rolls have been made": the
+ * new die joins the roll, a Bullseye or Double Strike on it queues behind the step-3
+ * tasks still waiting, anything else it targets joins step 4 at the back, and a Choke
+ * or Confuse waits with the delayed ones.
+ */
+function rollHeldAgain(state: GameState, spec: AttackSpec, unitId: UnitId): GameState {
+  const combat = requireCombat(state)
+  const attack = requireAttack(state, combat)
+  const { dice, rng, tasks } = rerollHeld(state, spec, unitId)
+
+  const queue = attack.targets ?? []
+  const stepThree = queue.filter((task) => task.kind === 'enemy' && task.rerollAfter !== undefined)
+  const stepFour = queue.filter((task) => !stepThree.includes(task))
+  const targets = [...stepThree, ...tasks.stepThree, ...stepFour, ...tasks.stepFour]
+  const delayedTasks = [...(attack.delayed ?? []), ...tasks.delayed]
+
+  return withTurn(
+    { ...state, rng },
+    {
+      combat: {
+        ...combat,
+        attack: {
+          dice: [...attack.dice, ...dice],
+          ...(targets.length > 0 ? { targets } : {}),
+          ...(delayedTasks.length > 0 ? { delayed: delayedTasks } : {}),
+        },
+      },
+    },
+  )
 }
 
 /**
@@ -1162,12 +1206,14 @@ function afterFlashfire(state: GameState, isCounter: boolean, onSaves: boolean):
   const attack = requireAttack(state, combat)
 
   if (!onSaves) {
-    const effects = attackEffects(state, spec, attack)
-    const targets = targetTasks(effects)
+    // Step 3's SAIs first -- a Bullseye or Double Strike resolves, and only then is its
+    // die thrown again -- and step 4's after them.
+    const split = splitAttackTasks(state, spec, attack.dice)
+    const targets = [...split.stepThree, ...split.stepFour]
     // Choke and Confuse wait for the defender's dice. They are parked with the attack
     // because they are *this* roll's SAIs and exist two steps before there is anything
     // to apply them to.
-    const delayed = delayedTasks(effects)
+    const delayed = split.delayed
 
     return withTurn(state, {
       marchStep: isCounter ? 'sai_target_counter' : 'sai_target_attack',

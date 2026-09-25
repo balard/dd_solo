@@ -367,9 +367,27 @@ rulebook plainly:
 | **The sub-roll is a save roll against *nothing*** | House rule. A Counter or Volley face on a Bullseye target generates its saves and sends no damage back — the narrow reading of "any other save roll", chosen because the wide one gives a sub-roll a damage channel the exchange has nowhere to put. |
 | **Roll order is the board's** | House rule, and the same one `death.ts` follows: targets roll in the order they stand in, not the order the roller named them, so two players naming the same dice differently get the same game. |
 
-**"Roll this unit again" is the roller's own die**, not the target's — Rend's sentence word for
-word, so Bullseye and Double Strike reroll at step 3 of the attack roll, and a reroll showing the
-same SAI again adds its budget to the same decision.
+**"Roll this unit again" is the roller's own die**, not the target's, and it comes **after** the
+SAI has resolved. Step 3 says "check to see if any existing effects will force or allow a die to be
+re-rolled. This includes SAIs that have a re-rolling effect (for example, Bullseye). Apply these
+effects one at a time", and both SAIs end "... those that do not generate a save result are
+killed. Roll this unit again and apply the new result as well." So a Bullseye or Double Strike is
+asked, resolved, and its deaths -- and whatever they trigger, an Accelerated Growth offer, a Rise
+from the Ashes roll -- all happen before the die is thrown again. Each is a decision of its own,
+never combined with another, and all of them come before step 4's SAIs. What the new throw shows
+joins the roll: a second Bullseye or Double Strike is applied the same way, and anything else is
+asked about at step 4 with the rest.
+
+*Until the fix after Phase 9* these rerolled in the step-3 sweep with Rend, before being applied,
+and a reroll showing the same SAI added its budget to the same decision. That put the second face
+on the table before the first had killed anything, which the rules' order does not allow.
+**Rend is unchanged**: it targets nobody, so there is nothing to apply first, and it still
+rerolls in the sweep.
+
+**Step 3's order among its own effects** -- a Rend, a Bullseye, a Flashfire -- is not given by the
+rules beyond "one at a time". Here Rend rerolls first, in the sweep, then Flashfire's pause, then
+the Bullseye and Double Strike decisions in roll order. A house rule, and the order that lets a
+player see every die before choosing a target.
 
 **An escapee is not killed**, so no death trigger fires on one. A Seized die that rolls its ID goes
 to Reserves untouched; a Seized Phoenix that *fails* is killed like anything else and gets its Rise

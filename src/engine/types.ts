@@ -240,6 +240,13 @@ export interface PendingAttack {
    * to apply them to.
    */
   readonly delayed?: readonly TargetTask[]
+  /**
+   * A Bullseye or Double Strike that has just resolved, whose die is owed its second
+   * throw. Set when the task is answered and spent on the next machine step -- *after*
+   * `stepGame` has raised anything the SAI's deaths triggered, such as an Accelerated
+   * Growth offer. Omitted otherwise.
+   */
+  readonly rerollDue?: UnitId
 }
 
 /**

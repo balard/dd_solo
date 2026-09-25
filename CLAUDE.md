@@ -240,7 +240,17 @@ These are the things that break the project if violated:
   roll (p. 28), a die that cannot be rolled fails and draws nothing, the sub-roll is a save roll
   against **nothing** (so a Counter on it saves but sends no damage back), and targets roll in board
   order rather than the order the roller named them. "Roll this unit again" is the *roller's* die,
-  at step 3, exactly as in Rend.
+  at step 3 -- but **after** the SAI has resolved, not in the sweep with Rend:
+  - **Bullseye and Double Strike are step-3 SAIs, applied one at a time** (fixed after Phase 9,
+    from a reported Double Strike whose reroll came up Smother and was asked about in the same
+    breath). The sweep holds their die (`rerollSweep`'s `hold`), each becomes its own task at the
+    front of the targeting queue carrying `rerollAfter`, and answering it leaves
+    `attack.rerollDue`. The *next* machine step throws the die again (`rollHeldAgain`), after
+    `stepGame` has asked about anything the kills triggered -- an Accelerated Growth offer. The
+    new face joins the roll: another Bullseye or Double Strike queues behind the step-3 tasks
+    still waiting, a step-4 SAI goes to the back, and Choke or Confuse to the delayed list.
+  - A `V0_RULES` roll never holds a die, since nothing targets there, which is why the goldens
+    did not move.
 - **Choke and Confuse are *delayed*: they are chosen after the defender's dice land** (v1 Phase 4e).
   That is the rulebook's step 2, and it is why the save roll is two march steps. Choke may take only
   the dice that rolled an ID icon -- `Pending.sai_target.eligible`, the one targeting rule that is a
