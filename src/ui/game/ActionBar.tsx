@@ -42,6 +42,7 @@ import {
   growthDraft,
   pickableIn,
   rollsBehind,
+  selectModeFor,
   tableRollHeading,
   promoteDraft,
   saiTargetSelection,
@@ -107,20 +108,56 @@ export function ActionBar(props: {
   onClearDraft: () => void
 
   dispatch: (action: GameAction) => void
+
+  /** "Look at dice" (Phase 9e): taps inspect rather than select, draft kept. */
+  looking: boolean
+  onLook: (looking: boolean) => void
+  /** Opens the floating inspector on a die -- from a strip here, or anywhere. */
+  onInspect: (id: UnitId | null) => void
 }) {
-  const { state, human, pending, selection, onToggle } = props
+  const { state, human, pending, selection, onToggle, looking, onLook, onInspect, ...rest } = props
   const options = state.winner === null ? pickableIn(pending, state) : null
   const pick =
-    options === null || pending?.player !== human
+    options === null || pending?.player !== human || looking
       ? undefined
       : { options: options as ReadonlySet<string>, selected: selection as ReadonlySet<string>, onToggle }
+  // Offered whenever the answer is dice -- on the board, in the DUA or in a strip --
+  // because that is exactly when a tap on a die cannot also open it.
+  const picksDice = pending?.player === human && (selectModeFor(pending, human) !== null || options !== null)
 
   return (
     <div className="action-dock">
       {state.winner === null && (
-        <RollsBehindBlock state={state} human={human} pending={pending} pick={pick} />
+        <RollsBehindBlock
+          state={state}
+          human={human}
+          pending={pending}
+          pick={pick}
+          onInspect={(id) => onInspect(id)}
+        />
       )}
-      <Sheet {...props} />
+      {state.winner === null && picksDice && (
+        <div className={`look-toggle ${looking ? 'is-looking' : ''}`}>
+          <button type="button" className="choice secondary minor" onClick={() => onLook(!looking)}>
+            {looking ? 'Back to choosing' : 'Look at dice'}
+          </button>
+          {looking && (
+            <span className="muted">
+              tap any die to see its faces — your picks so far are kept
+            </span>
+          )}
+        </div>
+      )}
+      {!looking && (
+        <Sheet
+          {...rest}
+          state={state}
+          human={human}
+          pending={pending}
+          selection={selection}
+          onToggle={onToggle}
+        />
+      )}
     </div>
   )
 }
@@ -130,6 +167,7 @@ function RollsBehindBlock({
   human,
   pending,
   pick,
+  onInspect,
 }: {
   state: GameState
   human: PlayerId
@@ -141,6 +179,7 @@ function RollsBehindBlock({
         readonly onToggle: (unitId: string) => void
       }
     | undefined
+  onInspect: (unitId: string) => void
 }) {
   const behind = rollsBehind(state, pending)
   if (behind === null) return null
@@ -156,6 +195,7 @@ function RollsBehindBlock({
                 {...(roll.roll.total === undefined ? {} : { total: roll.roll.total })}
                 {...(roll.roll.math === undefined ? {} : { math: roll.roll.math })}
                 {...(pick === undefined ? {} : { pick })}
+                onInspect={onInspect}
               />
             </div>
           ))

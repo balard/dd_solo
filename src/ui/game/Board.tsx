@@ -192,16 +192,19 @@ function strength(units: readonly { typeId: string }[]) {
  * Whose pool it came from is still worth showing -- it decides who rolls it, and it
  * is the only thing distinguishing two dragons standing in the same place.
  */
-function DragonRow({
+export function DragonRow({
   dragons,
   human,
   inspecting,
   onInspect,
+  inPool = false,
 }: {
   dragons: readonly DragonInPlay[]
   human: PlayerId
   inspecting: string | null
   onInspect: (id: string | null) => void
+  /** A Summoning Pool rather than a terrain (Phase 9e): it attacks nobody from there. */
+  inPool?: boolean
 }) {
   if (dragons.length === 0) return null
   return (
@@ -211,7 +214,7 @@ function DragonRow({
         const isOpen = inspecting === dragon.id
         const label = `${dragonName(dragon.dieId)} — ${
           dragon.owner === human ? 'yours' : "the enemy's"
-        }, and it attacks whoever is marching`
+        }${inPool ? ', waiting to be summoned' : ', and it attacks whoever is marching'}`
         return (
           <div className={`dragon-wrap ${isOpen ? 'is-open' : ''}`} key={dragon.id}>
             <button
@@ -236,30 +239,35 @@ function DragonRow({
                 floor={0}
               />
               {dragonName(dragon.dieId)}
-              <span className="muted">{dragon.owner === human ? ' (yours)' : ' (enemy)'}</span>
+              {!inPool && (
+                <span className="muted">{dragon.owner === human ? ' (yours)' : ' (enemy)'}</span>
+              )}
             </button>
-
-            {isOpen && (
-              <div className="die-detail">
-                <p className="detail-head">
-                  <b>{dragonName(dragon.dieId)}</b>
-                  <span className="muted">
-                    {DRAGON_HEALTH} health · {DRAGON_AUTOMATIC_SAVES} automatic saves · d12
-                  </span>
-                  <ElementDots elements={[die.element]} />
-                </p>
-                <p className="sai-text">
-                  Ten of one type kills it — melee <em>or</em> missile, never both. Five if it
-                  rolls its belly. Its breath is <b>{BREATH_NAME[die.element]}</b>:{' '}
-                  {BREATH_TEXT[die.element]}
-                </p>
-                <DragonFaceSheet dieId={dragon.dieId} />
-              </div>
-            )}
           </div>
         )
       })}
     </div>
+  )
+}
+
+/** Every face of a dragon die and what kills it, for the floating inspector (9e). */
+export function DragonDetail({ dieId }: { dieId: string }) {
+  const die = dragonDie(dieId)
+  return (
+    <>
+      <p className="detail-head">
+        <b>{dragonName(dieId)}</b>
+        <span className="muted">
+          {DRAGON_HEALTH} health · {DRAGON_AUTOMATIC_SAVES} automatic saves · d12
+        </span>
+        <ElementDots elements={[die.element]} />
+      </p>
+      <p className="sai-text">
+        Ten of one type kills it — melee <em>or</em> missile, never both. Five if it rolls its
+        belly. Its breath is <b>{BREATH_NAME[die.element]}</b>: {BREATH_TEXT[die.element]}
+      </p>
+      <DragonFaceSheet dieId={dieId} />
+    </>
   )
 }
 
@@ -488,7 +496,6 @@ export function Board({
               </p>
             )}
 
-            {facesOpen && <TerrainDetail terrain={terrain} />}
 
             {/* A terrain effect sits on the *place*, not on either army: Ash Storm
                 subtracts from both sides' rolls here and Wall of Fog wards the place

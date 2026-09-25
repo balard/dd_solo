@@ -9,7 +9,7 @@
  * forced rather than tidy: `GameView` holds hooks for the selection and inspection
  * drafts, so the phase check cannot be an early return inside it.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { unitType } from '../data/load'
 import {
@@ -17,15 +17,15 @@ import {
   deadUnits,
 
   livingUnits,
+  pooledDragons,
   speciesOf,
   type PlayerId,
   type PromotionPair,
-  type TerrainSlot,
   type UnitId,
 } from '../engine/types'
 
 import { ActionBar } from './game/ActionBar'
-import { Board, EffectList } from './game/Board'
+import { Board, DragonRow, EffectList } from './game/Board'
 import { DiceGrid } from './game/DiceGrid'
 import { speciesInfo } from './game/Elements'
 import { LogPanel } from './game/LogPanel'
@@ -39,6 +39,7 @@ import {
 } from './game/prompts'
 import { stageCast, type SpellAim, type SpellDraftCast } from '../engine/magic'
 
+import { Inspector, type InspectTarget } from './game/Inspector'
 import { NewGameScreen } from './game/NewGameScreen'
 import { useGame, type PlayingGame } from './game/useGame'
 import { RuleSetProvider } from './game/useRuleSet'
@@ -88,9 +89,13 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // picked the spell" from "I have picked how to pay for it".
   const [aiming, setAiming] = useState<SpellAim | null>(null)
 
-  const [inspecting, setInspecting] = useState<UnitId | null>(null)
+  // One thing open at a time, whatever it is (Phase 9e). There used to be two states
+  // here -- a unit or dragon id, and a terrain -- and opening one never closed the other.
+  const [inspect, setInspect] = useState<InspectTarget | null>(null)
   const [showFallen, setShowFallen] = useState(false)
-  const [openTerrain, setOpenTerrain] = useState<TerrainSlot | null>(null)
+  // "Look at dice" (Phase 9e): while a decision is selecting dice, a tap inspects instead
+  // of selecting -- and the selection draft stays exactly as it was.
+  const [looking, setLooking] = useState(false)
 
   // A selection is a draft answer to one question. When the question changes, the
   // draft is meaningless, so it goes. What counts as a change is `pendingKey` --
@@ -103,8 +108,22 @@ function GameView({ game }: { readonly game: PlayingGame }) {
     setCounters({})
     setCasts([])
     setAiming(null)
-    setInspecting(null)
+    setInspect(null)
+    setLooking(false)
   }, [key])
+
+  // The grids and strips speak in ids; a dragon's id is never a unit's, so which kind
+  // of panel it opens is a lookup, not a second callback.
+  const inspecting = inspect === null || inspect.kind === 'terrain' ? null : inspect.id
+  const onInspect = useCallback(
+    (id: UnitId | null) =>
+      setInspect(
+        id === null ? null : id in state.dragons ? { kind: 'dragon', id } : { kind: 'unit', id },
+      ),
+    [state.dragons],
+  )
+  const closeInspector = useCallback(() => setInspect(null), [])
+  const openTerrain = inspect?.kind === 'terrain' ? inspect.slot : null
 
 
   // Every army is on screen now, so there is nothing to look away *to*: this only
@@ -135,7 +154,9 @@ function GameView({ game }: { readonly game: PlayingGame }) {
 
   // Which grid is selectable depends on what is being asked. The rule itself lives
   // in prompts.ts, where it is testable without a DOM.
-  const selectMode = useMemo(() => selectModeFor(pending, human), [pending, human])
+  const asked = useMemo(() => selectModeFor(pending, human), [pending, human])
+  // Looking suspends selecting everywhere: every tile becomes a way to open its faces.
+  const selectMode = looking ? null : asked
 
   // Read off the dice rather than the setup: a force may have been rolled, in which
   // case there is no preset id to look up, and the units know anyway.
@@ -161,6 +182,10 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // Reserve Army, which nothing before Tower ever needed to show at all.
   const theirReserveSelectable = selectMode?.side === 'theirs' && selectMode.slot === 'reserve'
   const theirReserve = livingUnits(state, enemy).filter((u) => u.location.kind === 'reserve')
+  // Dragons waiting in each Summoning Pool (Phase 9e). Only a `Summon Dragon` brings one
+  // out, so which colours are still in a pool is what the spell is choosing among.
+  const myPool = pooledDragons(state, human)
+  const theirPool = pooledDragons(state, enemy)
 
   const myFallen = deadUnits(state, human)
   const theirFallen = deadUnits(state, enemy)
@@ -180,7 +205,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // Fallen section is where it is answered, and it opens itself. The DUA splits in three
   // rows -- the dying dice, the small ones that could come back, and the rest -- and the
   // first two are selectable, so both halves of the answer are tapped in one place.
-  const growth = selectMode?.side === 'dua' && pending?.kind === 'accelerated_growth' ? pending : null
+  const growth = asked?.side === 'dua' && pending?.kind === 'accelerated_growth' ? pending : null
   const dyingIds = new Set(growth?.dying ?? [])
   const partnerIds = new Set(growth?.partners ?? [])
   const dying = myFallen.filter((unit) => dyingIds.has(unit.id))
@@ -259,57 +284,69 @@ function GameView({ game }: { readonly game: PlayingGame }) {
           human={human}
           focused={focused}
           openTerrain={openTerrain}
-          onToggleFaces={(slot) => setOpenTerrain((open) => (open === slot ? null : slot))}
+          onToggleFaces={(slot) =>
+            setInspect((open) => (open?.kind === 'terrain' && open.slot === slot ? null : { kind: 'terrain', slot }))
+          }
           selectMode={selectMode}
           selected={selection}
           onToggle={toggle}
           inspecting={inspecting}
-          onInspect={setInspecting}
+          onInspect={onInspect}
           mySpecies={mySpecies}
           theirSpecies={theirSpecies}
         />
 
-        {(reserveShown.length > 0 || mineReserveSelectable) && (
-
+        {/* Everything in play that is not at a terrain (Phase 9e): both Reserve Armies
+            and both Summoning Pools. The enemy's reserve used to appear only while an
+            SAI was aimed at it, and the pools nowhere -- so a Reserve Army able to march
+            and cast, and the dragons a Summon Dragon could bring, were invisible. */}
+        {(reserveShown.length > 0 ||
+          theirReserve.length > 0 ||
+          mineReserveSelectable ||
+          myPool.length > 0 ||
+          theirPool.length > 0) && (
           <section className="army off-board">
-            <h3>
-              Your reserve{' '}
-              <span className="muted">
-                {reserveShown.length}d / {health(reserveShown)}h
-                {plan !== null && plan.moves.length > 0 ? ' still to place' : ''}
-              </span>
-            </h3>
-            <DiceGrid
-              units={reserveShown}
-
-              selectable={mineReserveSelectable}
-              selected={selection}
-              onToggle={toggle}
-              inspecting={inspecting}
-              onInspect={setInspecting}
-            />
-          </section>
-        )}
-
-        {/* A Tower's missile is the first thing in the game to target the enemy's
-            Reserve Army (Phase 5d), so this is the first time it needs to be shown
-            at all -- "Your reserve" above is always the human's own. */}
-        {(theirReserve.length > 0 && theirReserveSelectable) && (
-          <section className="army off-board">
-            <h3>
-              Enemy reserve{' '}
-              <span className="muted">
-                {theirReserve.length}d / {health(theirReserve)}h
-              </span>
-            </h3>
+            <h3>Reserves</h3>
+            <p className="fallen-side muted">
+              Enemy {theirReserve.length}d / {health(theirReserve)}h
+            </p>
             <DiceGrid
               units={theirReserve}
               selectable={theirReserveSelectable}
               selected={selection}
               onToggle={toggle}
               inspecting={inspecting}
-              onInspect={setInspecting}
+              onInspect={onInspect}
             />
+            <p className="fallen-side muted">
+              Yours {reserveShown.length}d / {health(reserveShown)}h
+              {plan !== null && plan.moves.length > 0 ? ' still to place' : ''}
+            </p>
+            <DiceGrid
+              units={reserveShown}
+              selectable={mineReserveSelectable}
+              selected={selection}
+              onToggle={toggle}
+              inspecting={inspecting}
+              onInspect={onInspect}
+            />
+            {(myPool.length > 0 || theirPool.length > 0) && (
+              <>
+                <h3 className="pool-head">Summoning pools</h3>
+                <p className="fallen-side muted">Enemy</p>
+                {theirPool.length === 0 ? (
+                  <p className="empty">empty</p>
+                ) : (
+                  <DragonRow dragons={theirPool} human={human} inspecting={inspecting} onInspect={onInspect} inPool />
+                )}
+                <p className="fallen-side muted">Yours</p>
+                {myPool.length === 0 ? (
+                  <p className="empty">empty</p>
+                ) : (
+                  <DragonRow dragons={myPool} human={human} inspecting={inspecting} onInspect={onInspect} inPool />
+                )}
+              </>
+            )}
           </section>
         )}
 
@@ -349,37 +386,37 @@ function GameView({ game }: { readonly game: PlayingGame }) {
                     <p className="fallen-side">Dying — tap the ones to save</p>
                     <DiceGrid
                       units={dying}
-                      selectable
+                      selectable={!looking}
                       selected={selection}
                       onToggle={toggle}
                       inspecting={inspecting}
-                      onInspect={setInspecting}
+                      onInspect={onInspect}
                     />
                     <p className="fallen-side">Can come back — tap as many as you save</p>
                     <DiceGrid
                       units={partners}
-                      selectable
+                      selectable={!looking}
                       selected={selection}
                       onToggle={toggle}
                       inspecting={inspecting}
-                      onInspect={setInspecting}
+                      onInspect={onInspect}
                     />
                   </>
                 )}
                 <p className="fallen-side muted">{growth === null ? 'Yours' : 'Yours, the rest'}</p>
-                <DiceGrid units={longDead} inspecting={inspecting} onInspect={setInspecting} />
+                <DiceGrid units={longDead} inspecting={inspecting} onInspect={onInspect} />
                 <p className="fallen-side muted">Enemy</p>
-                <DiceGrid units={theirFallen} inspecting={inspecting} onInspect={setInspecting} />
+                <DiceGrid units={theirFallen} inspecting={inspecting} onInspect={onInspect} />
                 {myBuried.length > 0 && (
                   <>
                     <p className="fallen-side muted">Yours, buried</p>
-                    <DiceGrid units={myBuried} inspecting={inspecting} onInspect={setInspecting} />
+                    <DiceGrid units={myBuried} inspecting={inspecting} onInspect={onInspect} />
                   </>
                 )}
                 {theirBuried.length > 0 && (
                   <>
                     <p className="fallen-side muted">Enemy, buried</p>
-                    <DiceGrid units={theirBuried} inspecting={inspecting} onInspect={setInspecting} />
+                    <DiceGrid units={theirBuried} inspecting={inspecting} onInspect={onInspect} />
                   </>
                 )}
               </div>
@@ -419,7 +456,12 @@ function GameView({ game }: { readonly game: PlayingGame }) {
         onClearSelection={() => setSelection(new Set())}
         onClearDraft={clearDraft}
         dispatch={dispatch}
+        looking={looking}
+        onLook={setLooking}
+        onInspect={onInspect}
       />
+
+      {inspect !== null && <Inspector target={inspect} state={state} onClose={closeInspector} />}
 
     </div>
   )

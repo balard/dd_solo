@@ -2086,7 +2086,7 @@ screen before the next begins. This phase is judged by looking at it.
 | **9b** | Accelerated Growth becomes a decision; the "Replanting before AG" house rule retires with it | ✅ landed |
 | **9c** | Every modifier explicit: named steps in each roll's arithmetic, and the dragon attack's math | ✅ landed |
 | **9d** | The roll behind every decision, the enemy's included; Confuse shown and logged | ✅ landed |
-| **9e** | Board surfaces: both reserves, both summoning pools, a selectable DUA, a floating inspector, "look" mode | |
+| **9e** | Board surfaces: both reserves, both summoning pools, a selectable DUA, a floating inspector, "look" mode | ✅ landed |
 | **9f** | One way to pick a die, the spell picker's count and colour, the 8th-face emphasis | |
 
 **The 25 goldens stay byte-identical and unregenerated throughout.** Everything here is gated behind
@@ -2302,6 +2302,31 @@ enemy mid-decision. Both were reverted before the commit.
   longer pushes the grid apart.
 - **"Look at dice" mode**: while a sheet is selecting dice, a toggle makes a tap inspect rather than
   select, without losing the selection.
+
+#### Where this slice was wrong
+
+- **"A popover anchored to the tapped element" became a centred panel over a backdrop.** Anchored,
+  it has nowhere to go on a phone but over the thing it points at. Centred, it covers the board
+  and nothing else, and a tap outside is an obvious way out. Under 600px it is a bottom sheet.
+- **"Both reserves move into `Board` as a fourth card" stayed in `App`, as one section.** On a
+  wide screen the board is three columns, and a fourth card wraps to a row of its own anyway. The
+  reserve grid also carries the reinforce draft, which lives in `App`. The section now holds both
+  reserves and both pools: everything in play that is not at a terrain.
+- **"A selectable DUA" was already done.** 9b made the DUA selectable for Accelerated Growth.
+  What 9e adds is that the DUA's dice stop being selectable while looking. Moving the *other*
+  DUA answers onto it is 9f.
+- **Hiding the sheet while looking was not planned.** It was what made the mode read clearly: the
+  question goes away, the dock says "tap any die to see its faces — your picks so far are kept",
+  and "Back to choosing" brings the question back with the draft intact.
+
+**Checked in a browser** on `?forces=starter&seed=24`, no scaffold needed:
+- **Reserves and pools:** the new section shows both empty reserves and both pools (Air Drake,
+  Fire Wyrm; Earth Wyrm, Water Wyrm).
+- **The inspector:** a unit tile, a terrain heading and a pool dragon each open the one floating
+  panel, and the board's height does not move.
+- **Look mode:** in the second march's counter-attack, one die was selected ("absorbed 3"), look
+  mode opened a Pineling's faces, and "Back to choosing" still read "absorbed 3".
+- **Phone width (375px):** the inspector is a bottom sheet with no sideways scroll.
 
 ### 9f — one way to pick
 

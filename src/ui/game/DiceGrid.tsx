@@ -173,8 +173,6 @@ export function DiceGrid({
         // A sleeping die is never pickable, so tapping it inspects even while the
         // rest of the army is being selected from.
         const isOpen = !canSelect && inspecting === unit.id
-        const species = speciesInfo(type.species)
-
         // The ID face is the die's portrait -- it is the one face that is a picture
         // of the unit rather than of an action. It sits at index 0 on all 40 dice,
         // but ask the data rather than trusting that.
@@ -237,22 +235,32 @@ export function DiceGrid({
               <span className="die-health">{type.health}</span>
             </button>
 
-            {isOpen && (
-              <div className="die-detail">
-                <p className="detail-head">
-                  <b>{type.name}</b>
-                  <span className="muted">
-                    {type.health} health · {type.dieType} · {kindOf(type)}
-                  </span>
-                  {species && <ElementDots elements={species.elements} />}
-                </p>
-                <FaceSheet typeId={unit.typeId} faces={type.faces} />
-              </div>
-            )}
           </div>
         )
       })}
     </div>
+  )
+}
+
+/**
+ * Every face of one unit die, for the floating inspector (Phase 9e). It used to open
+ * inline under its tile, as a full-width row that pushed the rest of the grid down
+ * and sideways -- which is what made opening one feel like the board rearranging.
+ */
+export function UnitDetail({ typeId }: { typeId: string }) {
+  const type = unitType(typeId)
+  const species = speciesInfo(type.species)
+  return (
+    <>
+      <p className="detail-head">
+        <b>{type.name}</b>
+        <span className="muted">
+          {type.health} health · {type.dieType} · {kindOf(type)}
+        </span>
+        {species && <ElementDots elements={species.elements} />}
+      </p>
+      <FaceSheet typeId={typeId} faces={type.faces} />
+    </>
   )
 }
 
@@ -381,8 +389,14 @@ export function RollStrip({
   total,
   math,
   pick,
+  onInspect,
 }: {
   dice: readonly StripDie[]
+  /**
+   * Tapping a die that is not an answer opens its faces (Phase 9e). The strip is where
+   * a player is looking when they wonder what else that die could have rolled.
+   */
+  onInspect?: (unitId: string) => void
   total?: number
   /**
    * The roll's arithmetic, named (Phase 9c): "14 on the dice − 4 Galeforce = 10". When
@@ -471,6 +485,15 @@ export function RollStrip({
                     title={title}
                     aria-pressed={chosen}
                     onClick={() => pick?.onToggle(die.unitId)}
+                  >
+                    {body}
+                  </button>
+                ) : onInspect !== undefined ? (
+                  <button
+                    type="button"
+                    className={`${className} rolled-inspectable`}
+                    title={`${title} — tap to see every face`}
+                    onClick={() => onInspect(die.unitId)}
                   >
                     {body}
                   </button>

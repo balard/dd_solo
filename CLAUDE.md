@@ -979,6 +979,21 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **A unit tile does two jobs.** When a decision needs units chosen it selects; otherwise tapping
   *inspects*, opening the die to show every face it has. Without that the app showed outcomes but
   never capabilities — you could watch a die roll but not find out what it could roll.
+- **One floating inspector for every die** (`Inspector.tsx`, v1 Phase 9e): a unit, a dragon or a
+  terrain, in one panel over the board. It is centred on a wide screen and a bottom sheet under
+  600px, and Esc or a tap outside closes it. `App` holds a single `inspect` target, so opening one
+  thing replaces whatever was open. It replaced three inline panels, each with its own state: a
+  unit tile's opened as a full-width row that pushed the grid down and sideways, and opening a
+  unit never closed a terrain. `UnitDetail`, `DragonDetail` and `TerrainDetail` are the bodies.
+  The grids and strips still speak in ids, and `App` maps an id to a unit or a dragon.
+  - **A die in a roll strip opens it too** (`RollStrip`'s `onInspect`), in the decision dock.
+  - **"Look at dice"** is a toggle in the dock whenever the answer is dice. While it is on,
+    `selectMode` is null everywhere, so every tap inspects. The selection draft is left exactly
+    as it was. It is cleared, like every draft, when `pending` changes.
+- **Everything off the board is on screen** (Phase 9e): a Reserves section with *both* Reserve
+  Armies, and both Summoning Pools as dragon chips (`DragonRow`'s `inPool`). The enemy's reserve
+  used to appear only while an SAI was aimed at it, and the pools nowhere. So a Reserve Army able
+  to march and cast, and the dragons a Summon Dragon could bring out, were invisible.
 - **A tile is identified by its ID face, not its name, and the whole tile is the die.** The button
   goes square and its side scales with die size — `TILE_SIZE` 48/54/60/70 around `PORTRAIT_SIZE`
   30/34/38/46 for small/medium/large/monster — because a big portrait in a name-shaped box does not
