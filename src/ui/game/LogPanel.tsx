@@ -64,7 +64,9 @@ function nameOf(state: GameState, id: UnitId): string {
   return unit === undefined ? id : unitType(unit.typeId).name
 }
 
-function Line({
+/** One log entry, as the log draws it. Exported for the decision sheet, which shows
+ *  the roll a decision answers with the same renderer (Phase 9d). */
+export function LogLine({
   entry,
   state,
   human,
@@ -551,6 +553,24 @@ function Line({
         </p>
       )
 
+    // Both faces, as they were and as they came back (Phase 9d). Without the "before"
+    // the only strip left was the replaced one, which read as Confuse firing on the
+    // attack roll that carried its face.
+    case 'confused':
+      return (
+        <div className="log-roll">
+          <div className="roll-head">
+            <b>{entry.sai}</b> · {who(entry.player)} {verb(entry.player, 'makes', 'make')}{' '}
+            {entry.target === human ? 'your' : "the enemy's"} saves roll again
+          </div>
+          <div className="confused-pair">
+            <RollStrip dice={entry.before} />
+            <span className="reroll-arrow" aria-label="became">&rarr;</span>
+            <RollStrip dice={entry.after} />
+          </div>
+        </div>
+      )
+
     case 'flashfire':
       return (
         <p className="log-line">
@@ -915,7 +935,7 @@ export function LogPanel({ state, human }: { state: GameState; human: PlayerId }
   return (
     <div className="log">
       {state.log
-        .map((entry, i) => <Line key={i} entry={entry} state={state} human={human} />)
+        .map((entry, i) => <LogLine key={i} entry={entry} state={state} human={human} />)
         .reverse()}
     </div>
   )

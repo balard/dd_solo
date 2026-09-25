@@ -447,6 +447,9 @@ body {
   background: var(--line);
 }
 .reroll-arrow { font-size: .8rem; color: var(--muted); line-height: 1; }
+/* Confuse's before and after, side by side: the same dice thrown twice. */
+.confused-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.confused-pair .roll-strip { margin-bottom: 0; }
 .rolled {
   display: inline-flex;
   align-items: center;
@@ -532,6 +535,29 @@ body {
   border-top: 1px solid var(--line);
   box-shadow: 0 -6px 20px rgb(0 0 0 / 7%);
 }
+/* The roll behind the decision sits on top of the sheet, in the same panel (Phase
+   9d). Capped and scrollable: two strips and a combat line must not push the buttons
+   off a phone screen. */
+.action-dock {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+}
+.rolls-behind {
+  margin-inline: -12px;
+  padding: 8px 12px 0;
+  max-height: 38vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -6px 20px rgb(0 0 0 / 7%);
+}
+.rolls-behind + .action-bar {
+  border-top: none;
+  box-shadow: none;
+  padding-top: 6px;
+}
+.rolls-behind .log-roll { margin: 0 0 6px; }
 .question { margin: 0 0 9px; font-size: .92rem; }
 /* The reinforce draft: where each staged die is headed, before it is sent. */
 .staged { margin: -4px 0 9px; font-size: .82rem; }

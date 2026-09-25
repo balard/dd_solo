@@ -819,12 +819,27 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   and dispatched on the spot, which is half the Reserves Phase and the half that matters when two
   fronts both need a die. The `reinforced` log entry names each destination for the same reason.
 
-- **Roll, then SAIs, then the totals** -- the order the rules resolve in, and now the order the
-  screen shows. Every SAI sheet opens with `SaiHeader`: the dice that produced the decision, drawn
-  with the same `RollStrip` the log uses, above the rule itself. Before it, the dice reached the log
-  only at `combat_resolved`, so a player picked a Flame's victims -- or split a Wild Growth -- without
-  ever being shown the roll that offered the choice.
-  - **`rollOnTheTable(state)` is the engine query behind it**, not a log entry: a `dice_rolled`
+- **Every decision shows the roll behind it, above the sheet** (`RollsBehindBlock` in
+  `ActionBar`, v1 Phase 9d). **The same block shows while the enemy is deciding**, which is when a
+  Confuse or a Flame is chosen against you. `rollsBehind` in `prompts.ts` has two sources:
+  - **live**: `rollsOnTheTable(state)` in the engine, every roll parked mid-decision. At the
+    delayed pause that is the attack roll **and** the save roll, and at Rapid Growth it is both
+    maneuver rolls. Showing only the save strip there is how Confuse was reported as firing on
+    the wrong roll: its face is on the attack, and its targets are on the saves.
+  - **logged**: a decision that *answers* a roll already counted -- `assign_damage`,
+    `choose_counter_attack`, `choose_direction`, a breath, a damage split, Accelerated Growth. It
+    shows the last roll entry in the log, drawn by `LogLine`, the log's own renderer. So the sheet
+    and the log cannot show one roll two ways. A dragon's damage brings the dragons' throw with it.
+  - **Dice in those strips are answers too** (`pickableIn`): Flashfire and Rapid Growth as
+    before, and now a targeting SAI's victims. At the delayed pause, Confuse and Choke pick from
+    the save strip, the one place those faces are drawn.
+  - `SaiHeader` is only the rule text now. It used to draw one strip itself, above the rule.
+- **Confuse logs both faces** (`confused`, Phase 9d): the save dice as they were and as they came
+  back. It used to write nothing, on the reasoning that "what they rolled the second time shows up
+  in the save strip". That was true, and it was the bug report: the first faces were gone.
+- **Roll, then SAIs, then the totals** -- the order the rules resolve in, and the order the
+  screen shows.
+  - **`rollOnTheTable(state)` is the engine query behind the single strip**, not a log entry: a `dice_rolled`
     entry would appear in every roll of every game and rewrite all 25 golden digests to show
     something `CombatState` already holds. It returns the *save* dice at the delayed pause, the
     *attack* dice at the targeting one and the army's own dice at Phase 6's dragon allocation,

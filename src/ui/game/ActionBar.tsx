@@ -13,7 +13,6 @@ import { spell } from '../../data/spells'
 
 import type { Element, ResultType, TerrainFaceNumber } from '../../data/types'
 
-import { rollOnTheTable } from '../../engine/turn'
 import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../../engine/sai'
 import { ABILITY_TEXT } from '../../engine/species'
 import {
@@ -41,6 +40,9 @@ import {
   damageSelection,
   moveDraft,
   growthDraft,
+  pickableIn,
+  rollsBehind,
+  tableRollHeading,
   promoteDraft,
   saiTargetSelection,
   describeFace,
@@ -62,9 +64,109 @@ import {
   type SpellTargetOffer,
 } from '../../engine/magic'
 
+import { LogLine } from './LogPanel'
 import { useFaceArt } from './useFaceArt'
 
-export function ActionBar({
+/**
+ * The bottom of the screen: the roll behind the decision, then the decision (Phase 9d).
+ *
+ * The rolls sit *above* every sheet rather than inside some of them. Before this only
+ * the targeting sheets drew one strip, and a player assigning damage, or watching the
+ * enemy choose a Flame's victims, saw no dice at all. It is also shown while the enemy
+ * is deciding, which is when a Confuse is chosen against you.
+ */
+export function ActionBar(props: {
+
+  state: GameState
+  human: PlayerId
+  pending: Pending | null
+  opponentThinking: boolean
+  selection: ReadonlySet<UnitId>
+  /** The reinforce draft: which reserve dice are going where, so far. */
+  staged: readonly ReinforceMove[]
+  /** The Wild Growth draft: which of your dice are growing into which of your dead.
+   *  A second draft rather than a wider one -- they answer different questions and
+   *  are never both live. */
+  pairs: readonly PromotionPair[]
+  /** The dragon sheets' draft: a tally under composite keys. */
+  counters: Readonly<Record<string, number>>
+  /** The spell picker's draft: every cast staged so far. */
+  casts: readonly SpellDraftCast[]
+  /** Which spell is being aimed, between the two taps an announcement takes. */
+  aiming: SpellAim | null
+  onAim: (aim: SpellAim | null) => void
+  onCast: (cast: SpellDraftCast) => void
+  onStage: (moves: readonly ReinforceMove[]) => void
+  onPair: (pair: PromotionPair) => void
+  onCount: (key: string, by: number) => void
+  /** The same toggle the board's grids use, so a die picked in either place is the
+   *  one selection. */
+  onToggle: (id: UnitId) => void
+  onClearSelection: () => void
+  /** Clear is not "unselect": mid-reinforce it has to drop the staged moves too. */
+  onClearDraft: () => void
+
+  dispatch: (action: GameAction) => void
+}) {
+  const { state, human, pending, selection, onToggle } = props
+  const options = state.winner === null ? pickableIn(pending, state) : null
+  const pick =
+    options === null || pending?.player !== human
+      ? undefined
+      : { options: options as ReadonlySet<string>, selected: selection as ReadonlySet<string>, onToggle }
+
+  return (
+    <div className="action-dock">
+      {state.winner === null && (
+        <RollsBehindBlock state={state} human={human} pending={pending} pick={pick} />
+      )}
+      <Sheet {...props} />
+    </div>
+  )
+}
+
+function RollsBehindBlock({
+  state,
+  human,
+  pending,
+  pick,
+}: {
+  state: GameState
+  human: PlayerId
+  pending: Pending | null
+  pick:
+    | {
+        readonly options: ReadonlySet<string>
+        readonly selected: ReadonlySet<string>
+        readonly onToggle: (unitId: string) => void
+      }
+    | undefined
+}) {
+  const behind = rollsBehind(state, pending)
+  if (behind === null) return null
+
+  return (
+    <div className="rolls-behind">
+      {behind.kind === 'live'
+        ? behind.rolls.map((roll, i) => (
+            <div className="sai-roll" key={i}>
+              <div className="roll-head">{tableRollHeading(roll, human)}</div>
+              <RollStrip
+                dice={roll.roll.dice}
+                {...(roll.roll.total === undefined ? {} : { total: roll.roll.total })}
+                {...(roll.roll.math === undefined ? {} : { math: roll.roll.math })}
+                {...(pick === undefined ? {} : { pick })}
+              />
+            </div>
+          ))
+        : behind.entries.map((entry, i) => (
+            <LogLine key={i} entry={entry} state={state} human={human} />
+          ))}
+    </div>
+  )
+}
+
+function Sheet({
   state,
   human,
   pending,
@@ -80,7 +182,6 @@ export function ActionBar({
   onStage,
   onPair,
   onCount,
-  onToggle,
   onClearSelection,
   onClearDraft,
   dispatch,
@@ -275,7 +376,6 @@ export function ActionBar({
       return out
     }
 
-    const roll = rollOnTheTable(state)
     // Flaming Shields (Phase 8): up to this many rolled saves may become melee. Not a
     // pool that must be spent -- "may" -- so it never gates the confirm button.
     const shields = pending.shields ?? 0
@@ -284,15 +384,9 @@ export function ActionBar({
     return (
       <div className="action-bar">
         <p className="question">{prompt.question}</p>
-        {/* The roll itself, because the question cannot be answered without it: how
-            many IDs there are to spend is the decision, and which dice already gave
-            melee or saves is what decides where they should go. */}
-        {roll !== null && roll.dice.length > 0 && (
-          <div className="sai-roll">
-            <div className="roll-head">your dragon roll</div>
-            <RollStrip dice={roll.dice} />
-          </div>
-        )}
+        {/* The roll itself is above the sheet (Phase 9d): how many IDs there are to
+            spend is the decision, and which dice already gave melee or saves is what
+            decides where they go. */}
         {pools.map((pool) => (
           <Fragment key={pool.key}>
             <p className={`tally ${spent(pool.key) === pool.total ? 'is-ready' : ''}`}>
@@ -513,41 +607,19 @@ function targetGroups(
 }
 
 function SaiHeader({
-  state,
   sai,
   rule,
-  pick,
 }: {
-  state: GameState
+  state?: GameState
   sai?: string
   rule?: string
-  /** Makes the dice in the header the answer as well as the evidence -- Flashfire.
-   *  See `RollStrip`'s own note for why that is not a convenience. */
-  pick?: {
-    readonly options: ReadonlySet<string>
-    readonly selected: ReadonlySet<string>
-    readonly onToggle: (unitId: string) => void
-  }
 }) {
-  const roll = rollOnTheTable(state)
+  // The roll itself is drawn above the sheet by `RollsBehindBlock` (Phase 9d), with the
+  // roll it came from beside it -- this is the rule, in the book's words.
   // A spell's sentence lives in `data/spells.json` rather than in `SAI_TEXT`, so a
-  // caller that already has one hands it over. Flashfire is the first: it raises a
-  // decision on a roll exactly as a targeting SAI does, and wants the same header.
+  // caller that already has one hands it over.
   const text = rule ?? (sai === undefined ? undefined : SAI_TEXT[sai])
-
-  return (
-    <>
-      {roll !== null && roll.dice.length > 0 && (
-        <div className="sai-roll">
-          <div className="roll-head">
-            {roll.kind === 'save' ? 'saves' : roll.kind === 'maneuver' ? 'your maneuver roll' : 'the roll'}
-          </div>
-          <RollStrip dice={roll.dice} {...(pick === undefined ? {} : { pick })} />
-        </div>
-      )}
-      {text !== undefined && <p className="sai-text">{text}</p>}
-    </>
-  )
+  return text === undefined ? null : <p className="sai-text">{text}</p>
 }
 
   /**
@@ -1061,7 +1133,6 @@ function SaiHeader({
         <SaiHeader
           state={state}
           rule={spell('flashfire').text}
-          pick={{ options: new Set(pending.options), selected: selection, onToggle }}
         />
         <div className="choices">
           <button
@@ -1099,7 +1170,6 @@ function SaiHeader({
         <SaiHeader
           state={state}
           rule={ABILITY_TEXT['Rapid Growth']}
-          pick={{ options: new Set(pending.options), selected: selection, onToggle }}
         />
         <div className="choices">
           <button

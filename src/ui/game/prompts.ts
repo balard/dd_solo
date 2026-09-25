@@ -16,7 +16,7 @@ import {
 import { growthPartners, promotionGain } from '../../engine/dua'
 import { ALL_RESULT_TYPES, type Modifier } from '../../engine/pipeline'
 import { isAsleep, type Effect } from '../../engine/effects'
-import { legalDirections } from '../../engine/turn'
+import { legalDirections, rollsOnTheTable, type TableRoll } from '../../engine/turn'
 import {
   TERRAIN_SLOTS,
   armyAt,
@@ -29,6 +29,7 @@ import {
 
   type GameAction,
   type GameState,
+  type LogEntry,
   type Pending,
   type PlayerId,
   type PromotionPair,
@@ -1050,6 +1051,114 @@ export function effectsOnArmy(
   }
 
   return out
+}
+
+/**
+ * The roll behind a decision (v1 Phase 9d): what a player -- or the enemy, while it
+ * thinks -- is looking at when they answer.
+ *
+ * Two sources, because a decision is either *inside* a roll or *after* one:
+ *
+ *  - **live**: the machine has dice parked mid-exchange (`rollsOnTheTable`). At the
+ *    delayed pause that is the attack roll *and* the save roll: a Confuse face is on the
+ *    first and replaces dice in the second, and showing only one is how Confuse came to
+ *    be reported as firing on the wrong roll.
+ *  - **logged**: the roll has already been counted and written down, and the question
+ *    is its consequence -- how to take the damage, whether to counter-attack, which way
+ *    to turn a terrain just won. That roll is the last one in the log, drawn by the same
+ *    renderer the log uses, so the sheet and the log cannot show one roll two ways.
+ */
+export type RollsBehind =
+  | { readonly kind: 'live'; readonly rolls: readonly TableRoll[] }
+  | { readonly kind: 'logged'; readonly entries: readonly LogEntry[] }
+
+/** Decisions that answer a roll already counted. Anything else with nothing parked has
+ *  no roll behind it -- a march, an action, a spell announcement. */
+const FOLLOWS_A_ROLL: ReadonlySet<Pending['kind']> = new Set([
+  'assign_damage',
+  'choose_counter_attack',
+  'choose_direction',
+  'dragon_breath',
+  'dragon_damage_split',
+  'accelerated_growth',
+])
+
+/** Log entries that *are* a roll, as opposed to its consequences. */
+const ROLL_ENTRIES: ReadonlySet<LogEntry['kind']> = new Set([
+  'combat_resolved',
+  'maneuver_contested',
+  'spell_saves',
+  'thorns',
+  'dragon_roll',
+  'dragon_damage',
+])
+
+export function rollsBehind(state: GameState, pending: Pending | null): RollsBehind | null {
+  const live = rollsOnTheTable(state)
+  if (live.length > 0) return { kind: 'live', rolls: live }
+  if (pending === null || !FOLLOWS_A_ROLL.has(pending.kind)) return null
+
+  const log = state.log
+  let last = log.length - 1
+  while (last >= 0 && !ROLL_ENTRIES.has((log[last] as LogEntry).kind)) last -= 1
+  if (last < 0) return null
+
+  // A dragon's damage is three entries, not one -- the dragons' throw, the army's
+  // answer, and the subtraction -- and the damage line alone would be the bare number
+  // this phase exists to explain. So a dragon roll brings the throw that caused it.
+  const head = log[last] as LogEntry
+  if (head.kind === 'dragon_damage' || head.kind === 'dragon_roll') {
+    const from = Math.max(0, last - 6)
+    const group = log
+      .slice(from, last + 1)
+      .filter((e) => e.kind === 'dragon_attack' || e.kind === 'dragon_roll' || e.kind === 'dragon_damage')
+    const start = group.map((e) => e.kind).lastIndexOf('dragon_attack')
+    return { kind: 'logged', entries: start < 0 ? group : group.slice(start) }
+  }
+  // Replanting rolls on the way to the DUA, after the kill that caused it -- and it is
+  // what an Accelerated Growth question is asked beside, so it rides along.
+  const after = log.slice(last + 1).filter((e) => e.kind === 'replanting' || e.kind === 'confused')
+  return { kind: 'logged', entries: [head, ...after] }
+}
+
+/** "Your melee attack", "the enemy's saves" -- a live strip's heading. */
+export function tableRollHeading(roll: TableRoll, human: PlayerId): string {
+  const whose = roll.player === human ? 'Your' : "The enemy's"
+  switch (roll.kind) {
+    case 'attack':
+      return `${whose} ${roll.action ?? ''} attack`.replace('  ', ' ')
+    case 'save':
+      return `${whose} saves`
+    case 'maneuver':
+      return `${whose} maneuver roll`
+    case 'dragon':
+      return `${whose} roll against the dragons`
+  }
+}
+
+/**
+ * Which dice in the rolls behind a decision are themselves answers -- the strip is
+ * where a player is looking, so it takes the tap as well as the board does.
+ *
+ * Flashfire and Rapid Growth have always picked from their strip. Phase 9d adds the
+ * targeting SAIs: at the delayed pause a Confuse or a Choke is choosing among the
+ * defender's *save dice*, and the save strip is the only place their faces are drawn.
+ * Every strip is given the same set, and a die outside it simply is not pickable, so
+ * the attack strip above never lights up.
+ */
+export function pickableIn(pending: Pending | null, state: GameState): ReadonlySet<UnitId> | null {
+  if (pending === null) return null
+  switch (pending.kind) {
+    case 'flashfire':
+    case 'rapid_growth':
+      return new Set(pending.options)
+    case 'sai_target':
+      return new Set(
+        pending.eligible ?? armyRef(state, pending.target, pending.slot).map((unit) => unit.id),
+      )
+    default:
+      return null
+  }
 }
 
 /**

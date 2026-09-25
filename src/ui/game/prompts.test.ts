@@ -9,6 +9,7 @@ import {
   TERRAIN_SLOTS,
   armyAt,
   type GameState,
+  type LogEntry,
   type Pending,
   type TerrainFace,
   type UnitId,
@@ -19,6 +20,8 @@ import {
   effectsOnArmy,
   effectsOnPlayer,
   growthDraft,
+  pickableIn,
+  rollsBehind,
   effectsOnTerrain,
   focusedSlot,
   orderedForDisplay,
@@ -659,6 +662,82 @@ describe('display order', () => {
     const before = units.map((u) => u.id)
     orderedForDisplay(units)
     expect(units.map((u) => u.id)).toEqual(before)
+  })
+})
+
+describe('rollsBehind', () => {
+  const resolved = {
+    kind: 'combat_resolved',
+    attacker: 'p2',
+    defender: 'p1',
+    attackerSlot: 'frontier',
+    defenderSlot: 'frontier',
+    action: 'melee',
+    isCounter: false,
+    attackTotal: 6,
+    saveTotal: 2,
+    damage: 4,
+    attackDice: [],
+    saveDice: [],
+  } as const satisfies LogEntry
+  const killed = { kind: 'units_killed', player: 'p1', slot: 'frontier', unitIds: [] } as const satisfies LogEntry
+  const asking = (kind: Pending['kind']) => ({ kind, player: 'p1' }) as unknown as Pending
+
+  it('shows the enemy attack a damage assignment answers, from the log', () => {
+    // Phase 9d: you were asked who dies without seeing the roll that killed them.
+    const state: GameState = { ...fresh(), log: [...fresh().log, resolved, killed] }
+    expect(rollsBehind(state, asking('assign_damage'))).toEqual({ kind: 'logged', entries: [resolved] })
+    // And the same roll behind the offer to counter-attack it.
+    expect(rollsBehind(state, asking('choose_counter_attack'))).toEqual({
+      kind: 'logged',
+      entries: [resolved],
+    })
+  })
+
+  it('shows nothing behind a decision no roll caused', () => {
+    const state: GameState = { ...fresh(), log: [...fresh().log, resolved] }
+    expect(rollsBehind(state, asking('choose_march_army'))).toBeNull()
+    expect(rollsBehind(state, null)).toBeNull()
+  })
+
+  it("brings the dragons' throw along with the damage it did", () => {
+    const attack = { kind: 'dragon_attack', slot: 'frontier', defender: 'p1', dragons: [] } as const satisfies LogEntry
+    const answer = {
+      kind: 'dragon_roll',
+      player: 'p1',
+      slot: 'frontier',
+      dice: [],
+      totals: { melee: 4, missile: 0, save: 2 },
+    } as const satisfies LogEntry
+    const damage = {
+      kind: 'dragon_damage',
+      player: 'p1',
+      slot: 'frontier',
+      incoming: { inflicted: 6, saves: 2, damage: 4 },
+    } as const satisfies LogEntry
+    const state: GameState = { ...fresh(), log: [...fresh().log, resolved, attack, answer, damage] }
+    expect(rollsBehind(state, asking('assign_damage'))).toEqual({
+      kind: 'logged',
+      entries: [attack, answer, damage],
+    })
+  })
+})
+
+describe('pickableIn', () => {
+  it('lets a Confuse or a Choke pick from the dice it is aimed at', () => {
+    const state = fresh()
+    const pending = {
+      kind: 'sai_target',
+      player: 'p1',
+      sai: 'Choke',
+      target: 'p2',
+      slot: 'frontier',
+      limit: { kind: 'health', budget: 4 },
+      eligible: ['p2:genie#0'],
+      remaining: 1,
+    } as unknown as Pending
+    expect([...(pickableIn(pending, state) ?? [])]).toEqual(['p2:genie#0'])
+    expect(pickableIn(null, state)).toBeNull()
   })
 })
 

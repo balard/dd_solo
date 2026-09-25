@@ -17,6 +17,8 @@ import {
   attackEffects,
   attackFacts,
   attackRollDice,
+  parkedAttackRoll,
+  parkedSaveRoll,
   finishSaves,
   legalActions,
   missileTargets,
@@ -79,6 +81,8 @@ import {
   rollUnits,
   rerollSweep,
   type DieRoll,
+  type RollMath,
+  type RollResult,
   type RawDie,
   type RollSpec,
 } from './roll'
@@ -1531,13 +1535,26 @@ function applyConfuse(
 
   const dice = saves.dice.map((die) => replaced.get(die.unitId) ?? die)
 
-  // No log entry of its own: `sai_resolved` has already named the dice, and what they
-  // rolled the second time shows up in the save strip at the end of the exchange --
-  // which is the only roll there is, because the first one is gone.
-  void task
-  return dropHeadTask(
-    withTurn({ ...state, rng }, { combat: withSaves(combat, saves, { dice }) }),
+  // Logged with both faces (Phase 9d). It used to write nothing -- "what they rolled the
+  // second time shows up in the save strip" -- and that was the bug report: the only
+  // strip left was the replaced one, so a Confuse looked like it had fired on the attack
+  // roll that carried its face. Before and after, from the same resolve the totals use.
+  const spec = exchangeSpec(state, state.turn.marchStep === 'sai_delayed_counter')
+  const shown = (from: readonly RawDie[]) =>
+    parkedSaveRoll(state, spec, { ...saves, dice: from }).dice.filter((die) => replaced.has(die.unitId))
+  const logged = withLog(
+    { ...state, rng },
+    {
+      kind: 'confused',
+      player: spec.attacker,
+      target: spec.defender,
+      slot: spec.defenderSlot,
+      sai: task.sai,
+      before: shown(saves.dice),
+      after: shown(dice),
+    },
   )
+  return dropHeadTask(withTurn(logged, { combat: withSaves(combat, saves, { dice }) }))
 }
 
 /**
@@ -2396,6 +2413,81 @@ export function rollOnTheTable(
   }
 
   return { dice: attackRollDice(state, spec, attack), kind: 'attack' }
+}
+
+/**
+ * One roll a decision is about, whole: who threw it, what for, the dice, and -- where the
+ * roll has one -- its total and `math`.
+ */
+export interface TableRoll {
+  readonly player: PlayerId
+  readonly kind: 'attack' | 'save' | 'maneuver' | 'dragon'
+  /** The attack's action, for "melee" rather than "attack" on the strip's heading. */
+  readonly action?: ActionKind
+  readonly roll: {
+    readonly dice: readonly DieRoll[]
+    readonly total?: number
+    readonly math?: RollMath
+  }
+}
+
+/**
+ * **Every** roll a decision in progress is about (Phase 9d) -- `rollOnTheTable`'s plural.
+ *
+ * `rollOnTheTable` answers "which dice is this decision choosing among", which is one
+ * roll. A player deciding needs more than that: at the delayed pause Confuse replaces
+ * *save* dice, but the Confuse face is on the *attack* roll, and a player looking at the
+ * save strip alone could not tell which roll the SAI came off -- which is exactly how
+ * Confuse was reported as firing on the wrong roll. So this returns both rolls there, and
+ * both maneuver rolls at Rapid Growth, whose question is "beat this number".
+ *
+ * Empty when nothing is parked. A decision that follows a roll the machine has already
+ * logged (damage assignment, a counter-attack offer) reads the roll from the log instead;
+ * that is presentation, and lives in `prompts.ts`.
+ */
+export function rollsOnTheTable(state: GameState): readonly TableRoll[] {
+  const whole = (result: RollResult): TableRoll['roll'] => ({
+    dice: result.dice,
+    total: result.total,
+    ...(result.math !== undefined ? { math: result.math } : {}),
+  })
+
+  const contest = state.turn.contest
+  if (contest !== undefined && state.turn.marchStep === 'rapid_growth') {
+    const { marcher, defender } = contestTotals(state, contest.marcher, contest.defender)
+    return [
+      { player: state.turn.marching, kind: 'maneuver', roll: whole(marcher) },
+      { player: opponentOf(state.turn.marching), kind: 'maneuver', roll: whole(defender) },
+    ]
+  }
+
+  const one = rollOnTheTable(state)
+  if (one?.kind === 'dragon') {
+    const attack = state.turn.dragonAttack
+    return attack === undefined ? [] : [{ player: attack.defender, kind: 'dragon', roll: { dice: one.dice } }]
+  }
+
+  const combat = state.turn.combat
+  if (one === null || combat === null || combat.attack === undefined) return []
+
+  const step = state.turn.marchStep
+  const isCounter =
+    step === 'sai_target_counter' ||
+    step === 'sai_delayed_counter' ||
+    step === 'flashfire_counter' ||
+    step === 'flashfire_counter_saves'
+  const spec = exchangeSpec(state, isCounter)
+  const attackRoll: TableRoll = {
+    player: spec.attacker,
+    kind: 'attack',
+    action: spec.action,
+    roll: whole(parkedAttackRoll(state, spec, combat.attack)),
+  }
+  if (one.kind !== 'save' || combat.saves === undefined) return [attackRoll]
+  return [
+    attackRoll,
+    { player: spec.defender, kind: 'save', roll: whole(parkedSaveRoll(state, spec, combat.saves)) },
+  ]
 }
 
 // --- the Eighth Face Phase (Phase 5e) -----------------------------------------

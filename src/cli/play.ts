@@ -447,6 +447,13 @@ function describe(entry: LogEntry, state: GameState): string | null {
           dim('thrown again'),
       )
 
+    // Both faces, before and after (Phase 9d).
+    case 'confused':
+      return cyan(
+        `  ${bold(entry.sai)}: ${entry.target}'s saves ${entry.before.map(shown).join('  ')} ` +
+          `-> ${entry.after.map(shown).join('  ')}`,
+      )
+
     case 'air_flight':
       return cyan(
         `  ${bold('Air Flight')}: ` +

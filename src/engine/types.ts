@@ -1571,6 +1571,21 @@ export type LogEntry =
       readonly unitId: UnitId
       readonly spells: readonly string[]
     }
+  /**
+   * Confuse (Phase 9d): the defender's save dice the attacker made roll again, as they
+   * were and as they came back. Before this the first faces were gone without a trace,
+   * and the replaced strip read as if Confuse had fired on the attack roll.
+   */
+  | {
+      readonly kind: 'confused'
+      /** The attacker, who chose. */
+      readonly player: PlayerId
+      readonly target: PlayerId
+      readonly slot: ArmyRef
+      readonly sai: string
+      readonly before: readonly DieRoll[]
+      readonly after: readonly DieRoll[]
+    }
   /** Flashfire: dice thrown again, and what they came back as. */
   | {
       readonly kind: 'flashfire'

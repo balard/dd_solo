@@ -7,7 +7,7 @@ import type { RollEffect } from './pipeline'
 import { advance } from './reduce'
 import { rollDice, type RngState } from './rng'
 import { targetTasks } from './targeting'
-import { applyAction } from './turn'
+import { applyAction, rollsOnTheTable } from './turn'
 import {
   IllegalActionError,
   V0_RULES,
@@ -1010,6 +1010,50 @@ describe('the delayed effects', () => {
     // on second, which saves nothing.
     const resolved = done.log.find((e) => e.kind === 'combat_resolved')
     expect(resolved).toMatchObject({ saveTotal: 0 })
+  })
+
+  /**
+   * Phase 9d. Confuse was reported as firing on the wrong roll. It never did: it has
+   * always resolved here, after the save roll. It *looked* wrong because the player was
+   * shown only one roll at this pause, and the log kept none of the faces it threw away.
+   */
+  it('shows both rolls at the pause, and logs the faces it replaced', () => {
+    const start = advance(
+      stage({
+        attackers: ['treefolk.satyr', 'treefolk.satyr'],
+        defenders: ['treefolk.oak'],
+        rng: rngShowing(
+          ['treefolk.satyr', 'treefolk.satyr', 'treefolk.oak', 'treefolk.oak'],
+          [CONFUSE_FACE, SATYR_ID, OAK_SAVE, OAK_MELEE],
+        ),
+      }),
+    )
+    const [oak] = idsOf(start, 'treefolk.oak') as [UnitId]
+
+    // The attack roll that carries the Confuse face, and the save roll it is aimed at.
+    const table = rollsOnTheTable(start)
+    expect(table.map((r) => r.kind)).toEqual(['attack', 'save'])
+    expect(table[0]?.roll.dice.some((d) => d.face.icon === 'SAI' && d.face.sai === 'Confuse')).toBe(true)
+    expect(table[1]?.roll.total).toBe(4)
+
+    const done = advance(applyAction(start, { kind: 'sai_target', unitIds: [oak] }))
+    const confused = done.log.find((e) => e.kind === 'confused')
+    expect(confused).toMatchObject({ sai: 'Confuse', player: 'p1', target: 'p2' })
+    if (confused?.kind !== 'confused') throw new Error('no confused entry')
+    // The four saves it rolled first, and the melee face that replaced them.
+    expect(confused.before.map((d) => [d.unitId, d.faceIndex])).toEqual([[oak, OAK_SAVE]])
+    expect(confused.after.map((d) => [d.unitId, d.faceIndex])).toEqual([[oak, OAK_MELEE]])
+    // Before the exchange's own line, which shows only what counted.
+    const at = (kind: string) => done.log.findIndex((e) => e.kind === kind)
+    expect(at('confused')).toBeLessThan(at('combat_resolved'))
+  })
+
+  it('has nothing on the table once the exchange is over', () => {
+    expect(rollsOnTheTable(advance(stage({
+      attackers: ['treefolk.satyr'],
+      defenders: ['treefolk.oak'],
+      rng: rngShowing(['treefolk.satyr', 'treefolk.oak'], [SATYR_ID, OAK_MELEE]),
+    })))).toEqual([])
   })
 
   /**

@@ -425,8 +425,7 @@ export function attackRollDice(
   spec: AttackSpec,
   attack: AttackRollState,
 ): readonly DieRoll[] {
-  const attackers = attackerRoll(state, spec)
-  return resolveFaces(attack.dice, attackRollSpec(spec, attackers.modifiers), state.ruleSet).dice
+  return parkedAttackRoll(state, spec, attack).dice
 }
 
 /** The same for the defender's save dice, which sit parked across the delayed pause. */
@@ -435,7 +434,37 @@ export function saveRollDice(
   spec: AttackSpec,
   saves: SaveRollState,
 ): readonly DieRoll[] {
-  return resolveFaces(saves.dice, saveRollSpec(state, spec, saves.bonus), state.ruleSet).dice
+  return parkedSaveRoll(state, spec, saves).dice
+}
+
+/**
+ * The parked attack roll as a whole result -- total and `math` as well as dice -- for a
+ * sheet that shows the roll behind a decision (Phase 9d). The total is what the roll
+ * comes to *now*; nothing later in the exchange changes an attack roll.
+ */
+export function parkedAttackRoll(
+  state: GameState,
+  spec: AttackSpec,
+  attack: AttackRollState,
+): RollResult {
+  const attackers = attackerRoll(state, spec)
+  return asResult(
+    resolveFaces(attack.dice, attackRollSpec(spec, attackers.modifiers), state.ruleSet),
+    spec.action,
+  )
+}
+
+/** The parked save roll as a whole result. At the delayed pause this is the roll before
+ *  Choke or Confuse has touched it -- which is the point of showing it. */
+export function parkedSaveRoll(
+  state: GameState,
+  spec: AttackSpec,
+  saves: SaveRollState,
+): RollResult {
+  return asResult(
+    resolveFaces(saves.dice, saveRollSpec(state, spec, saves.bonus), state.ruleSet),
+    'save',
+  )
 }
 
 /**

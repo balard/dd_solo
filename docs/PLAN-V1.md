@@ -2085,7 +2085,7 @@ screen before the next begins. This phase is judged by looking at it.
 | **9a** | House rule: beneficial army spells target only your own armies. Four spell-announcement bugs | ✅ landed |
 | **9b** | Accelerated Growth becomes a decision; the "Replanting before AG" house rule retires with it | ✅ landed |
 | **9c** | Every modifier explicit: named steps in each roll's arithmetic, and the dragon attack's math | ✅ landed |
-| **9d** | The roll behind every decision, the enemy's included; Confuse shown and logged | |
+| **9d** | The roll behind every decision, the enemy's included; Confuse shown and logged | ✅ landed |
 | **9e** | Board surfaces: both reserves, both summoning pools, a selectable DUA, a floating inspector, "look" mode | |
 | **9f** | One way to pick a die, the spell picker's count and colour, the 8th-face emphasis | |
 
@@ -2263,6 +2263,35 @@ the rulebook's step 2 says. It *looked* as if it fired on the attack roll for th
 - the log's only strip carried the Confuse face.
 
 The save strip becomes pickable, and a `confused` entry logs each rerolled die, before → after.
+
+#### Where this slice was wrong
+
+- **"Built on `rollOnTheTable`" was half right.** That query answers "which dice is this decision
+  choosing among", which is one roll. The delayed pause needs two, so `rollsOnTheTable` is its
+  plural and returns totals and `math` as well as dice. The singular stays: `PassiveAI` and the
+  dragon allocation still ask the narrower question.
+- **The logged half needed no engine at all.** A decision after a roll (damage, a counter-attack
+  offer, a direction) is answered with the roll already in the log. The sheet draws that entry
+  with `LogLine`, the log's own renderer, now exported. Nothing was duplicated.
+- **Confuse picking came almost free.** `RollStrip`'s `pick` only lights the dice in its option
+  set, so every strip gets the same set. For a Confuse that is the target army's units, and only
+  the save strip holds any of them. The attack strip above never lights up, and no code decides
+  which strip is "the" pickable one.
+- **Not planned: a Vite cache ate an edit.** The first browser load crashed with "LogLine is not
+  defined". The dev server was serving a transform from before the import landed, because a `sed`
+  edit had not invalidated it. Touching the file fixed it. It is worth knowing before blaming the
+  code.
+
+**Checked in a browser** with the replay scaffold, and a 650 ms → 8 s AI think time to catch the
+enemy mid-decision. Both were reverted before the commit.
+- **`?forces=starter&seed=1`, 135 decisions in.** "Choose units to lose" now sits under the
+  enemy's counter-attack and your saves: "4 melee − 0 saves = 4 damage".
+- **`?forces=treefolk_satyr&seed=2`, 328 decisions in.** While the enemy chooses a Confuse, the
+  panel shows "The enemy's melee attack", with its Confuse die outlined, and "Your saves" above
+  "The enemy is deciding…". The log then reads "Satyr: 4 magic → Satyr: 4 Sleep".
+- **Same force, seed 1, 102 decisions in.** Your Confuse: the enemy's two save dice are dashed in
+  the strip. Tapping one reads "targeted 4 / must reach 4", and the log shows
+  "4 Volley +4 → 4 (ID)".
 
 ### 9e — board surfaces and the inspector
 
