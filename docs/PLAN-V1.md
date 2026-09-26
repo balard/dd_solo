@@ -72,9 +72,9 @@ G  Golden files: 25 recorded v0 games          DONE  cut before anything moves
                                    |
                         8 Species abilities   DONE -- no ability acts in its own phase
                                    |
-                        9 UI and rules polish   -- six slices, 9a-9f
+                        9 UI and rules polish   DONE -- six slices, 9a-9f
                                    |
-                        10 GreedyAI
+                        10 GreedyAI   -- five slices, 10a-10e
 ```
 
 Phase 9 was once "UI and AI for v1". The first playtest of the complete rules turned the UI half
@@ -2448,6 +2448,193 @@ The app's opponent becomes `GreedyAI`, and the start screen gains an opponent pi
 a phone, against an opponent that marches, maneuvers, casts and recruits. A 200-game
 `SPECIES_RULES` fuzz against `RandomAI` has `stuck === 0` and every activity counter `> 0`.
 
+| Slice | Scope | State |
+|---|---|---|
+| **10a** | The estimator: expected results from exact face distributions, through `armyRoll` | ✅ landed |
+| **10b** | `GreedyAI`: the march, and every forced or free decision | planned |
+| **10c** | `GreedyAI`: spells, Dispel Magic, Summon Dragon; the greedy fuzz | planned |
+| **10d** | The opponent in both clients: start-screen picker, `?ai=`, `--ai greedy` | planned |
+| **10e** | The roll-off choice, behind `rollOff: 'choice'`; retires `RULES-V0.md` §7's house rule | planned |
+
+**One commit per slice, and the 25 goldens stay byte-identical and unregenerated throughout.**
+Nothing in 10a-10d changes a rule, and 10e is gated on a key `V0_RULES` has on `'split'`.
+
+**Not in this phase: moving the 1000-game fuzz onto the live rules.** It still runs `V0_RULES`,
+and 10c adds a 200-game greedy fuzz rather than closing that gap. The gap is named in *Risks*.
+
+### 10a — the estimator
+
+`src/ai/estimate.ts`, pure, with no decisions yet. This is the closed-form expectation `OVERVIEW.md`
+§4 promises, and **the one place the AI turns faces into numbers**, so every scorer after it reads
+the board the same way.
+
+- **`expectedFace`** is a die's mean over its faces.
+  - Normal and ID faces go through `faceResults`.
+  - SAI faces go through `saiEffects(face, context)`, so an SAI counts only in the rolls its
+    `Applies` column names. A Fly on a monster is worth nothing in a melee roll, here as in play.
+  - The result comes back as the pipeline's `Share`, `{ id, normal, sai }`, because step 6 and step
+    9 need the ID share separate from the rest.
+- **`expectedArmy` gathers its dice and modifiers from `armyRoll`**, then runs the summed shares
+  through `applyModifiers`, which takes fractional values without complaint. Using the one door
+  means a sleeping die drops out, and Galeforce, Stone Skin, the eighth face's doubling and
+  Flaming Shields reach the estimate without the AI learning about any of them. An AI that
+  gathered its own modifiers would be the second door `armyRoll` exists to prevent.
+- **`expectedDamage`** is E[attack] − E[saves], floored at 0, plus the unsavable share (Smite).
+  **`killValue`** turns that into health that actually dies, via `maxAbsorbable`.
+- **`unitValue`** is a die's expected output across the four result types at its terrain, plus its
+  health.
+- **`leastValuableMaximal`** is an exact-sum knapsack on `unitValue`, and it is how the AI picks
+  which maximal set to lose. Flipped, it picks which maximal set to take. It never uses a
+  largest-first loop: §6's 4 damage against 3, 2, 2 kills `{2,2}`.
+- **`contestOdds`** is the marcher's E[maneuver] against the defender's. It is an expectation, not
+  a probability, which is enough for a player told to be active.
+
+Tests:
+- a single die's expectation matches an exact enumeration of its faces;
+- a Galeforce lowers E[save] by four, floored at 0;
+- the eighth face doubles only the ID share;
+- Fly is worth 0 in melee;
+- the §6 example holds;
+- given a choice between two dice of equal health, the cheaper one is the one lost.
+
+#### Where this slice was wrong
+
+- **`expectedDamage` became `expectedAttack`**, which returns both rolls as well as the damage.
+  Every scorer after it wants the attack total and the save total separately: Galeforce targets
+  the save side, and a riposte comes off the save roll. The damage also counts the targeting
+  SAIs, not only Smite. A Flame's two health is damage in all but name, so a target with no way
+  out counts whole and one that rolls for its life counts at half.
+- **`unitValue` is a property of the die type, not of where the die stands.** The plan said "at
+  its current terrain". But the same die is compared across the DUA, the Reserves and the board
+  (a promotion partner, a burial, a recruit), and a value that moved with the terrain face would
+  make those choices depend on which face happened to be up.
+- **A rerolling face needed a closed form the plan did not mention.** With `k` of `n` faces
+  rerolling, `E = sum / (n - k)`. Averaging the printed faces makes Strangle Vine's Rend and
+  Double Strike worth only what they print, which undervalues the die by a fifth.
+- **Wild Growth's budget counts as saves on a save roll.** "Keep it all as saves" is always a
+  legal split, so the budget is the die's floor there. It is worth nothing on any other roll.
+- `contestOdds` takes the player it is asked for, since the defender asks too, and the per-face
+  function is exported as `expectedFace` for the Fly test.
+
+#### One thing that would have shipped silently
+
+**Flaming Shields.** `armyRoll` gathers it as a `counts_as` modifier, and `applyModifiers` ignores
+`counts_as` by design: only the dice can say how many saves there were. So an estimator built the
+obvious way, `armyRoll` then `applyModifiers`, drops the conversion without a sound. Every
+Firewalker army at a fire terrain would read as weaker in melee than it is, and nothing would fail.
+It is added now from the expected rolled saves, at step 10 and never on a counter-attack, as
+`resolveFaces` does. A test holds it to exactly one Watcher's worth, 2/6.
+
+**Verification.** 22 tests, including one against the real roller: two Oak Lords average three
+melee over 4000 throws of `rollArmy`, with Smite excluded. That checks the estimate against the
+engine's own arithmetic rather than a restatement of it. The full suite and the 25 goldens are
+green and unregenerated. 10a adds no decision, so there is nothing to fuzz yet.
+
+### 10b — the march and every forced or free decision
+
+`src/ai/greedy.ts`: **an exhaustive `switch` over all 31 `Pending` kinds, with no `default:`.**
+- Where it has no better opinion yet, it calls passive's answer. `decideAction` becomes an export
+  so the fallback is one call rather than a copy.
+- rng breaks ties and nothing else, so a game still replays from `{ seed, aiSeed }`.
+
+"Active over optimal" decides every row:
+
+| Pending | Answer |
+|---|---|
+| `choose_march_army` | Always marches, choosing the army whose best action plus terrain progress scores highest. |
+| `choose_maneuver`, `choose_direction` | Toward 8 from 7. Toward a face whose action suits the army's strongest type. Away from a face that hands the enemy their best action. Goes up on a tie, and maneuvers even with the contest slightly against it. |
+| `contest_maneuver`, `choose_counter_attack` | Yes. Both are free, as they are for passive. |
+| `choose_action`, `choose_missile_target` | The highest expected value, and never a pass while something is legal. Magic uses a placeholder value until 10c. |
+| `assign_damage`, `dragon_breath`, `temple_bury` | Its least valuable maximal set, or its least valuable die. |
+| `sai_target` | The most valuable maximal set it may take, `eligible` respected. Sleep goes on the most valuable single die. |
+| `sai_target_army` | The enemy army facing our strongest attacker, else the largest. |
+| `sai_promote`, `eighth_face_city`, `dragon_treasure`, `accelerated_growth` | **Always takes the offer**, choosing the most health gained. |
+| `sai_move`, `retreat` (Air Flight) | Moves when it brings a capture closer. Otherwise it stays. |
+| `reinforce` | **Brings reserves out**, to the widest health gap or the nearest capture. It keeps a caster back only when Reserve magic scores higher. |
+| `rapid_growth`, `flashfire` | Rerolls the dice that came in below their own expectation. |
+| `eighth_face_temple` | Forces the burial, **unless** the opponent's DUA holds a Rise face. This is the case `passive.ts` hands over. |
+| dragon decisions | Different-element dragon first (p. 18). Kills a dragon when a single pool reaches the threshold, and sends everything else to saves. Converts a Flaming Shields save only when that completes a kill. |
+
+Every row has a scenario test, and every row that is allowed to decline has one proving it does not
+decline when an option exists.
+
+### 10c — spells, and the fuzz
+
+`src/ai/spells.ts` scores an announcement **from the data's shape wherever it can**:
+- an `effect` block is weighed by the sign and size of its modifiers against its scope;
+- a damage handler is scored through `expectedDamage` against the target's saves, because
+  `spellSaveRoll` rolls them first;
+- a small table covers the handlers that are neither (Summon Dragon, Resurrect Dead, Path, Mirage,
+  Flash Flood, the walls).
+
+A test fails if a spell in `data/spells.json` has no score, which mirrors the `resolvesSpell`
+guard.
+
+The list is built greedily by value per point out of `pending.castable`.
+- It respects each target's `minCount`, merges repeats through `stageCast`, and checks
+  `announcementProblem` before returning.
+- Harm goes on reachable enemies, buffs on the army about to act, and **Summon Dragon** on a
+  terrain holding an enemy army and none of ours.
+- `dispel_magic` rolls when a harmful announced spell is aimed at us.
+- `spell_move` and `spell_summon` use `reinforce`'s terrain score.
+
+**The fuzz** is 200 `SPECIES_RULES` games, greedy against random.
+- Sides alternate, and the force mix and `maxDecisions: 20_000` follow `species.test.ts`, with the
+  longest game recorded.
+- `stuck === 0`, and no game reaches the cap.
+- **Counters over greedy's own actions** are each `> 0`: marches, maneuvers, every attack kind,
+  spells announced, Summon Dragon, reinforcements, and promotions or recruits.
+- **A strength check: greedy wins most of the decided games.** It catches a sign error that every
+  other test would pass. The threshold is measured before it is written down, not guessed.
+- 20 greedy-vs-greedy games, with `stuck === 0`.
+
+### 10d — the opponent in both clients
+
+- `newGame.ts` gains the opponent: `greedy` by default, or `passive`. `RandomAI` stays a test tool,
+  reachable only from the terminal. The rule lives in `newGame.ts`, tested in node, and
+  `NewGameScreen` only shows it.
+- `useGame` takes the chosen AI from the session. `parseGameRequest` reads `?ai=`, and an unknown
+  name is reported the way an unknown `forces` name is.
+- `npm run play` defaults to `--ai greedy`.
+- **No `SAVE_VERSION` bump**: a record stores the actions an AI produced, and replay never calls
+  `decide`.
+- The exit criterion is checked here, in a browser at phone width.
+
+### 10e — the roll-off choice
+
+The rule (full rules p. 10, step 4): the Horde winner takes **either** the first turn, and the
+opponent then selects the Frontier from the two proposals, **or** selects the Frontier, and the
+opponent goes first. The starting faces are rolled after the choice.
+
+- **Gated on a new `RuleSet` key, `rollOff: 'split' | 'choice'`.** Every existing rung, `V0_RULES`
+  included, stays on `'split'`. `SPECIES_RULES` / `V1_RULES` take `'choice'`.
+- **Under `'choice'` each player proposes a Frontier.**
+  - The draw order becomes: p1 home, p1's proposal (from p1's elements, through
+    `drawFrontierDie`), p2's proposal, p2 home.
+  - No face is rolled yet.
+  - A pinned Frontier skips the choice and draws nothing, following the pinned-terrain rule.
+- **A new `'setup'` phase holds two `Pending` kinds.**
+  - `roll_off_choice` goes to the winner: `first_turn` | `frontier`.
+  - `choose_frontier` goes to whoever selects it: `options` are the two proposal dice.
+  - The answer sets `turn.marching`, places the die and rolls the three starting faces in slot
+    order.
+  - `GameState.proposals` is optional and omitted outside the phase.
+- **Open at the start of the slice: what `state.terrains` holds during the pause.** One option is
+  a placeholder Frontier with its face unrolled, with `validateState` told about the phase; the
+  other is a face that may be null for that phase. Pick whichever `validateState` and the digest
+  can say most simply, and write up the choice here.
+- **The union makes this a compile error in every player**, so all of them answer it:
+  - `promptFor`, with both proposals drawn through `TerrainDetail`;
+  - `PassiveAI` takes the first turn, then picks its own proposal;
+  - `RandomAI` flips a coin, then picks;
+  - the CLI;
+  - `GreedyAI` scores each proposal by the elements its species' abilities and spells want, plus
+    the eighth-face icon. It takes the Frontier when the gap between the proposals is wide, and
+    the first turn otherwise.
+- **`SAVE_VERSION` 13 → 14**, for two true reasons: a new decision that changes the dice order, and
+  a new `RuleSet` key an old record would read as `undefined`.
+- The 10c fuzz gains both roll-off answers as counters `> 0`.
+
 ---
 
 ## §10 — Every v0 house rule this plan removes
@@ -2562,6 +2749,10 @@ every turn and `RandomAI` retreats into it constantly -- so the spell fuzz needs
 seconds. A thousand would be closer to 45. That is not a reason not to do it; it is a reason to
 decide deliberately whether the standing suite wants it, or whether the 1000-game run belongs behind
 a flag with 200 in the default suite.
+
+**Phase 10 decided not to close it.** Its greedy fuzz is another 200-game `SPECIES_RULES` net, with
+activity counters, and the 1000-game run stays on `V0_RULES`. Moving it is a named follow-up: 1000
+live-rules games behind an environment flag, 200 in the default suite.
 
 **The verification scaffold was the other new risk, and it shrank rather than compounding.** 4b
 needed a preset and a ruleset flip; 4c needed both refusal branches stubbed as well; **4d needed one

@@ -760,6 +760,17 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     and 20 of 200 games stopped on `runGame`'s default 5000 with every trigger counter quietly
     under-reporting. The spell fuzz passes `maxDecisions: 20_000` against a longest *observed*
     game of 16,353. A cap raised by guessing is a cap that will be hit again.
+- **`src/ai/estimate.ts` is the one place the AI turns faces into numbers** (v1 Phase 10a).
+  It computes closed-form expectations: `expectedFace` averages each face, `expectedArmy` goes
+  through `armyRoll` and then `applyModifiers`, and `expectedAttack` gives both rolls. A scorer that
+  gathers its own modifiers is a second door onto an army roll: a Galeforce or a sleeping die it
+  forgets goes silently unseen.
+  - **`applyModifiers` ignores `counts_as`, so Flaming Shields is added by hand** from the
+    expected rolled saves. Building the estimate the obvious way drops it without a sound.
+  - A rerolling face is `E = sum / (faces - rerolls)`.
+  - `unitValue` depends on the die type only, never on where the die stands.
+  - `leastValuableMaximal` / `mostValuableMaximal` are an exact-sum knapsack over
+    `maxAbsorbable`, never largest-first.
 - **A game record is `{ setup, actions }` and nothing else.** Replaying it reproduces the game die
   for die. `replayTo(record, n)` is undo.
 - **The golden corpus is the guard on "this changed no outcome".** `src/engine/__golden__/` holds
