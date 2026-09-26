@@ -60,6 +60,22 @@ export const randomAi: AiPlayer = {
 
   decide(state: GameState, pending: Pending, rng: RngState) {
     switch (pending.kind) {
+      // All three answers, uniformly: the first turn, or either proposal. A fuzz that
+      // always took the first turn would never reach `choose_frontier` at all.
+      case 'roll_off_choice': {
+        const [pick, next] = nextInt(rng, 3)
+        const action: GameAction =
+          pick === 0
+            ? { kind: 'roll_off_choice', take: 'first_turn' }
+            : { kind: 'roll_off_choice', take: 'frontier', proposer: pick === 1 ? 'p1' : 'p2' }
+        return [action, next] as const
+      }
+
+      case 'choose_frontier': {
+        const [proposer, next] = pick(rng, ['p1', 'p2'] as const)
+        return [{ kind: 'choose_frontier', proposer } as GameAction, next] as const
+      }
+
       case 'choose_march_army': {
         // `null` is always legal, so it belongs in the pool alongside the armies.
         const [army, next] = pick(rng, [...pending.options, null])

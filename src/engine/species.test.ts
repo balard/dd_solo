@@ -116,10 +116,10 @@ describe('the species ability table', () => {
     }
   })
 
-  it('is off in every rung below SPECIES_RULES, and V1_RULES is that rung', () => {
+  it('is off in every rung below SPECIES_RULES, and on in V1_RULES, which only adds the roll-off', () => {
     expect(V0_RULES.speciesAbilities).toBe(false)
     expect(SPELL_RULES.speciesAbilities).toBe(false)
-    expect(V1_RULES).toBe(SPECIES_RULES)
+    expect(V1_RULES).toEqual({ ...SPECIES_RULES, rollOff: 'choice' })
 
     const units: Spec[] = [
       { id: 't', typeId: OAKLING, owner: 'p1', at: at('frontier') },

@@ -18,7 +18,7 @@
  * Where it holds no better opinion yet it answers as `PassiveAI` would, by calling
  * `decideAction` rather than copying it. The spell decisions land in 10c.
  */
-import { terrainFaceAction, unitType } from '../data/load'
+import { speciesElements, terrainDie, terrainFaceAction, terrainType, unitType } from '../data/load'
 import type { ResultType, TerrainFaceNumber } from '../data/types'
 import { legalActions, missileTargets } from '../engine/combat'
 import { growthPartners } from '../engine/dua'
@@ -30,6 +30,7 @@ import {
   army,
   opponentOf,
   reserveArmy,
+  speciesOf,
   type ActionKind,
   type ArmyRef,
   type Direction,
@@ -350,12 +351,51 @@ function duaCanRise(state: GameState, player: PlayerId): boolean {
   )
 }
 
+/**
+ * How much a proposed Frontier favours `player`: the elements it shares with their
+ * species, less the ones it shares with the enemy's.
+ *
+ * Elements are what the terrain's action and every species ability in this box key
+ * on -- Replanting and Rapid Growth at water and earth, Air Flight and Flaming Shields
+ * at air and fire, and a spell's colour through Standing Stones -- so a Frontier of your
+ * own colours is one where your side's rules work and theirs do not.
+ */
+function frontierScore(state: GameState, player: PlayerId, dieId: string): number {
+  const elements = terrainType(terrainDie(dieId).type).elements
+  const shared = (who: PlayerId): number =>
+    speciesElements(speciesOf(state, who)).filter((e) => elements.includes(e)).length
+  return shared(player) - shared(opponentOf(player))
+}
+
+/** What the first march of the game is worth against the pick of the Frontier: about
+ *  one shared element. The Frontier is taken only when the proposals differ by more. */
+const FIRST_TURN = 1.5
+
 // --- the decisions -------------------------------------------------------------------
 
 function decide(state: GameState, pending: Pending): GameAction {
   const player = pending.player
 
   switch (pending.kind) {
+    // The roll-off (v1 Phase 10e). Taking the first turn hands the loser the pick, and
+    // the loser will pick the proposal worst for us -- so the Frontier is worth taking
+    // only when the best proposal beats that one by more than a first march is worth.
+    case 'roll_off_choice': {
+      const proposers = ['p1', 'p2'] as const
+      const score = (proposer: PlayerId): number => frontierScore(state, player, pending.proposals[proposer])
+      const mine = best(proposers, score) ?? 'p1'
+      const theirs = best(proposers, (proposer) => -score(proposer)) ?? 'p1'
+      return score(mine) - score(theirs) > FIRST_TURN
+        ? { kind: 'roll_off_choice', take: 'frontier', proposer: mine }
+        : { kind: 'roll_off_choice', take: 'first_turn' }
+    }
+
+    case 'choose_frontier':
+      return {
+        kind: 'choose_frontier',
+        proposer: best(['p1', 'p2'] as const, (proposer) => frontierScore(state, player, pending.proposals[proposer])) ?? pending.player,
+      }
+
     // Always marches. Every army scores what its march could achieve, the Reserve Army
     // its magic; standing still is never among the answers while an army can go.
     case 'choose_march_army': {

@@ -29,7 +29,7 @@ import {
 import { RollStrip } from './DiceGrid'
 import { DragonFaceArt } from './FaceArt'
 import { speciesInfo } from './Elements'
-import { slotLabel } from './prompts'
+import { proposalLabel, slotLabel } from './prompts'
 
 /** "melee" -> "Melee". The action reads as a name in a sentence, not a keyword. */
 function actionName(action: string): string {
@@ -106,6 +106,45 @@ export function LogLine({
           />
           <div className="roll-sum">{outcome}</div>
         </div>
+      )
+    }
+    // v1 Phase 10e: the roll-off decides who *chooses*, and the choice is its own line.
+    case 'roll_off': {
+      const other = human === 'p1' ? 'p2' : 'p1'
+      const outcome = (
+        <>
+          {entry.rolls[human]} vs {entry.rolls[other]} maneuver;{' '}
+          <b>
+            {whoLower(entry.winner)} {verb(entry.winner, 'chooses', 'choose')} the first turn or the Frontier
+          </b>
+        </>
+      )
+      if (entry.dice[human].length === 0) {
+        return <p className="log-line muted">Horde roll-off &mdash; {outcome}</p>
+      }
+      return (
+        <div className="log-roll">
+          <div className="roll-head">horde roll-off</div>
+          <RollStrip dice={entry.dice[human]} total={entry.rolls[human]} />
+          <div className="roll-head">the enemy&rsquo;s horde</div>
+          <RollStrip dice={entry.dice[other]} total={entry.rolls[other]} />
+          <div className="roll-sum">{outcome}</div>
+        </div>
+      )
+    }
+    case 'roll_off_decided': {
+      const frontier = <b>{proposalLabel(entry.frontier, entry.proposer, human)}</b>
+      const loser = entry.winner === 'p1' ? 'p2' : 'p1'
+      return entry.took === 'first_turn' ? (
+        <p className="log-line">
+          {who(entry.winner)} {verb(entry.winner, 'takes', 'take')} the first turn;{' '}
+          {whoLower(loser)} {verb(loser, 'picks', 'pick')} the Frontier: {frontier}
+        </p>
+      ) : (
+        <p className="log-line">
+          {who(entry.winner)} {verb(entry.winner, 'picks', 'pick')} the Frontier: {frontier};{' '}
+          {whoLower(entry.firstPlayer)} {verb(entry.firstPlayer, 'marches', 'march')} first
+        </p>
       )
     }
     case 'march_begin':

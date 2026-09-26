@@ -105,6 +105,7 @@ import {
   spellTargetProblem,
 } from './magic'
 import { castSpell, spellEffect } from './spells'
+import { applyChooseFrontier, applyRollOffChoice, rollOffPending } from './setup'
 import type { DragonElement, ResultType } from '../data/types'
 import {
   IllegalActionError,
@@ -3609,6 +3610,15 @@ export function stepGame(state: GameState): GameState {
   if (synced !== state) return synced
 
   switch (state.turn.phase) {
+    // Before the first turn, under `rollOff: 'choice'` (v1 Phase 10e): the winner of the
+    // roll-off is choosing, and then perhaps the loser. Answering settles the Frontier,
+    // rolls the starting faces and moves the phase on, so this only ever asks.
+    case 'setup': {
+      const pending = rollOffPending(state)
+      if (pending === null) throw new Error('the setup phase has no roll-off choice open')
+      return { ...state, pending }
+    }
+
     // No longer a no-op: effects with a duration end "at the beginning of your next
     // turn", which is here. It takes no decision, so it expires and moves on in one
     // step.
@@ -4508,6 +4518,14 @@ export function applyAction(state: GameState, action: GameAction): GameState {
   const cleared: GameState = { ...state, pending: null }
 
   switch (action.kind) {
+    case 'roll_off_choice':
+      return applyRollOffChoice(
+        cleared,
+        action.take,
+        action.take === 'frontier' ? action.proposer : undefined,
+      )
+    case 'choose_frontier':
+      return applyChooseFrontier(cleared, action.proposer)
     case 'choose_march_army':
       return applyMarchArmy(cleared, action.army)
     case 'choose_maneuver':

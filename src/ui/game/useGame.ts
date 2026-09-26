@@ -29,7 +29,7 @@ import {
   type ForceSpec,
   type SetupOptions,
 } from '../../engine/setup'
-import { SPECIES_RULES, type GameAction, type GameState, type PlayerId } from '../../engine/types'
+import { V1_RULES, type GameAction, type GameState, type PlayerId } from '../../engine/types'
 
 import { clearSave } from './storage'
 
@@ -127,7 +127,7 @@ export function parseGameRequest(search: string, fallbackSeed: number): GameRequ
     }
   }
 
-  const setup: SetupOptions = { seed, forces, ruleSet: SPECIES_RULES }
+  const setup: SetupOptions = { seed, forces, ruleSet: V1_RULES }
   return problem === null
     ? { setup, opponent, origin: { kind: 'requested', forces: name, seed } }
     : { setup, opponent, origin: { kind: 'recovered', reason: problem } }

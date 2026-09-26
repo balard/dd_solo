@@ -223,7 +223,11 @@ A ladder, because the interesting version needs the boring version's interface f
   abstraction works before any strategy exists. Contesting and countering are both free, so
   declining them would cost it the terrain track for nothing and leave those paths untested.
 - **v1 — `GreedyAI`.** Heuristic scoring over enumerated legal actions: expected damage, terrain
-  progress, army health preserved.
+  progress, army health preserved. **Landed in v1 Phase 10.** Every number comes from
+  `src/ai/estimate.ts`, closed-form expectations over the face tables through the engine's own
+  `armyRoll` and `applyModifiers`. Spells are scored from their data (`src/ai/spells.ts`). It is
+  *active over optimal*: it marches every turn, and the stalls self-play found were each a
+  value that outbid walking a terrain home.
 - **v2 — search.** Genuinely tractable here, unlike most games: every die's face distribution is
   fully known and tiny, so the expected results of any roll are computable in closed form rather
   than sampled. An expectimax over one or two plies is realistic.

@@ -18,7 +18,7 @@ import { stdin, stdout } from 'node:process'
 import { DEFAULT_OPPONENT, OPPONENT_NAMES, OPPONENTS, opponentNamed } from '../ai/opponents'
 import { randomAi } from '../ai/random'
 import type { AiPlayer } from '../ai/types'
-import { SPECIES, dragonName, terrainDie, terrainFaceAction, unitType } from '../data/load'
+import { SPECIES, dragonName, terrainDie, terrainDieName, terrainFaceAction, unitType } from '../data/load'
 import { spell } from '../data/spells'
 import type { Element, ResultType, TerrainFaceNumber } from '../data/types'
 import { damageOptions } from '../engine/damage'
@@ -35,7 +35,7 @@ import { OWN_ARMY_NOTE, spellPlan, spellTargetLabel, stageCast } from '../engine
 
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
 import {
-  SPECIES_RULES,
+  V1_RULES,
   TERRAIN_SLOTS,
   armyAt,
   army as armyRef,
@@ -151,11 +151,26 @@ function effectsOn(state: GameState, player: PlayerId, slot: TerrainSlot): reado
 function board(state: GameState, human: PlayerId): string {
   const lines: string[] = []
   const turn = state.log.filter((e) => e.kind === 'turn_end').length + 1
-  const who = state.turn.marching === human ? green('you march') : red('opponent marches')
+  // The roll-off choice is open (v1 Phase 10e): nobody is marching, no face is rolled,
+  // and the Frontier slot holds a placeholder. Printing it would show a board nobody rolled.
+  const unrolled = state.rollOff !== undefined
+  const who = unrolled
+    ? cyan('roll-off')
+    : state.turn.marching === human
+      ? green('you march')
+      : red('opponent marches')
   lines.push(bold(`\n── Turn ${turn} · ${who} ` + '─'.repeat(34)))
 
   for (const slot of TERRAIN_SLOTS) {
     const terrain = state.terrains[slot]
+    if (unrolled) {
+      const name = slot === 'frontier' ? 'chosen after the roll-off' : terrain.dieId.replace('_', ' ')
+      lines.push(
+        `  ${SLOT_LABEL[slot].padEnd(9)} ${dim(name.padEnd(26))}${dim('not rolled')}  ` +
+          `P1 ${armySummary(state, 'p1', slot)} P2 ${armySummary(state, 'p2', slot)}`,
+      )
+      continue
+    }
     const action =
       terrain.face === 8
         ? cyan(terrainDie(terrain.dieId).eighthFace.replace('_', ' '))
@@ -245,6 +260,20 @@ function describe(entry: LogEntry, state: GameState): string | null {
       )
     case 'order_of_play':
       return dim(`Horde roll-off ${entry.rolls.p1}–${entry.rolls.p2}: ${entry.firstPlayer} marches first`)
+    // v1 Phase 10e: the roll-off decides who chooses, not who marches.
+    case 'roll_off':
+      return dim(
+        `Horde roll-off ${entry.rolls.p1}–${entry.rolls.p2}: ${entry.winner} chooses the first turn or ` +
+          `the Frontier — p1 proposes ${terrainDieName(entry.proposals.p1)}, ` +
+          `p2 proposes ${terrainDieName(entry.proposals.p2)}`,
+      )
+    case 'roll_off_decided': {
+      const loser = entry.winner === 'p1' ? 'p2' : 'p1'
+      const frontier = `${bold(terrainDieName(entry.frontier))} (${entry.proposer}'s proposal)`
+      return entry.took === 'first_turn'
+        ? `${entry.winner} takes the first turn; ${loser} picks the Frontier: ${frontier}`
+        : `${entry.winner} picks the Frontier: ${frontier}; ${entry.firstPlayer} marches first`
+    }
     case 'march_begin':
       return `${entry.player} marches at ${SLOT_LABEL[entry.army as TerrainSlot] ?? entry.army}`
     case 'march_skipped':
@@ -634,6 +663,23 @@ const dragonNameOf = (state: GameState, dragonId: string | undefined): string =>
 
 function choicesFor(state: GameState, pending: Pending): Choice[] {
   switch (pending.kind) {
+    case 'roll_off_choice':
+      return [
+        { key: '1', label: 'take the first turn (the enemy picks the Frontier)', action: { kind: 'roll_off_choice', take: 'first_turn' } },
+        ...(['p1', 'p2'] as const).map((proposer, i) => ({
+          key: String(i + 2),
+          label: `pick the Frontier: ${terrainDieName(pending.proposals[proposer])} (${proposer === 'p1' ? 'your' : "the enemy's"} proposal; the enemy marches first)`,
+          action: { kind: 'roll_off_choice', take: 'frontier', proposer } as GameAction,
+        })),
+      ]
+
+    case 'choose_frontier':
+      return (['p1', 'p2'] as const).map((proposer, i) => ({
+        key: String(i + 1),
+        label: `${terrainDieName(pending.proposals[proposer])} (${proposer === 'p1' ? 'your' : "the enemy's"} proposal)`,
+        action: { kind: 'choose_frontier', proposer } as GameAction,
+      }))
+
     case 'choose_march_army':
       return [
         ...pending.options.map((army, i) => ({
@@ -1550,7 +1596,7 @@ async function main() {
   const { seed, ai, forces }: { seed: number; ai: AiPlayer; forces: ForceSpec } = parseArgs()
   const human: PlayerId = 'p1'
 
-  let state = begin(setupGame({ seed, forces, ruleSet: SPECIES_RULES }))
+  let state = begin(setupGame({ seed, forces, ruleSet: V1_RULES }))
 
   // Which species you are is a roll now, so the banner reads it off the board
   // rather than stating it.

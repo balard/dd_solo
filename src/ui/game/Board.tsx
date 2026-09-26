@@ -432,10 +432,16 @@ export function Board({
   const art = useFaceArt()
   const ruleSet = useRuleSet()
 
+  // The roll-off choice is open (v1 Phase 10e): no starting face is rolled yet, and the
+  // Frontier slot holds a placeholder -- p1's proposal -- that the choice may replace.
+  // Drawing either would show the player a board nobody has rolled.
+  const unrolled = state.rollOff !== undefined
+
   return (
     <div className="board">
       {TERRAIN_SLOTS.map((slot) => {
         const terrain = state.terrains[slot]
+        const undecided = unrolled && slot === 'frontier'
         const captured = terrain.face === 8
         const icon = captured
           ? null
@@ -461,9 +467,11 @@ export function Board({
             <button
               type="button"
               className="card-head-btn"
-              onClick={() => onToggleFaces(slot)}
+              onClick={() => {
+                if (!undecided) onToggleFaces(slot)
+              }}
               aria-expanded={facesOpen}
-              title="tap to see every face of this terrain die"
+              title={undecided ? 'chosen after the roll-off' : 'tap to see every face of this terrain die'}
             >
               <span className="chip-head">
                 <span className="chip-name">
@@ -475,21 +483,35 @@ export function Board({
                    * differs is on screen. The icon is what face 8 does once
                    * captured, hence the tooltip from `eighthFaceLabel`.
                    */}
-                  <span className="chip-terrain">
-                    {type.name}
-                    <span
-                      className="chip-eighth"
-                      title={eighthFaceLabel(terrainDie(terrain.dieId).eighthFace, ruleSet)}
-                    >
-                      {terrainDie(terrain.dieId).eighthFace.replace(/_/g, ' ')}
-                    </span>
-                  </span>
-                  <ElementDots
-                    elements={type.elements}
-                    title={`${type.name} — ${type.elements.join(' + ')}`}
-                  />
+                  {undecided ? (
+                    <span className="chip-terrain muted">chosen after the roll-off</span>
+                  ) : (
+                    <>
+                      <span className="chip-terrain">
+                        {type.name}
+                        <span
+                          className="chip-eighth"
+                          title={eighthFaceLabel(terrainDie(terrain.dieId).eighthFace, ruleSet)}
+                        >
+                          {terrainDie(terrain.dieId).eighthFace.replace(/_/g, ' ')}
+                        </span>
+                      </span>
+                      <ElementDots
+                        elements={type.elements}
+                        title={`${type.name} — ${type.elements.join(' + ')}`}
+                      />
+                    </>
+                  )}
                 </span>
-                <span className="chip-face">{renderFace(art, terrain, icon, ruleSet)}</span>
+                <span className="chip-face">
+                  {unrolled ? (
+                    <span className="chip-number muted" title="rolled once the roll-off choice is made">
+                      not rolled
+                    </span>
+                  ) : (
+                    renderFace(art, terrain, icon, ruleSet)
+                  )}
+                </span>
               </span>
             </button>
 

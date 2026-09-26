@@ -229,6 +229,29 @@ export function validateState(state: GameState): string[] {
     problems.push(`armiesMarched has a repeat: ${marched.join(', ')} -- each march needs a different army`)
   }
 
+  // The roll-off choice (v1 Phase 10e): open exactly while the phase is `'setup'`, and
+  // while it is open the terrains are the placeholder and nothing else -- every face 1,
+  // nobody holding anything, p1's proposal at the Frontier. A placeholder that drifted
+  // would be a board with faces nobody rolled.
+  if ((state.rollOff !== undefined) !== (state.turn.phase === 'setup')) {
+    problems.push(
+      state.rollOff !== undefined
+        ? `a roll-off choice is open outside the setup phase (${state.turn.phase})`
+        : 'the setup phase has no roll-off choice open',
+    )
+  }
+  if (state.rollOff !== undefined) {
+    for (const slot of TERRAIN_SLOTS) {
+      const terrain = state.terrains[slot]
+      if (terrain.face !== 1 || terrain.capturedBy !== null) {
+        problems.push(`terrain ${slot}: shows face ${terrain.face} before the roll-off choice has rolled any`)
+      }
+    }
+    if (state.terrains.frontier.dieId !== state.rollOff.proposals.p1) {
+      problems.push("the Frontier placeholder is not p1's proposal")
+    }
+  }
+
   return problems
 }
 

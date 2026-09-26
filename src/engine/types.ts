@@ -87,6 +87,20 @@ export interface DragonInPlay {
 
 export type TerrainFace = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
 
+/**
+ * The roll-off choice while it is open (v1 Phase 10e). See `GameState.rollOff`.
+ *
+ * `firstTurnTaken` is the one step it has: the winner took the first turn, so the loser
+ * is choosing the Frontier now. Optional-and-omitted, like every field near the digest.
+ */
+export interface RollOffState {
+  readonly winner: PlayerId
+  /** Each player's proposed Frontier die, drawn from a terrain sharing an element
+   *  with their species. */
+  readonly proposals: Readonly<Record<PlayerId, string>>
+  readonly firstTurnTaken?: true
+}
+
 export interface TerrainInPlay {
   readonly slot: TerrainSlot
   /** Key into the terrain die data, e.g. `swampland_tower`. */
@@ -104,6 +118,12 @@ export interface TerrainInPlay {
  * the turn loop later.
  */
 export type Phase =
+  /**
+   * Before the first turn, under `rollOff: 'choice'` only: the roll-off winner is
+   * choosing the first turn or the Frontier, and no starting face is rolled yet. See
+   * `GameState.rollOff`. Every other game starts on `effects_expire`, as it always did.
+   */
+  | 'setup'
   | 'effects_expire'
   | 'eighth_face'
   | 'dragon_attack'
@@ -585,6 +605,22 @@ export type ActionKind = 'melee' | 'missile' | 'magic'
  * shape of the game is visible in one place.
  */
 export type Pending =
+  /**
+   * The roll-off winner's choice (v1 Phase 10e): the first turn, or one of the two
+   * proposed Frontiers -- which hands the opponent the first turn. Proposals are keyed
+   * by who proposed them, because two players can propose the same die.
+   */
+  | {
+      readonly kind: 'roll_off_choice'
+      readonly player: PlayerId
+      readonly proposals: Readonly<Record<PlayerId, string>>
+    }
+  /** The roll-off loser picks the Frontier, the winner having taken the first turn. */
+  | {
+      readonly kind: 'choose_frontier'
+      readonly player: PlayerId
+      readonly proposals: Readonly<Record<PlayerId, string>>
+    }
   | { readonly kind: 'choose_march_army'; readonly player: PlayerId; readonly options: readonly ArmyRef[] }
   | { readonly kind: 'choose_maneuver'; readonly player: PlayerId; readonly slot: TerrainSlot }
   | { readonly kind: 'contest_maneuver'; readonly player: PlayerId; readonly slot: TerrainSlot }
@@ -999,6 +1035,11 @@ export interface DragonDamageTarget {
 
 /** Actions answer the current `Pending`. Each `kind` matches a `Pending.kind`. */
 export type GameAction =
+  | { readonly kind: 'roll_off_choice'; readonly take: 'first_turn' }
+  /** Picking the Frontier outright, which is the winner's other prize. `proposer`
+   *  names the proposal, not the die: two players can propose the same die. */
+  | { readonly kind: 'roll_off_choice'; readonly take: 'frontier'; readonly proposer: PlayerId }
+  | { readonly kind: 'choose_frontier'; readonly proposer: PlayerId }
   | { readonly kind: 'choose_march_army'; readonly army: ArmyRef | null }
   | { readonly kind: 'choose_maneuver'; readonly maneuver: boolean }
   | { readonly kind: 'contest_maneuver'; readonly contest: boolean }
@@ -1104,7 +1145,32 @@ export interface PromotionPair {
 }
 
 export type LogEntry =
-  | { readonly kind: 'game_start'; readonly seed: number; readonly firstPlayer: PlayerId }
+  /** `firstPlayer` is absent under `rollOff: 'choice'`, where nobody knows it until the
+   *  winner chooses; `roll_off_decided` names it then. */
+  | { readonly kind: 'game_start'; readonly seed: number; readonly firstPlayer?: PlayerId }
+  /**
+   * The Horde roll-off under `rollOff: 'choice'`: who **won**, which is not who marches
+   * first. `order_of_play` is the `split` rung's entry and its field says
+   * `firstPlayer`; reusing it here would have been a field that means the winner under
+   * one rung and the first player under the other.
+   */
+  | {
+      readonly kind: 'roll_off'
+      readonly rolls: Readonly<Record<PlayerId, number>>
+      readonly winner: PlayerId
+      readonly dice: Readonly<Record<PlayerId, readonly DieRoll[]>>
+      readonly proposals: Readonly<Record<PlayerId, string>>
+    }
+  /** What the roll-off winner chose, and so who marches first and where the Frontier is. */
+  | {
+      readonly kind: 'roll_off_decided'
+      readonly winner: PlayerId
+      readonly took: 'first_turn' | 'frontier'
+      /** Whose proposal became the Frontier, and which die it is. */
+      readonly proposer: PlayerId
+      readonly frontier: string
+      readonly firstPlayer: PlayerId
+    }
   | {
       /** Only when the forces were rolled: a named force is a choice, not a draw. */
       readonly kind: 'forces_drawn'
@@ -1750,6 +1816,21 @@ export interface RuleSet {
    * `V0_RULES` game would shift every die after it in all 25 goldens.
    */
   readonly speciesAbilities: boolean
+  /**
+   * Setup step 4 (full rules p. 10), and the last house rule `PLAN-V1.md` retires.
+   *
+   * `split`  -- the roll-off winner marches first and the loser draws the Frontier:
+   *             one prize each, and no decision. What every rung below v1 plays.
+   * `choice` -- each player proposes a Frontier, and the winner takes *either* the
+   *             first turn *or* the pick of the two; the loser gets the other (v1
+   *             Phase 10e). A real decision, so the game opens paused in `'setup'`
+   *             before a single starting face is rolled.
+   *
+   * A flag rather than a change to setup because it moves the dice order: a
+   * `V0_RULES` game drawing a second proposal would land on a different board, and all
+   * 25 goldens with it.
+   */
+  readonly rollOff: 'split' | 'choice'
 }
 
 export const V0_RULES: RuleSet = {
@@ -1759,6 +1840,7 @@ export const V0_RULES: RuleSet = {
   dua: 'inert',
   dragons: false,
   speciesAbilities: false,
+  rollOff: 'split',
 }
 
 /** `V0_RULES` plus the twelve result-generating SAIs. Phase 1's rung. */
@@ -1827,8 +1909,16 @@ export const SPELL_RULES: RuleSet = { ...DRAGON_RULES, magic: 'spells' }
  */
 export const SPECIES_RULES: RuleSet = { ...SPELL_RULES, speciesAbilities: true }
 
-/** Every rule in the v1 plan switched on. */
-export const V1_RULES: RuleSet = SPECIES_RULES
+/**
+ * The roll-off as the rules have it (v1 Phase 10e): the winner chooses the first turn
+ * or the Frontier. A rung of its own rather than a change to `SPECIES_RULES`, because
+ * it adds a decision before the first march -- and every test built on
+ * `SPECIES_RULES` expects its first pending to be a march.
+ */
+export const ROLLOFF_RULES: RuleSet = { ...SPECIES_RULES, rollOff: 'choice' }
+
+/** Every rule in the v1 plan switched on: what the app plays. */
+export const V1_RULES: RuleSet = ROLLOFF_RULES
 
 
 export interface GameState {
@@ -1855,6 +1945,18 @@ export interface GameState {
    */
   readonly dragons: Readonly<Record<DragonId, DragonInPlay>>
   readonly turn: TurnState
+  /**
+   * The open roll-off choice (v1 Phase 10e), present exactly while the phase is
+   * `'setup'` and omitted the rest of the time.
+   *
+   * **While it is open, `terrains` is a placeholder**, and `validateState` holds it to
+   * exactly that: every face is 1 and nobody holds anything, and the Frontier slot
+   * holds p1's proposal. The rules roll the starting faces after the choice, so there
+   * is no honest face to show, and a nullable face would reach every one of the
+   * hundred places that read one. Nothing reads the placeholder: the phase takes no
+   * action but the choice, and the board draws "not rolled" over it.
+   */
+  readonly rollOff?: RollOffState
   readonly pending: Pending | null
   readonly log: readonly LogEntry[]
   readonly winner: PlayerId | null

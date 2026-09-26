@@ -303,6 +303,17 @@ export function dragonName(dieId: string): string {
 }
 
 /**
+ * "Coastland · city": a terrain die's type and its eighth-face icon, which together
+ * are what tells two dice apart -- two players can bring the same type. Both clients
+ * name the roll-off's proposed Frontiers with it (v1 Phase 10e), which is where a die
+ * is named before it has a slot to be called by.
+ */
+export function terrainDieName(dieId: string): string {
+  const die = terrainDie(dieId)
+  return `${terrainType(die.type).name} · ${die.eighthFace.replace(/_/g, ' ')}`
+}
+
+/**
  * A species' two elements -- the one copy of this fact.
  *
  * It lives here rather than in `setup.ts`, where it started, because it is a fact

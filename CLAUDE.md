@@ -3,10 +3,11 @@
 Solo-play app for the dice game **Dragon Dice**. Human plays one side, the app runs the board,
 the dice and the opponent.
 
-> **Status: v0 alpha complete; v1 Phases 0–8 landed. The app plays every SAI, every eighth-face
-> icon power, all five elemental dragons, all eighteen spells and all four species abilities --
-> every rule in `PLAN-V1.md`. Phase 9 (UI and rules polish, six slices 9a-9f) has landed too; what
-> is left is Phase 10 (`GreedyAI`, a real opponent).**
+> **Status: v0 alpha complete; all twelve phases of `PLAN-V1.md` landed. The app plays every SAI,
+> every eighth-face icon power, all five elemental dragons, all eighteen spells, all four species
+> abilities and the real roll-off choice, against `GreedyAI` -- the complete basic game for
+> Treefolk vs Firewalkers. Phase 10 landed in five slices (10a-10e): the estimator, the greedy
+> player, spells, the opponent picker, and the roll-off.**
 > All nine phases of `docs/PLAN-V0.md` are done.
 > The game is playable in the browser (`npm run dev`), in the terminal (`npm run play`),
 > and installable as a PWA. It opens on a screen that picks the two forces and the seed; saving is
@@ -196,7 +197,8 @@ These are the things that break the project if violated:
 5. **Scope is controlled by the `RuleSet` config**, not by scattered `if`s. `V0_RULES` is
    `magic: 'simplified'`, `sai: 'inert'`, `eighthFace: 'standard'`, `dua: 'inert'`,
    `dragons: false`, `speciesAbilities: false`, and stays exactly that -- it is what the golden corpus is recorded against.
-   What the app plays is `SPECIES_RULES` (also exported as `V1_RULES`) = `SPELL_RULES` +
+   What the app plays is `V1_RULES` = `ROLLOFF_RULES` = `SPECIES_RULES` + `rollOff: 'choice'`
+   (Phase 10e); `SPECIES_RULES` is `SPELL_RULES` +
    `speciesAbilities: true` (Phase 8); `SPELL_RULES` is `DRAGON_RULES` + `magic: 'spells'` (Phase 7),
    `DRAGON_RULES` is `FULL_RULES` + `dragons: true` (Phase 6), `FULL_RULES` is `DUA_RULES` +
    `sai: 'full'` + `eighthFace: 'full'` (Phase 5e), and `DUA_RULES` is `V0_RULES` + `sai: 'results'`
@@ -373,10 +375,22 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   to a pinned terrain slot (Phase 5b): it consumes no draw either, which is why the die draws sit
   after the roll-off and before the faces, and why a partly pinned game draws only for what is left
   unpinned.
-- **The roll-off's two prizes are split one each**: the winner marches first, the loser draws the
-  Frontier (Phase 5b). The rules give the winner the choice of one *or* the other; that is a real
-  decision and `PassiveAI` could hold no opinion about it, so `GreedyAI` gets the real rule in
-  Phase 10. A house rule, recorded in `RULES-V0.md` section 7.
+- **The roll-off is a real choice under `rollOff: 'choice'`** (v1 Phase 10e, what `V1_RULES`
+  plays): each player proposes a Frontier, and the winner takes the first turn *or* the pick of the
+  two, the loser the other prize. Below that rung the two prizes are still split one each (winner
+  marches, loser draws the Frontier), which is the Phase 5b house rule every golden plays.
+  - **The game opens paused in phase `'setup'`, before any starting face is rolled**: the rules
+    roll after the choice. While `GameState.rollOff` is open, `terrains` is a **placeholder** --
+    every face 1, p1's proposal at the Frontier -- and `validateState` holds it to exactly that.
+    Both boards draw "not rolled" over it rather than showing faces nobody rolled. The placeholder
+    beat a nullable face, which would have reached every reader of a face in the engine.
+  - **It skips itself when there is nothing to choose**: a named first player means no roll-off,
+    and a pinned Frontier leaves the winner one prize. That is why no test pinning either moved.
+  - **Its own rung, `ROLLOFF_RULES`**, rather than a change to `SPECIES_RULES`: every test built
+    on `SPECIES_RULES` expects its first pending to be a march.
+  - The log says `roll_off` (who *won*) and `roll_off_decided`, never `order_of_play`, whose field
+    is named `firstPlayer` -- under the choice the winner is not the first player until they
+    say so.
 - **Both Home Terrains and the Frontier are drawn, not chosen by species** (Phase 5b). Each Home
   Terrain is uniform over all 24 dice; the Frontier draws one of the loser's two elements and then
   draws uniformly among the dice carrying it, so the loser's own home type comes up about twice as
@@ -752,9 +766,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     plays. Phase 1 turned the app over to `SAI_RULES` and deliberately did not add a second fuzz of
     that size, and every phase since has widened the gap. There are several smaller ones now --
     Phase 5e's eighth-face fuzz, Phase 6's 240-game dragon fuzz, Phase 7's 200-game spell fuzz and
-    Phase 8's 200-game species fuzz (`species.test.ts`, which is the one that runs what the app
-    plays) -- but the *big* net still guards the one config that least needs it, and the gap is now
-    seven phases wide. Worth knowing before trusting a green suite.
+    Phase 8's 200-game species fuzz (`species.test.ts`) and Phase 10's 200-game greedy fuzz
+    (`greedy.test.ts`, the one that runs what the app plays, `V1_RULES`) -- but the *big* net still
+    guards the one config that least needs it. Phase 10 decided not to move it; the follow-up is
+    named in `PLAN-V1.md` *Risks*. Worth knowing before trusting a green suite.
   - **A long game needs `maxDecisions` raised, and raising it needs measuring.** Reserve magic
     (Phase 7f) roughly tripled a random game's length -- the Reserve Army can march every turn --
     and 20 of 200 games stopped on `runGame`'s default 5000 with every trigger counter quietly
@@ -1173,7 +1188,7 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     the type says cannot exist — the new flag reading `undefined`, behaving as its off value by
     accident rather than by decision. That is the reason `storage.ts` records for version 5, beside
     the version-4 one.
-- **A record written by the app names its ruleset.** `useGame` passes `ruleSet: SPECIES_RULES`
+- **A record written by the app names its ruleset.** `useGame` passes `ruleSet: V1_RULES`
   explicitly rather than leaning on the default, so a save says which rules it was played under and
   goes on replaying under them -- which is also why Phase 4e's flip needed no `SAVE_VERSION` bump.
   Phase 6's bump to 8, Phase 7's to 9 and Phase 8's to 10 are for the new decisions and the dice they

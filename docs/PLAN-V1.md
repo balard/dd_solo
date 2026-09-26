@@ -74,7 +74,7 @@ G  Golden files: 25 recorded v0 games          DONE  cut before anything moves
                                    |
                         9 UI and rules polish   DONE -- six slices, 9a-9f
                                    |
-                        10 GreedyAI   -- five slices, 10a-10e
+                        10 GreedyAI   DONE -- five slices, 10a-10e
 ```
 
 Phase 9 was once "UI and AI for v1". The first playtest of the complete rules turned the UI half
@@ -2454,7 +2454,7 @@ a phone, against an opponent that marches, maneuvers, casts and recruits. A 200-
 | **10b** | `GreedyAI`: the march, and every forced or free decision | ✅ landed |
 | **10c** | `GreedyAI`: spells, Dispel Magic, Summon Dragon; the greedy fuzz | ✅ landed |
 | **10d** | The opponent in both clients: start-screen picker, `?ai=`, `--ai greedy` | ✅ landed |
-| **10e** | The roll-off choice, behind `rollOff: 'choice'`; retires `RULES-V0.md` §7's house rule | planned |
+| **10e** | The roll-off choice, behind `rollOff: 'choice'`; retires `RULES-V0.md` §7's house rule | ✅ landed |
 
 **One commit per slice, and the 25 goldens stay byte-identical and unregenerated throughout.**
 Nothing in 10a-10d changes a rule, and 10e is gated on a key `V0_RULES` has on `'split'`.
@@ -2770,6 +2770,69 @@ opponent goes first. The starting faces are rolled after the choice.
   a new `RuleSet` key an old record would read as `undefined`.
 - The 10c fuzz gains both roll-off answers as counters `> 0`.
 
+#### Where this slice was wrong
+
+- **The open question was settled with a placeholder.** While the choice is open, `terrains` holds
+  every face at 1, nobody holding anything, and p1's proposal at the Frontier, and
+  `validateState` holds it to exactly that. A nullable face would have reached every reader of a
+  face in the engine, for one pause that no rule ever reads. The cost is in the clients: **both
+  boards had to learn to draw "not rolled"**, and the terminal first shipped without it. It
+  printed "1 ▸ magic" on all three terrains, named the placeholder die as the Frontier, and said
+  "you march", and only running it showed that.
+- **A rung, not a flip.** The plan gave `SPECIES_RULES` the choice. That would have paused every
+  test built on it before its first march, so `ROLLOFF_RULES` is a new rung and `V1_RULES` points
+  at it. No existing engine test moved; the six that failed were the app's own "which ruleset do
+  I play" assertions.
+- **One decision for the winner, not two.** Picking the Frontier outright is a single answer
+  (`take: 'frontier', proposer`). Only taking the first turn opens a second question, the loser's
+  `choose_frontier`.
+- **Proposals are keyed by proposer, not die id**, because two players can draw the same die, and
+  then a die id cannot say which proposal was meant.
+- **The choice skips itself when there is nothing to choose.** Naming the first player means no
+  roll-off, and pinning the Frontier leaves the winner one prize. That is why pinned tests and the
+  goldens never see it.
+- **New log entries, not a reused one.** `order_of_play`'s field is `firstPlayer`, which is not
+  the winner under the choice. So the choice logs `roll_off` and `roll_off_decided`, and
+  `game_start.firstPlayer` became optional, omitted until anyone knows it. A field meaning two
+  things under two rungs is the bug CLAUDE.md warns about.
+- **The header said "your march" during the roll-off**, which nobody is doing yet. It says
+  "roll-off" now, found in the browser.
+- **Greedy almost always takes the Frontier when it wins**, because a player's own proposal
+  usually carries its colours. That is why the browser check of the human's `choose_frontier`
+  sheet used `?ai=passive`, which always takes the first turn. The fuzz still sees greedy take
+  both answers: the first turn 58 times and the Frontier 42.
+
+#### Verification
+
+- **Engine tests**, 12 in `rolloff.test.ts`:
+  - the pause, with no faces rolled and no first player named;
+  - each proposal shares an element with its proposer, over 30 seeds;
+  - both branches, with the right Frontier and the right first player;
+  - the faces rolled in slot order after the answer;
+  - illegal answers refused;
+  - replay die for die;
+  - the three skips (named first player, pinned Frontier, `SPECIES_RULES`);
+  - two `validateState` breaches.
+- **Greedy scenarios**: three roll-off tests.
+- **The fuzz** now plays `V1_RULES`, with counters for greedy winning and taking the Frontier,
+  winning and taking the first turn, and losing and picking the Frontier. It won 199 of 200, the
+  longest game was 225 decisions, and Summon Dragon fired 10 times.
+- **In the browser at 375 × 812**, all three paths:
+  - seed 2, the human wins: the sheet, then Frontier = own proposal, and greedy marches first;
+  - seed 7, greedy wins and picks its own Wasteland: the human marches first;
+  - `?seed=5&ai=passive`: passive takes the first turn, and the human's `choose_frontier` sheet
+    appears.
+  - No console errors and no overflow.
+- **The terminal**: the roll-off menu, and a board that says "not rolled".
+- **Suite and build**: 873 tests and a production build, both green.
+- **`SAVE_VERSION` 13 → 14**, for the reasons in `storage.ts`. The 25 goldens replay
+  unregenerated.
+
+**Phase 10 is landed, and with it `PLAN-V1.md`.** The exit criterion is met, with one
+reservation: it was checked with the human side passing and greedy winning. It was not checked
+with a human playing to win against greedy, which is the game this plan exists to make and
+the thing to do next.
+
 ---
 
 ## §10 — Every v0 house rule this plan removes
@@ -2791,7 +2854,7 @@ opponent goes first. The starting faces are rolled after the choice.
 | Three fixed terrains, all Towers | Phase 5 ✅ |
 | Two hand-authored 30-health forces, fixed race per player | Phase 0a |
 | The Frontier is a constant, and both forces must propose the same die | Phase 0a |
-| The roll-off winner marches first and the loser sets the Frontier (Phase 0a's own house rule) | Phase 10 |
+| The roll-off winner marches first and the loser sets the Frontier (Phase 0a's own house rule) | Phase 10e ✅ |
 | Accelerated Growth is taken automatically, and Replanting always rolls before it | Phase 9b ✅ |
 
 **Two of these are replaced by another house rule, not by the real rule** — the only entries in this

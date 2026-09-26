@@ -5,7 +5,7 @@
  * bar renders whatever this returns, so no component ever tracks its own wizard
  * state or decides what is legal -- the engine already did both.
  */
-import { dragonName, terrainDie, terrainFaceAction, unitType } from '../../data/load'
+import { dragonName, terrainDie, terrainDieName, terrainFaceAction, unitType } from '../../data/load'
 import { spell } from '../../data/spells'
 import type { TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
@@ -146,10 +146,44 @@ export function describeFace({ dieId, face }: FaceHint): string {
   return `face ${face}, ${terrainFaceAction(dieId, face as TerrainFaceNumber).toLowerCase()}`
 }
 
+/**
+ * "Coastland · city (your proposal)" -- a proposed Frontier, named before it has a slot
+ * to be called by (v1 Phase 10e). The prompt and the log both say it, so it is written
+ * once, here.
+ */
+export function proposalLabel(dieId: string, proposer: PlayerId, human: PlayerId): string {
+  return `${terrainDieName(dieId)} (${proposer === human ? 'your' : "the enemy's"} proposal)`
+}
+
 export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState): Prompt {
   const label = (slot: ArmyRef) => slotLabel(slot, human)
 
   switch (pending.kind) {
+    // The roll-off (v1 Phase 10e): one prize or the other. Naming what the opponent then
+    // gets is the whole question -- "the first turn" alone reads as a free extra.
+    case 'roll_off_choice':
+      return {
+        question:
+          'You won the roll-off. Take the first turn and let the enemy pick the Frontier, ' +
+          'or pick the Frontier and let the enemy go first?',
+        choices: [
+          { label: 'Take the first turn', action: { kind: 'roll_off_choice', take: 'first_turn' } },
+          ...(['p1', 'p2'] as const).map((proposer) => ({
+            label: `Frontier: ${proposalLabel(pending.proposals[proposer], proposer, human)}`,
+            action: { kind: 'roll_off_choice', take: 'frontier', proposer } as GameAction,
+          })),
+        ],
+      }
+
+    case 'choose_frontier':
+      return {
+        question: 'The enemy took the first turn. Which proposed terrain becomes the Frontier?',
+        choices: (['p1', 'p2'] as const).map((proposer) => ({
+          label: proposalLabel(pending.proposals[proposer], proposer, human),
+          action: { kind: 'choose_frontier', proposer } as GameAction,
+        })),
+      }
+
     case 'choose_march_army':
       return {
         question: 'Which army marches?',

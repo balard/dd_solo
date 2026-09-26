@@ -5,6 +5,7 @@ import { BESTIARY_FORCES, FORCE_SETS, STARTER_FORCES, setupGame, type ForceSpec 
 import {
   SPECIES_RULES,
   V0_RULES,
+  V1_RULES,
   type GameAction,
   type GameState,
   type Location,
@@ -305,9 +306,46 @@ describe('GreedyAI: reserves', () => {
   })
 })
 
+describe('GreedyAI: the roll-off', () => {
+  // Treefolk (water, earth) against Firewalkers (air, fire).
+  const state = board([
+    { id: 't', typeId: 'treefolk.oak', at: at('p1_home') },
+    { id: 'f', typeId: 'firewalkers.watcher', owner: 'p2', at: at('p2_home') },
+  ])
+
+  it("picks the Frontier when one proposal is its colours and the other the enemy's", () => {
+    const proposals = { p1: 'swampland_city', p2: 'wasteland_city' }
+    expect(answer(state, { kind: 'roll_off_choice', player: 'p1', proposals })).toEqual({
+      kind: 'roll_off_choice',
+      take: 'frontier',
+      proposer: 'p1',
+    })
+  })
+
+  it('takes the first turn when the two proposals are worth the same to it', () => {
+    // Highland is fire and earth: one element each, whichever side you are on.
+    const proposals = { p1: 'highland_city', p2: 'highland_tower' }
+    expect(answer(state, { kind: 'roll_off_choice', player: 'p1', proposals })).toEqual({
+      kind: 'roll_off_choice',
+      take: 'first_turn',
+    })
+  })
+
+  it('picks its own colours when the winner leaves it the Frontier', () => {
+    const proposals = { p1: 'wasteland_city', p2: 'coastland_city' }
+    // Coastland is air and water: one of the Firewalkers' elements and one of ours,
+    // against a Wasteland that is both of theirs.
+    expect(answer(state, { kind: 'choose_frontier', player: 'p1', proposals })).toEqual({
+      kind: 'choose_frontier',
+      proposer: 'p2',
+    })
+  })
+})
+
 describe('GreedyAI: self-play', () => {
   /*
-   * The phase's fuzz (10c): 200 `SPECIES_RULES` games against `RandomAI`, sides
+   * The phase's fuzz (10c): 200 `V1_RULES` games against `RandomAI` -- what the app
+   * plays, roll-off choice included since 10e -- sides
    * alternating, over the starter pair, the bestiary, rolled forces and the monster
    * mirrors. `runGame` validates every state, so an illegal answer -- an announcement
    * the engine refuses above all -- fails here rather than in a browser.
@@ -320,7 +358,7 @@ describe('GreedyAI: self-play', () => {
    * a scorer is the bug every other test here would pass, and it shows up as greedy
    * losing to a coin.
    */
-  it('plays 200 live-rules games against RandomAI: every activity fires, and it wins', () => {
+  it('plays 200 V1_RULES games against RandomAI: every activity fires, and it wins', () => {
     const mirrors = Object.entries(FORCE_SETS)
       .filter(([name]) => name !== 'starter' && name !== 'bestiary')
       .map(([, forces]) => forces)
@@ -341,7 +379,7 @@ describe('GreedyAI: self-play', () => {
     for (const [forces, seed] of games) {
       const greedySide: PlayerId = seed % 2 === 0 ? 'p1' : 'p2'
       const result = runGame({
-        setup: { seed, forces, ruleSet: SPECIES_RULES },
+        setup: { seed, forces, ruleSet: V1_RULES },
         players: greedySide === 'p1' ? { p1: greedyAi, p2: randomAi } : { p1: randomAi, p2: greedyAi },
         aiSeed: seed,
         maxDecisions: 20_000,
@@ -351,6 +389,11 @@ describe('GreedyAI: self-play', () => {
       longest = Math.max(longest, result.decisions)
 
       for (const entry of result.state.log) {
+        // The roll-off names its winner, not a player: greedy chose if it won, and
+        // picked the Frontier if it lost and the winner took the first turn.
+        if (entry.kind === 'roll_off_decided') {
+          bump(`${entry.winner === greedySide ? 'won' : 'lost'}_${entry.took}`)
+        }
         if (!('player' in entry) || entry.player !== greedySide) continue
         if (entry.kind === 'action_chosen') bump(entry.action)
         else bump(entry.kind)
@@ -370,10 +413,14 @@ describe('GreedyAI: self-play', () => {
       'units_promoted',
       'units_recruited',
       'dispel_magic',
+      // Both answers greedy gives as the winner, and its answer as the loser.
+      'won_frontier',
+      'won_first_turn',
+      'lost_first_turn',
     ]) {
       expect(count[activity] ?? 0, activity).toBeGreaterThan(0)
     }
-    // Measured at 354; the cap is 20,000. A game that runs long is a stall on its way.
+    // Measured at 354 under SPECIES_RULES and 225 under V1_RULES; the cap is 20,000. A game that runs long is a stall on its way.
     expect(longest).toBeLessThan(2_000)
   })
 

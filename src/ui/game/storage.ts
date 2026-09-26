@@ -122,8 +122,18 @@ const KEY = 'dd_solo.save'
  *    targets' sub-rolls, and a face the reroll shows is asked about after the SAI rather
  *    than beside it -- so a version-12 record would roll different faces from the same
  *    seed and answer the wrong questions.
+ *
+ * 14: the roll-off choice, Phase 10e. Decision order and dice: under the new
+ *    `rollOff: 'choice'` a game opens on the winner's choice, both players draw a
+ *    proposed Frontier, and the starting faces are rolled after the answer -- so a
+ *    version-13 record would roll a different board from the same seed and open on the
+ *    wrong question. The app moves from `SPECIES_RULES` to `V1_RULES`.
+ *
+ *    **And a `RuleSet` key, the version-10 hazard again**: a version-13 record's
+ *    `SPECIES_RULES` has no `rollOff`, which reads `undefined` and so plays `'split'`
+ *    -- correctly, but only because the code tests for `'choice'`.
  */
-export const SAVE_VERSION = 13
+export const SAVE_VERSION = 14
 
 
 export interface SavedGame {

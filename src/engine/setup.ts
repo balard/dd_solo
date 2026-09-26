@@ -36,12 +36,16 @@ import { nextInt, rngFrom, type RngState } from './rng'
 import { expectNoEffects, rollArmy, type DieRoll } from './roll'
 import type { RollContext } from './sai'
 import {
+  IllegalActionError,
+  TERRAIN_SLOTS,
   V0_RULES,
   opponentOf,
   type DragonInPlay,
   type GameState,
   type LogEntry,
+  type Pending,
   type PlayerId,
+  type RollOffState,
   type RuleSet,
   type TerrainFace,
   type TerrainInPlay,
@@ -410,8 +414,21 @@ export function setupGame(options: SetupOptions): GameState {
     units[unit.id] = unit
   }
 
+  /*
+   * The roll-off as the rules have it (v1 Phase 10e): the winner chooses the first turn
+   * *or* the Frontier. Only when there is a roll-off to win and a Frontier to choose --
+   * naming the first player skips the roll-off, and pinning the Frontier leaves the
+   * winner one prize, the first turn, which is the `split` rung's answer anyway. So a
+   * test that pins either plays exactly the board it always did.
+   */
+  const choosing =
+    ruleSet.rollOff === 'choice' &&
+    options.firstPlayer === undefined &&
+    options.terrains?.frontier === undefined
+
   // Step 4: order of play, before the terrains are rolled.
   let firstPlayer: PlayerId
+  let rollOffRecord: Omit<Extract<LogEntry, { kind: 'roll_off' }>, 'kind' | 'proposals'> | null = null
   if (options.firstPlayer === undefined) {
     const [winner, rolls, rollOffDice, next] = rollForFirstPlayer(
       { p1: p1Units.byArmy.horde, p2: p2Units.byArmy.horde },
@@ -420,12 +437,19 @@ export function setupGame(options: SetupOptions): GameState {
     )
     firstPlayer = winner
     rng = next
-    log.push({ kind: 'order_of_play', rolls, firstPlayer, dice: rollOffDice })
+    // Under the choice the winner has not chosen yet, so this is not an order of play:
+    // it is logged as `roll_off` once the proposals it chooses between are drawn.
+    if (choosing) rollOffRecord = { rolls, winner, dice: rollOffDice }
+    else log.push({ kind: 'order_of_play', rolls, firstPlayer, dice: rollOffDice })
   } else {
     firstPlayer = options.firstPlayer
   }
 
-  log.unshift({ kind: 'game_start', seed: options.seed, firstPlayer })
+  log.unshift(
+    choosing
+      ? { kind: 'game_start', seed: options.seed }
+      : { kind: 'game_start', seed: options.seed, firstPlayer },
+  )
 
   // The roll-off's other prize: the loser draws the Frontier, from a terrain sharing
   // an element with their species.
@@ -445,9 +469,19 @@ export function setupGame(options: SetupOptions): GameState {
     rng = next
   }
 
+  // Under the choice both players propose, in player order -- each from a terrain
+  // sharing an element with their own species, the same draw the `split` rung gives
+  // the loser alone. Pinning the Frontier never reaches here (see `choosing`).
   let frontierDie: string
+  let proposals: Readonly<Record<PlayerId, string>> | null = null
   if (options.terrains?.frontier !== undefined) {
     frontierDie = options.terrains.frontier
+  } else if (choosing) {
+    const [p1Proposal, afterP1] = drawFrontierDie(forces.p1.species, rng)
+    const [p2Proposal, afterP2] = drawFrontierDie(forces.p2.species, afterP1)
+    rng = afterP2
+    proposals = { p1: p1Proposal, p2: p2Proposal }
+    frontierDie = p1Proposal
   } else {
     const [dieId, next] = drawFrontierDie(forces[frontierSetter].species, rng)
     frontierDie = dieId
@@ -469,15 +503,24 @@ export function setupGame(options: SetupOptions): GameState {
     frontier: frontierDie,
     p2_home: p2HomeDie,
   }
-  const terrains = {} as Record<TerrainSlot, TerrainInPlay>
+  let terrains = {} as Record<TerrainSlot, TerrainInPlay>
 
-  for (const slot of ['p1_home', 'frontier', 'p2_home'] as const) {
-    const dieId = dice[slot]
-    terrainDie(dieId) // throws if the die is not in the data
-    const [face, next] = rollStartingFace(rng)
-    rng = next
-    terrains[slot] = { slot, dieId, face, capturedBy: null }
-    log.push({ kind: 'terrain_placed', slot, dieId, face })
+  if (proposals !== null && rollOffRecord !== null) {
+    // Step 6 waits for the choice: "the player that selected the Frontier Terrain rolls
+    // that die" -- after selecting it. Until then the terrains are the placeholder
+    // `GameState.rollOff` describes, and nothing is rolled.
+    for (const dieId of [dice.p1_home, proposals.p1, proposals.p2, dice.p2_home]) terrainDie(dieId)
+    terrains = placeholderTerrains(dice.p1_home, proposals.p1, dice.p2_home)
+    log.push({ kind: 'roll_off', ...rollOffRecord, proposals })
+  } else {
+    for (const slot of ['p1_home', 'frontier', 'p2_home'] as const) {
+      const dieId = dice[slot]
+      terrainDie(dieId) // throws if the die is not in the data
+      const [face, next] = rollStartingFace(rng)
+      rng = next
+      terrains[slot] = { slot, dieId, face, capturedBy: null }
+      log.push({ kind: 'terrain_placed', slot, dieId, face })
+    }
   }
 
   // Step 7: the dragons, last of all and **only under `dragons: true`**, so every
@@ -539,6 +582,9 @@ export function setupGame(options: SetupOptions): GameState {
     }
   }
 
+  const rollOff: RollOffState | null =
+    proposals !== null && rollOffRecord !== null ? { winner: rollOffRecord.winner, proposals } : null
+
   return {
     ruleSet,
     rng,
@@ -546,9 +592,12 @@ export function setupGame(options: SetupOptions): GameState {
     terrains,
     effects: [],
     dragons,
+    ...(rollOff !== null ? { rollOff } : {}),
     turn: {
+      // While the choice is open the winner is "marching" only in the sense that the
+      // turn machine needs a name there; `settleRollOff` writes the real one.
       marching: firstPlayer,
-      phase: 'effects_expire',
+      phase: rollOff !== null ? 'setup' : 'effects_expire',
       marchIndex: 0,
       marchStep: 'select_army',
       marchingArmy: null,
@@ -559,5 +608,125 @@ export function setupGame(options: SetupOptions): GameState {
     pending: null,
     log,
     winner: null,
+  }
+}
+
+// --- the roll-off choice (v1 Phase 10e) ---------------------------------------------
+
+/** The placeholder terrains of an open roll-off choice: every face 1, nobody holding
+ *  anything, p1's proposal in the Frontier slot. See `GameState.rollOff`. */
+export function placeholderTerrains(
+  p1Home: string,
+  p1Proposal: string,
+  p2Home: string,
+): Record<TerrainSlot, TerrainInPlay> {
+  return {
+    p1_home: { slot: 'p1_home', dieId: p1Home, face: 1, capturedBy: null },
+    frontier: { slot: 'frontier', dieId: p1Proposal, face: 1, capturedBy: null },
+    p2_home: { slot: 'p2_home', dieId: p2Home, face: 1, capturedBy: null },
+  }
+}
+
+/** The decision an open roll-off is waiting on, or null when there is none. */
+export function rollOffPending(state: GameState): Pending | null {
+  const open = state.rollOff
+  if (open === undefined) return null
+  return open.firstTurnTaken === true
+    ? { kind: 'choose_frontier', player: opponentOf(open.winner), proposals: open.proposals }
+    : { kind: 'roll_off_choice', player: open.winner, proposals: open.proposals }
+}
+
+function openRollOff(state: GameState, expecting: 'winner' | 'loser'): RollOffState {
+  const open = state.rollOff
+  if (open === undefined) throw new IllegalActionError('there is no roll-off choice open')
+  if ((open.firstTurnTaken === true) !== (expecting === 'loser')) {
+    throw new IllegalActionError(
+      expecting === 'winner'
+        ? 'the roll-off winner has already chosen; the loser is picking the Frontier'
+        : 'the roll-off winner has not taken the first turn, so there is no Frontier to pick',
+    )
+  }
+  return open
+}
+
+function checkProposer(proposer: PlayerId): void {
+  if (proposer !== 'p1' && proposer !== 'p2') {
+    throw new IllegalActionError(`${String(proposer)} is not a player, so it proposed no Frontier`)
+  }
+}
+
+/** The winner's answer: the first turn, or a Frontier -- which gives the loser the
+ *  first turn. */
+export function applyRollOffChoice(
+  state: GameState,
+  take: 'first_turn' | 'frontier',
+  proposer: PlayerId | undefined,
+): GameState {
+  const open = openRollOff(state, 'winner')
+  if (take === 'first_turn') return { ...state, rollOff: { ...open, firstTurnTaken: true } }
+  if (proposer === undefined) throw new IllegalActionError('choosing the Frontier names a proposal')
+  checkProposer(proposer)
+  return settleRollOff(state, open, 'frontier', proposer, opponentOf(open.winner))
+}
+
+/** The loser's answer, once the winner has taken the first turn. */
+export function applyChooseFrontier(state: GameState, proposer: PlayerId): GameState {
+  const open = openRollOff(state, 'loser')
+  checkProposer(proposer)
+  return settleRollOff(state, open, 'first_turn', proposer, open.winner)
+}
+
+/**
+ * The choice made: the Frontier is placed, all three starting faces are rolled in slot
+ * order -- setup step 5, which the rules put after step 4 -- and the first turn opens.
+ *
+ * Built field by field rather than spread, so `rollOff` is dropped by omission: the same
+ * rule every optional field near the digest follows.
+ */
+function settleRollOff(
+  state: GameState,
+  open: RollOffState,
+  took: 'first_turn' | 'frontier',
+  proposer: PlayerId,
+  firstPlayer: PlayerId,
+): GameState {
+  const dice: Readonly<Record<TerrainSlot, string>> = {
+    p1_home: state.terrains.p1_home.dieId,
+    frontier: open.proposals[proposer],
+    p2_home: state.terrains.p2_home.dieId,
+  }
+
+  let rng = state.rng
+  const terrains = {} as Record<TerrainSlot, TerrainInPlay>
+  const placed: LogEntry[] = []
+  for (const slot of TERRAIN_SLOTS) {
+    const [face, next] = rollStartingFace(rng)
+    rng = next
+    terrains[slot] = { slot, dieId: dice[slot], face, capturedBy: null }
+    placed.push({ kind: 'terrain_placed', slot, dieId: dice[slot], face })
+  }
+
+  return {
+    ruleSet: state.ruleSet,
+    rng,
+    units: state.units,
+    terrains,
+    effects: state.effects,
+    dragons: state.dragons,
+    turn: { ...state.turn, marching: firstPlayer, phase: 'effects_expire' },
+    pending: null,
+    log: [
+      ...state.log,
+      {
+        kind: 'roll_off_decided',
+        winner: open.winner,
+        took,
+        proposer,
+        frontier: dice.frontier,
+        firstPlayer,
+      },
+      ...placed,
+    ],
+    winner: state.winner,
   }
 }

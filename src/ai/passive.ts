@@ -37,6 +37,17 @@ export const passiveAi: AiPlayer = {
  */
 export function decideAction(state: GameState, pending: Pending): GameAction {
   switch (pending.kind) {
+    // The roll-off (v1 Phase 10e): the first turn, which it will then spend passing --
+    // an opinion about a terrain is exactly what passive does not have, so it never
+    // chooses the Frontier over the one prize that asks nothing of it.
+    case 'roll_off_choice':
+      return { kind: 'roll_off_choice', take: 'first_turn' }
+
+    // Picking the Frontier is forced once the winner has taken the first turn, and its
+    // own proposal is as good an answer as it can give.
+    case 'choose_frontier':
+      return { kind: 'choose_frontier', proposer: pending.player }
+
     case 'choose_march_army':
       return { kind: 'choose_march_army', army: null }
 

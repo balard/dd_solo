@@ -191,8 +191,13 @@ Both are legal and the defender picks. Killing only the 3 is **illegal**.
 die — `setupGame` throws otherwise, saying in as many words that choosing between them is a setup
 decision that does not exist yet. v1 Phase 0a makes it: the roll-off **winner marches first and the
 loser sets the Frontier** from their own second terrain, which splits step 4's two prizes one each
-without raising a decision `PassiveAI` cannot hold an opinion about. The real step 4 comes back
-with `GreedyAI` (`PLAN-V1.md` Phase 10).
+without raising a decision `PassiveAI` cannot hold an opinion about. **The real step 4 came back
+in v1 Phase 10e, under `rollOff: 'choice'`** (`V1_RULES`): each player proposes a Frontier drawn
+from a terrain sharing an element with their species, and the roll-off winner takes the first turn
+*or* the pick of the two, the loser taking the other. The starting faces are rolled after the
+choice, as step 5 says. Every rung below `V1_RULES` keeps the split, and so do the goldens.
+Naming the first player or pinning the Frontier skips the choice, since then there is nothing to
+choose between.
 
 For the alpha, ship **two fixed preset 30-health army lists** (one per species) so a game can be
 started in one tap. **v1 Phase 0a replaced them** with forces rolled from the seed — random race,

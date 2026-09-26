@@ -13,7 +13,7 @@
 import { DEFAULT_OPPONENT, OPPONENT_NAMES, type OpponentName } from '../../ai/opponents'
 import { PRESETS, preset, presetHealth, PRESET_ARMY_NAMES } from '../../data/presets'
 import type { SetupOptions } from '../../engine/setup'
-import { SPECIES_RULES } from '../../engine/types'
+import { V1_RULES } from '../../engine/types'
 
 export interface PresetChoice {
   readonly id: string
@@ -157,7 +157,7 @@ export function newGameSetup(
 
   return {
     kind: 'ok',
-    setup: { seed: seed.seed, forces: { kind: 'named', forces: { p1, p2 } }, ruleSet: SPECIES_RULES },
+    setup: { seed: seed.seed, forces: { kind: 'named', forces: { p1, p2 } }, ruleSet: V1_RULES },
   }
 }
 
@@ -167,6 +167,6 @@ export function randomGameSetup(seedText: string, randomSeed: number): SetupChoi
   if (seed.kind === 'bad') return { kind: 'problem', problem: seed.problem }
   return {
     kind: 'ok',
-    setup: { seed: seed.seed, forces: { kind: 'random' }, ruleSet: SPECIES_RULES },
+    setup: { seed: seed.seed, forces: { kind: 'random' }, ruleSet: V1_RULES },
   }
 }

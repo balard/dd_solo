@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { SPECIES_RULES } from '../../engine/types'
+import { V1_RULES } from '../../engine/types'
 
 import { DEFAULT_OPPONENT, OPPONENTS } from '../../ai/opponents'
 
@@ -75,7 +75,7 @@ describe('newGameSetup', () => {
       setup: {
         seed: 7,
         forces: { kind: 'named', forces: { p1: 'treefolk_satyr', p2: 'firewalkers_gorgon' } },
-        ruleSet: SPECIES_RULES,
+        ruleSet: V1_RULES,
       },
     })
   })
@@ -107,7 +107,7 @@ describe('randomGameSetup', () => {
   it('rolls both sides from the seed', () => {
     expect(randomGameSetup('42', 0)).toEqual({
       kind: 'ok',
-      setup: { seed: 42, forces: { kind: 'random' }, ruleSet: SPECIES_RULES },
+      setup: { seed: 42, forces: { kind: 'random' }, ruleSet: V1_RULES },
     })
   })
 

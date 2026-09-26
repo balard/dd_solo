@@ -277,7 +277,9 @@ function GameView({ game }: { readonly game: PlayingGame }) {
             Turn {turn} ·{' '}
             {state.winner !== null
               ? 'game over'
-              : state.turn.marching === human
+              : state.turn.phase === 'setup'
+                ? 'roll-off'
+                : state.turn.marching === human
                 ? 'your march'
                 : 'enemy march'}{' '}
             · vs {opponent} · seed {seed}
