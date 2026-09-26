@@ -7,7 +7,16 @@ import { describe, expect, it } from 'vitest'
 
 import { SPECIES_RULES } from '../../engine/types'
 
-import { choiceGroups, newGameSetup, presetChoices, randomGameSetup, readSeed } from './newGame'
+import { DEFAULT_OPPONENT, OPPONENTS } from '../../ai/opponents'
+
+import {
+  choiceGroups,
+  newGameSetup,
+  opponentChoices,
+  presetChoices,
+  randomGameSetup,
+  readSeed,
+} from './newGame'
 
 describe('presetChoices', () => {
   it('offers every hand-authored force, lightest first', () => {
@@ -105,5 +114,22 @@ describe('randomGameSetup', () => {
   it('carries the same seed rule', () => {
     expect(randomGameSetup('', 55).kind === 'ok').toBe(true)
     expect(randomGameSetup('-3', 55).kind).toBe('problem')
+  })
+})
+
+describe('opponentChoices', () => {
+  it('opens on GreedyAI, the opponent that plays', () => {
+    expect(DEFAULT_OPPONENT).toBe('greedy')
+    expect(opponentChoices()[0]?.id).toBe('greedy')
+  })
+
+  it('offers every registered opponent, each with words, and never the fuzz opponent', () => {
+    const ids = opponentChoices().map((o) => o.id)
+    expect([...ids].sort()).toEqual(Object.keys(OPPONENTS).sort())
+    expect(ids as readonly string[]).not.toContain('random')
+    for (const choice of opponentChoices()) {
+      expect(choice.name.length, choice.id).toBeGreaterThan(0)
+      expect(choice.note.length, choice.id).toBeGreaterThan(0)
+    }
   })
 })

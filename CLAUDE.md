@@ -147,7 +147,7 @@ npm run typecheck   # tsc --noEmit
 npm run build       # typecheck + production build
 npm run data        # regenerate and validate data/starter/ from data/raw/
 npm run art         # optional: mirror real face art into public/faces/ + assets/faces/ (both gitignored)
-npm run play        # play a game in the terminal (--seed N, --ai random, --forces starter|bestiary)
+npm run play        # play a game in the terminal (--seed N, --ai greedy|passive|random, --forces starter|bestiary)
 npm run goldens     # re-record the golden corpus -- see below before you do
 ```
 
@@ -849,6 +849,14 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   is how you hand someone the exact board you are looking at. Names come from `FORCE_SETS` in
   `setup.ts`, shared with the terminal's `--forces`. An unknown name is reported in the banner
   rather than quietly rolled, because a random force looks exactly like a preset that does not work.
+  - **`?ai=greedy|passive` picks the opponent the same way** (v1 Phase 10d), and is a request on its
+    own. The names are `OPPONENTS` in `src/ai/opponents.ts`, the one registry the start screen,
+    the link and the terminal's `--ai` all read, so they cannot disagree about what a name means or
+    what "nobody said" gets (`DEFAULT_OPPONENT`, greedy). `random` is refused in the app and offered
+    only by the terminal: it is the fuzz opponent, not an opponent.
+  - **The opponent is part of the `Session`, not a `useGame` argument.** It is chosen with the
+    forces and fixed for the game, and the record does not store it, since replay never asks it
+    anything.
   - **The request is stripped from the address bar in an effect, not in the `useState` initializer.**
     StrictMode runs those twice in development: clearing the query on the first pass left the second
     reading a bare URL. Keep the initializer free of side effects.

@@ -10,6 +10,7 @@
  * bring different totals, and a throw out of a click handler is a blank page, so the
  * pairing is checked here and the Start button reports it instead.
  */
+import { DEFAULT_OPPONENT, OPPONENT_NAMES, type OpponentName } from '../../ai/opponents'
 import { PRESETS, preset, presetHealth, PRESET_ARMY_NAMES } from '../../data/presets'
 import type { SetupOptions } from '../../engine/setup'
 import { SPECIES_RULES } from '../../engine/types'
@@ -63,6 +64,37 @@ export function choiceGroups(): readonly ChoiceGroup[] {
     }
   }
   return groups
+}
+
+/** One opponent on the start screen: what it is called, and what it will do. */
+export interface OpponentChoice {
+  readonly id: OpponentName
+  readonly name: string
+  readonly note: string
+}
+
+const OPPONENT_TEXT: Readonly<Record<OpponentName, Omit<OpponentChoice, 'id'>>> = {
+  greedy: {
+    name: 'Greedy',
+    note: 'Marches every turn: maneuvers, attacks, casts spells, summons dragons and promotes its dead.',
+  },
+  passive: {
+    name: 'Passive',
+    note: 'Starts nothing. It answers what it must, contests and counter-attacks, and never marches -- for learning the rules.',
+  },
+}
+
+/**
+ * The opponents the screen offers, the default first.
+ *
+ * Built from `OPPONENTS` rather than listed, and the text table is a `Record` over
+ * its names -- so an opponent added to the registry is a compile error here until it
+ * has words, and cannot reach the screen described as nothing.
+ */
+export function opponentChoices(): readonly OpponentChoice[] {
+  return [...OPPONENT_NAMES]
+    .sort((a, b) => Number(b === DEFAULT_OPPONENT) - Number(a === DEFAULT_OPPONENT))
+    .map((id) => ({ id, ...OPPONENT_TEXT[id] }))
 }
 
 export type SeedChoice =

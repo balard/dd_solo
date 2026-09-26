@@ -73,3 +73,30 @@ describe('parseGameRequest', () => {
     expect(parseGameRequest('?forces=nope', FALLBACK)?.setup.ruleSet).toBe(SPECIES_RULES)
   })
 })
+
+describe('parseGameRequest: the opponent', () => {
+  const FALLBACK = 99
+
+  it('plays GreedyAI when the link names nobody', () => {
+    expect(parseGameRequest('?forces=bestiary', FALLBACK)?.opponent).toBe('greedy')
+  })
+
+  it('takes the opponent from ?ai=, which is a request on its own', () => {
+    const request = parseGameRequest('?ai=passive', FALLBACK)
+    expect(request?.opponent).toBe('passive')
+    expect(request?.origin).toEqual({ kind: 'requested', forces: null, seed: FALLBACK })
+  })
+
+  it('reports an opponent nobody knows, rather than swapping in the default silently', () => {
+    const request = parseGameRequest('?ai=random&seed=5', FALLBACK)
+    // `random` is the fuzz opponent: the terminal offers it, the app does not.
+    expect(request?.origin).toMatchObject({ kind: 'recovered', reason: expect.stringContaining('greedy or passive') })
+    expect(request?.opponent).toBe('greedy')
+    expect(request?.setup.seed).toBe(5)
+  })
+
+  it('reports a bad force first when both names are wrong', () => {
+    const request = parseGameRequest('?forces=nope&ai=nobody', FALLBACK)
+    expect(request?.origin).toMatchObject({ reason: expect.stringContaining('no force named') })
+  })
+})

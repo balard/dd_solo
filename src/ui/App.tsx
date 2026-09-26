@@ -61,7 +61,7 @@ export function App() {
 }
 
 function GameView({ game }: { readonly game: PlayingGame }) {
-  const { state, human, seed, origin, dispatch, newGame, opponentThinking } = game
+  const { state, human, seed, opponent, origin, dispatch, newGame, opponentThinking } = game
   const enemy: PlayerId = human === 'p1' ? 'p2' : 'p1'
   const pending = state.pending
 
@@ -280,7 +280,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
               : state.turn.marching === human
                 ? 'your march'
                 : 'enemy march'}{' '}
-            · seed {seed}
+            · vs {opponent} · seed {seed}
           </p>
         </div>
         <button

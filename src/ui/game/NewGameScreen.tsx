@@ -11,12 +11,14 @@
  */
 import { useState } from 'react'
 
+import { DEFAULT_OPPONENT, type OpponentName } from '../../ai/opponents'
 import type { SetupOptions } from '../../engine/setup'
 
 import { speciesInfo } from './Elements'
 import {
   choiceGroups,
   newGameSetup,
+  opponentChoices,
   randomGameSetup,
   presetChoices,
 } from './newGame'
@@ -24,6 +26,7 @@ import { newSeed } from './useGame'
 
 const GROUPS = choiceGroups()
 const CHOICES = presetChoices()
+const OPPONENTS = opponentChoices()
 
 const byId = new Map(CHOICES.map((c) => [c.id, c]))
 
@@ -69,10 +72,16 @@ function Picker({
   )
 }
 
-export function NewGameScreen({ onStart }: { readonly onStart: (setup: SetupOptions) => void }) {
+export function NewGameScreen({
+  onStart,
+}: {
+  readonly onStart: (setup: SetupOptions, opponent: OpponentName) => void
+}) {
   const [p1, setP1] = useState(() => defaultFor('treefolk'))
   const [p2, setP2] = useState(() => defaultFor('firewalkers'))
+  const [opponent, setOpponent] = useState<OpponentName>(DEFAULT_OPPONENT)
   const [seedText, setSeedText] = useState('')
+  const opponentNote = OPPONENTS.find((o) => o.id === opponent)?.note
 
   // Recomputed on every keystroke rather than on submit, so the seed box says it is
   // wrong while you are looking at it.
@@ -81,7 +90,7 @@ export function NewGameScreen({ onStart }: { readonly onStart: (setup: SetupOpti
 
   const begin = (build: (randomSeed: number) => ReturnType<typeof randomGameSetup>) => {
     const result = build(newSeed())
-    if (result.kind === 'ok') onStart(result.setup)
+    if (result.kind === 'ok') onStart(result.setup, opponent)
   }
 
   return (
@@ -94,7 +103,19 @@ export function NewGameScreen({ onStart }: { readonly onStart: (setup: SetupOpti
         </p>
 
         <Picker label="Your side" value={p1} onChange={setP1} />
-        <Picker label="Opponent" value={p2} onChange={setP2} />
+        <Picker label="Opponent's side" value={p2} onChange={setP2} />
+
+        <label className="new-game-field">
+          <span className="new-game-label">Opponent</span>
+          <select value={opponent} onChange={(e) => setOpponent(e.target.value as OpponentName)}>
+            {OPPONENTS.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+          <span className="new-game-note muted">{opponentNote}</span>
+        </label>
 
         <label className="new-game-field">
           <span className="new-game-label">Seed</span>

@@ -12,8 +12,13 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { passiveAi } from '../../ai/passive'
-import type { AiPlayer } from '../../ai/types'
+import {
+  DEFAULT_OPPONENT,
+  OPPONENT_NAMES,
+  OPPONENTS,
+  opponentNamed,
+  type OpponentName,
+} from '../../ai/opponents'
 import { begin, reduce } from '../../engine/reduce'
 import { type GameRecord } from '../../engine/replay'
 import { rngFrom, type RngState } from '../../engine/rng'
@@ -40,7 +45,7 @@ export type GameOrigin =
 
 export interface ChoosingGame {
   readonly phase: 'choosing'
-  readonly start: (setup: SetupOptions) => void
+  readonly start: (setup: SetupOptions, opponent: OpponentName) => void
 }
 
 export interface PlayingGame {
@@ -48,6 +53,8 @@ export interface PlayingGame {
   readonly state: GameState
   readonly human: PlayerId
   readonly seed: number
+  /** Who is answering the other side's decisions. */
+  readonly opponent: OpponentName
   readonly origin: GameOrigin
   readonly opponentThinking: boolean
   readonly dispatch: (action: GameAction) => void
@@ -60,8 +67,16 @@ export type Game = ChoosingGame | PlayingGame
 
 export const newSeed = () => Math.floor(Math.random() * 100_000)
 
+/** What the address bar asked for, once read. */
+export interface GameRequest {
+  readonly setup: SetupOptions
+  readonly opponent: OpponentName
+  readonly origin: GameOrigin
+}
+
 /**
- * A game named in the address bar: `?forces=bestiary`, `?seed=1234`, or both.
+ * A game named in the address bar: `?forces=bestiary`, `?seed=1234`, `?ai=passive`,
+ * or any of them together.
  *
  * The start screen has covered most of what this was for, but a link is still the
  * one way to hand someone the exact board you are looking at, and it is how the
@@ -71,10 +86,7 @@ export const newSeed = () => Math.floor(Math.random() * 100_000)
  * An unrecognised `forces` name is reported rather than ignored: silently rolling a
  * random force would look exactly like a preset that does not work.
  */
-export function parseGameRequest(
-  search: string,
-  fallbackSeed: number,
-): { setup: SetupOptions; origin: GameOrigin } | null {
+export function parseGameRequest(search: string, fallbackSeed: number): GameRequest | null {
   const params = new URLSearchParams(search)
   // An empty value is the same as an absent one. `?seed=` reads back as `''`, and
   // `Number('')` is 0 -- a perfectly legal seed, and a silently different game from
@@ -86,7 +98,8 @@ export function parseGameRequest(
 
   const name = given('forces')
   const seedParam = given('seed')
-  if (name === null && seedParam === null) return null
+  const aiParam = given('ai')
+  if (name === null && seedParam === null && aiParam === null) return null
 
   const parsed = seedParam === null ? NaN : Number(seedParam)
   const seed = Number.isInteger(parsed) && parsed >= 0 ? parsed : fallbackSeed
@@ -102,15 +115,27 @@ export function parseGameRequest(
     }
   }
 
+  // The same rule for the opponent: a name nobody knows is reported, never swapped
+  // for the default without a word.
+  let opponent: OpponentName = DEFAULT_OPPONENT
+  if (aiParam !== null) {
+    const found = opponentNamed(aiParam)
+    if (found === null) {
+      problem ??= `there is no opponent named "${aiParam}" -- try ${OPPONENT_NAMES.join(' or ')}`
+    } else {
+      opponent = found
+    }
+  }
+
   const setup: SetupOptions = { seed, forces, ruleSet: SPECIES_RULES }
   return problem === null
-    ? { setup, origin: { kind: 'requested', forces: name, seed } }
-    : { setup, origin: { kind: 'recovered', reason: problem } }
+    ? { setup, opponent, origin: { kind: 'requested', forces: name, seed } }
+    : { setup, opponent, origin: { kind: 'recovered', reason: problem } }
 }
 
 /** `parseGameRequest` against the real address bar. Split so the parsing can be
  *  tested without a DOM, the way `prompts.ts` is. */
-function requestedFromUrl(): { setup: SetupOptions; origin: GameOrigin } | null {
+function requestedFromUrl(): GameRequest | null {
   if (typeof window === 'undefined') return null
   return parseGameRequest(window.location.search, newSeed())
 }
@@ -135,19 +160,22 @@ function clearUrlRequest(): void {
 interface Session {
   readonly state: GameState
   readonly setup: SetupOptions
+  /** Chosen with the forces, and fixed for the game: the record replays without it,
+   *  since it stores the actions the opponent produced and never asks it again. */
+  readonly opponent: OpponentName
   readonly actions: readonly GameAction[]
   readonly origin: GameOrigin
 }
 
-function sessionFrom(setup: SetupOptions, origin: GameOrigin): Session {
-  return { state: begin(setupGame(setup)), setup, actions: [], origin }
+function sessionFrom(setup: SetupOptions, opponent: OpponentName, origin: GameOrigin): Session {
+  return { state: begin(setupGame(setup)), setup, opponent, actions: [], origin }
 }
 
 /** The address bar, or the start screen. Nothing is read from storage: saving is
  *  off, so there is never a game to resume. */
 function opening(): Session | null {
   const requested = requestedFromUrl()
-  return requested === null ? null : sessionFrom(requested.setup, requested.origin)
+  return requested === null ? null : sessionFrom(requested.setup, requested.opponent, requested.origin)
 }
 
 /**
@@ -166,7 +194,7 @@ export function currentRecord(): GameRecord | null {
   return lastRecord
 }
 
-export function useGame(ai: AiPlayer = passiveAi): Game {
+export function useGame(): Game {
   const [session, setSession] = useState<Session | null>(opening)
   const [opponentThinking, setOpponentThinking] = useState(false)
 
@@ -197,9 +225,9 @@ export function useGame(ai: AiPlayer = passiveAi): Game {
     )
   }, [])
 
-  const start = useCallback((setup: SetupOptions) => {
+  const start = useCallback((setup: SetupOptions, opponent: OpponentName) => {
     aiRng.current = rngFrom(setup.seed ^ 0x5eed)
-    setSession(sessionFrom(setup, { kind: 'chosen' }))
+    setSession(sessionFrom(setup, opponent, { kind: 'chosen' }))
   }, [])
 
   const newGame = useCallback(() => setSession(null), [])
@@ -208,6 +236,7 @@ export function useGame(ai: AiPlayer = passiveAi): Game {
   // read what just happened rather than watching the board jump.
   const state = session?.state ?? null
   const pending = state?.pending ?? null
+  const ai = OPPONENTS[session?.opponent ?? DEFAULT_OPPONENT]
   useEffect(() => {
     if (state === null || state.winner !== null || pending === null || pending.player === human) {
       setOpponentThinking(false)
@@ -237,6 +266,7 @@ export function useGame(ai: AiPlayer = passiveAi): Game {
     state: session.state,
     human,
     seed,
+    opponent: session.opponent,
     origin: session.origin,
     opponentThinking,
     dispatch,

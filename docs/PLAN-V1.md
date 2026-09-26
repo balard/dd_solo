@@ -2453,7 +2453,7 @@ a phone, against an opponent that marches, maneuvers, casts and recruits. A 200-
 | **10a** | The estimator: expected results from exact face distributions, through `armyRoll` | ✅ landed |
 | **10b** | `GreedyAI`: the march, and every forced or free decision | ✅ landed |
 | **10c** | `GreedyAI`: spells, Dispel Magic, Summon Dragon; the greedy fuzz | ✅ landed |
-| **10d** | The opponent in both clients: start-screen picker, `?ai=`, `--ai greedy` | planned |
+| **10d** | The opponent in both clients: start-screen picker, `?ai=`, `--ai greedy` | ✅ landed |
 | **10e** | The roll-off choice, behind `rollOff: 'choice'`; retires `RULES-V0.md` §7's house rule | planned |
 
 **One commit per slice, and the 25 goldens stay byte-identical and unregenerated throughout.**
@@ -2696,6 +2696,44 @@ Deliberately not done: dragon allocation, and Path. The goldens replay unregener
 - **No `SAVE_VERSION` bump**: a record stores the actions an AI produced, and replay never calls
   `decide`.
 - The exit criterion is checked here, in a browser at phone width.
+
+#### Where this slice was wrong
+
+- **One registry, not three lists.** `src/ai/opponents.ts` holds `OPPONENTS` and
+  `DEFAULT_OPPONENT`, the `FORCE_SETS` pattern. The start screen, `?ai=` and `--ai` all read it, so
+  "greedy" means one thing in all three places. The screen's words are a `Record` over the
+  registry's names, so an opponent added there is a compile error on the screen until it has a
+  description.
+- **The opponent lives on the `Session`**, beside the setup, and `useGame` lost its `ai` parameter.
+  The plan said "takes the chosen AI from the session", and a parameter with a default was the
+  way that would silently not have happened.
+- **`?ai=` is a request on its own**, like `?seed=`. An unknown name is reported and falls back to
+  the default, never swapped in silently, and a bad force name is reported first when both are
+  wrong. `?ai=random` is refused in the app, because `RandomAI` is the fuzz opponent.
+- The header says `vs greedy` beside the seed. The two together are what reproduces a game.
+
+#### Verification
+
+This slice checks the exit criterion, in a browser at 375 × 812.
+
+- **The start screen** shows the new Opponent picker, Greedy by default, with its note.
+- **A rolled game on seed 7** was played end to end. The human side only passed, allowed and
+  auto-assigned; no prompt needed a fallback answer. Greedy:
+  - marched every turn and declared 11 maneuvers;
+  - made melee, missile and magic actions;
+  - cast Lightning Strike twice, Ash Storm ×2 and Fiery Weapon;
+  - won by capturing both the human's home and the Frontier on turn 9.
+- **The page itself**: no console errors, and nothing overflows 375px. The screenshot tool drew the
+  page tiled, and measuring the DOM showed that was the capture, not the layout.
+- **Links**: `?ai=passive&seed=3` starts that game with "vs passive". `?ai=random` banners the
+  refusal and plays greedy.
+- **The terminal** defaults to greedy, `--ai passive` works, and `--ai nobody` is refused with the
+  list. It was not played through to the end interactively; the 10c fuzz is what plays greedy to
+  the end, 200 times.
+- **What one game could not show**: no promotion or recruit came up in a nine-turn game. The fuzz
+  counters are the proof of those.
+- **Suite and build**: 858 tests and a production build, both green. No `SAVE_VERSION` bump, and
+  the goldens replay unregenerated.
 
 ### 10e — the roll-off choice
 

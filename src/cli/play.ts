@@ -5,16 +5,17 @@
  * therefore judgeable, weeks before there is a board to look at. It is also the
  * fastest way to find rules bugs that tests did not think to ask about.
  *
- *   npm run play               -- you are p1, PassiveAI is p2
+ *   npm run play               -- you are p1, GreedyAI is p2
  *   npm run play -- --seed 42  -- a specific game
- *   npm run play -- --ai random
+ *   npm run play -- --ai passive        -- an opponent that starts nothing
+ *   npm run play -- --ai random         -- the fuzz opponent, for poking at rules
  *   npm run play -- --forces starter    -- the two hand-authored 30-health lists
  *   npm run play -- --forces bestiary   -- every monster and large die, so every SAI
  */
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
 
-import { passiveAi } from '../ai/passive'
+import { DEFAULT_OPPONENT, OPPONENT_NAMES, OPPONENTS, opponentNamed } from '../ai/opponents'
 import { randomAi } from '../ai/random'
 import type { AiPlayer } from '../ai/types'
 import { SPECIES, dragonName, terrainDie, terrainFaceAction, unitType } from '../data/load'
@@ -1515,6 +1516,19 @@ function forcesArg(name: string | undefined): ForceSpec {
   return found
 }
 
+/** `--ai <name>`: an opponent from the registry the app uses, or the fuzz opponent,
+ *  which only the terminal offers. An unknown name is refused with the list. */
+function aiArg(name: string | undefined): AiPlayer {
+  if (name === undefined) return OPPONENTS[DEFAULT_OPPONENT]
+  if (name === 'random') return randomAi
+  const found = opponentNamed(name)
+  if (found === null) {
+    console.error(`unknown --ai ${name}; try ${[...OPPONENT_NAMES, 'random'].join(', ')}`)
+    process.exit(1)
+  }
+  return OPPONENTS[found]
+}
+
 function parseArgs() {
   const args = process.argv.slice(2)
   const get = (flag: string) => {
@@ -1524,7 +1538,7 @@ function parseArgs() {
   const seedArg = get('--seed')
   return {
     seed: seedArg === undefined ? Math.floor(Math.random() * 100_000) : Number(seedArg),
-    ai: get('--ai') === 'random' ? randomAi : passiveAi,
+    ai: aiArg(get('--ai')),
     // The seed decides the forces now. A name brings back one of the hand-authored
     // pairs instead -- `starter` is what the tests and the goldens play, `bestiary`
     // puts every monster and large die on the board.
