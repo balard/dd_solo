@@ -31,7 +31,11 @@ export const passiveAi: AiPlayer = {
   },
 }
 
-function decideAction(state: GameState, pending: Pending): GameAction {
+/**
+ * Passive's answer to any pending, as a plain function -- exported so `GreedyAI` can
+ * fall back to it where it holds no better opinion, rather than keeping a copy.
+ */
+export function decideAction(state: GameState, pending: Pending): GameAction {
   switch (pending.kind) {
     case 'choose_march_army':
       return { kind: 'choose_march_army', army: null }
@@ -47,7 +51,7 @@ function decideAction(state: GameState, pending: Pending): GameAction {
       return { kind: 'choose_action', action: null }
 
     // It casts nothing, which is honest while it also attacks nothing -- and stops
-    // being honest the moment it is declining eighteen spells. `GreedyAI` (Phase 9)
+    // being honest the moment it is declining eighteen spells. `GreedyAI` (Phase 10)
     // is where that is answered; see OVERVIEW.md section 4.
     case 'announce_spells':
       return { kind: 'announce_spells', casts: [] }
@@ -182,7 +186,7 @@ function decideAction(state: GameState, pending: Pending): GameAction {
     }
 
     // Temple: forces every time. A crude opinion, but a real one -- `GreedyAI`
-    // (Phase 9) is what should notice a Phoenix in the opponent's DUA and decline.
+    // (Phase 10) notices a Phoenix in the opponent's DUA and declines.
     case 'eighth_face_temple':
       return { kind: 'eighth_face_temple', force: true }
 

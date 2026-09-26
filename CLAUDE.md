@@ -771,6 +771,18 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - `unitValue` depends on the die type only, never on where the die stands.
   - `leastValuableMaximal` / `mostValuableMaximal` are an exact-sum knapsack over
     `maxAbsorbable`, never largest-first.
+- **`GreedyAI` (`src/ai/greedy.ts`, v1 Phase 10b) is active over optimal**: it always marches,
+  maneuvers toward the eighth face, never passes while an action is legal, takes every promotion,
+  and brings its reserves out. It never draws from its rng, and ties go to the pending's own
+  order. Where it has no opinion it calls passive's exported `decideAction`.
+  - **Self-play against `PassiveAI` and against itself is the check that matters.** Against
+    random it wins no matter what. Every stall found so far showed up only as a *capped* game,
+    never a stuck one, and each came from a scorer that valued something that was not what the
+    action does: magic priced by its dice while casting nothing, and a caster held back to march a
+    Reserve Army that did nothing.
+  - **Retreat is how a die changes terrain**, so greedy retreats: surplus off a held, unopposed
+    eighth face when a terrain has none of its dice, and a lone die on its only eighth face leaves
+    to hunt. Remove either and games cap.
 - **A game record is `{ setup, actions }` and nothing else.** Replaying it reproduces the game die
   for die. `replayTo(record, n)` is undo.
 - **The golden corpus is the guard on "this changed no outcome".** `src/engine/__golden__/` holds

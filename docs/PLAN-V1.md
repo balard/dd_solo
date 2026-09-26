@@ -2451,7 +2451,7 @@ a phone, against an opponent that marches, maneuvers, casts and recruits. A 200-
 | Slice | Scope | State |
 |---|---|---|
 | **10a** | The estimator: expected results from exact face distributions, through `armyRoll` | ✅ landed |
-| **10b** | `GreedyAI`: the march, and every forced or free decision | planned |
+| **10b** | `GreedyAI`: the march, and every forced or free decision | ✅ landed |
 | **10c** | `GreedyAI`: spells, Dispel Magic, Summon Dragon; the greedy fuzz | planned |
 | **10d** | The opponent in both clients: start-screen picker, `?ai=`, `--ai greedy` | planned |
 | **10e** | The roll-off choice, behind `rollOff: 'choice'`; retires `RULES-V0.md` §7's house rule | planned |
@@ -2557,6 +2557,53 @@ green and unregenerated. 10a adds no decision, so there is nothing to fuzz yet.
 
 Every row has a scenario test, and every row that is allowed to decline has one proving it does not
 decline when an option exists.
+
+#### Where this slice was wrong
+
+**Self-play found four stalls, and each one broke a rule written above.** The first cut beat
+`RandomAI` 29 games out of 30, and hit the 20,000-decision cap in 25 of 30 against `PassiveAI`.
+Nothing stuck and nothing threw. A player that marches every turn simply never finished. Each fix
+came from reading the board a capped game ended on:
+
+1. **Magic was worth its dice, and cast nothing.** The placeholder valued a magic action at half its
+   expected results. But until 10c greedy announces nothing, so every march chose magic and spent it
+   on an empty list. Magic is now worth what it does: `floor(M / 2)` kills under the v0 house rule,
+   and 0 under spells until 10c scores them. **A placeholder that is not what the action actually
+   does is worse than a zero.**
+2. **Terrain progress was priced at a quarter point a face**, so a skirmish always outbid walking an
+   empty terrain home. It is one point a face now. The eighth face is worth twice the whole track to
+   its holder, and a debt of the whole track to the other side.
+3. **"Retreat: none by default" was wrong.** A die changes terrain only by going through Reserves.
+   With no retreats, greedy piled its whole force onto the one eighth face it held and the Frontier
+   sat empty at 7 for the rest of the game. Surplus dice now leave a held, unopposed eighth face
+   whenever some terrain has none of ours, and half the health stays behind as the guard.
+4. **"Keep a caster back" left one Ashbringer in Reserves for a whole game,** marching every turn
+   and casting nothing, with no greedy die on the board. A caster stays back only while the Reserve
+   Army's magic scores above zero, which it cannot do before 10c.
+
+**A fifth stall needed a rule the table never had: the hunt.** Greedy against greedy ended with one
+lone die on each side's eighth face, and neither could ever make a second capture. When a held
+eighth face is a player's only army, with no surplus and nothing in Reserves, the die now leaves and
+goes after the enemy. That trades a won-looking position for a finished game. Against `PassiveAI` it
+costs 8 games in 150, because a hunting die sometimes dies, which is active over optimal working
+as written.
+
+**Also different from the table:**
+- **Greedy never draws from the rng it is handed.** Ties go to the first option in the pending's own
+  order, so a run is reproducible without the AI seed, and a test holds it to that.
+- **Dragon decisions and Accelerated Growth fall back to passive's answers.** Passive's damage split
+  already kills what it can, and its exchange already takes every pair. `dragon_allocate` stays "all
+  to saves", because choosing a better split needs the army's per-kind totals, which the pending
+  does not carry.
+
+**Verification.** 18 scenario tests and 3 self-play checks, with every state validated by `runGame`:
+40 `SPECIES_RULES` games against `RandomAI` (all must finish and greedy must win at least 36; it
+won 60 of 60 in the probe before the threshold was written), 20 greedy-vs-greedy games, and 20
+`V0_RULES` games against passive. A
+hand-run of 150 games per matchup under both rulesets gave zero caps and zero stalls across 900
+games, and greedy won 149 of 150 against random on both rule sets. Games average a few
+milliseconds. The spell-side decisions and the counter-based fuzz are 10c's. The goldens replay
+unregenerated.
 
 ### 10c — spells, and the fuzz
 
