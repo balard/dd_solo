@@ -1,17 +1,16 @@
 /**
  * Builds the opening position, following RULES-V0.md section 7.
  *
- * Both setup choices are made here now. Order of play comes from the Horde roll-off,
- * and the *Frontier* comes from the loser of that roll-off, who draws it (Phase 5b
- * house rule). The rules give the winner the choice of one prize or the other;
- * splitting them one each costs nothing while the opponent is `PassiveAI`, which
- * could hold no opinion about which terrain it would rather fight on, and it means
- * no decision has to be raised. `GreedyAI` (Phase 9) gets the real rule.
+ * Order of play comes from the Horde roll-off. Under `rollOff: 'split'` the loser
+ * draws the Frontier (the Phase 5b house rule); under `'choice'` (v1 Phase 10e) both
+ * players propose one and the winner chooses the first turn or the pick -- see
+ * `rollOffPending` at the bottom of this file.
  *
- * Terrain has no per-species profile any more (Phase 5b removed it): each Home
- * Terrain is drawn uniformly from all 24 dice, and the Frontier is drawn from the
- * terrains that share an element with the loser's species -- see `drawHomeDie` /
- * `drawFrontierDie`.
+ * The terrain dice are drawn, not chosen (a house rule, `RULES-V0.md` section 7): each
+ * Home Terrain is a random die of the species' own type -- Swampland for Treefolk,
+ * Wasteland for Firewalkers, `homeTerrainType` -- and a Frontier proposal is any die
+ * sharing at least one element with its proposer's species, uniformly. See
+ * `drawHomeDie` / `drawFrontierDie`.
  *
  * A force is either named -- a preset, for tests and the golden corpus -- or rolled
  * from the seed. **The named path must consume no generation draws at all**, or a
@@ -22,6 +21,7 @@
  */
 import {
   DRAGON_DICE,
+  homeTerrainType,
   speciesElements,
   TERRAIN_DICE,
   terrainDie,
@@ -172,34 +172,40 @@ function startingSlot(armyName: PresetArmyName, player: PlayerId): TerrainSlot {
  */
 const SORTED_TERRAIN_DICE: readonly string[] = [...TERRAIN_DICE].map((d) => d.id).sort()
 
-/** Draws a Home Terrain die uniformly from all 24 (Phase 5b house rule). */
-function drawHomeDie(rng: RngState): readonly [string, RngState] {
-  const [index, next] = nextInt(rng, SORTED_TERRAIN_DICE.length)
-  const dieId = SORTED_TERRAIN_DICE[index]
-  if (dieId === undefined) throw new Error(`drew home terrain ${index}`)
+/**
+ * Draws a Home Terrain die: uniformly among the four dice of the species' own type, so
+ * the one thing the draw decides is the eighth-face icon.
+ *
+ * It was uniform over all 24 from Phase 5b, which put a Treefolk force at home on a
+ * Wasteland -- a terrain carrying neither of its elements, where Replanting and Rapid
+ * Growth never fire and its spells need a Standing Stones to be cast at all.
+ */
+function drawHomeDie(species: string, rng: RngState): readonly [string, RngState] {
+  const own = homeTerrainType(species).id
+  const eligible = SORTED_TERRAIN_DICE.filter((dieId) => terrainDie(dieId).type === own)
+  const [index, next] = nextInt(rng, eligible.length)
+  const dieId = eligible[index]
+  if (dieId === undefined) throw new Error(`drew home terrain ${index} of ${eligible.length}`)
   return [dieId, next] as const
 }
 
 /**
- * Draws the Frontier die: one of the loser's two elements, then uniformly among the
- * dice whose type carries it (Phase 5b house rule, the "element first" reading).
- * The loser's own home type carries both of the loser's elements, so it is reachable
- * from either draw of the first step and comes up twice as often as a type that
- * shares only one element with the loser.
+ * Draws a Frontier die: uniformly among every die sharing at least one element with the
+ * species -- 20 of the 24 for either species in this box, everything but the other
+ * side's own type. One draw.
+ *
+ * Phase 5b drew an element first and then a die carrying it, which made the species'
+ * own type twice as likely as any other. Every eligible die is equally likely now.
  */
-function drawFrontierDie(loserSpecies: string, rng: RngState): readonly [string, RngState] {
-  const elements = speciesElements(loserSpecies)
-  const [elementIndex, afterElement] = nextInt(rng, elements.length)
-  const element = elements[elementIndex]
-  if (element === undefined) throw new Error(`drew element ${elementIndex}`)
-
+function drawFrontierDie(species: string, rng: RngState): readonly [string, RngState] {
+  const elements = speciesElements(species)
   const eligible = SORTED_TERRAIN_DICE.filter((dieId) =>
-    terrainType(terrainDie(dieId).type).elements.includes(element),
+    terrainType(terrainDie(dieId).type).elements.some((e) => elements.includes(e)),
   )
-  const [dieIndex, afterDie] = nextInt(afterElement, eligible.length)
-  const dieId = eligible[dieIndex]
-  if (dieId === undefined) throw new Error(`drew frontier die ${dieIndex} of ${eligible.length}`)
-  return [dieId, afterDie] as const
+  const [index, next] = nextInt(rng, eligible.length)
+  const dieId = eligible[index]
+  if (dieId === undefined) throw new Error(`drew frontier die ${index} of ${eligible.length}`)
+  return [dieId, next] as const
 }
 
 /**
@@ -456,7 +462,7 @@ export function setupGame(options: SetupOptions): GameState {
   const frontierSetter = opponentOf(firstPlayer)
 
   // Step 5: the three terrain dice, drawn in this order -- p1_home, then the
-  // Frontier (element, then die), then p2_home -- and only for the slots
+  // Frontier (one proposal, or two under the choice), then p2_home -- and only for the slots
   // `options.terrains` does not pin. A pinned slot consumes no draw at all, the
   // named-force rule again: not "the same draws", none, or a partly pinned game
   // would land on a different board than the same seed gives a fully pinned one.
@@ -464,7 +470,7 @@ export function setupGame(options: SetupOptions): GameState {
   if (options.terrains?.p1_home !== undefined) {
     p1HomeDie = options.terrains.p1_home
   } else {
-    const [dieId, next] = drawHomeDie(rng)
+    const [dieId, next] = drawHomeDie(forces.p1.species, rng)
     p1HomeDie = dieId
     rng = next
   }
@@ -492,7 +498,7 @@ export function setupGame(options: SetupOptions): GameState {
   if (options.terrains?.p2_home !== undefined) {
     p2HomeDie = options.terrains.p2_home
   } else {
-    const [dieId, next] = drawHomeDie(rng)
+    const [dieId, next] = drawHomeDie(forces.p2.species, rng)
     p2HomeDie = dieId
     rng = next
   }

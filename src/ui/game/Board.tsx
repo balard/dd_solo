@@ -503,14 +503,13 @@ export function Board({
                     </>
                   )}
                 </span>
+                {/* During the roll-off no face is rolled, so a Home shows what it can
+                    become instead: its eighth face, the one thing its draw decided. The
+                    Frontier shows nothing -- its die is not chosen yet. */}
                 <span className="chip-face">
-                  {unrolled ? (
-                    <span className="chip-number muted" title="rolled once the roll-off choice is made">
-                      not rolled
-                    </span>
-                  ) : (
-                    renderFace(art, terrain, icon, ruleSet)
-                  )}
+                  {unrolled
+                    ? !undecided && renderFace(art, { ...terrain, face: 8 }, null, ruleSet)
+                    : renderFace(art, terrain, icon, ruleSet)}
                 </span>
               </span>
             </button>

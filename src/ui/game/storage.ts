@@ -132,8 +132,14 @@ const KEY = 'dd_solo.save'
  *    **And a `RuleSet` key, the version-10 hazard again**: a version-13 record's
  *    `SPECIES_RULES` has no `rollOff`, which reads `undefined` and so plays `'split'`
  *    -- correctly, but only because the code tests for `'choice'`.
+ *
+ * 15: the terrain draw, after Phase 10. Dice consumption: a Home Terrain is drawn among
+ *    the four dice of the species' own type rather than all 24, and a Frontier in one
+ *    uniform draw among the dice sharing an element rather than an element and then a
+ *    die -- so a version-14 record would land on a different board from the same seed.
+ *    Every rung, not a flag: the goldens pin all three terrains and never draw.
  */
-export const SAVE_VERSION = 14
+export const SAVE_VERSION = 15
 
 
 export interface SavedGame {

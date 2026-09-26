@@ -898,7 +898,11 @@ describe('the fuzz', () => {
           aiSeed: seed,
           // The spell fuzz's cap and reason (Reserve magic tripled a game's length);
           // the longest game here is recorded below so a raise is measured, not guessed.
-          maxDecisions: 20_000,
+          // Raised from 20,000 after the terrain draw changed (homes of the species' own
+          // type): bestiary seed 25, passive against random, runs 58,784 decisions and
+          // then ends in a win. The next longest of the 200 is 13,865 -- one slow random
+          // walk, not a stall, and it finishes.
+          maxDecisions: 100_000,
         })
         if (result.stoppedBecause === 'stuck') stuck += 1
         expect(result.stoppedBecause, `seed ${seed}`).not.toBe('cap')
@@ -928,6 +932,6 @@ describe('the fuzz', () => {
     expect(growthTaken).toBeGreaterThan(0)
     expect(growthDeclined).toBeGreaterThan(0)
     expect(flights).toBeGreaterThan(0)
-    expect(longest).toBeLessThan(20_000)
+    expect(longest).toBeLessThan(100_000)
   })
 })

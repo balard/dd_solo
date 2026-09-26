@@ -164,9 +164,13 @@ function board(state: GameState, human: PlayerId): string {
   for (const slot of TERRAIN_SLOTS) {
     const terrain = state.terrains[slot]
     if (unrolled) {
-      const name = slot === 'frontier' ? 'chosen after the roll-off' : terrain.dieId.replace('_', ' ')
+      // No face is rolled yet, so a Home shows what it can become -- its eighth face,
+      // the one thing its draw decided -- and the undecided Frontier shows nothing.
+      const frontier = slot === 'frontier'
+      const name = frontier ? 'chosen after the roll-off' : terrain.dieId.replace('_', ' ')
+      const eighth = frontier ? '' : `8 ▸ ${terrainDie(terrain.dieId).eighthFace.replace('_', ' ')}`
       lines.push(
-        `  ${SLOT_LABEL[slot].padEnd(9)} ${dim(name.padEnd(26))}${dim('not rolled')}  ` +
+        `  ${SLOT_LABEL[slot].padEnd(9)} ${dim(name.padEnd(26))}${cyan(eighth.padEnd(18))} ` +
           `P1 ${armySummary(state, 'p1', slot)} P2 ${armySummary(state, 'p2', slot)}`,
       )
       continue

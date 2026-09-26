@@ -326,6 +326,26 @@ export function speciesElements(speciesId: string): readonly Element[] {
   return found.elements
 }
 
+/**
+ * A species' own terrain type: the one whose two elements are exactly the species' two.
+ * Treefolk (water, earth) bring Swampland, Firewalkers (air, fire) bring Wasteland.
+ *
+ * Derived rather than tabled, so there is no second copy of "which terrain a species
+ * brings" to drift. The six basic types carry the six pairs of four elements, one each,
+ * so the match is always exactly one, and this throws if the data ever stops saying so.
+ */
+export function homeTerrainType(speciesId: string): TerrainType {
+  const own = speciesElements(speciesId)
+  const found = TERRAIN_TYPES.filter(
+    (t) => t.elements.length === own.length && own.every((e) => t.elements.includes(e)),
+  )
+  const [only] = found
+  if (only === undefined || found.length > 1) {
+    throw new DataError(`${speciesId} matches ${found.length} terrain types, not exactly one`)
+  }
+  return only
+}
+
 /** Units of one species, in the data's order (by class, then size). */
 export function unitsOfSpecies(speciesId: string): readonly UnitType[] {
   return UNIT_TYPES.filter((u) => u.species === speciesId)

@@ -2823,7 +2823,8 @@ opponent goes first. The starting faces are rolled after the choice.
   - `?seed=5&ai=passive`: passive takes the first turn, and the human's `choose_frontier` sheet
     appears.
   - No console errors and no overflow.
-- **The terminal**: the roll-off menu, and a board that says "not rolled".
+- **The terminal**: the roll-off menu, and a board that says "not rolled" (now the eighth face;
+  see below).
 - **Suite and build**: 873 tests and a production build, both green.
 - **`SAVE_VERSION` 13 → 14**, for the reasons in `storage.ts`. The 25 goldens replay
   unregenerated.
@@ -2832,6 +2833,28 @@ opponent goes first. The starting faces are rolled after the choice.
 reservation: it was checked with the human side passing and greedy winning. It was not checked
 with a human playing to win against greedy, which is the game this plan exists to make and
 the thing to do next.
+
+#### What looking at it found afterwards
+
+- **"Not rolled" was the wrong thing to show.** During the roll-off each Home now shows its
+  **eighth face**: the one thing its draw decided, and what that terrain becomes once captured.
+  The undecided Frontier shows nothing. Both boards do the same.
+- **The proposal buttons carry their two element dots** (`Choice.elements`), since colour is what
+  decides whose terrain a proposal is. `plainLabel` spells the elements out for a screen reader.
+  That also turned up that `Element` in `prompts.ts` had silently resolved to the DOM's global
+  `Element` type until it was imported.
+- **The terrain draw changed** (`RULES-V0.md` §7):
+  - **a Home is a random die of the species' own type**: Swampland for Treefolk, Wasteland for
+    Firewalkers, derived from the data by `homeTerrainType`;
+  - **a Frontier or proposal is one uniform draw among the dice sharing an element** with the
+    species.
+  - This applies on every rung, since it is a house rule about setup rather than a flag. The
+    goldens pin all three terrains and did not move. Four setup tests described the old draw and
+    were rewritten. `SAVE_VERSION` is 15.
+- **The species fuzz's cap rose from 20,000 to 100,000, measured.** On the new boards,
+  bestiary seed 25 (passive against random) runs 58,784 decisions and then ends in a win. The
+  next longest of the 200 is 13,865. It is one slow random walk, not a stall, and the suite takes
+  about 5s longer for it.
 
 ---
 

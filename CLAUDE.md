@@ -62,6 +62,8 @@ the dice and the opponent.
 > draw: each Home Terrain is drawn uniformly from all 24 dice, and the Frontier is drawn from a
 > terrain sharing an element with the roll-off loser's species -- so a board is no longer "both
 > homes are Towers, the Frontier a City" the way Phase 0a left it, and `SpeciesProfile` is gone.
+> (Revised after Phase 10: a Home is now a random die of the species' own type -- see the setup
+> notes under Engine notes.)
 > `SAVE_VERSION` became 7 here, for dice consumption at setup and the two Eighth Face Phase
 > decisions 5e was already known to add. **5c added the seam** -- `iconAt` / `resolvesIcon` -- and
 > nothing else, the same shape 4a gave `sai: 'full'`. **5d added Tower**: any army may be missiled,
@@ -365,7 +367,8 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   ```
   race -> size -> p1 units -> p1 split -> p2 units -> p2 split   (random forces only)
        -> Horde roll-off
-       -> p1 home die -> Frontier element -> Frontier die -> p2 home die   (unpinned slots only)
+       -> p1 home die -> Frontier die (p1's then p2's proposal, under the choice) -> p2 home die
+                                                                 (unpinned slots only)
        -> terrain faces
   ```
 
@@ -382,7 +385,8 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - **The game opens paused in phase `'setup'`, before any starting face is rolled**: the rules
     roll after the choice. While `GameState.rollOff` is open, `terrains` is a **placeholder** --
     every face 1, p1's proposal at the Frontier -- and `validateState` holds it to exactly that.
-    Both boards draw "not rolled" over it rather than showing faces nobody rolled. The placeholder
+    Both boards draw each Home's **eighth face** over it -- the one thing its draw decided -- and
+    nothing at the undecided Frontier, never the placeholder face. The placeholder
     beat a nullable face, which would have reached every reader of a face in the engine.
   - **It skips itself when there is nothing to choose**: a named first player means no roll-off,
     and a pinned Frontier leaves the winner one prize. That is why no test pinning either moved.
@@ -391,12 +395,17 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - The log says `roll_off` (who *won*) and `roll_off_decided`, never `order_of_play`, whose field
     is named `firstPlayer` -- under the choice the winner is not the first player until they
     say so.
-- **Both Home Terrains and the Frontier are drawn, not chosen by species** (Phase 5b). Each Home
-  Terrain is uniform over all 24 dice; the Frontier draws one of the loser's two elements and then
-  draws uniformly among the dice carrying it, so the loser's own home type comes up about twice as
-  often as a type sharing only one element with them. `SpeciesProfile` and the old per-species
-  profile in `data/presets.json` are gone -- there is no second copy of "which terrain a species
-  brings" left to drift.
+- **Each Home Terrain is a random die of the species' own type** (after Phase 10): Swampland for
+  Treefolk, Wasteland for Firewalkers, so the draw decides only the eighth-face icon. The type is
+  **derived, not tabled** -- `homeTerrainType` in `data/load.ts` finds the one terrain type whose
+  elements are exactly the species' two, because the six basic types carry the six pairs of four
+  elements, one each. So there is still no second copy of "which terrain a species brings" to drift.
+  - **A Frontier (or a proposal) is one uniform draw among every die sharing at least one
+    element** with the species -- 20 of the 24 for either species here. Phase 5b drew an element
+    first and then a die, which made the species' own type twice as likely; that is gone.
+  - Phase 5b had homes uniform over all 24, which put Treefolk at home on a Wasteland: neither of
+    their elements, so Replanting and Rapid Growth never fired there. The goldens pin all three
+    terrains and never drew, which is why the change moved none of them.
 - **`SetupOptions.terrains` pins a die to a slot.** That is how a test says "a Tower, here", and it
   is what lets the golden corpus keep replaying the board it was recorded on now that the terrains
   are drawn rather than fixed. Applied last, over whatever would have been drawn.

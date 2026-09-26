@@ -1954,7 +1954,7 @@ export interface GameState {
    * holds p1's proposal. The rules roll the starting faces after the choice, so there
    * is no honest face to show, and a nullable face would reach every one of the
    * hundred places that read one. Nothing reads the placeholder: the phase takes no
-   * action but the choice, and the board draws "not rolled" over it.
+   * action but the choice, and the boards draw each Home's eighth face over it.
    */
   readonly rollOff?: RollOffState
   readonly pending: Pending | null

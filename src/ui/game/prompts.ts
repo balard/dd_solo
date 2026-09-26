@@ -5,9 +5,9 @@
  * bar renders whatever this returns, so no component ever tracks its own wizard
  * state or decides what is legal -- the engine already did both.
  */
-import { dragonName, terrainDie, terrainDieName, terrainFaceAction, unitType } from '../../data/load'
+import { dragonName, terrainDie, terrainDieName, terrainFaceAction, terrainType, unitType } from '../../data/load'
 import { spell } from '../../data/spells'
-import type { TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
+import type { Element, TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
 import { damageOptions } from '../../engine/damage'
 import {
   castingsFor,
@@ -80,6 +80,11 @@ export interface Choice {
   readonly label: string
   /** Fills the `{}` slots in `label`, in order. */
   readonly faces?: readonly FaceHint[]
+  /**
+   * Element dots drawn after the label (v1 Phase 10e): a proposed Frontier's two
+   * colours, which are what decides whose terrain it is. Spelled out in `plainLabel`.
+   */
+  readonly elements?: readonly Element[]
   readonly action: GameAction
   /** Marks the "do nothing" option so it can be styled as secondary. */
   readonly passive?: boolean
@@ -100,13 +105,14 @@ export interface Choice {
  */
 export function plainLabel(choice: Choice): string {
   const faces = choice.faces ?? []
+  const elements = choice.elements === undefined ? '' : ` — ${choice.elements.join(' and ')}`
   return choice.label
     .split('{}')
     .map((text, i) => {
       const hint = faces[i]
       return hint === undefined ? text : text + describeFace(hint)
     })
-    .join('')
+    .join('') + elements
 }
 
 export interface Prompt {
@@ -155,6 +161,11 @@ export function proposalLabel(dieId: string, proposer: PlayerId, human: PlayerId
   return `${terrainDieName(dieId)} (${proposer === human ? 'your' : "the enemy's"} proposal)`
 }
 
+/** A proposed Frontier's two elements, for the dots on its button. */
+function proposalElements(dieId: string): readonly Element[] {
+  return terrainType(terrainDie(dieId).type).elements
+}
+
 export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState): Prompt {
   const label = (slot: ArmyRef) => slotLabel(slot, human)
 
@@ -170,6 +181,7 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
           { label: 'Take the first turn', action: { kind: 'roll_off_choice', take: 'first_turn' } },
           ...(['p1', 'p2'] as const).map((proposer) => ({
             label: `Frontier: ${proposalLabel(pending.proposals[proposer], proposer, human)}`,
+            elements: proposalElements(pending.proposals[proposer]),
             action: { kind: 'roll_off_choice', take: 'frontier', proposer } as GameAction,
           })),
         ],
@@ -180,6 +192,7 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         question: 'The enemy took the first turn. Which proposed terrain becomes the Frontier?',
         choices: (['p1', 'p2'] as const).map((proposer) => ({
           label: proposalLabel(pending.proposals[proposer], proposer, human),
+          elements: proposalElements(pending.proposals[proposer]),
           action: { kind: 'choose_frontier', proposer } as GameAction,
         })),
       }

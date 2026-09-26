@@ -212,11 +212,18 @@ v1 Phase 0a needed the two proposals to differ, and with three types in the box 
 left no third option for either species, so each proposed a second die of its own type: Swampland
 for Treefolk, Wasteland for Firewalkers. **Phase 5b replaced that with a draw**, now that Coastland,
 Feyland and Flatland are in the data alongside Swampland, Highland and Wasteland (§5's table): each
-Home Terrain is drawn uniformly from all 24 dice, and the Frontier is drawn from a terrain sharing
-an element with the roll-off loser's species — one of the loser's two elements, then uniformly among
-the dice carrying it, so the loser's own home type comes up about twice as often as the other three
-it merely shares an element with. There is no longer a per-species profile to consult; "which
-terrain a species brings" is answered by the seed, not by a table.
+Home Terrain was drawn uniformly from all 24 dice, and the Frontier from a terrain sharing an
+element with the roll-off loser's species — one of the loser's two elements, then uniformly among
+the dice carrying it.
+
+**After v1 Phase 10 the draw changed again, and this is the rule now.** Each Home Terrain is a
+random die of the species' own type — the type whose two elements are exactly the species' two:
+**Swampland for Treefolk, Wasteland for Firewalkers** — so the draw decides only its eighth-face
+icon. A Frontier, and under `rollOff: 'choice'` each player's proposal, is one uniform draw among
+every die sharing **at least one** element with the species (20 of the 24 here). The uniform-home
+draw put Treefolk at home on a Wasteland, carrying neither of their elements. The own type is
+derived from the data (`homeTerrainType`), not tabled, so "which terrain a species brings" still
+has one copy.
 
 ## 8. SAIs under `sai: 'results'` (v1 Phase 1)
 
@@ -503,9 +510,9 @@ Resolved so far:
   question**: they are in neither rulebook, but both forms are now recorded in `PLAN-V1.md` Phase 6
   (Drake and Wyrm, twelve faces each, the same layout for all five elements). They still have to be
   imported into `data/` before that phase can run, which is work rather than an unknown.
-- **Which terrain dice each species brings** — resolved by Phase 5b, and not by a per-species rule:
-  each Home Terrain is drawn uniformly from all 24 dice, and the Frontier is drawn from a terrain
-  sharing an element with the roll-off loser's species. There is no "should the Frontier go on being
+- **Which terrain dice each species brings** — resolved by Phase 5b and revised after Phase 10:
+  each Home Terrain is a random die of the species' own type (Swampland, Wasteland), and the
+  Frontier is a uniform draw among dice sharing an element with its proposer's species (§7). There is no "should the Frontier go on being
   a City" question either, since which icon it carries is now a draw rather than a species choice.
 - Magic targets **same terrain only** — it is a melee variant in v0 (§4).
 - A Reserve Army may **not** take a magic action, and so cannot march in v0 (§3, §4).

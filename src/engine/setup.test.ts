@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { SPECIES, TERRAIN_DICE, UNIT_TYPES, terrainDie, terrainType, unitType } from '../data/load'
+import { SPECIES, TERRAIN_DICE, UNIT_TYPES, homeTerrainType, terrainDie, terrainType, unitType } from '../data/load'
 import { PRESETS, maxArmyHealth, preset } from '../data/presets'
 
 import { reduce } from './reduce'
@@ -9,6 +9,7 @@ import {
   BESTIARY_FORCES,
   dragonCount,
   rollStartingFace,
+  namedForces,
   setupGame,
   STARTER_FORCES,
   type SetupOptions,
@@ -282,14 +283,15 @@ describe('setupGame', () => {
   })
 })
 
-describe('the Phase 5b terrain draw', () => {
+describe('the terrain draw', () => {
   const ALL_PINNED = {
     p1_home: 'swampland_tower',
     frontier: 'highland_tower',
     p2_home: 'wasteland_tower',
   } as const
 
-  it('draws each Home Terrain uniformly from all 24 dice, over 1000 seeds', () => {
+  it("draws each Home Terrain from the species' own type, all four eighth faces, over 1000 seeds", () => {
+    // Starter forces: p1 is Treefolk (water, earth), p2 Firewalkers (air, fire).
     const p1Home = new Set<string>()
     const p2Home = new Set<string>()
     for (let seed = 1; seed <= 1000; seed++) {
@@ -297,8 +299,14 @@ describe('the Phase 5b terrain draw', () => {
       p1Home.add(state.terrains.p1_home.dieId)
       p2Home.add(state.terrains.p2_home.dieId)
     }
-    expect(p1Home.size).toBe(TERRAIN_DICE.length)
-    expect(p2Home.size).toBe(TERRAIN_DICE.length)
+    const ofType = (type: string) => TERRAIN_DICE.filter((d) => d.type === type).map((d) => d.id).sort()
+    expect([...p1Home].sort()).toEqual(ofType('swampland'))
+    expect([...p2Home].sort()).toEqual(ofType('wasteland'))
+  })
+
+  it("finds each species' own type from the data: the one whose elements are exactly its own", () => {
+    expect(homeTerrainType('treefolk').id).toBe('swampland')
+    expect(homeTerrainType('firewalkers').id).toBe('wasteland')
   })
 
   it('always draws a Frontier sharing an element with the roll-off loser, over 1000 random-force seeds', () => {
@@ -312,19 +320,20 @@ describe('the Phase 5b terrain draw', () => {
     }
   })
 
-  it("draws the loser's own home type about twice as often as the others", () => {
-    // p2 (firewalkers, air+fire) always loses here, since p1 always marches first.
-    const counts = new Map<string, number>()
-    for (let seed = 1; seed <= 1000; seed++) {
+  it('draws the Frontier from every die sharing an element with the loser, and no other', () => {
+    // p2 (Firewalkers, air and fire) always loses here, since p1 always marches first:
+    // every die but the four Swamplands (water and earth) is eligible.
+    const seen = new Map<string, number>()
+    for (let seed = 1; seed <= 2000; seed++) {
       const state = setupGame({ seed, forces: STARTER_FORCES, firstPlayer: 'p1' })
-      const type = terrainDie(state.terrains.frontier.dieId).type
-      counts.set(type, (counts.get(type) ?? 0) + 1)
+      const dieId = state.terrains.frontier.dieId
+      seen.set(dieId, (seen.get(dieId) ?? 0) + 1)
     }
-    const wasteland = counts.get('wasteland') ?? 0
-    for (const [type, n] of counts) {
-      if (type === 'wasteland') continue
-      expect(wasteland, type).toBeGreaterThan(n)
-    }
+    const eligible = TERRAIN_DICE.filter((d) => d.type !== 'swampland').map((d) => d.id).sort()
+    expect([...seen.keys()].sort()).toEqual(eligible)
+    // Uniform, not element-first: the own type is no longer drawn twice as often. 2000
+    // draws over 20 dice is 100 each; no die strays anywhere near double.
+    for (const [dieId, n] of seen) expect(n, dieId).toBeLessThan(160)
   })
 
   it('lets the other player species decide the Frontier when firstPlayer is given explicitly', () => {
@@ -359,16 +368,22 @@ describe('the Phase 5b terrain draw', () => {
     })
     expect(partial.terrains.p1_home.dieId).toBe(full.terrains.p1_home.dieId)
     expect(partial.terrains.p2_home.dieId).toBe(full.terrains.p2_home.dieId)
-    // Exactly the Frontier's two draws (element, then die) more than the fully
-    // pinned board -- the faces differ too, since all three are rolled off one
-    // shared counter after the dice, and those two extra draws shift it.
-    expect(partial.rng.counter).toBe(full.rng.counter + 2)
+    // Exactly the Frontier's one draw more than the fully pinned board -- the faces
+    // differ too, since all three are rolled off one shared counter after the dice,
+    // and that extra draw shifts it. (Two draws before the uniform Frontier draw: an
+    // element, then a die.)
+    expect(partial.rng.counter).toBe(full.rng.counter + 1)
   })
 
   it('sets up and validates a game whose two homes draw the same die', () => {
-    const state = setupGame({ seed: 5, forces: STARTER_FORCES, firstPlayer: 'p1' })
-    expect(state.terrains.p1_home.dieId).toBe(state.terrains.p2_home.dieId)
-    expect(validateState(state)).toEqual([])
+    // Only a mirror can: two species never share a home type any more.
+    const mirror = namedForces('treefolk_satyr')
+    if (mirror === null) throw new Error('no Satyr mirror')
+    const state = Array.from({ length: 40 }, (_, i) =>
+      setupGame({ seed: i + 1, forces: mirror, firstPlayer: 'p1' }),
+    ).find((s) => s.terrains.p1_home.dieId === s.terrains.p2_home.dieId)
+    expect(state).toBeDefined()
+    expect(validateState(state as GameState)).toEqual([])
   })
 
   it('draws Standing Stones like any other icon, in every slot', () => {

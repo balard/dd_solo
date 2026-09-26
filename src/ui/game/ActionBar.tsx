@@ -26,6 +26,7 @@ import {
 } from '../../engine/types'
 
 import { RollStrip } from './DiceGrid'
+import { ElementDots } from './Elements'
 import { Glyph, type GlyphName } from './Glyph'
 
 /** A unit's name by id, for the sheets that carry ids rather than units. */
@@ -1431,6 +1432,7 @@ function SaiHeader({
             }}
           >
             <ChoiceLabel label={choice.label} faces={choice.faces ?? []} />
+            {choice.elements !== undefined && <ElementDots elements={choice.elements} />}
           </button>
         ))}
       </div>
