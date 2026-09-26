@@ -55,6 +55,7 @@ import {
   unitValue,
 } from './estimate'
 import { decideAction as passiveAnswer } from './passive'
+import { announcementValue, chooseAnnouncement } from './spells'
 import type { AiPlayer } from './types'
 
 export const greedyAi: AiPlayer = {
@@ -92,7 +93,7 @@ function best<T>(options: readonly T[], score: (option: T) => number): T | undef
 /**
  * How far along the terrain track a face is, from `player`'s side.
  *
- * One point a face, so a step toward the eighth is worth about a small die killed --
+ * A point and a half a face, so a step toward the eighth outbids a small die killed --
  * and the eighth itself is worth twice the whole track to its holder and a debt of the
  * whole track to the other side. Two captures win the game, which is why a march that
  * walks an unopposed terrain home has to outscore a skirmish, and why knocking an
@@ -100,7 +101,7 @@ function best<T>(options: readonly T[], score: (option: T) => number): T | undef
  */
 function progress(player: PlayerId, face: TerrainFace, capturedBy: PlayerId | null): number {
   if (face === 8) return capturedBy === player ? CAPTURE * 2 : -CAPTURE
-  return face
+  return face * 1.5
 }
 
 /**
@@ -138,13 +139,14 @@ function actionsAtFace(
  * Magic's worth: what it actually does under the rules being played.
  *
  * Under v0's house rule that is `floor(M / 2)` damage at the army opposite, with no
- * save. Under real spells it is whatever the spells a pool could buy are worth, and
- * until 10c scores them this player announces nothing -- so a magic action is worth
- * nothing, and valuing it by its dice made greedy cast into the void every march while
- * a terrain it could have walked home sat untouched.
+ * save. Under real spells it is the announcement the army's expected pool would buy
+ * (`spells.ts`). Before 10c that half read zero, because greedy announced nothing --
+ * and valuing magic by its dice instead made greedy cast into the void every march
+ * while a terrain it could have walked home sat untouched.
  */
 function magicValue(state: GameState, player: PlayerId, ref: ArmyRef): number {
-  if (state.ruleSet.magic === 'spells' || ref === 'reserve') return 0
+  if (state.ruleSet.magic === 'spells') return announcementValue(state, player, ref)
+  if (ref === 'reserve') return 0
   const enemy = army(state, opponentOf(player), ref)
   return killValue(enemy, expectedArmy(state, player, ref, 'magic').total / 2)
 }
@@ -608,11 +610,35 @@ function decide(state: GameState, pending: Pending): GameAction {
     case 'eighth_face_temple':
       return { kind: 'eighth_face_temple', force: !duaCanRise(state, opponentOf(player)) }
 
-    // Spells and dragons: passive's answers until 10c.
     case 'announce_spells':
-    case 'dispel_magic':
+      return {
+        kind: 'announce_spells',
+        casts: chooseAnnouncement(state, player, pending.slot, pending.castable, pending.pool).casts,
+      }
+
+    // Dispel Magic negates whatever reaches the unit, its army or its terrain, whoever
+    // cast it -- so it rolls against the opponent's announcement and never its own.
+    case 'dispel_magic': {
+      const caster = state.turn.magic?.caster ?? state.turn.marching
+      return { kind: 'dispel_magic', roll: caster !== player }
+    }
+
+    // Path: to the terrain that wants a die most.
     case 'spell_move':
-    case 'spell_summon':
+      return {
+        kind: 'spell_move',
+        slot: best(pending.options, (slot) => frontScore(state, player, slot)) ?? pending.options[0] ?? 'frontier',
+      }
+
+    // Summon Dragon: a dragon from a Summoning Pool before one already standing on a
+    // terrain, where it may be attacking the enemy already.
+    case 'spell_summon': {
+      const fromPool = pending.options.find((id) => state.dragons[id]?.location.kind === 'pool')
+      return { kind: 'spell_summon', dragonId: fromPool ?? pending.options[0] ?? '' }
+    }
+
+    // Dragons: passive's answers. Its damage split already kills what it can, and a
+    // better allocation needs per-kind totals the pending does not carry.
     case 'dragon_order':
     case 'dragon_target':
     case 'dragon_allocate':

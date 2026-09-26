@@ -783,6 +783,15 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - **Retreat is how a die changes terrain**, so greedy retreats: surplus off a held, unopposed
     eighth face when a terrain has none of its dice, and a lone die on its only eighth face leaves
     to hunt. Remove either and games cap.
+  - **Spells are scored from the data's shape** (`src/ai/spells.ts`, 10c). An `effect` block is
+    weighed by its modifiers against the armies it reaches, and a handler has one line in
+    `HANDLER_VALUE`. A spell with neither fails a test, since a spell greedy cannot score is one it
+    silently never casts. The announcement is bought greedily by value per point through
+    `stageCast`, then checked against `spellPlan` and `announcementProblem`.
+  - **Price a defensive buff as insurance.** A save bonus re-cast every turn outbid a step up the
+    track and capped games against `PassiveAI`, the 10b stall a second time. The terrain progress
+    number has had to rise twice for the same reason, so whenever a new value outbids walking a
+    terrain home, re-run greedy against passive.
 - **A game record is `{ setup, actions }` and nothing else.** Replaying it reproduces the game die
   for die. `replayTo(record, n)` is undo.
 - **The golden corpus is the guard on "this changed no outcome".** `src/engine/__golden__/` holds

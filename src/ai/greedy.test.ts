@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { rngFrom } from '../engine/rng'
-import { BESTIARY_FORCES, STARTER_FORCES, setupGame } from '../engine/setup'
+import { BESTIARY_FORCES, FORCE_SETS, STARTER_FORCES, setupGame, type ForceSpec } from '../engine/setup'
 import {
   SPECIES_RULES,
   V0_RULES,
@@ -307,28 +307,74 @@ describe('GreedyAI: reserves', () => {
 
 describe('GreedyAI: self-play', () => {
   /*
-   * Not the phase's fuzz -- that is 10c's, with counters over every activity. This is
-   * the net under 10b: forty live-rules games against the fuzz opponent, every state
-   * validated by `runGame`, so an illegal answer fails here rather than in a browser.
+   * The phase's fuzz (10c): 200 `SPECIES_RULES` games against `RandomAI`, sides
+   * alternating, over the starter pair, the bestiary, rolled forces and the monster
+   * mirrors. `runGame` validates every state, so an illegal answer -- an announcement
+   * the engine refuses above all -- fails here rather than in a browser.
    *
-   * The win rate is measured, not guessed: 60 of 60 when this slice landed. A sign
-   * error in a scorer is the bug every other test here would pass, and it would show
-   * as greedy losing to a coin.
+   * **The counters are greedy's own**, read off the log by player. A clean run that
+   * never cast a spell or summoned a dragon proves nothing about the spell scorer, and
+   * Summon Dragon did go 200 games without firing before it was repriced.
+   *
+   * The win floor is measured, not guessed: 199 of 200 when this landed. A sign error in
+   * a scorer is the bug every other test here would pass, and it shows up as greedy
+   * losing to a coin.
    */
-  it('beats RandomAI and never stalls, under the rules the app plays', () => {
+  it('plays 200 live-rules games against RandomAI: every activity fires, and it wins', () => {
+    const mirrors = Object.entries(FORCE_SETS)
+      .filter(([name]) => name !== 'starter' && name !== 'bestiary')
+      .map(([, forces]) => forces)
+    const games: [ForceSpec, number][] = [
+      ...Array.from({ length: 60 }, (_, i): [ForceSpec, number] => [STARTER_FORCES, i + 1]),
+      ...Array.from({ length: 60 }, (_, i): [ForceSpec, number] => [BESTIARY_FORCES, i + 1]),
+      ...Array.from({ length: 60 }, (_, i): [ForceSpec, number] => [{ kind: 'random' }, i + 1]),
+      ...Array.from({ length: 20 }, (_, i): [ForceSpec, number] => [mirrors[i % mirrors.length] as ForceSpec, i + 1]),
+    ]
+
+    const count: Record<string, number> = {}
+    const bump = (key: string): void => {
+      count[key] = (count[key] ?? 0) + 1
+    }
     let won = 0
-    for (let seed = 1; seed <= 40; seed++) {
+    let longest = 0
+
+    for (const [forces, seed] of games) {
       const greedySide: PlayerId = seed % 2 === 0 ? 'p1' : 'p2'
       const result = runGame({
-        setup: { seed, forces: seed % 3 === 0 ? BESTIARY_FORCES : { kind: 'random' }, ruleSet: SPECIES_RULES },
+        setup: { seed, forces, ruleSet: SPECIES_RULES },
         players: greedySide === 'p1' ? { p1: greedyAi, p2: randomAi } : { p1: randomAi, p2: greedyAi },
         aiSeed: seed,
         maxDecisions: 20_000,
       })
       expect(result.stoppedBecause, `seed ${seed}`).toBe('winner')
       if (result.state.winner === greedySide) won += 1
+      longest = Math.max(longest, result.decisions)
+
+      for (const entry of result.state.log) {
+        if (!('player' in entry) || entry.player !== greedySide) continue
+        if (entry.kind === 'action_chosen') bump(entry.action)
+        else bump(entry.kind)
+      }
     }
-    expect(won).toBeGreaterThanOrEqual(36)
+
+    expect(won).toBeGreaterThanOrEqual(190)
+    for (const activity of [
+      'march_begin',
+      'maneuver_declared',
+      'melee',
+      'missile',
+      'magic',
+      'spell_cast',
+      'dragon_summoned',
+      'reinforced',
+      'units_promoted',
+      'units_recruited',
+      'dispel_magic',
+    ]) {
+      expect(count[activity] ?? 0, activity).toBeGreaterThan(0)
+    }
+    // Measured at 354; the cap is 20,000. A game that runs long is a stall on its way.
+    expect(longest).toBeLessThan(2_000)
   })
 
   it('finishes games against itself, and plays the v0 rules too', () => {

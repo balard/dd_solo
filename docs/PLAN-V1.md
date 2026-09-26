@@ -2452,7 +2452,7 @@ a phone, against an opponent that marches, maneuvers, casts and recruits. A 200-
 |---|---|---|
 | **10a** | The estimator: expected results from exact face distributions, through `armyRoll` | ✅ landed |
 | **10b** | `GreedyAI`: the march, and every forced or free decision | ✅ landed |
-| **10c** | `GreedyAI`: spells, Dispel Magic, Summon Dragon; the greedy fuzz | planned |
+| **10c** | `GreedyAI`: spells, Dispel Magic, Summon Dragon; the greedy fuzz | ✅ landed |
 | **10d** | The opponent in both clients: start-screen picker, `?ai=`, `--ai greedy` | planned |
 | **10e** | The roll-off choice, behind `rollOff: 'choice'`; retires `RULES-V0.md` §7's house rule | planned |
 
@@ -2634,6 +2634,56 @@ The list is built greedily by value per point out of `pending.castable`.
 - **A strength check: greedy wins most of the decided games.** It catches a sign error that every
   other test would pass. The threshold is measured before it is written down, not guessed.
 - 20 greedy-vs-greedy games, with `stuck === 0`.
+
+#### Where this slice was wrong
+
+- **The first priced spells re-created 10b's first stall.** At a magic face greedy re-cast its
+  defensive buffs every turn: Wall of Fog, Watery Double, Ash Storm. Against an opponent that never
+  attacked, that outbid a contested step up the track forever. Two games of 60 capped against
+  `PassiveAI`, with about 6,000 magic actions between them.
+  - **A save bonus is insurance, not a result.** It is worth something only if the enemy attacks
+    before it expires, so it is now priced at 0.3 against an offensive result's 0.6, and Wall of
+    Fog at 0.25 a point.
+  - A step of terrain progress went from 1 point to 1.5. That is the second time this number has
+    moved, both times because something outbid walking a terrain home.
+- **Summon Dragon went 200 fuzz games without firing.** It was priced as one breath (0.8 × 5). But a
+  summoned dragon stays and attacks that army every turn it marches there, so it is now priced at
+  the army's health, up to 8. It fires 4 times in the 200 games, and a scenario test pins the
+  choice.
+- **The plan's "property test over random pools" is the fuzz.** Legality belongs to `reduce`, and
+  every greedy announcement in 200 games goes through it with every state validated.
+  `chooseAnnouncement` also checks `spellPlan` and `announcementProblem` before it answers, so a
+  separate property test would have restated those checks. `spells.test.ts` checks the one thing
+  they don't: that no board makes greedy overspend its pool.
+- **Dispel Magic keys on the caster, not the spell.** A dispel negates everything that reaches the
+  unit, its army or its terrain, whoever cast it. So greedy rolls against the opponent's
+  announcement (which also strips the opponent's own buffs at that terrain) and never against its
+  own.
+- **Path is scored at zero, deliberately.** Moving one die between two terrains the caster already
+  holds is the Reinforce Step's job. The coverage test accepts it because the zero is written into
+  the handler table with a reason, not left missing.
+- **The fuzz replaced 10b's 40-game net**, which it contains.
+
+#### Verification
+
+`spells.test.ts` (9 tests):
+- every spell can be scored;
+- a buff lands on our own army that faces the enemy;
+- Lightning Strike goes on the enemy monster;
+- a dragon is summoned onto an enemy army standing alone, never onto our own;
+- nothing is announced when nothing is worth casting;
+- 320 random boards never overspend the pool;
+- Dispel Magic rolls against the opponent's announcement only.
+
+The fuzz: 200 games, 199 won against a floor of 190. The longest game was 354 decisions against a
+2,000 bound. Every counter is `> 0`: marches, maneuvers, melee, missile, magic, spells cast
+(451), Summon Dragon, reinforcements, promotions, recruits and Dispel Magic rolls. A separate
+150-game probe against random saw 16 of the 18 spells cast.
+
+A hand-run of 150 games per matchup, under both rule sets, had zero caps and zero stalls. The one
+long game is greedy against passive at 11,200 decisions, which still finishes.
+
+Deliberately not done: dragon allocation, and Path. The goldens replay unregenerated.
 
 ### 10d — the opponent in both clients
 
