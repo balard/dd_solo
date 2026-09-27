@@ -8,7 +8,8 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. It is a draft: no phase has landed, so it has predictions where V1 has findings.
+of work*. **Phase 0 has landed** and carries its findings below; the rest is still a draft, with
+predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
 collection, win dice, dragons and terrains, and raise the force cap to 24 and then 36 at set
@@ -130,6 +131,74 @@ and eight abilities, and the big net should guard what is actually played before
 
 **Exit criterion.** Both golden corpora replay green. The live-rules fuzz runs 1000 games with
 `stuck === 0` behind its flag.
+
+> **Landed in one commit.** `v1-games.json` holds 20 games and replays green beside the untouched
+> v0 corpus; `src/ai/fuzz.test.ts` runs 200 live-rules games in `npm test` (about 14 s) and 1000
+> under `npm run fuzz` (about 55 s), every state validated, `stuck === 0` and no game capped.
+
+### Where this section was wrong
+
+**1. "`GreedyAI` against `RandomAI`" alone makes a thin corpus.** Greedy wins every such game by
+capture, in under a hundred decisions: eighteen of them never summoned a dragon, never rolled
+Dispel Magic, and never ended by elimination. The armies never stand and fight. The corpus is
+therefore ten named pairings, each played **once against random and once by greedy against
+itself**. Together they summon five dragons, which attack seventeen times, roll Dispel Magic
+sixteen times, and end two games by elimination. Greedy draws nothing from its rng, so a self-play game varies by its seed alone, which
+is all a golden needs. Twenty games, 2,110 decisions, 478 KB.
+
+**2. Pinning every terrain costs the roll-off choice.** A pinned Frontier leaves the winner one
+prize, so no game in the corpus ever asks `roll_off_choice`. That is the right trade -- the plan's
+reason for pinning holds -- but it means the corpus does not guard the choice. The live-rules fuzz
+and `rolloff.test.ts` do.
+
+**3. "The same `digestState`" had a hole the v0 corpus could not see.** `state.dragons` had been
+outside the digest since v1 Phase 6 put it in `GameState`, and `rollOff` since 10e. Neither cost
+the v0 corpus anything, since no dragon exists under `V0_RULES`, but a v1 corpus without them
+would have seen a dragon that moved wrongly only through the log. Both are digest fields now; the
+v0 corpus lacks them and `golden.test.ts` reads them as empty, the way it already read `effects`.
+
+**4. A recorded `ruleSet` is a snapshot, and the corpus now says so.** A record stores its rules as
+JSON and `setupGame` takes them as given, so a key added to `V1_RULES` in a later phase would read
+`undefined` in all twenty games: its off value by accident. `golden.test.ts` fails when the
+recorded key set and `V1_RULES`' differ. That forces a decision about what the corpus means,
+rather than letting it quietly replay a smaller game. `npm run goldens` now also takes the corpus
+as a required argument (`-- v0` or `-- v1`), so no command regenerates both.
+
+**5. "Per-rule trigger counters" became a table the compiler keeps honest.** The counters are
+`Record<GameAction['kind'], Reach>` and `Record<LogEntry['kind'], Reach>`. A decision or log kind
+added in a later phase does not compile until somebody says whether this fuzz reaches it:
+`'every'` (in the 200), `'full'` (only in the 1000, for anything under five in the 200), or
+`{ elsewhere }` naming the test that does. Every SAI on any die in the data must be rolled, and
+every spell the rules resolve must be cast. Both are read from the data, and random forces draw
+every species, so a species phase tightens this net without an edit. Branches inside a kind (both
+roll-off prizes, both victories, Tower's missile at a Reserve Army, each species ability both
+ways, breath in every element a dragon was drawn in) are a hand-kept `RULES` table.
+
+**6. Three decisions are never reached at random, even in 1000 games.** `dragon_order`,
+`dragon_target` and `dragon_damage_split` need two dragons at one terrain, or dragons at two terrains
+at once, and Summon Dragon is the only way onto the board. All three have named tests in
+`dragons.test.ts`, which the table points at. `order_of_play` is the other `elsewhere`: it is the
+rung below the roll-off choice.
+
+**7. Measured, not guessed.** The longest game is 17,074 decisions, the same game in the 200 and
+the 1000, and the median is about 2,000. The cap is twice that, 35,000, and a capped game fails:
+a counter under a game cut short is a lie by omission. `PLAN-V1.md` guessed 45 s for a thousand;
+it is 55 s with every state validated.
+
+**8. Two hundred more games in `npm test` found a timeout that was already marginal.** The species
+fuzz takes about 25 s alone and had been running on vitest's shared 30 s default. With the live
+fuzz running beside it, it failed. It and the spell fuzz now carry their own timeouts, as the
+fuzzes in `ai.test.ts` always have. The shared default stays at 30 s. The suite runs in about
+32 s on the machine that measured 28 s before this phase.
+
+**Deliberately not done.**
+- **The v0 1000-game fuzz stays** in `ai.test.ts`. It is `V0_RULES`' net, and the goldens' rules
+  are the one thing v2 promises not to touch. The per-rung fuzzes (eighth face, dragons, spells,
+  species, greedy) stay too, for their rung-specific counters.
+- **No `PassiveAI` seat in the live fuzz.** A bestiary game of passive against random ran past
+  100,000 decisions without ending. That is a slow walk rather than a stall (the species fuzz has
+  measured one at 58,784 that ends), and the species fuzz already gives passive a seat.
+- **No regeneration of `v0-games.json`**, and its digest was not rewritten for the two new fields.
 
 ---
 

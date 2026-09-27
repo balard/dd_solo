@@ -875,7 +875,9 @@ describe('the fuzz', () => {
    * above instead: Flaming Shields in Wall of Thorns' roll, and the dragon roll's
    * choice.
    */
-  it('plays 200 SPECIES_RULES games with every ability firing', () => {
+  // Its own timeout, like the fuzzes in `ai.test.ts`: about 25 s alone, and the shared
+  // 30 s default failed it once the live-rules fuzz (v2 Phase 0b) ran beside it.
+  it('plays 200 SPECIES_RULES games with every ability firing', { timeout: 180_000 }, () => {
     let stuck = 0
     let replanted = 0
     let replantMisses = 0

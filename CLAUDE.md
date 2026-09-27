@@ -124,12 +124,16 @@ the dice and the opponent.
 > a second destination in the Retreat Step, and Flaming Shields is a step-10 "counts as" on every
 > melee roll the army makes at a fire terrain.
 
+> **v2 Phase 0 has landed**: a second golden corpus, `v1-games.json` (20 games under `V1_RULES`,
+> every terrain pinned), and the 1000-game fuzz moved onto the live rules -- 200 games in `npm test`,
+> 1000 behind `npm run fuzz`. Phase 1, mixed species, is next; both corpora are its guard.
+
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (a draft; no phase has landed). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phase 0 landed; the rest is a draft). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
@@ -157,11 +161,12 @@ npm run build       # typecheck + production build
 npm run data        # regenerate and validate data/starter/ from data/raw/
 npm run art         # optional: mirror real face art into public/faces/ + assets/faces/ (both gitignored)
 npm run play        # play a game in the terminal (--seed N, --ai greedy|passive|random, --forces starter|bestiary)
-npm run goldens     # re-record the golden corpus -- see below before you do
+npm run fuzz        # the live-rules fuzz at 1000 games instead of 200 (about a minute)
+npm run goldens -- v1   # re-record one golden corpus (v0 or v1) -- see below before you do
 ```
 
-**`npm test` is slow on purpose** — tens of seconds, most of it the 1000-game fuzz and the replay
-check that replays 25 full games. How slow is very machine-dependent: the figure here was once
+**`npm test` is slow on purpose** — tens of seconds, most of it the fuzzes (1000 `V0_RULES` games,
+200 live-rules ones) and the replay check that replays 45 full games. How slow is very machine-dependent: the figure here was once
 30-50s and the same suite now finishes in about 10s on a fast machine, so treat a number in this
 file as an order of magnitude and not a baseline to measure against. `vite.config.ts` sets `testTimeout: 30_000` because vitest's 5s
 default fails those outright; do not read a long run as a hang, and do not lower it back. A real
@@ -777,14 +782,22 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     terrains -- and the bug that made the UI unable to do it lived on for exactly as long. When a
     decision gains a dimension, the fuzz opponent has to gain it too or the fuzz quietly narrows.
 
-  - **The 1000-game fuzz runs `V0_RULES` only**, which is no longer the configuration anyone
-    plays. Phase 1 turned the app over to `SAI_RULES` and deliberately did not add a second fuzz of
-    that size, and every phase since has widened the gap. There are several smaller ones now --
-    Phase 5e's eighth-face fuzz, Phase 6's 240-game dragon fuzz, Phase 7's 200-game spell fuzz and
-    Phase 8's 200-game species fuzz (`species.test.ts`) and Phase 10's 200-game greedy fuzz
-    (`greedy.test.ts`, the one that runs what the app plays, `V1_RULES`) -- but the *big* net still
-    guards the one config that least needs it. Phase 10 decided not to move it; the follow-up is
-    named in `PLAN-V1.md` *Risks*. Worth knowing before trusting a green suite.
+  - **The live-rules fuzz is `src/ai/fuzz.test.ts`** (v2 Phase 0b): `RandomAI` self-play under
+    `V1_RULES`, 200 games in `npm test` and 1000 under `npm run fuzz` (`vitest --mode fuzz`, read
+    as `import.meta.env.MODE`). It closed a gap that was five phases wide, where the 1000-game net
+    guarded `V0_RULES` -- the one config nobody plays. That net stays in `ai.test.ts` as
+    `V0_RULES`' own guard, beside the per-rung fuzzes (eighth face, dragons, spells, species,
+    greedy), which keep their rung-specific counters.
+    - **Its counters are keyed by type**: `Record<GameAction['kind'], Reach>` and the same for
+      `LogEntry['kind']`, so a kind added later does not compile until someone says whether the
+      fuzz reaches it -- `'every'` (the 200), `'full'` (only the 1000), or `{ elsewhere }` naming
+      the test that does. Every SAI in the data must be rolled and every resolvable spell cast,
+      read from the data, so a new species tightens it on its own. `RULES` is the hand-kept rest.
+    - **Three dragon decisions are never reached at random** -- `dragon_order`, `dragon_target`,
+      `dragon_damage_split` need two dragons in one place, and a thousand games never do it. They
+      have named tests in `dragons.test.ts`.
+    - **No `PassiveAI` seat.** A bestiary game of passive against random ran past 100,000
+      decisions; the species fuzz already gives passive its seat.
   - **A long game needs `maxDecisions` raised, and raising it needs measuring.** Reserve magic
     (Phase 7f) roughly tripled a random game's length -- the Reserve Army can march every turn --
     and 20 of 200 games stopped on `runGame`'s default 5000 with every trigger counter quietly
@@ -824,13 +837,25 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     terrain home, re-run greedy against passive.
 - **A game record is `{ setup, actions }` and nothing else.** Replaying it reproduces the game die
   for die. `replayTo(record, n)` is undo.
-- **The golden corpus is the guard on "this changed no outcome".** `src/engine/__golden__/` holds
-  25 recorded games plus a `digestState` of what each replayed to, and `golden.test.ts` replays
-  them. A refactor that claims to be behaviour-preserving is only as good as this file staying
-  untouched. **Regenerating it with `npm run goldens` is the one move that can hide a bug**, so a
-  commit that does it says why in the message — it is not a snapshot to refresh when it goes red.
-  The digest keeps per-die results, because a roll can change without changing who dies.
-
+- **The golden corpora are the guard on "this changed no outcome".** `src/engine/__golden__/` holds
+  two, each a list of recorded games plus a `digestState` of what each replayed to, and
+  `golden.test.ts` replays both. A refactor that claims to be behaviour-preserving is only as good
+  as these files staying untouched. **Regenerating one with `npm run goldens -- v0|v1` is the one
+  move that can hide a bug**, so a commit that does it says why in the message — it is not a
+  snapshot to refresh when it goes red. The corpus is a required argument, so no command rewrites
+  both. The digest keeps per-die results, because a roll can change without changing who dies.
+  - **`v0-games.json`**: 25 random self-play games under `V0_RULES` (v1 Phase G). Nothing in v2
+    touches `V0_RULES`, so it stays byte-identical and unregenerated.
+  - **`v1-games.json`**: 20 games under `V1_RULES` (v2 Phase 0a) -- ten named pairings, each once
+    greedy against random and once greedy against itself, with **every terrain pinned** so a change
+    to the force or terrain draws cannot move them. Greedy against random alone wins by capture in
+    under a hundred decisions and never summons a dragon; against itself the armies fight. A pinned
+    Frontier means the roll-off *choice* never appears here.
+  - **A recorded `ruleSet` is replayed as given**, so a key added to `V1_RULES` later would read
+    `undefined` in every v1 game. `golden.test.ts` fails when the key sets differ: decide what the
+    corpus means without the key before regenerating it.
+  - **The digest gained `dragons` and `rollOff` in v2 Phase 0a.** `state.dragons` had been outside
+    it since v1 Phase 6; the v0 corpus lacks both fields and reads them as empty.
 ## UI
 
 - **Every screen renders from `state.pending`.** `promptFor(pending, human, state)` turns it into a

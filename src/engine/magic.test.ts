@@ -1429,7 +1429,9 @@ describe('the Frontier dragon seed', () => {
 })
 
 describe('the fuzz', () => {
-  it('plays 200 SPELL_RULES games, casting every spell this build resolves', () => {
+  // Its own timeout, like the fuzzes in `ai.test.ts`: about 18 s under load, near the shared
+  // 30 s default that failed the species fuzz once the live-rules fuzz (v2 Phase 0b) ran beside it.
+  it('plays 200 SPELL_RULES games, casting every spell this build resolves', { timeout: 180_000 }, () => {
     const cast = new Map<string, number>()
     let magicActions = 0
     let announcements = 0

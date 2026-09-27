@@ -2975,6 +2975,9 @@ a flag with 200 in the default suite.
 activity counters, and the 1000-game run stays on `V0_RULES`. Moving it is a named follow-up: 1000
 live-rules games behind an environment flag, 200 in the default suite.
 
+> **Closed in v2 Phase 0b** (`src/ai/fuzz.test.ts`, `npm run fuzz`): 200 `V1_RULES` games in the
+> default suite and 1000 behind `vitest --mode fuzz`. The `V0_RULES` net stays beside it.
+
 **The verification scaffold was the other new risk, and it shrank rather than compounding.** 4b
 needed a preset and a ruleset flip; 4c needed both refusal branches stubbed as well; **4d needed one
 line**, because by then two of the shipped fixtures could play the rung outright. Every scaffold was

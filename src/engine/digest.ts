@@ -6,9 +6,15 @@
  * so a failing golden prints a diff you can read: this unit is in the wrong place,
  * this terrain is on the wrong face, this log entry appeared.
  *
- * Everything not derivable is included -- unit positions, terrains, the turn state,
- * the RNG counter, the pending decision, the winner and the whole log. `ruleSet` is
- * not: it is an input to the game, and it is in the record's setup.
+ * Everything not derivable is included -- unit positions, terrains, dragons, the turn
+ * state, an open roll-off, the RNG counter, the pending decision, the winner and the
+ * whole log. `ruleSet` is not: it is an input to the game, and it is in the record's
+ * setup.
+ *
+ * `dragons` and `rollOff` joined in v2 Phase 0a, with the corpus recorded under the
+ * live rules: `state.dragons` had been outside the digest since v1 Phase 6 added it,
+ * which cost the v0 corpus nothing (no dragon ever exists there) and would have left a
+ * dragon that moved wrongly visible only through the log.
  *
  * Log entries are rendered as key-sorted JSON rather than prose. The UI and the CLI
  * both have prose renderers, but they are presentation and they change; this has to
@@ -21,7 +27,14 @@
  * log entry that carries dice, present or future, rather than a renderer per entry
  * kind that Phase 1 onwards would have to keep in step.
  */
-import { TERRAIN_SLOTS, type GameState, type Location, type UnitId } from './types'
+import {
+  TERRAIN_SLOTS,
+  type DragonId,
+  type DragonLocation,
+  type GameState,
+  type Location,
+  type UnitId,
+} from './types'
 
 export interface StateDigest {
   /** `<unit id> <type> <where>`, sorted by unit id. */
@@ -31,7 +44,12 @@ export interface StateDigest {
    *  game, which is why the corpus predates the field and `golden.test.ts` reads an
    *  absent one as `[]` rather than the file being regenerated for it. */
   readonly effects: readonly string[]
+  /** `<dragon id> <die> <owner> <where>`, sorted by dragon id. Empty unless `dragons`
+   *  is on, which is why the v0 corpus predates the field. */
+  readonly dragons: readonly string[]
   readonly turn: string
+  /** The open roll-off choice, or `none` -- which is every finished game. */
+  readonly rollOff: string
   readonly pending: string
   readonly rngCounter: number
   readonly winner: string
@@ -97,6 +115,15 @@ function whereIs(location: Location): string {
   }
 }
 
+function whereIsDragon(location: DragonLocation): string {
+  switch (location.kind) {
+    case 'pool':
+      return 'pool'
+    case 'terrain':
+      return `terrain:${location.slot}`
+  }
+}
+
 
 export function digestState(state: GameState): StateDigest {
   const unitIds = (Object.keys(state.units) as UnitId[]).sort()
@@ -112,7 +139,13 @@ export function digestState(state: GameState): StateDigest {
       return `${slot} ${terrain.dieId} face ${terrain.face} held-by ${terrain.capturedBy ?? '-'}`
     }),
     effects: state.effects.map((effect) => stableJson(effect)),
+    dragons: (Object.keys(state.dragons) as DragonId[]).sort().map((id) => {
+      const dragon = state.dragons[id]
+      if (dragon === undefined) throw new Error(`digest: dragon ${id} vanished between key and lookup`)
+      return `${dragon.id} ${dragon.dieId} ${dragon.owner} ${whereIsDragon(dragon.location)}`
+    }),
     turn: stableJson(state.turn),
+    rollOff: state.rollOff === undefined ? 'none' : stableJson(state.rollOff),
     pending: state.pending === null ? 'none' : stableJson(state.pending),
     rngCounter: state.rng.counter,
     winner: state.winner ?? 'none',

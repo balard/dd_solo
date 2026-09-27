@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "fuzz": "vitest run --mode fuzz src/ai/fuzz.test.ts",
     "typecheck": "tsc --noEmit",
     "data": "python tools/import_faces.py && python tools/import_terrains.py && python tools/import_dragons.py && python tools/validate_data.py",
     "play": "vite-node src/cli/play.ts",
