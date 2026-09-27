@@ -129,7 +129,8 @@ the dice and the opponent.
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V1.md` | **The order of work now.** Twelve phases from the alpha to the complete basic game, each landed one carrying a write-up of what the plan got wrong. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (a draft; no phase has landed). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
 | `data/ICONS.md` | The die-face vocabulary. Required before touching `data/`. |
@@ -137,6 +138,11 @@ the dice and the opponent.
 | `docs/rules/dragon-dice-v4.01-full-rules.pdf` | Full v4.01 rules. Fallback for anything the starter book leaves vague. |
 
 Both PDFs are text-extractable: `pdftotext -layout <file> -` (available in the Git Bash environment).
+
+**v4.01 stays the rulebook**, and page numbers throughout the project are its pages. A v4.02 book
+may sit beside it as `docs/rules/V4.02 Dragon Dice rules.pdf`: a local, gitignored reference
+(92 MB), whose main addition is the Dracolem. Its other differences read as editing. Adopt it
+only when something in scope exists only there.
 
 ## Stack
 

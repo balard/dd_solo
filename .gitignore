@@ -35,3 +35,8 @@ assets*.zip
 
 # Temporary working plan for the phase in progress; folded into docs/PLAN-V1.md when it lands.
 docs/PLAN-V1-Phase*.md
+docs/PLAN-V2-Phase*.md
+
+# The v4.02 rulebook: a local reference only. v4.01 stays the rules this project implements,
+# and at 92 MB the newer book is not worth carrying in the history. See PLAN-V2.md, Phase 0.
+docs/rules/V4.02 Dragon Dice rules.pdf
