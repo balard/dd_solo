@@ -8,7 +8,7 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0, 1 and 2 have landed, and so have slices 3a to 3d**, each with its findings below;
+of work*. **Phases 0, 1, 2 and 3 have landed** (Phase 3 as slices 3a to 3e), each with its findings below;
 the rest is still a draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
@@ -68,7 +68,7 @@ start.
 |
 +------------------------------+
 |                              |
-3  The schematic board         5  Coral Elves       (the race pipeline, first run)
+3  The schematic board [landed] 5  Coral Elves       (the race pipeline, first run)
 |                              |
 4  The army builder            6  Dwarves
                                |
@@ -510,7 +510,7 @@ real art can drop in later without a layout change.
 | **3b** | The schematic pass: tokens, shapes, the log out of the way — **landed** |
 | **3c** | The roll presentation — **landed**: every roll stops, in a dialog floating over the board |
 | **3d** | The landscape board — **landed**: the phone's layout, alongside on wide screens, with stacks and a reserves row |
-| **3e** | Playtest tools: concede, turn count, clock, end-of-game summary |
+| **3e** | Playtest tools — **landed**: concede, turn count, clock, end-of-game summary |
 
 ### 3a — Mockups first — **landed**
 
@@ -875,7 +875,7 @@ edge.
 - **The tile shape is left free to widen** for side-facing art: every size is a side length in
   one table, and the ladder asks `tileSize` for widths rather than assuming squares.
 
-### 3e — Playtest tools
+### 3e — Playtest tools — **landed**
 
 What live testing needs to leave a number behind rather than a feeling.
 - **Concede, as an engine action.** `{ kind: 'concede' }`, legal for the player a pending is
@@ -891,6 +891,62 @@ What live testing needs to leave a number behind rather than a feeling.
 **Exit criterion.** A 12-health game is playable in both layouts on a laptop and on a phone held
 sideways. The log is collapsed by default. An AI march is readable from the roll panel alone. A
 conceded game shows its summary.
+
+### What 3e found
+
+The engine changed for the first time since Phase 2, by one action and one reason. Both golden
+corpora replay byte-identical and unregenerated: no recorded game concedes. `SAVE_VERSION` did not
+move either, and not only because saving is off: an old record never holds a `concede`, so it
+replays exactly as before, and the version is about nothing else.
+
+**1. `concede` is the one action that matches no `Pending.kind`.** Every other action names the
+decision it answers, and `reduce` refuses a mismatch. Concede answers any of them, so it has its own
+door there: legal while a pending is open, and the pending's `player` is who concedes, since the
+action carries none. `applyAction` sets the winner itself (the board has not changed, so
+`findVictory` has nothing to find), logs `victory` with the new reason `'concession'`, and sets no
+pending, so `advance` stops before `stepGame` runs. No randomness is drawn, and a test says so.
+
+**2. What would have shipped quietly: a concession at the roll-off failed `validateState`.** The
+live rules open on the roll-off choice, so the first decision a player can concede on leaves
+`GameState.rollOff` open in a finished game, and the validator held "a roll-off open" to "the setup
+phase". Dropping the roll-off would have made both boards draw the placeholder faces as a roll that
+never happened; a game given up before anyone chose is exactly a game with the choice still open.
+So the validator allows that one case, named by the log (a `concession` victory with no
+`roll_off_decided`), and the summary counts it as ended before the first turn.
+
+**3. The exit criterion named a game nothing in the app could start.** The presets are 24, 30 and
+35 health, a rolled force is 24 or 36, and the only 12-health pair was `data/forces/mixed-12.json`,
+which only the terminal could load. The two example files joined `FORCE_SETS` under their file
+names, so `?forces=mixed-12` starts one, and the terminal's `--forces mixed-12` too. The start
+screen still pairs presets only; a 12-health game from a menu is the army builder's (Phase 4).
+- **Two fuzzes picked their "mirrors" by exclusion** ("every name but starter and bestiary"), so
+  the built pairs would have joined them silently and changed which games they play. Both now
+  select `isMirror` (one preset on both sides), which is the same set as before.
+
+**4. The clock and the turn count are the client's.** `Session.startedAt` is set when a game
+begins and `endedAt` by whichever action produced a winner, the AI's included, so the time is wall
+time: roll cards and thinking count, because a pacing test asks how long a game takes to play. The
+header shows it beside the turn. The turn is the header's count, finished turns plus the one in
+progress, with each player's turn counted on its own, as the rules count them.
+
+**5. The summary replaces the decision in the dialog, after the last roll card.** How it ended,
+the turn, the time, and health left of what each side brought (`gameSummary` in `summary.ts`,
+pure and tested). The roll that won is always seen first: the summary waits behind the cursor like
+any decision. Checked in the app on a 12-health game conceded in landscape at 844×390, and one
+played to a capture on the cards at 1366×680.
+
+**6. Concede is in the header, greyed while the enemy decides.** Legal only on your own decision,
+so it is disabled rather than hidden while the enemy thinks, and says why on hover; a button that
+comes and goes would move New game under the thumb. It asks for confirmation. The terminal takes
+`concede` typed at any menu, which every turn passes through.
+
+**Deliberately not done.**
+- **No AI concedes**, as planned; the fuzz names `concede.test.ts` for the action and the reason.
+- **The summary is not copyable or kept.** Saving is off, and nothing yet collects playtest
+  results; the numbers are on screen at the end of every game.
+- **The clock does not pause** when the tab is hidden or the player walks away. It measures the
+  session, which is honest about what it is and wrong for an interrupted game.
+- **No DOM test of the header or the card**, by the project's rule; the logic is `summary.ts`.
 
 ---
 

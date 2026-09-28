@@ -59,7 +59,10 @@ export function reduce(state: GameState, action: GameAction): GameState {
     )
   }
 
-  if (pending.kind !== action.kind) {
+  // Concede answers any decision (v2 Phase 3e): it is legal for whoever the open
+  // pending is addressed to, and only for them -- the action carries no player, so the
+  // pending is what says who gave up.
+  if (action.kind !== 'concede' && pending.kind !== action.kind) {
     throw new IllegalActionError(
       `received ${action.kind} but the engine is waiting for ${pending.kind}`,
     )

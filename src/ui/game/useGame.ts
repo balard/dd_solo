@@ -68,6 +68,13 @@ export interface PlayingGame {
   /** Back to the start screen, to pick forces again. */
   readonly newGame: () => void
   readonly record: GameRecord
+  /**
+   * The game's clock (v2 Phase 3e): wall time from the moment it started, and the
+   * moment it ended, or null while it is on. Client state only -- no clock ever enters
+   * the engine -- and the record does not carry it, since replay is not play.
+   */
+  readonly startedAt: number
+  readonly endedAt: number | null
 }
 
 export type Game = ChoosingGame | PlayingGame
@@ -189,10 +196,23 @@ interface Session {
    * are `rollSteps` of the log from here.
    */
   readonly rolls: RollCursor
+  readonly startedAt: number
+  /** Set by the action that produced a winner, whoever sent it. */
+  readonly endedAt: number | null
 }
 
 function sessionFrom(setup: SetupOptions, opponent: OpponentName, origin: GameOrigin): Session {
-  return { state: begin(setupGame(setup)), setup, opponent, actions: [], origin, rolls: { log: 0, step: 0 } }
+  return {
+    state: begin(setupGame(setup)),
+    setup,
+    opponent,
+    actions: [],
+    origin,
+    rolls: { log: 0, step: 0 },
+    // Reading the clock has no side effect, so this may run twice under StrictMode.
+    startedAt: Date.now(),
+    endedAt: null,
+  }
 }
 
 /** The address bar, or the start screen. Nothing is read from storage: saving is
@@ -238,15 +258,16 @@ export function useGame(): Game {
   const aiRng = useRef<RngState>(rngFrom(seed ^ 0x5eed))
 
   const dispatch = useCallback((action: GameAction) => {
-    setSession((current) =>
-      current === null
-        ? current
-        : {
-            ...current,
-            state: reduce(current.state, action),
-            actions: [...current.actions, action],
-          },
-    )
+    setSession((current) => {
+      if (current === null) return current
+      const state = reduce(current.state, action)
+      return {
+        ...current,
+        state,
+        actions: [...current.actions, action],
+        endedAt: current.endedAt ?? (state.winner !== null ? Date.now() : null),
+      }
+    })
   }, [])
   const nextRoll = useCallback(() => {
     setSession((current) =>
@@ -319,5 +340,7 @@ export function useGame(): Game {
         : null,
     newGame,
     record,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
   }
 }

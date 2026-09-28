@@ -1360,3 +1360,27 @@ body {
 .ls-board.is-short .ls-slot .elements { display: none; }
 .ls-board.is-short .ls-slot { letter-spacing: 0; font-size: var(--fs-2xs); }
 .ls-board.is-short .ls-row { padding: 3px 6px; }
+
+/* --- playtest tools (v2 Phase 3e) ------------------------------------------ */
+
+.app-clock { font-variant-numeric: tabular-nums; }
+
+/* The end-of-game summary, where the decisions were. */
+.game-over { padding: 12px 14px 14px; }
+.game-over .question.big { margin-bottom: 2px; }
+.game-over.is-won .question.big { color: var(--accent); }
+.game-over-how { margin: 0 0 10px; color: var(--muted); }
+.game-over-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px 16px;
+  margin: 0 0 12px;
+}
+.game-over-side dt {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+.game-over-side dd { margin: 0; font-variant-numeric: tabular-nums; }
+.game-over-side dd b { font-size: var(--fs-xl); }

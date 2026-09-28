@@ -4587,5 +4587,29 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applySpellMove(cleared, action.slot)
     case 'spell_summon':
       return applySpellSummon(cleared, action.dragonId)
+    case 'concede': {
+      // `reduce` only lets this through with a pending open, and the pending names
+      // who is conceding.
+      const conceding = state.pending?.player
+      if (conceding === undefined) throw new IllegalActionError('nobody is being asked, so nobody can concede')
+      return applyConcede(cleared, conceding)
+    }
   }
+}
+
+/**
+ * The game ends here, won by the other player (v2 Phase 3e).
+ *
+ * The winner is set in the action rather than left to `findVictory`, because nothing
+ * about the board has changed for it to find. That keeps the victory check itself
+ * untouched, and `applyAction` still sets no pending: with a winner set, `advance`
+ * stops before `stepGame` runs at all. The phase goes to `game_over` because
+ * `validateState` holds a winner and that phase to each other.
+ */
+function applyConcede(state: GameState, conceding: PlayerId): GameState {
+  const winner = opponentOf(conceding)
+  return withLog(
+    { ...withTurn(state, { phase: 'game_over' }), winner, pending: null },
+    { kind: 'victory', player: winner, reason: 'concession' },
+  )
 }

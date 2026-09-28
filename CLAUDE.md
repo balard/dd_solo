@@ -162,6 +162,11 @@ the dice and the opponent.
 > reserve row; a phone held sideways opens on it, an upright one keeps the cards, and elsewhere it
 > is a toggle. Identical dice stack when a row is crowded (`stacks.ts`), and the ID face is larger.
 > UI only again.
+>
+> **v2 Phase 3e has landed, and with it all of Phase 3: playtest tools.** `{ kind: 'concede' }` is
+> an engine action, a game has a client-side clock beside its turn count, and a finished game shows a
+> summary (how it ended, the turn, the time, health left). `?forces=mixed-12` starts the 12-health
+> example. Both golden corpora are still byte-identical and unregenerated.
 
 ## Read these first
 
@@ -508,6 +513,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     (30) or a bestiary (35); `newGame.ts` refuses that pairing on the start screen.
   - `setup.test.ts` derives the roster from `UNIT_TYPES` rather than listing it, so **a monster
     added to the data later fails there** instead of quietly going without a fixture.
+- **The example built forces are in `FORCE_SETS` too** (v2 Phase 3e), by file name: `mixed-12` and
+  `mixed-12-vs-24`, the only 12-health games there are. So a test that wants the mirrors must ask
+  `isMirror` (one preset on both sides), never "every name but starter and bestiary" -- that
+  filter is what the two fuzzes used, and it would have taken the built pairs in silently.
 - **Species belongs to a unit, not a player** (v2 Phase 1). `unitType(unit.typeId).species` is the
   fact; `speciesIn(units)` and `forceSpecies(state, player)` list the species among some dice, dead
   ones included. There is no `speciesOf(state, player)` any more: it answered "which species is
@@ -820,6 +829,11 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - **Exchanged units are never considered killed** -- no log entry, no death trigger.
   - `promotionMatching` promotes by exactly one step. Health-budget promotion, where one unit may
     spend X twice (1 -> 2 -> 3), belongs to Wild Growth and the City and is deliberately not there.
+- **`concede` is the one action that matches no `Pending.kind`** (v2 Phase 3e). `reduce` lets it
+  answer any open decision, and the pending's `player` is who concedes. `applyAction` sets the winner
+  itself and logs `victory` with reason `'concession'`; nothing on the board changed for
+  `findVictory` to find. A game conceded at the roll-off keeps `rollOff` open, and `validateState`
+  allows exactly that case -- the choice was never made, and the Frontier stays undecided on screen.
 - **`applyAction` clears `pending` and must never set one; `stepGame` is the only thing that sets
   it.** This is why the victory check runs after every state change: an action leaves `pending`
   null, so `advance` always runs `stepGame` at least once afterwards. Set `pending` inside
@@ -1153,6 +1167,11 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   the lit die in the DUA it grows into (Phase 9f; it was a button). The sheet lists what each
   partner would cost, because a lit die cannot say. A free move tallies passengers against three
   health-worth and gates the destinations, never "Stay put".
+- **Playtest tools** (v2 Phase 3e). The clock is `Session.startedAt` / `endedAt` in `useGame`, wall
+  time, stopped by whichever action produced a winner; it never enters the engine or the record.
+  `summary.ts` turns a finished state into the end-of-game card (`gameSummary`, `formatClock`,
+  `turnNumber`), shown in the dialog after the last roll card. Concede sits in the header, disabled
+  with a reason while the enemy decides, and asks first; the terminal takes `concede` at a menu.
 - **Logic lives in pure functions in `prompts.ts`, not in components.** `damageSelection` is the
   example: the confirm-button rule is testable without a DOM. Keep it that way rather than
   reaching for jsdom.

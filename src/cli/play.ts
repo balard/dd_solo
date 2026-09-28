@@ -1555,6 +1555,9 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
       console.log(dim('\nbye'))
       process.exit(0)
     }
+    // Giving up is a move, not a quit (v2 Phase 3e): the game ends with a winner, and
+    // its record says so. Offered at every menu, which every turn passes through.
+    if (reply === 'concede') return { kind: 'concede' }
     const found = choices.find((c) => c.key === reply)
     if (found) return found.action
     console.log(red('  pick one of the listed options, or q to quit'))
@@ -1651,7 +1654,7 @@ async function main() {
         `opponent is ${ai.name} (${fielding('p2')})`,
     ),
   )
-  console.log(dim('q quits at any prompt. Nothing is saved.\n'))
+  console.log(dim('q quits at any prompt; typing concede at a menu gives the game up. Nothing is saved.\n'))
   let aiRng: RngState = rngFrom(seed ^ 0x5eed)
   let shown = 0
   // Redraw the board when the situation changes, not before every prompt --

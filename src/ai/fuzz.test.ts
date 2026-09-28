@@ -39,7 +39,14 @@ import { describe, expect, it } from 'vitest'
 import { UNIT_TYPES } from '../data/load'
 import { SPELLS } from '../data/spells'
 import { resolvesSpell } from '../engine/spells'
-import { BESTIARY_FORCES, FORCE_SETS, STARTER_FORCES, setupGame, type ForceSpec } from '../engine/setup'
+import {
+  BESTIARY_FORCES,
+  FORCE_SETS,
+  STARTER_FORCES,
+  isMirror,
+  setupGame,
+  type ForceSpec,
+} from '../engine/setup'
 import { dragonDie } from '../data/load'
 import { V1_RULES, forceSize, type GameAction, type LogEntry } from '../engine/types'
 
@@ -93,6 +100,8 @@ const DECISIONS: Readonly<Record<GameAction['kind'], Reach>> = {
   dragon_order: { elsewhere: "dragons.test.ts, 'lets the marching player order two terrains'" },
   dragon_target: { elsewhere: "dragons.test.ts, 'raises the declaration through the real machine'" },
   dragon_damage_split: { elsewhere: "dragons.test.ts, 'asks when two same-element dragons both go for the army'" },
+  // No AI concedes (v2 Phase 3e): whether one ever should is a v3 encounter question.
+  concede: { elsewhere: 'concede.test.ts' },
 }
 
 const LOG: Readonly<Record<LogEntry['kind'], Reach>> = {
@@ -166,6 +175,7 @@ const RULES: Readonly<Record<string, Reach>> = {
   'took:frontier': 'every',
   'victory:captures': 'every',
   'victory:elimination': 'every',
+  'victory:concession': { elsewhere: 'concede.test.ts' },
   // Every SAI that is a decision rather than a number, by the entry it leaves.
   'resolved:Bullseye': 'every',
   'resolved:Choke': 'every',
@@ -200,9 +210,9 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
   const bump = (key: string, by = 1): void => {
     counts.set(key, (counts.get(key) ?? 0) + by)
   }
-  const mirrors = Object.entries(FORCE_SETS)
-    .filter(([name]) => name !== 'starter' && name !== 'bestiary')
-    .map(([, forces]) => forces)
+  // By what a mirror is, not by leaving out the other names: the built examples joined
+  // `FORCE_SETS` in v2 Phase 3e, and a filter by exclusion would have taken them in.
+  const mirrors = Object.values(FORCE_SETS).filter(isMirror)
   let stuck = 0
   let capped = 0
   let longest = 0

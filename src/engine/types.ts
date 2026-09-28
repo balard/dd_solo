@@ -1033,7 +1033,8 @@ export interface DragonDamageTarget {
   readonly threshold: number
 }
 
-/** Actions answer the current `Pending`. Each `kind` matches a `Pending.kind`. */
+/** Actions answer the current `Pending`. Each `kind` matches a `Pending.kind`, except
+ *  `concede`, which answers any of them. */
 export type GameAction =
   | { readonly kind: 'roll_off_choice'; readonly take: 'first_turn' }
   /** Picking the Frontier outright, which is the winner's other prize. `proposer`
@@ -1111,6 +1112,13 @@ export type GameAction =
       readonly melee: Readonly<Record<DragonId, number>>
       readonly missile: Readonly<Record<DragonId, number>>
     }
+  /**
+   * Giving the game up (v2 Phase 3e), and **the one action that matches no
+   * `Pending.kind`**: it answers whatever decision is open, by whoever it is addressed
+   * to, which is who concedes. An action rather than a button that stops the client,
+   * so the record says how the game ended and replays to the same end.
+   */
+  | { readonly kind: 'concede' }
 
 /** One unit Air Flight could move, and where to. */
 export interface AirFlightOffer {
@@ -1770,7 +1778,8 @@ export type LogEntry =
   | {
       readonly kind: 'victory'
       readonly player: PlayerId
-      readonly reason: 'captures' | 'elimination'
+      /** `'concession'` (v2 Phase 3e): `player` won because the other conceded. */
+      readonly reason: 'captures' | 'elimination' | 'concession'
     }
 
 /**

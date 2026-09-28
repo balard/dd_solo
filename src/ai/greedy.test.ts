@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import { rngFrom } from '../engine/rng'
-import { BESTIARY_FORCES, FORCE_SETS, STARTER_FORCES, setupGame, type ForceSpec } from '../engine/setup'
+import {
+  BESTIARY_FORCES,
+  FORCE_SETS,
+  STARTER_FORCES,
+  isMirror,
+  setupGame,
+  type ForceSpec,
+} from '../engine/setup'
 import {
   SPECIES_RULES,
   V0_RULES,
@@ -359,9 +366,8 @@ describe('GreedyAI: self-play', () => {
    * losing to a coin.
    */
   it('plays 200 V1_RULES games against RandomAI: every activity fires, and it wins', () => {
-    const mirrors = Object.entries(FORCE_SETS)
-      .filter(([name]) => name !== 'starter' && name !== 'bestiary')
-      .map(([, forces]) => forces)
+    // By what a mirror is: the built examples joined `FORCE_SETS` in v2 Phase 3e.
+    const mirrors = Object.values(FORCE_SETS).filter(isMirror)
     const games: [ForceSpec, number][] = [
       ...Array.from({ length: 60 }, (_, i): [ForceSpec, number] => [STARTER_FORCES, i + 1]),
       ...Array.from({ length: 60 }, (_, i): [ForceSpec, number] => [BESTIARY_FORCES, i + 1]),

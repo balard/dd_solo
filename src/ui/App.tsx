@@ -30,6 +30,9 @@ import { Board, DragonRow, EffectList } from './game/Board'
 import { DiceGrid } from './game/DiceGrid'
 import { speciesInfo } from './game/Elements'
 import { RollCard } from './game/RollCard'
+import { GameOver } from './game/GameOver'
+import { formatClock, gameSummary, turnNumber } from './game/summary'
+import { useClock } from './game/useClock'
 import { LogPanel, LogTicker } from './game/LogPanel'
 import { readFlag, writeFlag } from './game/prefs'
 import {
@@ -68,6 +71,8 @@ export function App() {
 
 function GameView({ game }: { readonly game: PlayingGame }) {
   const { state, human, seed, opponent, origin, dispatch, newGame, opponentThinking, rollShown } = game
+  // The playtest clock (v2 Phase 3e): client-side, stopped by the action that ends the game.
+  const elapsed = useClock(game.startedAt, game.endedAt)
   const enemy: PlayerId = human === 'p1' ? 'p2' : 'p1'
   const pending = state.pending
 
@@ -315,8 +320,9 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   const health = (units: readonly { typeId: string }[]) =>
     units.reduce((n, u) => n + unitType(u.typeId).health, 0)
 
-  const turn = state.log.filter((e) => e.kind === 'turn_end').length + 1
+  const turn = turnNumber(state)
   const started = state.log.some((e) => e.kind === 'march_begin')
+  const summary = gameSummary(state, human, elapsed)
 
   // In landscape the Fallen section has no heading until something opens it: a tap on
   // the reserve row's counts, or a decision that picks from the DUA.
@@ -363,7 +369,8 @@ function GameView({ game }: { readonly game: PlayingGame }) {
                 ? 'roll-off'
                 : state.turn.marching === human
                 ? 'your march'
-                : 'enemy march'}
+                : 'enemy march'}{' '}
+            · <span className="app-clock">{formatClock(elapsed)}</span>
             <span className="app-sub-extra">
               {' '}
               · vs {opponent} · seed {seed}
@@ -384,6 +391,26 @@ function GameView({ game }: { readonly game: PlayingGame }) {
               }
             >
               {landscape ? 'Cards' : 'Landscape'}
+            </button>
+          )}
+          {/* Legal only on a decision addressed to you (v2 Phase 3e): the action carries
+              no player, so the open pending is who concedes. Waiting on the enemy, it is
+              greyed with the reason on hover rather than hidden, so it does not jump. */}
+          {state.winner === null && (
+            <button
+              type="button"
+              className="choice secondary"
+              disabled={pending?.player !== human}
+              title={
+                pending?.player === human
+                  ? 'Give the game up: the enemy wins, and the summary shows how it went'
+                  : 'You can concede on your next decision'
+              }
+              onClick={() => {
+                if (window.confirm('Concede this game? The enemy wins.')) dispatch({ kind: 'concede' })
+              }}
+            >
+              Concede
             </button>
           )}
           <button
@@ -626,6 +653,9 @@ function GameView({ game }: { readonly game: PlayingGame }) {
       <div className="float-dock" ref={dockRef}>
       {rollShown !== null ? (
         <RollCard shown={rollShown} state={state} human={human} onInspect={onInspect} />
+      ) : summary !== null ? (
+        // After the last roll card, never over it: the roll that won is seen first.
+        <GameOver summary={summary} onNewGame={newGame} />
       ) : (
       <ActionBar
         state={state}

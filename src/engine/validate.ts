@@ -221,7 +221,20 @@ export function validateState(state: GameState): string[] {
   // while it is open the terrains are the placeholder and nothing else -- every face 1,
   // nobody holding anything, p1's proposal at the Frontier. A placeholder that drifted
   // would be a board with faces nobody rolled.
-  if ((state.rollOff !== undefined) !== (state.turn.phase === 'setup')) {
+  //
+  // One exception (v2 Phase 3e): a game conceded at the roll-off ends with the choice
+  // still open. That is the truth -- nobody chose, nothing was rolled -- and it keeps
+  // both boards drawing the Frontier as undecided rather than the placeholder as a roll.
+  const last = state.log.at(-1)
+  const concededAtRollOff =
+    state.turn.phase === 'game_over' &&
+    last?.kind === 'victory' &&
+    last.reason === 'concession' &&
+    !state.log.some((e) => e.kind === 'roll_off_decided')
+  if (
+    !concededAtRollOff &&
+    (state.rollOff !== undefined) !== (state.turn.phase === 'setup')
+  ) {
     problems.push(
       state.rollOff !== undefined
         ? `a roll-off choice is open outside the setup phase (${state.turn.phase})`

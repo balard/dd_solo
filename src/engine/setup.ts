@@ -32,12 +32,15 @@ import {
 } from '../data/load'
 import type { Element } from '../data/types'
 import { preset, PRESET_ARMY_NAMES, PRESETS, type PresetArmyName } from '../data/presets'
+import mixed12Json from '../../data/forces/mixed-12.json'
+import mixed12vs24Json from '../../data/forces/mixed-12-vs-24.json'
 
 import {
   builtForceHealth,
   builtForceProblem,
   dragonCount,
   generateForces,
+  readBuiltForces,
   type BuiltForce,
 } from './force'
 import { nextInt, rngFrom, type RngState } from './rng'
@@ -118,6 +121,32 @@ const MONSTER_MIRRORS: Readonly<Record<string, ForceSpec>> = Object.fromEntries(
 )
 
 /**
+ * The example built forces in `data/forces/`, by file name (v2 Phase 3e).
+ *
+ * Here because they are the only 12-health games there are: the presets are 24, 30
+ * and 35, a rolled force is 24 or 36, and 3e's exit criterion is a 12-health game in
+ * the app -- which only a link can start until the army builder (Phase 4) exists. The
+ * terminal could always play them as `built:<file>`; this names them for both clients.
+ * A file that fails its shape check throws at load, which `setup.test.ts` would see.
+ */
+function builtExample(json: unknown, name: string): ForceSpec {
+  const read = readBuiltForces(json)
+  if ('problem' in read) throw new Error(`data/forces/${name}.json: ${read.problem}`)
+  return { kind: 'built', forces: read.forces }
+}
+
+const BUILT_EXAMPLES: Readonly<Record<string, ForceSpec>> = {
+  'mixed-12': builtExample(mixed12Json, 'mixed-12'),
+  'mixed-12-vs-24': builtExample(mixed12vs24Json, 'mixed-12-vs-24'),
+}
+
+/** A monster fixture's mirror: one preset on both sides. What the fuzzes play besides
+ *  the starters, the bestiaries and rolled forces. */
+export function isMirror(forces: ForceSpec): boolean {
+  return forces.kind === 'named' && forces.forces.p1 === forces.forces.p2
+}
+
+/**
  * The hand-authored pairings, by the name a front end takes for them.
  *
  * One registry rather than one per client: the terminal's `--forces` and the app's
@@ -128,6 +157,7 @@ export const FORCE_SETS: Readonly<Record<string, ForceSpec>> = {
   starter: STARTER_FORCES,
   bestiary: BESTIARY_FORCES,
   ...MONSTER_MIRRORS,
+  ...BUILT_EXAMPLES,
 }
 
 /** The named pairing, or null -- so a caller can say what it wants done about a
