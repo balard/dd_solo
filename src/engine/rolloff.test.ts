@@ -16,7 +16,7 @@ import {
   SPECIES_RULES,
   V1_RULES,
   opponentOf,
-  speciesOf,
+  forceSpecies,
   type GameState,
   type PlayerId,
 } from './types'
@@ -56,7 +56,7 @@ describe('the roll-off choice', () => {
       const state = opened(seed)
       if (state.pending?.kind !== 'roll_off_choice') throw new Error(`seed ${seed}: no choice`)
       for (const player of ['p1', 'p2'] as const) {
-        const mine = speciesElements(speciesOf(state, player))
+        const mine = forceSpecies(state, player).flatMap((species) => speciesElements(species))
         const proposal = state.pending.proposals[player]
         expect(elementsOf(proposal).some((e) => mine.includes(e)), `seed ${seed} ${player}`).toBe(true)
       }

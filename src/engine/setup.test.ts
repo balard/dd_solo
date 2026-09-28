@@ -26,7 +26,7 @@ import {
   opponentOf,
   pooledDragons,
   reserveArmy,
-  speciesOf,
+  forceSpecies,
   unitsOf,
   type GameState,
   type PlayerId,
@@ -314,7 +314,7 @@ describe('the terrain draw', () => {
       const state = setupGame({ seed, forces: { kind: 'random' } })
       expect(validateState(state), `seed ${seed}`).toEqual([])
 
-      const loserElements = elementsOfSpecies(speciesOf(state, opponentOf(state.turn.marching)))
+      const loserElements = forceSpecies(state, opponentOf(state.turn.marching)).flatMap(elementsOfSpecies)
       const frontierElements = terrainType(terrainDie(state.terrains.frontier.dieId).type).elements
       expect(frontierElements.some((e) => loserElements.includes(e)), `seed ${seed}`).toBe(true)
     }

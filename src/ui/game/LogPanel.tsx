@@ -11,6 +11,7 @@ import { Fragment, type ReactElement } from 'react'
 
 import { dragonDie, dragonName, unitType } from '../../data/load'
 import { spell } from '../../data/spells'
+import { poolSplit } from '../../engine/magic'
 import { BREATH_NAME, DRAGON_ICON_TEXT } from '../../engine/dragons'
 import { mathPhrase, saiPhrase, saisBehind, type RollMath } from '../../engine/roll'
 
@@ -539,7 +540,8 @@ export function LogLine({
           <div className="roll-head">magic at {where(entry.slot)}</div>
           <RollStrip dice={entry.dice} total={entry.total} {...withMath(entry.math)} />
           <div className="roll-sum">
-            <b>{entry.total}</b> magic <span className="muted">({entry.elements.join(' or ')})</span>
+            <b>{entry.total}</b> magic{' '}
+            <span className="muted">({poolSplit(entry.suppliers) ?? entry.elements.join(' or ')})</span>
           </div>
         </div>
       )
@@ -777,7 +779,7 @@ export function LogLine({
       )
     case 'forces_drawn': {
       const named = (player: PlayerId) =>
-        speciesInfo(entry.species[player])?.name ?? entry.species[player]
+        entry.species[player].map((id) => speciesInfo(id)?.name ?? id).join(' and ')
       return (
         <p className="log-line muted">
           Forces rolled &mdash; {entry.health} health a side. You are{' '}

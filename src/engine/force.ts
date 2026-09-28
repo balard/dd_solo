@@ -22,9 +22,9 @@ import { PRESET_ARMY_NAMES, maxArmyHealth, type PresetArmyName } from '../data/p
 import { nextInt, type RngState } from './rng'
 import type { PlayerId } from './types'
 
-/** A force as setup needs it: who they are, and how they are split. */
+/** A force as setup needs it: its dice, and how they are split. The species follow
+ *  from the dice (v2 Phase 1), so they are not a field here. */
 export interface GeneratedForce {
-  readonly species: string
   readonly armies: Readonly<Record<PresetArmyName, readonly string[]>>
 }
 
@@ -207,7 +207,7 @@ export function generateForces(
     const [ids, afterUnits] = drawForce(species, budget, state)
     const [armies, afterSplit] = splitForce(ids, afterUnits)
     state = afterSplit
-    forces[player] = { species, armies }
+    forces[player] = { armies }
   }
 
   return [forces, state] as const

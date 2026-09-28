@@ -30,7 +30,7 @@ import { rngFrom, type RngState } from '../engine/rng'
 import { mathPhrase, saiPhrase, type DieRoll, type RollMath } from '../engine/roll'
 import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../engine/sai'
 import { rollOnTheTable } from '../engine/turn'
-import { OWN_ARMY_NOTE, spellPlan, spellTargetLabel, stageCast } from '../engine/magic'
+import { OWN_ARMY_NOTE, poolSplit, spellPlan, spellTargetLabel, stageCast } from '../engine/magic'
 
 
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
@@ -43,8 +43,8 @@ import {
   buriedUnits,
   deadUnits,
 
+  forceSpecies,
   livingUnits,
-  speciesOf,
   type AnnouncedSpell,
   type ArmyRef,
   type GameAction,
@@ -105,6 +105,9 @@ const healthOf = (state: GameState, id: UnitId): number => {
 const letters = ['a', 'b', 'c', 'd']
 /** "treefolk" -> "Treefolk": ids are the engine's vocabulary, not the player's. */
 const speciesName = (id: string) => SPECIES.find((s) => s.id === id)?.name ?? id
+/** A force as the list of species it holds (v2 Phase 1): "Treefolk", or
+ *  "Firewalkers and Treefolk" for a mixed one. */
+const speciesNames = (ids: readonly string[]) => ids.map(speciesName).join(' and ')
 const health = (units: readonly UnitInstance[]) =>
   units.reduce((sum, u) => sum + unitType(u.typeId).health, 0)
 
@@ -259,8 +262,8 @@ function describe(entry: LogEntry, state: GameState): string | null {
     case 'forces_drawn':
       return dim(
         `forces rolled: ${entry.health} health a side — ` +
-          `p1 ${speciesName(entry.species.p1)} (${entry.dice.p1} dice), ` +
-          `p2 ${speciesName(entry.species.p2)} (${entry.dice.p2} dice)`,
+          `p1 ${speciesNames(entry.species.p1)} (${entry.dice.p1} dice), ` +
+          `p2 ${speciesNames(entry.species.p2)} (${entry.dice.p2} dice)`,
       )
     case 'order_of_play':
       return dim(`Horde roll-off ${entry.rolls.p1}–${entry.rolls.p2}: ${entry.firstPlayer} marches first`)
@@ -451,7 +454,7 @@ function describe(entry: LogEntry, state: GameState): string | null {
       return (
         `  ${entry.player} rolls ${bold(String(entry.total))} magic at ` +
         `${SLOT_LABEL[entry.slot as TerrainSlot] ?? entry.slot} ` +
-        dim(`(${entry.elements.join(' or ')})`)
+        dim(`(${poolSplit(entry.suppliers) ?? entry.elements.join(' or ')})`)
       )
 
     case 'spell_cast':
@@ -1604,7 +1607,7 @@ async function main() {
 
   // Which species you are is a roll now, so the banner reads it off the board
   // rather than stating it.
-  const fielding = (player: PlayerId) => speciesName(speciesOf(state, player))
+  const fielding = (player: PlayerId) => speciesNames(forceSpecies(state, player))
   console.log(bold('\ndd_solo — Dragon Dice'))
   console.log(
     dim(

@@ -33,12 +33,13 @@
  * 4a seam exists for. They are on the `sai: 'full'` rung, so `state.effects` is still
  * always empty in a `DUA_RULES` game, which is what the app plays.
  */
-import { doubleIdsModifier, SAVES_AS_MELEE, type Modifier } from './pipeline'
-import { hasAbility, terrainHas } from './species'
+import { doubleIdsModifier, savesAsMelee, type Modifier } from './pipeline'
+import { terrainHas, unitHasAbility } from './species'
 import { terrainDie } from '../data/load'
 import type { EighthFaceIcon, ResultType } from '../data/types'
 import {
   army as armyOf,
+  speciesIn,
   type ArmyRef,
   type GameState,
   type LogEntry,
@@ -284,19 +285,15 @@ export function armyRoll(
   // fire terrain -- the attack, Wall of Thorns' roll, the dragon combination roll. It
   // rides the modifier list for the reason the Death breath does: that reaches every
   // one of those without a call site learning about it. `resolveFaces` refuses it on a
-  // counter-attack, because only the roll knows what it is for.
-  if (
-    resultType === 'melee' &&
-    hasAbility(state, player, 'Flaming Shields') &&
-    terrainHas(state, ref, 'fire')
-  ) {
-    modifiers.push(SAVES_AS_MELEE)
+  // counter-attack, because only the roll knows what it is for. It names the species
+  // whose dice convert (v2 Phase 1), because a mixed army's other dice do not.
+  const units = armyOf(state, player, ref).filter((unit) => !isAsleep(state, unit.id))
+  if (resultType === 'melee' && terrainHas(state, ref, 'fire')) {
+    const shielded = speciesIn(units.filter((unit) => unitHasAbility(state.ruleSet, unit, 'Flaming Shields')))
+    if (shielded.length > 0) modifiers.push(savesAsMelee(shielded))
   }
 
-  return {
-    units: armyOf(state, player, ref).filter((unit) => !isAsleep(state, unit.id)),
-    modifiers,
-  }
+  return { units, modifiers }
 }
 
 /** What a *unit* roll needs: the die, whether it may be rolled at all, and everything

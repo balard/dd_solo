@@ -142,10 +142,32 @@ export interface SetupOptions {
   readonly ruleSet?: RuleSet
 }
 
-/** A force once it is resolved, whichever way it was obtained. */
+/**
+ * A force once it is resolved, whichever way it was obtained: its dice, and nothing
+ * else. The species follow from the dice (v2 Phase 1) -- a `species` field beside them
+ * was a second copy of a fact that could drift, and a false one for a mixed force.
+ */
 interface ResolvedForce {
-  readonly species: string
   readonly armies: Readonly<Record<PresetArmyName, readonly string[]>>
+}
+
+/** The species a force's dice belong to, each once, sorted. */
+function speciesOfForce(force: ResolvedForce): readonly string[] {
+  const ids = PRESET_ARMY_NAMES.flatMap((name) => force.armies[name])
+  return [...new Set(ids.map((id) => unitType(id).species))].sort()
+}
+
+/**
+ * Every element a force's species carry, each once -- in the species' own order for a
+ * one-species force, which is what every draw below consumed before v2 Phase 1 and so
+ * what keeps a single-species game on the board it always had.
+ */
+function forceElements(force: ResolvedForce): readonly Element[] {
+  const out: Element[] = []
+  for (const species of speciesOfForce(force)) {
+    for (const element of speciesElements(species)) if (!out.includes(element)) out.push(element)
+  }
+  return out
 }
 
 /**
@@ -180,8 +202,19 @@ const SORTED_TERRAIN_DICE: readonly string[] = [...TERRAIN_DICE].map((d) => d.id
  * Wasteland -- a terrain carrying neither of its elements, where Replanting and Rapid
  * Growth never fire and its spells need a Standing Stones to be cast at all.
  */
-function drawHomeDie(species: string, rng: RngState): readonly [string, RngState] {
-  const own = homeTerrainType(species).id
+function drawHomeDie(force: ResolvedForce, rng: RngState): readonly [string, RngState] {
+  // A mixed force has no one "own type" to draw from. Built forces (v2 Phase 2) name
+  // their Home die; until then a mixed force has to pin it, and says so rather than
+  // quietly drawing from the first species' type.
+  const species = speciesOfForce(force)
+  const [only] = species
+  if (only === undefined || species.length > 1) {
+    throw new Error(
+      `a force of ${species.join(' and ') || 'no dice'} has no one home terrain type to draw ` +
+        `from; pin its Home Terrain with SetupOptions.terrains`,
+    )
+  }
+  const own = homeTerrainType(only).id
   const eligible = SORTED_TERRAIN_DICE.filter((dieId) => terrainDie(dieId).type === own)
   const [index, next] = nextInt(rng, eligible.length)
   const dieId = eligible[index]
@@ -191,14 +224,14 @@ function drawHomeDie(species: string, rng: RngState): readonly [string, RngState
 
 /**
  * Draws a Frontier die: uniformly among every die sharing at least one element with the
- * species -- 20 of the 24 for either species in this box, everything but the other
- * side's own type. One draw.
+ * force's species -- 20 of the 24 for either species in this box, everything but the
+ * other side's own type. One draw.
  *
  * Phase 5b drew an element first and then a die carrying it, which made the species'
  * own type twice as likely as any other. Every eligible die is equally likely now.
  */
-function drawFrontierDie(species: string, rng: RngState): readonly [string, RngState] {
-  const elements = speciesElements(species)
+function drawFrontierDie(force: ResolvedForce, rng: RngState): readonly [string, RngState] {
+  const elements = forceElements(force)
   const eligible = SORTED_TERRAIN_DICE.filter((dieId) =>
     terrainType(terrainDie(dieId).type).elements.some((e) => elements.includes(e)),
   )
@@ -234,11 +267,11 @@ export function dragonCount(health: number): number {
  * chest against two wings.
  */
 function drawDragonDice(
-  speciesId: string,
+  force: ResolvedForce,
   count: number,
   rng: RngState,
 ): readonly [readonly string[], RngState] {
-  const elements = [...speciesElements(speciesId)].sort()
+  const elements = [...forceElements(force)].sort()
   let state = rng
   const drawn: string[] = []
 
@@ -251,7 +284,9 @@ function drawDragonDice(
       state = next
       element = elements[index]
     }
-    if (element === undefined) throw new Error(`${speciesId} has no elements to draw a dragon from`)
+    if (element === undefined) {
+      throw new Error(`${speciesOfForce(force).join(' and ')} has no elements to draw a dragon from`)
+    }
 
     const [formIndex, afterForm] = nextInt(state, 2)
     state = afterForm
@@ -397,7 +432,7 @@ export function setupGame(options: SetupOptions): GameState {
     log.push({
       kind: 'forces_drawn',
       health: forceHealth(rolled.p1),
-      species: { p1: rolled.p1.species, p2: rolled.p2.species },
+      species: { p1: speciesOfForce(rolled.p1), p2: speciesOfForce(rolled.p2) },
       dice: { p1: countDice(rolled.p1), p2: countDice(rolled.p2) },
     })
   }
@@ -470,7 +505,7 @@ export function setupGame(options: SetupOptions): GameState {
   if (options.terrains?.p1_home !== undefined) {
     p1HomeDie = options.terrains.p1_home
   } else {
-    const [dieId, next] = drawHomeDie(forces.p1.species, rng)
+    const [dieId, next] = drawHomeDie(forces.p1, rng)
     p1HomeDie = dieId
     rng = next
   }
@@ -483,13 +518,13 @@ export function setupGame(options: SetupOptions): GameState {
   if (options.terrains?.frontier !== undefined) {
     frontierDie = options.terrains.frontier
   } else if (choosing) {
-    const [p1Proposal, afterP1] = drawFrontierDie(forces.p1.species, rng)
-    const [p2Proposal, afterP2] = drawFrontierDie(forces.p2.species, afterP1)
+    const [p1Proposal, afterP1] = drawFrontierDie(forces.p1, rng)
+    const [p2Proposal, afterP2] = drawFrontierDie(forces.p2, afterP1)
     rng = afterP2
     proposals = { p1: p1Proposal, p2: p2Proposal }
     frontierDie = p1Proposal
   } else {
-    const [dieId, next] = drawFrontierDie(forces[frontierSetter].species, rng)
+    const [dieId, next] = drawFrontierDie(forces[frontierSetter], rng)
     frontierDie = dieId
     rng = next
   }
@@ -498,7 +533,7 @@ export function setupGame(options: SetupOptions): GameState {
   if (options.terrains?.p2_home !== undefined) {
     p2HomeDie = options.terrains.p2_home
   } else {
-    const [dieId, next] = drawHomeDie(forces.p2.species, rng)
+    const [dieId, next] = drawHomeDie(forces.p2, rng)
     p2HomeDie = dieId
     rng = next
   }
@@ -538,7 +573,7 @@ export function setupGame(options: SetupOptions): GameState {
 
     for (const player of ['p1', 'p2'] as const) {
       const count = dragonCount(forceHealth(forces[player]))
-      const [dieIds, next] = drawDragonDice(forces[player].species, count, rng)
+      const [dieIds, next] = drawDragonDice(forces[player], count, rng)
       rng = next
       pools[player] = dieIds.map((dieId, ordinal) => ({
         id: `${player}:${dieId}#${ordinal}`,

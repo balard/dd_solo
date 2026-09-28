@@ -337,14 +337,24 @@ describe('bury', () => {
 
 })
 
-describe('validateState', () => {
-  it('catches a force that has picked up a die of another species', () => {
-    const state = board(
+describe('a force of two species (v2 Phase 1)', () => {
+  // The one-species check in `validateState` stood in for p. 30's "a unit ... of the same
+  // species": a cross-species exchange was the only way a force could gain a second
+  // species. A mixed force is legal now, so the rule moved to the exchange itself.
+  const mixed = () =>
+    board(
       { id: 'oak', typeId: OAK, at: home },
       { id: 'sentinel', typeId: 'firewalkers.sentinel', at: dua },
     )
 
-    expect(validateState(state).join('\n')).toMatch(/fields more than one species/)
+  it('is a valid state', () => {
+    expect(validateState(mixed())).toEqual([])
+  })
+
+  it('still cannot exchange across species, at the one door every promotion uses', () => {
+    expect(() => exchangeWithDua(mixed(), [{ unitId: 'oak', partnerId: 'sentinel' }])).toThrow(
+      /different species/,
+    )
   })
 })
 

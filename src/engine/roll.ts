@@ -411,15 +411,26 @@ function perDieResults(
 }
 
 /**
- * Whether this roll converts saves to melee: Flaming Shields' permission is on it, the
- * roll counts melee, and it is not a counter-attack -- "Flaming Shields does not apply
- * when making a counter-attack". Decided here rather than in `armyRoll` because this is
- * the one place that knows what the roll is for.
+ * Whose dice this roll converts from saves to melee, or null for nobody: Flaming
+ * Shields' permission is on it, the roll counts melee, and it is not a counter-attack
+ * -- "Flaming Shields does not apply when making a counter-attack". Decided here rather
+ * than in `armyRoll` because this is the one place that knows what the roll is for.
+ *
+ * A set of species rather than a yes (v2 Phase 1): the permission is the Firewalkers',
+ * so in a mixed army a Treefolk die's saves stay saves. `convertsDie` asks per die.
  */
-function convertsSaves(spec: RollSpec): boolean {
-  if (spec.context.isCounter) return false
-  if (!spec.kinds.includes('melee')) return false
-  return spec.modifiers.some((m) => m.kind === 'counts_as' && m.from === 'save')
+function convertsSaves(spec: RollSpec): ReadonlySet<string> | null {
+  if (spec.context.isCounter) return null
+  if (!spec.kinds.includes('melee')) return null
+  const species = spec.modifiers.flatMap((m) =>
+    m.kind === 'counts_as' && m.from === 'save' ? m.species : [],
+  )
+  return species.length > 0 ? new Set(species) : null
+}
+
+/** Whether this die's saves are among those a roll converts. */
+function convertsDie(converts: ReadonlySet<string> | null, die: RawDie): boolean {
+  return converts !== null && converts.has(unitType(die.typeId).species)
 }
 
 /**
@@ -557,7 +568,7 @@ export function rollPools(
     const contribution = classify(face, spec, ruleSet)
     ids += contribution.idPool
     flexible += contribution.flexible
-    if (converts) shields += rolledSaves(face, contribution, ruleSet)
+    if (convertsDie(converts, die)) shields += rolledSaves(face, contribution, ruleSet)
   }
   // Only a roll that also counts saves has anything to choose. In one that does not,
   // every rolled save converts and nobody is asked.
@@ -588,13 +599,13 @@ export function resolveFaces(
   const converts = convertsSaves(spec)
   // A roll that does not count saves converts every one it rolled; a roll that does
   // (the dragon's) converts only what its owner chose.
-  const convertsAll = converts && !spec.kinds.includes('save')
+  const convertsAll = converts !== null && !spec.kinds.includes('save')
   let convertible = 0
 
   for (const die of dice) {
     const face = faceOf(die)
     const contribution = classify(face, spec, ruleSet)
-    const saves = converts ? rolledSaves(face, contribution, ruleSet) : 0
+    const saves = convertsDie(converts, die) ? rolledSaves(face, contribution, ruleSet) : 0
     convertible += saves
 
     idPool += contribution.idPool
@@ -625,10 +636,10 @@ export function resolveFaces(
 
   // Flaming Shields: how many rolled saves become melee, which step 10 adds.
   const chosen = spec.savesAsMelee ?? 0
-  if (chosen > 0 && (!converts || convertsAll)) {
+  if (chosen > 0 && (converts === null || convertsAll)) {
     throw new Error(
       `${chosen} saves counted as melee, but this roll ` +
-        (converts ? 'converts every save it rolled' : 'has no Flaming Shields to convert with'),
+        (converts !== null ? 'converts every save it rolled' : 'has no Flaming Shields to convert with'),
     )
   }
   if (!Number.isInteger(chosen) || chosen < 0 || chosen > convertible) {

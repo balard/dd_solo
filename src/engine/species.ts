@@ -10,15 +10,21 @@
  *   Air Flight       the Retreat Step                  `applyRetreat` in `turn.ts`
  *   Flaming Shields  a melee roll, as a "counts as"    `armyRoll` and `resolveFaces`
  *
- * This file holds the two facts every one of those asks -- does this player's species
+ * This file holds the two facts every one of those asks -- does this *die's* species
  * have the ability, and does this terrain carry the element it keys on -- and the
- * rules text both clients show. It holds no ability's behaviour: that lives at the
+ * rules text both clients show.
+ *
+ * **Per die, not per player** (v2 Phase 1). Every ability here names units -- "Treefolk
+ * units", "Firewalker units", "Firewalkers may count save results" -- so in a mixed army
+ * only the dice of that species act, and a Treefolk save beside a Firewalker one stays
+ * a save. v1 asked about the player, which was the same set of dice while a force was
+ * one species. It holds no ability's behaviour: that lives at the
  * seam, the same split `sai.ts` keeps between a handler and the step that consumes it.
  */
-import { terrainDie, terrainType } from '../data/load'
+import { terrainDie, terrainType, unitType } from '../data/load'
 import type { Element } from '../data/types'
 
-import { speciesOf, type ArmyRef, type GameState, type PlayerId } from './types'
+import type { ArmyRef, GameState, RuleSet, UnitInstance } from './types'
 
 export type AbilityName = 'Rapid Growth' | 'Replanting' | 'Air Flight' | 'Flaming Shields'
 
@@ -54,16 +60,21 @@ export const ABILITY_TEXT: Readonly<Record<AbilityName, string>> = {
     'were melee results. Flaming Shields does not apply when making a counter-attack.',
 }
 
+/** Whether a species has `ability` -- the table alone, with no ruleset in it. */
+export function speciesHasAbility(speciesId: string, ability: AbilityName): boolean {
+  return (SPECIES_ABILITIES[speciesId] ?? []).includes(ability)
+}
+
 /**
- * Whether `player` has `ability` in the rules being played.
+ * Whether this die has `ability` in the rules being played.
  *
  * Asks the ruleset first, so nothing behind it -- and in particular no die -- is ever
- * reached under `V0_RULES`. A force is one species, so "Treefolk units" in an
- * ability's text is simply "that player's units".
+ * reached under `V0_RULES`. Takes the ruleset rather than the state because a unit's
+ * species is a fact about its type, and nothing else about the game can change it.
  */
-export function hasAbility(state: GameState, player: PlayerId, ability: AbilityName): boolean {
-  if (!state.ruleSet.speciesAbilities) return false
-  return (SPECIES_ABILITIES[speciesOf(state, player)] ?? []).includes(ability)
+export function unitHasAbility(ruleSet: RuleSet, unit: UnitInstance, ability: AbilityName): boolean {
+  if (!ruleSet.speciesAbilities) return false
+  return speciesHasAbility(unitType(unit.typeId).species, ability)
 }
 
 /**

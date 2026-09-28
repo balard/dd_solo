@@ -250,6 +250,15 @@ export function exchangeWithDua(state: GameState, pairs: readonly Exchange[]): G
     if (unit.owner !== partner.owner) {
       throw new Error(`exchangeWithDua: ${unit.id} and ${partner.id} have different owners`)
     }
+    // p. 30: an exchange is with "a unit ... of the same species". Checked here, the
+    // one door, since v2 Phase 1 -- `validateState` used to catch a breach as a force
+    // holding two species, which a mixed force now does legally.
+    if (speciesOfUnit(unit) !== speciesOfUnit(partner)) {
+      throw new Error(
+        `exchangeWithDua: ${unit.id} (${speciesOfUnit(unit)}) and ${partner.id} ` +
+          `(${speciesOfUnit(partner)}) are different species -- an exchange stays within one`,
+      )
+    }
     if (!isInPlay(unit)) {
       throw new Error(`exchangeWithDua: ${unit.id} is not in play (${unit.location.kind})`)
     }

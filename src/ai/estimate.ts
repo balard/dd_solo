@@ -228,6 +228,12 @@ export function expectedArmy(
   let riposte = 0
   let targeted = 0
   let rolledSaves = 0
+  // Whose saves Flaming Shields converts: only its own species' dice (v2 Phase 1).
+  const shielded = new Set(
+    resultType === 'melee' && !context.isCounter
+      ? modifiers.flatMap((m) => (m.kind === 'counts_as' && m.from === 'save' ? m.species : []))
+      : [],
+  )
   for (const unit of units) {
     const die = expectedDie(unit.typeId, resultType, context, state.ruleSet)
     id += die.share.id
@@ -236,22 +242,59 @@ export function expectedArmy(
     unsavable += die.unsavable
     riposte += die.riposte
     targeted += die.targeted
-    rolledSaves += die.rolledSaves
+    if (shielded.has(unitType(unit.typeId).species)) rolledSaves += die.rolledSaves
   }
 
   const share: Share = { id: options.countIds === false ? 0 : id, normal, sai }
-  const converts =
-    resultType === 'melee' &&
-    !context.isCounter &&
-    modifiers.some((m) => m.kind === 'counts_as' && m.from === 'save')
 
   return {
     share,
-    total: applyModifiers(share, resultType, modifiers) + (converts ? rolledSaves : 0),
+    total: applyModifiers(share, resultType, modifiers) + rolledSaves,
     unsavable,
     riposte,
     targeted,
   }
+}
+
+/**
+ * An expected magic total split by the species whose dice would roll it (v2 Phase 1),
+ * so a mixed army's expected pool has suppliers the way a rolled one does.
+ *
+ * Proportional to each species' expected results in a magic roll, rounded down, with
+ * what rounding leaves going to the largest remainders -- so the parts sum to `points`
+ * exactly. Species in id order and ties in that order, so it never depends on the
+ * order the board happens to list the dice in. A single-species force's pool ignores
+ * the split, which is why nothing a one-species game does can move for it.
+ */
+export function expectedMagicBySpecies(
+  state: GameState,
+  player: PlayerId,
+  ref: ArmyRef,
+  points: number,
+): Readonly<Record<string, number>> {
+  const context = defaultContextFor('magic')
+  const raw = new Map<string, number>()
+  for (const unit of armyRoll(state, player, ref, 'magic').units) {
+    const die = expectedDie(unit.typeId, 'magic', context, state.ruleSet)
+    const species = unitType(unit.typeId).species
+    raw.set(species, (raw.get(species) ?? 0) + die.share.id + die.share.normal + die.share.sai)
+  }
+  const species = [...raw.keys()].sort()
+  const total = species.reduce((sum, s) => sum + (raw.get(s) ?? 0), 0)
+  if (total <= 0 || points <= 0) return {}
+
+  const exact = species.map((s) => ((raw.get(s) ?? 0) / total) * points)
+  const parts = exact.map(Math.floor)
+  let left = points - parts.reduce((sum, n) => sum + n, 0)
+  const byRemainder = species
+    .map((_, i) => i)
+    .sort((a, b) => (exact[b] ?? 0) - (parts[b] ?? 0) - ((exact[a] ?? 0) - (parts[a] ?? 0)) || a - b)
+  for (const i of byRemainder) {
+    if (left <= 0) break
+    parts[i] = (parts[i] ?? 0) + 1
+    left -= 1
+  }
+  return Object.fromEntries(species.map((s, i) => [s, parts[i] ?? 0]))
 }
 
 /** An attack's expected outcome, both rolls and what they come to. */

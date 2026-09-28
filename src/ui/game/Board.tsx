@@ -312,7 +312,8 @@ function jawsFace(dieId: string): DragonFaceNumber {
   return found
 }
 
-type Species = ReturnType<typeof speciesInfo>
+/** The species a force holds -- one, or several for a mixed force (v2 Phase 1). */
+type Species = readonly NonNullable<ReturnType<typeof speciesInfo>>[]
 
 /**
  * Effects with a duration, as one line each: the source, what it does, and when it ends.
@@ -365,13 +366,13 @@ function ArmySide({
     <section className="army card-army">
       <h3>
         {title}
-        {species && (
-          <>
+        {species.map((one) => (
+          <span key={one.id}>
             {' '}
-            <span className="muted">{species.name}</span>
-            <ElementDots elements={species.elements} />
-          </>
-        )}{' '}
+            <span className="muted">{one.name}</span>
+            <ElementDots elements={one.elements} />
+          </span>
+        ))}{' '}
         <span className="muted">
           {dice}d / {health}h
         </span>

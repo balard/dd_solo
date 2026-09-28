@@ -26,13 +26,14 @@
  * extra draw here would shift `rng.counter` and every die after it in all of them.
  */
 import { unitType } from '../data/load'
+import { spell } from '../data/spells'
 
 import { applyDamage } from './damage'
 import { bury } from './dua'
 import { regrows } from './effects'
 import { faceOf, rollFaces, type DieRoll } from './roll'
 import { rollDie } from './rng'
-import { hasAbility, terrainHas } from './species'
+import { terrainHas, unitHasAbility } from './species'
 import {
   deadUnits,
   type ArmyRef,
@@ -239,7 +240,7 @@ export function buryEntries(
  *    missile -- is at no terrain, which contains no water.
  *
  * Board order, like `riseFromTheAshes`, and a unit that does not qualify draws nothing.
- * Gated on `speciesAbilities` alone (via `hasAbility`), not on `dua`: it moves a unit
+ * Gated on `speciesAbilities` alone (via `unitHasAbility`), not on `dua`: it moves a unit
  * to Reserves and touches the DUA not at all.
  */
 function replanting(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
@@ -250,7 +251,7 @@ function replanting(state: GameState, unitIds: readonly UnitId[]): DeathOutcome 
     (unit) =>
       unitIds.includes(unit.id) &&
       unit.location.kind === 'terrain' &&
-      hasAbility(state, unit.owner, 'Replanting') &&
+      unitHasAbility(state.ruleSet, unit, 'Replanting') &&
       terrainHas(state, unit.location.slot, 'water'),
   )
   if (candidates.length === 0) return none
@@ -332,8 +333,11 @@ export function killUnits(
  * automatically for that reason, which made the "may" a house rule; Phase 9b defers it
  * instead, and `stepGame` raises it before anything else moves.
  *
- * A dying unit is offered only if its owner had a one-health unit of its species in the
- * DUA *before* this kill. How many are actually exchanged -- one partner each, each
+ * A dying unit is offered only if it is of the spell's own species -- "a two (or greater)
+ * health **Treefolk** unit", read off the data rather than the name -- and its owner had a
+ * one-health unit of that species in the DUA *before* this kill. The species check is v2
+ * Phase 1's: while a force was one species, only a Treefolk force could cast the spell
+ * and every die in its DUA was Treefolk, so a Firewalker beside them never came up. How many are actually exchanged -- one partner each, each
  * partner once -- is the answer's to say.
  */
 function growthOffers(
@@ -355,6 +359,7 @@ function growthOffers(
 
     const type = unitType(unit.typeId)
     if (type.health < 2) continue
+    if (type.species !== spell('accelerated_growth').species) continue
 
     const partners = deadUnits(state, unit.owner)
       .filter(

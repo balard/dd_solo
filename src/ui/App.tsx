@@ -18,7 +18,7 @@ import {
 
   livingUnits,
   pooledDragons,
-  speciesOf,
+  forceSpecies,
   type PlayerId,
   type PromotionPair,
   type UnitId,
@@ -202,10 +202,12 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   const selectMode = looking ? null : asked
 
   // Read off the dice rather than the setup: a force may have been rolled, in which
-  // case there is no preset id to look up, and the units know anyway.
-  const speciesName = (player: PlayerId) => speciesInfo(speciesOf(state, player))
-  const mySpecies = speciesName(human)
-  const theirSpecies = speciesName(enemy)
+  // case there is no preset id to look up, and the units know anyway. A list, since
+  // v2 Phase 1: a force is the species its dice belong to, and it may hold several.
+  const speciesOfForce = (player: PlayerId) =>
+    forceSpecies(state, player).flatMap((id) => speciesInfo(id) ?? [])
+  const mySpecies = speciesOfForce(human)
+  const theirSpecies = speciesOfForce(enemy)
 
   const reserve = livingUnits(state, human).filter((u) => u.location.kind === 'reserve')
   // Mid-reinforce the grid offers only the dice still without a destination, so a

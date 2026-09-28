@@ -89,7 +89,7 @@ import {
 } from './roll'
 import { doubleIdsModifier, ignoreIdsModifiers, type Modifier } from './pipeline'
 import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
-import { hasAbility, terrainHas } from './species'
+import { terrainHas, unitHasAbility } from './species'
 import { targetTasks, type TargetTask } from './targeting'
 import { unitType } from '../data/load'
 import { spell } from '../data/spells'
@@ -100,6 +100,7 @@ import {
   dispelCandidates,
   dispelNegates,
   DISPEL_MAGIC,
+  magicBySpecies,
   magicPool,
   sameSpellTarget,
   spellTargetProblem,
@@ -1933,7 +1934,7 @@ function beginSpellcasting(
   outcome: AttackOutcome,
 ): GameState {
   const player = state.turn.marching
-  const pool = magicPool(state, player, army, outcome.attackTotal)
+  const pool = magicPool(state, player, army, outcome.attackTotal, magicBySpecies(outcome.attackRoll.dice))
 
   const logged = withLog({ ...state, rng: outcome.rng }, {
     kind: 'magic_rolled',
@@ -1941,6 +1942,7 @@ function beginSpellcasting(
     slot: army,
     total: pool.points,
     elements: pool.elements,
+    ...(pool.suppliers !== undefined ? { suppliers: pool.suppliers } : {}),
     dice: outcome.attackRoll.dice,
     ...(outcome.attackRoll.math !== undefined ? { math: outcome.attackRoll.math } : {}),
   })
@@ -3872,24 +3874,26 @@ const requireContest = (state: GameState): NonNullable<GameState['turn']['contes
  * Rapid Growth: "when at a terrain that contains earth, Treefolk units that do not roll
  * an SAI result may be re-rolled once when making a counter-maneuver."
  *
- * Every die the contester threw that did not come up an SAI, in board order. Empty
- * unless the contester has the ability and the terrain contains earth -- which, under
- * any ruleset without the flag, is always.
+ * Every Treefolk die the contester threw that did not come up an SAI, in board order.
+ * Empty unless the terrain contains earth and the ability is in the rules being played.
+ * Per die (v2 Phase 1): "Treefolk units ... may be re-rolled", so a mixed army's other
+ * dice keep their faces.
  *
  * Only a first throw can qualify. A die with a step-3 reroll after it rolled Rend to
  * get one, and Rend is an SAI, so the chain is out by construction; checking the
  * `reroll` mark as well says so rather than leaving it to the data.
  */
 function rapidGrowthOptions(state: GameState, defenderDice: readonly RawDie[]): readonly UnitId[] {
-  const contester = opponentOf(state.turn.marching)
   const slot = marchingSlot(state)
-  if (!hasAbility(state, contester, 'Rapid Growth') || !terrainHas(state, slot, 'earth')) {
-    return []
-  }
+  if (!state.ruleSet.speciesAbilities || !terrainHas(state, slot, 'earth')) return []
   const chained = new Set(defenderDice.filter((die) => die.reroll === true).map((d) => d.unitId))
   const eligible = defenderDice
     .filter((die) => die.reroll !== true && !chained.has(die.unitId))
     .filter((die) => faceOf(die).icon !== 'SAI')
+    .filter((die) => {
+      const unit = state.units[die.unitId]
+      return unit !== undefined && unitHasAbility(state.ruleSet, unit, 'Rapid Growth')
+    })
     .map((die) => die.unitId)
   return inBoardOrder(state, eligible)
 }
@@ -4342,9 +4346,9 @@ function applyReinforce(
 /**
  * Announces every spell and every target at once.
  *
- * Validated **as a whole**, which is not fussiness: the pool is one number and the
- * casts spend it jointly, so "can I afford this" is a question about the list rather
- * than about any one cast. (Lightning Strike's "a unit may not be targeted by more
+ * Validated **as a whole**, which is not fussiness: the casts spend one pool jointly --
+ * per species, for a mixed force (v2 Phase 1) -- so "can I afford this" is a question
+ * about the list rather than about any one cast. (Lightning Strike's "a unit may not be targeted by more
  * than one Lightning Strike per magic action" is the same shape, and arrives in 7d.)
  *
  * An empty list is legal and common -- "any number of spells can be cast up to the
@@ -4355,7 +4359,6 @@ function applyAnnounceSpells(state: GameState, casts: readonly AnnouncedSpell[])
   const player = magic.caster ?? state.turn.marching
   const castable = castableSpells(state, player, magic.pool, state.ruleSet)
 
-  let spent = 0
   for (const cast of casts) {
     const offer = castable.find((c) => c.spell.id === cast.spell)
     if (offer === undefined) {
@@ -4386,18 +4389,13 @@ function applyAnnounceSpells(state: GameState, casts: readonly AnnouncedSpell[])
     // Strike's once-per-unit in 7d.
     const problem = spellTargetProblem(state, cast)
     if (problem !== null) throw new IllegalActionError(problem)
-    spent += offer.spell.cost * cast.count
   }
 
-  // A rule between casts rather than about one: Lightning Strike's once-per-unit.
-  const across = announcementProblem(casts)
+  // The rules between casts rather than about one -- Lightning Strike's once-per-unit
+  // -- and paying for the lot: the total within the roll, and (v2 Phase 1) a split of
+  // the pool that pays every spell in its element and, for a species spell, its species.
+  const across = announcementProblem(magic.pool, casts)
   if (across !== null) throw new IllegalActionError(across)
-
-  if (spent > magic.pool.points) {
-    throw new IllegalActionError(
-      `announced ${spent} magic worth of spells with only ${magic.pool.points} rolled`,
-    )
-  }
 
   // "Once you have decided which spells to cast, announce all of the spells ... Once
   // all spells and their targets are announced, cast and resolve the spells one at a
@@ -4425,23 +4423,26 @@ function applyAnnounceSpells(state: GameState, casts: readonly AnnouncedSpell[])
  * **Judged once, against the board as the step begins** -- a house rule, `RULES-V0.md`
  * section 16. The moves are one decision, so they are simultaneous: a terrain that
  * empties because everybody flew out of it still counted as holding a Firewalker for
- * the units flying *in*, and two armies may swap places. A force is one species, so
- * "a Firewalker unit" there is any unit of yours.
+ * the units flying *in*, and two armies may swap places.
+ *
+ * **Per die** (v2 Phase 1): only a Firewalker flies, and a destination qualifies only
+ * if a Firewalker of yours stands there -- in a mixed force a terrain holding nothing
+ * but your Treefolk is not one. v1 read "a Firewalker unit" as "any unit of yours",
+ * which was the same thing while a force was one species.
  *
  * A sleeping unit "cannot ... leave the terrain", so it is not offered -- and it still
  * counts as a Firewalker standing at its terrain, which it is.
  */
 function airFlightOffers(state: GameState, player: PlayerId): readonly AirFlightOffer[] {
-  if (!hasAbility(state, player, 'Air Flight')) return []
-  const airy = TERRAIN_SLOTS.filter(
-    (slot) => terrainHas(state, slot, 'air') && armyAt(state, player, slot).length > 0,
-  )
+  const flyers = (slot: TerrainSlot) =>
+    armyAt(state, player, slot).filter((unit) => unitHasAbility(state.ruleSet, unit, 'Air Flight'))
+  const airy = TERRAIN_SLOTS.filter((slot) => terrainHas(state, slot, 'air') && flyers(slot).length > 0)
   if (airy.length < 2) return []
 
   const offers: AirFlightOffer[] = []
   for (const slot of airy) {
     const options = airy.filter((other) => other !== slot)
-    for (const unit of armyAt(state, player, slot)) {
+    for (const unit of flyers(slot)) {
       if (isAsleep(state, unit.id)) continue
       offers.push({ unitId: unit.id, options })
     }

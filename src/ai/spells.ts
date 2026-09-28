@@ -15,7 +15,7 @@
  * the other two actions a terrain might offer.
  */
 import { unitType } from '../data/load'
-import type { ResultType } from '../data/types'
+import type { Element, ResultType } from '../data/types'
 import type { Spell } from '../data/spells'
 import { missileTargets } from '../engine/combat'
 import {
@@ -42,7 +42,7 @@ import {
   type UnitInstance,
 } from '../engine/types'
 
-import { expectedArmy, expectedFace, killValue, unitValue } from './estimate'
+import { expectedArmy, expectedFace, expectedMagicBySpecies, killValue, unitValue } from './estimate'
 
 /** Every result type, for Ash Storm's `'*'`. */
 const EVERY_TYPE: readonly ResultType[] = ['melee', 'missile', 'magic', 'save', 'maneuver']
@@ -325,7 +325,7 @@ export function chooseAnnouncement(
         const cost = s.cost * (next - already)
         if (cost > remaining || next > offer.maxCount) continue
 
-        const element = elementFor(state, offer, aim.target)
+        const element = payableElement(state, castable, pool, staged, offer, aim.target, next - already)
         if (element === null) continue
 
         const gain =
@@ -350,10 +350,42 @@ export function chooseAnnouncement(
     count: c.count,
     target: c.target,
   }))
-  if (plan.casts.length !== staged.length || plan.remaining < 0 || announcementProblem(casts) !== null) {
+  if (plan.casts.length !== staged.length || plan.remaining < 0 || announcementProblem(pool, casts) !== null) {
     return NOTHING
   }
   return { casts, value }
+}
+
+/**
+ * The element this many more castings at this target are paid in, or null if the pool
+ * cannot pay for them in any.
+ *
+ * `elementFor`'s choice first, and for a single-species pool nothing else: its one
+ * supplier pays every element on offer, and `remaining` has already bounded the cost.
+ * A mixed pool (v2 Phase 1) may be able to pay only in another element, or not at all
+ * once the right species' points are spent, so each is tried against the announcement
+ * validator -- the same question a client asks through `spellPlan`.
+ */
+function payableElement(
+  state: GameState,
+  castable: readonly Castable[],
+  pool: MagicPool,
+  staged: readonly SpellDraftCast[],
+  offer: Castable,
+  target: SpellTarget,
+  count: number,
+): Element | null {
+  const first = elementFor(state, offer, target)
+  if (pool.suppliers === undefined) return first
+  const candidates = first === null ? [] : [first, ...offer.elements.filter((e) => e !== first)]
+  for (const element of candidates) {
+    if (offer.spell.id === 'summon_dragon' && target.kind === 'terrain' && summonable(state, element, target.slot).length === 0) {
+      continue
+    }
+    const trial = stageCast(castable, staged, { spell: offer.spell.id, element, count, target })
+    if (announcementProblem(pool, trial) === null) return element
+  }
+  return null
 }
 
 /** The element a casting at this target is paid in: the first the offer accepts,
@@ -373,6 +405,6 @@ function elementFor(state: GameState, offer: Castable, target: SpellTarget) {
 export function announcementValue(state: GameState, player: PlayerId, ref: ArmyRef): number {
   const points = Math.floor(expectedArmy(state, player, ref, 'magic').total)
   if (points <= 0) return 0
-  const pool = magicPool(state, player, ref, points)
+  const pool = magicPool(state, player, ref, points, expectedMagicBySpecies(state, player, ref, points))
   return chooseAnnouncement(state, player, ref, castableSpells(state, player, pool, state.ruleSet), pool).value
 }

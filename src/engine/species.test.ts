@@ -11,7 +11,7 @@ import { SPECIES, UNIT_TYPES, unitType } from '../data/load'
 
 import { buryUnits, deathEntries, killAndBury, killedIds, killUnits } from './death'
 import { armyRoll } from './effects'
-import { SAVES_AS_MELEE, type Modifier } from './pipeline'
+import { savesAsMelee, type Modifier } from './pipeline'
 import { begin, reduce } from './reduce'
 import { rngFrom, rollDie, type RngState } from './rng'
 import { resolveFaces, rollPools, type RawDie, type RollSpec } from './roll'
@@ -20,7 +20,7 @@ import { BESTIARY_FORCES, setupGame, STARTER_FORCES, type ForceSpec } from './se
 import {
   ABILITY_TEXT,
   SPECIES_ABILITIES,
-  hasAbility,
+  unitHasAbility,
   terrainHas,
   type AbilityName,
 } from './species'
@@ -92,6 +92,8 @@ function seedRolling(typeId: string, wanted: (faceIndex: number) => boolean): Rn
 const OAKLING = 'treefolk.oakling'
 /** A Firewalker with a plain `1 SAVE` face and a `1 MELEE` one. */
 const GUARDIAN = 'firewalkers.guardian'
+/** Flaming Shields' permission as `armyRoll` gathers it for a Firewalker army. */
+const SAVES_AS_MELEE = savesAsMelee(['firewalkers'])
 /** `2 SAVE` and `3 MELEE`. */
 const WATCHER = 'firewalkers.watcher'
 
@@ -128,17 +130,19 @@ describe('the species ability table', () => {
     const off = board(SPELL_RULES, 'swampland_tower', rngFrom(1), ...units)
     const on = board(SPECIES_RULES, 'swampland_tower', rngFrom(1), ...units)
 
+    const has = (state: GameState, id: string, ability: AbilityName) =>
+      unitHasAbility(state.ruleSet, state.units[id]!, ability)
     const all: AbilityName[] = ['Rapid Growth', 'Replanting', 'Air Flight', 'Flaming Shields']
     for (const ability of all) {
-      expect(hasAbility(off, 'p1', ability)).toBe(false)
-      expect(hasAbility(off, 'p2', ability)).toBe(false)
+      expect(has(off, 't', ability)).toBe(false)
+      expect(has(off, 'f', ability)).toBe(false)
     }
-    expect(hasAbility(on, 'p1', 'Replanting')).toBe(true)
-    expect(hasAbility(on, 'p1', 'Rapid Growth')).toBe(true)
-    expect(hasAbility(on, 'p1', 'Flaming Shields')).toBe(false)
-    expect(hasAbility(on, 'p2', 'Air Flight')).toBe(true)
-    expect(hasAbility(on, 'p2', 'Flaming Shields')).toBe(true)
-    expect(hasAbility(on, 'p2', 'Replanting')).toBe(false)
+    expect(has(on, 't', 'Replanting')).toBe(true)
+    expect(has(on, 't', 'Rapid Growth')).toBe(true)
+    expect(has(on, 't', 'Flaming Shields')).toBe(false)
+    expect(has(on, 'f', 'Air Flight')).toBe(true)
+    expect(has(on, 'f', 'Flaming Shields')).toBe(true)
+    expect(has(on, 'f', 'Replanting')).toBe(false)
   })
 
   it("reads a terrain's elements off its die, and the Reserve Area contains nothing", () => {

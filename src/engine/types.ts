@@ -9,7 +9,7 @@ import type { DragonElement, DragonIcon, Element, ResultType } from '../data/typ
 
 import type { DragonRoll, DragonTarget } from './dragons'
 import type { Effect } from './effects'
-import type { Castable, MagicPool } from './magic'
+import type { Castable, MagicPool, MagicSupplier } from './magic'
 import type { DieRoll, RawDie, RollMath } from './roll'
 import type { TargetTask } from './targeting'
 import type { RngState } from './rng'
@@ -1176,7 +1176,9 @@ export type LogEntry =
       readonly kind: 'forces_drawn'
       /** Health per side. Both sides always bring the same. */
       readonly health: number
-      readonly species: Readonly<Record<PlayerId, string>>
+      /** The species present in each force, read off its dice (v2 Phase 1): one today,
+       *  since a rolled force is one species, and a list because a force need not be. */
+      readonly species: Readonly<Record<PlayerId, readonly string[]>>
       readonly dice: Readonly<Record<PlayerId, number>>
     }
   | {
@@ -1602,6 +1604,9 @@ export type LogEntry =
       readonly slot: ArmyRef
       readonly total: number
       readonly elements: readonly Element[]
+      /** The pool's per-species split (v2 Phase 1), when the caster's force holds more
+       *  than one species -- `MagicPool.suppliers`. Omitted otherwise, near the digest. */
+      readonly suppliers?: readonly MagicSupplier[]
       readonly dice: readonly DieRoll[]
       /** Why the total is what it is (Phase 9c). Display only: `digestState` drops every
        *  `...Math` key, so it never moves a golden. Omitted when there is nothing to say. */
@@ -1975,16 +1980,27 @@ export class IllegalActionError extends Error {
 // goes through these.
 
 /**
- * Which species a player is fielding, read off their dice.
+ * The species among some units: each once, sorted by id.
  *
- * Derived rather than stored, for the same reason armies are: a force is one
- * species, every unit says which, and a second copy of that fact could drift. Dead
- * units count -- they stay in `state.units` -- so this survives a rout.
+ * **A player is not a species; a unit is** (v2 Phase 1). There used to be a
+ * `speciesOf(state, player)` answering "which species is this force", which was one
+ * question while a force was one species and stopped being a question at all the day
+ * an army could mix. It was deleted rather than kept answering "the first die's
+ * species", so a caller that still asked it failed to compile instead of being quietly
+ * wrong about a mixed army. Ask about the dice: a unit's own species for anything a
+ * die does, this for anything a group of dice does.
  */
-export function speciesOf(state: GameState, player: PlayerId): string {
-  const unit = Object.values(state.units).find((u) => u.owner === player)
-  if (unit === undefined) throw new Error(`${player} has no units at all, not even dead ones`)
-  return unitType(unit.typeId).species
+export function speciesIn(units: readonly UnitInstance[]): readonly string[] {
+  return [...new Set(units.map((u) => unitType(u.typeId).species))].sort()
+}
+
+/**
+ * Every species in a player's force, read off their dice -- dead and buried ones
+ * included, so a rout does not change what a force *is*. What a client shows as the
+ * force's name, and never what a rule asks: a rule asks about the dice it touches.
+ */
+export function forceSpecies(state: GameState, player: PlayerId): readonly string[] {
+  return speciesIn(unitsOf(state, player))
 }
 
 export function unitsOf(state: GameState, player: PlayerId): readonly UnitInstance[] {

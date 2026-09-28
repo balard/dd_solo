@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { SPECIES, terrainDie, terrainType, unitType, unitsOfSpecies } from '../data/load'
 import { PRESET_ARMY_NAMES, maxArmyHealth } from '../data/presets'
 
-import { FORCE_SIZES, drawForce, generateForces, repairSplit, splitForce } from './force'
+import { FORCE_SIZES, drawForce, generateForces, repairSplit, splitForce, type GeneratedForce } from './force'
 import { rngFrom } from './rng'
 import { setupGame, STARTER_FORCES } from './setup'
-import { TERRAIN_SLOTS, armyAt, opponentOf, speciesOf, unitsOf, type PlayerId } from './types'
+import { TERRAIN_SLOTS, armyAt, forceSpecies, opponentOf, unitsOf, type PlayerId } from './types'
 import { validateState } from './validate'
 
 const PLAYERS: readonly PlayerId[] = ['p1', 'p2']
@@ -102,16 +102,25 @@ describe('splitForce', () => {
 })
 
 describe('generateForces', () => {
-  it('gives the two players different species', () => {
+  /** A generated force's species, read off its dice -- it carries no field for them. */
+  const speciesOfForce = (force: GeneratedForce): readonly string[] => [
+    ...new Set(PRESET_ARMY_NAMES.flatMap((name) => force.armies[name]).map((id) => unitType(id).species)),
+  ]
+
+  it('gives each player one species, and the two players different ones', () => {
     for (let seed = 1; seed <= 50; seed++) {
       const [forces] = generateForces(rngFrom(seed))
-      expect(forces.p1.species, `seed ${seed}`).not.toBe(forces.p2.species)
+      expect(speciesOfForce(forces.p1), `seed ${seed}`).toHaveLength(1)
+      expect(speciesOfForce(forces.p2), `seed ${seed}`).toHaveLength(1)
+      expect(speciesOfForce(forces.p1), `seed ${seed}`).not.toEqual(speciesOfForce(forces.p2))
     }
   })
 
   it('reaches both race assignments', () => {
     const firsts = new Set<string>()
-    for (let seed = 1; seed <= 50; seed++) firsts.add(generateForces(rngFrom(seed))[0].p1.species)
+    for (let seed = 1; seed <= 50; seed++) {
+      firsts.add(speciesOfForce(generateForces(rngFrom(seed))[0].p1).join())
+    }
     expect(firsts.size).toBe(2)
   })
 
@@ -161,7 +170,7 @@ describe('a game set up from nothing but a seed', () => {
       // already sets a game up. Distribution and edge cases live in
       // setup.test.ts's "the Phase 5b terrain draw".
       const loser = opponentOf(state.turn.marching)
-      const loserSpecies = SPECIES.find((s) => s.id === speciesOf(state, loser))
+      const loserSpecies = SPECIES.find((s) => s.id === forceSpecies(state, loser)[0])
       if (!loserSpecies) throw new Error(`unknown species for ${loser}`)
       const frontierElements = terrainType(terrainDie(state.terrains.frontier.dieId).type).elements
       expect(
@@ -218,7 +227,11 @@ describe('a game set up from nothing but a seed', () => {
     if (entry?.kind !== 'forces_drawn') throw new Error('unreachable')
 
     expect(FORCE_SIZES).toContain(entry.health)
-    expect(entry.species.p1).not.toBe(entry.species.p2)
+    // A list per force since v2 Phase 1, one species long for a rolled force.
+    expect(entry.species.p1).toEqual(forceSpecies(state, 'p1'))
+    expect(entry.species.p2).toEqual(forceSpecies(state, 'p2'))
+    expect(entry.species.p1).toHaveLength(1)
+    expect(entry.species.p1).not.toEqual(entry.species.p2)
     for (const player of PLAYERS) {
       expect(entry.dice[player]).toBe(unitsOf(state, player).length)
     }

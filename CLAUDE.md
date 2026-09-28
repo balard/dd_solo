@@ -102,11 +102,11 @@ the dice and the opponent.
 > the gap between the last two is where Dispel Magic lives. `SAVE_VERSION` is 9 and the 25 goldens
 > are still byte-identical and unregenerated.
 >
-> **An army's magic is one number, not a per-element tally**, and that is the load-bearing fact of
-> the whole system. Each unit's results "may be divided between that unit's elements" and a force is
-> one species, so the total splits freely between two elements -- which is why `resolveFaces` is
-> still pure and `GameState`-free, and why validating an announcement is a sum rather than a
-> knapsack. It collapses the day two units in one army carry different colours, and nothing else does.
+> **An army's magic was one number, not a per-element tally**, and that was the load-bearing fact of
+> the whole system: each unit's results "may be divided between that unit's elements" and a force
+> was one species, so the total split freely between two elements. **v2 Phase 1 made it a pool per
+> species** (`MagicPool.suppliers`), present only when the caster's force holds more than one
+> species, so every single-species game still pays for spells with one number.
 >
 > **Phase 6's Frontier dragon seed retired in 7c**, gated on `magic !== 'spells'` rather than
 > deleted: `Summon Dragon` is the route the base rules intend, but `DRAGON_RULES` is still playable
@@ -126,14 +126,20 @@ the dice and the opponent.
 
 > **v2 Phase 0 has landed**: a second golden corpus, `v1-games.json` (20 games under `V1_RULES`,
 > every terrain pinned), and the 1000-game fuzz moved onto the live rules -- 200 games in `npm test`,
-> 1000 behind `npm run fuzz`. Phase 1, mixed species, is next; both corpora are its guard.
+> 1000 behind `npm run fuzz`.
+>
+> **v2 Phase 1 has landed: species belongs to a unit, not a player.** `speciesOf(state, player)` is
+> deleted; abilities are asked per die (`unitHasAbility`), a magic pool is split per species, and a
+> mixed force is a valid state. Nothing can *set up* a mixed force until Phase 2 (built forces), so
+> `mixed.test.ts` builds mixed boards directly -- one test per call site that moved -- and both golden
+> corpora replay byte-identical and unregenerated.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phase 0 landed; the rest is a draft). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 and 1 landed; the rest is a draft). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
@@ -367,8 +373,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   query. Home/Campaign/Horde are setup vocabulary only. Never add a parallel army, DUA or BUA list
   — the absence of one is what makes desync impossible, and it is why `validateState` still does
   not check "every unit is in exactly one place" (`PLAN-V1.md` Phase 2 asked for that check; it
-  cannot fail). What it *does* check, since an exchange is the one thing that can move a die
-  between two players' areas, is that **every unit of a player shares one species**.
+  cannot fail). It used to check that every unit of a player shares one species, which stood in for
+  "an exchange stays within a species". **v2 Phase 1 removed it**, since a mixed force is legal:
+  p. 30's "a unit ... of the same species" is enforced in `exchangeWithDua`, the one door every
+  promotion goes through, where it can see the pair.
 
 - **`rollArmy` has no special case for ID icons or monsters, and must not grow one.** The count
   printed on the face is already the answer. `faceResults` is three lines; keep it that way.
@@ -449,9 +457,23 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     (30) or a bestiary (35); `newGame.ts` refuses that before `setupGame` can throw.
   - `setup.test.ts` derives the roster from `UNIT_TYPES` rather than listing it, so **a monster
     added to the data later fails there** instead of quietly going without a fixture.
-- **Species is derived, like armies are.** `speciesOf(state, player)` reads it off any of that
-  player's dice, dead ones included; a rolled force has no preset id to look up, and a second copy
-  of the fact could drift.
+- **Species belongs to a unit, not a player** (v2 Phase 1). `unitType(unit.typeId).species` is the
+  fact; `speciesIn(units)` and `forceSpecies(state, player)` list the species among some dice, dead
+  ones included. There is no `speciesOf(state, player)` any more: it answered "which species is
+  this force", which stopped being a question once a force could mix, and it was **deleted rather
+  than kept answering "the first die's species"**, so a caller still asking it failed to compile.
+  - **A rule asks about the dice it touches.** Abilities are `unitHasAbility(ruleSet, unit, ...)`;
+    Flaming Shields' `counts_as` modifier names the species whose dice convert; Air Flight needs a
+    *Firewalker* at the destination; Accelerated Growth exchanges only a dying unit of the spell's
+    own species. `forceSpecies` is for what a client shows as the force's name.
+  - **A force carries no species field.** `ResolvedForce` and `GeneratedForce` are dice only; setup
+    derives the species (and the elements its draws use) from them. A mixed force has no one
+    "own type" to draw a Home die from, so it must pin its Home until Phase 2 names one.
+  - **The magic pool is per species, and only for a mixed force** (`MagicPool.suppliers`). Paying
+    for an announcement is a transport problem, solved exactly by Hall's condition in
+    `allocationProblem`, behind `announcementProblem(pool, casts)` -- the one validator, which
+    `spellPlan` and greedy both call. A single-species force's pool has no `suppliers`, which is
+    what keeps `turn.magic.pool` and the `announce_spells` pending out of the golden digests' way.
 - **A roll is four functions, and the last of them is pure.** `rollFaces` is step 1, `rerollSweep`
   is step 3, `resolveFaces` is steps 4-10, and `resolveRoll` is their composition. Every mid-roll
   pause in v1 Phase 4 sits at the same joint -- between a step that consumes randomness and a step

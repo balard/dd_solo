@@ -30,7 +30,7 @@ import {
   army,
   opponentOf,
   reserveArmy,
-  speciesOf,
+  unitsOf,
   type ActionKind,
   type ArmyRef,
   type Direction,
@@ -353,17 +353,30 @@ function duaCanRise(state: GameState, player: PlayerId): boolean {
 
 /**
  * How much a proposed Frontier favours `player`: the elements it shares with their
- * species, less the ones it shares with the enemy's.
+ * dice, less the ones it shares with the enemy's.
+ *
+ * Per die since v2 Phase 1: the elements each die's species shares with the terrain,
+ * averaged over the force by health. For a one-species force that is exactly the
+ * number it always was -- every die shares the same count -- and a mixed force is
+ * weighed by how much of it the terrain would favour.
  *
  * Elements are what the terrain's action and every species ability in this box key
  * on -- Replanting and Rapid Growth at water and earth, Air Flight and Flaming Shields
  * at air and fire, and a spell's colour through Standing Stones -- so a Frontier of your
  * own colours is one where your side's rules work and theirs do not.
  */
-function frontierScore(state: GameState, player: PlayerId, dieId: string): number {
+export function frontierScore(state: GameState, player: PlayerId, dieId: string): number {
   const elements = terrainType(terrainDie(dieId).type).elements
-  const shared = (who: PlayerId): number =>
-    speciesElements(speciesOf(state, who)).filter((e) => elements.includes(e)).length
+  const shared = (who: PlayerId): number => {
+    let weighted = 0
+    let health = 0
+    for (const unit of unitsOf(state, who)) {
+      const type = unitType(unit.typeId)
+      weighted += type.health * speciesElements(type.species).filter((e) => elements.includes(e)).length
+      health += type.health
+    }
+    return health === 0 ? 0 : weighted / health
+  }
   return shared(player) - shared(opponentOf(player))
 }
 

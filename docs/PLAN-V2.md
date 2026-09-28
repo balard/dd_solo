@@ -8,8 +8,8 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phase 0 has landed** and carries its findings below; the rest is still a draft, with
-predictions where V1 has findings.
+of work*. **Phases 0 and 1 have landed** and carry their findings below; the rest is still a
+draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
 collection, win dice, dragons and terrains, and raise the force cap to 24 and then 36 at set
@@ -274,6 +274,83 @@ the splits, is simpler to get right than a clever greedy check.
   species and nothing changed. Either keep the single-species shape exactly (an optional field,
   omitted when there is one supplier, the `CombatState` rule) or make it display-only and drop it
   from the digest like the `...Math` keys.
+
+> **Landed in one commit.** Both golden corpora replay byte-identical and unregenerated, the suite
+> and the 1000-game live fuzz are green, and `src/engine/mixed.test.ts` builds mixed boards
+> directly: one test, or a few, per call site that moved (28 in all). No `RuleSet` flag, as
+> planned.
+
+### Where this section was wrong
+
+**1. Six callers were really two questions, and four of the six were one function.**
+`speciesOf` fed `hasAbility`, which fed Replanting, Flaming Shields, Rapid Growth and Air Flight;
+the other callers were the magic pool (twice), greedy's Frontier score, and the two clients'
+banners. So the work was `hasAbility(state, player, ...)` becoming `unitHasAbility(ruleSet, unit,
+...)` at four seams, plus the pool. `speciesOf` is deleted, as planned, and `forceSpecies` (a
+list) is what a client shows.
+
+**2. `resolveFaces` did not need to change.** The plan had it return a magic total per species. A
+`DieRoll` already names its type and its own results, so `magicBySpecies(dice)` reads the split
+off the dice the roll returns. The pure function is untouched.
+
+**3. The plan forgot army modifiers.** A per-species pool cannot absorb an army-level subtraction
+without a rule, and Ash Storm subtracts one from every roll at its terrain, magic included. **House
+rule** (`RULES-V0.md` section 15): each supplier holds what its own dice rolled, the roll's total
+caps the whole spend, and the caster chooses whose results the modifier took. That is still exactly
+Hall's condition plus one total check, which is what `allocationProblem` computes.
+
+**4. "Omitted when there is one supplier" was the wrong trigger.** A single-species pool's species
+has to come from somewhere when a spell is checked against it, and the only place is the caster's
+force, which is right only if the force is one species. So `suppliers` appears **when the caster's
+force holds more than one species**, even if only one species rolled magic, and never otherwise.
+That keeps `turn.magic.pool` and the `announce_spells` pending byte-identical for every game there
+is.
+
+**5. Cantrip lost its dice before the pool was built.** Two Cantrip faces in one roll combine into
+one task by SAI name, and the task keeps the sum, not the dice. A mixed army can roll both a
+Treefolk Cantrip (Eldar Dryad) and a Firewalker one. The task sits inside the digest, so rather
+than widen it, `cantripPool` reads the split back off the dice parked on the exchange.
+
+**6. Two spells were missing from the list.** Accelerated Growth paired a dying unit of *any*
+species with a one-health partner of the same species. Only a Treefolk force could cast it, so that
+was harmless until a mixed force would have offered a Firewalker the exchange. It now checks the
+dying unit against the spell's own species, read from the data. Resurrect Dead's offer is filtered
+to the dead that the offered elements could raise, since a mixed DUA holds dice of more than one
+colour.
+
+**7. `validateState` cannot say "every exchange stays within a species".** A state does not know
+how it became mixed. The old check was a stand-in, and it is gone. The rule it stood for now lives
+in `exchangeWithDua`, the one door every promotion goes through. `promote` and
+`promotionBudgetProblem` already checked it; Wild Growth's direct call to `exchangeWithDua` relied
+on the second.
+
+**8. "`RollMath` shows the split" was the wrong home.** `RollMath` is per-type arithmetic, and the
+split is not arithmetic. `poolSplit` gives the sentence ("5 Treefolk: water or earth; 3
+Firewalkers: air or fire"). `magicRolled` opens every mixed magic prompt with it, and both clients
+print it for a `magic_rolled` entry that carries `suppliers`.
+
+**9. The AI needed more than a scorer.** `estimate.ts` added Flaming Shields for the whole army,
+so it now counts only the converting species' saves. Greedy's announcer now finds an element some
+split can pay, not the first on offer. It prices an expected magic action through
+`expectedMagicBySpecies` (proportional, largest remainder). Its Frontier score became a
+health-weighted mean over the dice, which is exactly v1's number for a one-species force.
+`spellPlan` gained `problem` and asks the allocation for `affordable` when the pool is mixed:
+three points left over do not buy a spell of the wrong species.
+
+**10. Setup could not stay silent about a mixed force.** `ResolvedForce` and `GeneratedForce` lost
+their `species` field. Frontier and dragon draws take the union of the force's elements, which is
+the same list in the same order for one species. A Home Terrain, though, is "a die of the species'
+own type", which a mixed force does not have. `drawHomeDie` throws for one and asks for a pinned
+Home, and Phase 2's built force names its Home die.
+
+**Deliberately not done.**
+- **Nothing can set up a mixed force yet.** Presets are validated as one species, and random forces
+  are drawn per species. Phase 2 is the first place one can start.
+- **An army's heading shows its force's species, not the army's.** In a mixed force every army
+  would list every species. The schematic board (Phase 3) is where to decide what an army header
+  says.
+- **No `SAVE_VERSION` bump.** Saving is off, and no single-species game consumes a draw
+  differently. A mixed game has never been recorded.
 
 ---
 

@@ -627,8 +627,9 @@ describe('the sub-roll spells', () => {
       count: 1,
       target: { kind: 'units', unitIds: [victim] } as const,
     }))
-    expect(announcementProblem(twice)).toMatch(/more than one Lightning Strike/)
-    expect(announcementProblem([twice[0]!])).toBeNull()
+    const pool = { points: 99, elements: ['air', 'fire'] } as const
+    expect(announcementProblem(pool, twice)).toMatch(/more than one Lightning Strike/)
+    expect(announcementProblem(pool, [twice[0]!])).toBeNull()
   })
 
   it('lets Flash Flood through only when the army there cannot hold it', () => {
@@ -744,9 +745,10 @@ describe('the targeting house rule and the announcement fixes (Phase 9a)', () =>
     const flood = (target: SpellTarget): AnnouncedSpell => ({
       spell: 'flash_flood', element: 'water', count: 1, target,
     })
-    expect(announcementProblem([flood(at), flood(at)])).toMatch(/twice at one target/)
+    const pool = { points: 99, elements: ['water', 'earth'] } as const
+    expect(announcementProblem(pool, [flood(at), flood(at)])).toMatch(/twice at one target/)
     // Two targets are two spells, which the rules allow for anything cumulative.
-    expect(announcementProblem([flood(at), flood({ kind: 'terrain', slot: 'p1_home' })])).toBeNull()
+    expect(announcementProblem(pool, [flood(at), flood({ kind: 'terrain', slot: 'p1_home' })])).toBeNull()
   })
 
   it('merges a repeat casting of a cumulative spell, and refuses one of a non-cumulative spell', () => {

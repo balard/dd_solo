@@ -11,12 +11,14 @@
  * deriving armies by query, and adding the BUA did not weaken it -- `PLAN-V1.md`
  * asked Phase 2 for that check, and it would still be a check that cannot fail.
  *
- * What Phase 2 *did* make reachable is a unit changing sides: `exchangeWithDua` is
- * the only operation in the game that moves a die between two players' areas, and a
- * promotion that picked the wrong partner would be silent -- `speciesOf` reads the
- * species off whichever unit it finds first. Hence the species check below.
+ * There was a check here that every unit of a player shares one species, standing in
+ * for "an exchange with the DUA stays within a species": a cross-species promotion was
+ * the only thing that could give a force a second species. v2 Phase 1 removed it,
+ * because a mixed force is legal now and a state cannot say how it came to be mixed.
+ * The rule it guarded -- p. 30, "a unit ... of the same species" -- is enforced where
+ * it can be, in `exchangeWithDua`, the one door every promotion goes through.
  */
-import { UNIT_TYPES, dragonDie, terrainDie, unitType } from '../data/load'
+import { UNIT_TYPES, dragonDie, terrainDie } from '../data/load'
 
 import { pruneEffects } from './effects'
 import { MID_EXCHANGE_STEPS } from './turn'
@@ -24,7 +26,6 @@ import {
   TERRAIN_SLOTS,
   capturedCount,
   livingUnits,
-  unitsOf,
   type GameState,
   type PlayerId,
 } from './types'
@@ -54,19 +55,6 @@ export function validateState(state: GameState): string[] {
     }
     if (unit.location.kind === 'terrain' && !TERRAIN_SLOTS.includes(unit.location.slot)) {
       problems.push(`unit ${unit.id}: unknown terrain slot ${String(unit.location.slot)}`)
-    }
-  }
-
-  // A force is one species, dead and buried dice included. Only an exchange with the
-  // DUA can break this, and only by pairing across owners or across species.
-  for (const player of PLAYERS) {
-    const species = new Set(
-      unitsOf(state, player)
-        .filter((u) => knownTypes.has(u.typeId))
-        .map((u) => unitType(u.typeId).species),
-    )
-    if (species.size > 1) {
-      problems.push(`${player}: fields more than one species (${[...species].sort().join(', ')})`)
     }
   }
 
