@@ -60,9 +60,9 @@ start.
 **Dependencies:**
 
 ```
-0  Groundwork: a live-rules golden corpus, the 1000-game fuzz on the live rules
+0  Groundwork: a live-rules golden corpus, the 1000-game fuzz on the live rules   [landed]
 |
-1  Mixed species                      engine only; a single-species game does not move
+1  Mixed species                      engine only; a single-species game does not move   [landed]
 |
 2  Built forces                       ForceSpec 'built', any size, unequal totals
 |
@@ -97,7 +97,7 @@ while nothing else moves. It is the Phase 0b lesson from v1.
 
 ---
 
-## Phase 0 — Groundwork
+## Phase 0 — Groundwork — **landed**
 
 Two things, neither of them visible, each cheaper now than after Phase 1.
 
@@ -109,7 +109,7 @@ Every rule, SAI, spell and ability this plan names is in v4.01 with the same con
 while drafting. **Page numbers here are v4.01's**, like everywhere else in the project. Come back
 to v4.02 when something in scope is only in it.
 
-### 0a — A golden corpus for the live rules
+### 0a — A golden corpus for the live rules — **landed**
 
 The 25 goldens run `V0_RULES`. Nothing guards `V1_RULES` except unit tests and a 200-game fuzz,
 and Phase 1 is exactly the kind of refactor a golden file exists for. So, **before Phase 1**, cut
@@ -123,7 +123,7 @@ a second corpus the same way Phase G cut the first:
   Phase 2 for Death species and mixed forces. Games recorded with drawn terrains would move for that reason
   alone.
 
-### 0b — Close the fuzz gap
+### 0b — Close the fuzz gap — **landed**
 
 The named follow-up from `PLAN-V1.md` *Risks*: 1000 live-rules games behind an environment flag,
 200 in the default suite, with per-rule trigger counters. v2 adds about twenty SAIs, eleven spells
@@ -202,7 +202,7 @@ fuzzes in `ai.test.ts` always have. The shared default stays at 30 s. The suite 
 
 ---
 
-## Phase 1 — Mixed species
+## Phase 1 — Mixed species — **landed**
 
 **Deliverable.** An engine where species belongs to a unit, not a player. **No game changes
 outcome**: both golden corpora replay byte-identical and unregenerated. A mixed force cannot be
