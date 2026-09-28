@@ -1,5 +1,18 @@
 /* Phone-first. Tokens on :root, redefined once for dark. */
 :root {
+  /*
+   * The type scale (v2 Phase 3b). Eight steps where the sheet had grown twenty-three
+   * sizes, most of them a hair apart. Body text is 15px (1rem) and sits outside it.
+   */
+  --fs-2xs: .66rem;
+  --fs-xs: .72rem;
+  --fs-sm: .8rem;
+  --fs-md: .86rem;
+  --fs-lg: .92rem;
+  --fs-xl: 1.05rem;
+  --fs-2xl: 1.15rem;
+  --fs-3xl: 1.4rem;
+
   --bg: #fbfaf8;
   --panel: #ffffff;
   --sunk: #f2efea;
@@ -67,7 +80,7 @@ body {
 }
 
 .muted { color: var(--muted); font-weight: 400; }
-.empty { color: var(--muted); font-size: .85rem; margin: 2px 0 0; }
+.empty { color: var(--muted); font-size: var(--fs-md); margin: 2px 0 0; }
 
 /* --- shell ---------------------------------------------------------------- */
 
@@ -99,8 +112,8 @@ body {
   gap: 12px;
   margin-bottom: 10px;
 }
-.app-head h1 { font-size: 1.05rem; margin: 0; letter-spacing: .01em; }
-.app-head .sub { margin: 0; color: var(--muted); font-size: .78rem; }
+.app-head h1 { font-size: var(--fs-xl); margin: 0; letter-spacing: .01em; }
+.app-head .sub { margin: 0; color: var(--muted); font-size: var(--fs-sm); }
 
 /* --- the board ------------------------------------------------------------ */
 
@@ -134,38 +147,44 @@ body {
 .off-board { margin-top: 12px; }
 
 .chip-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.chip-name { font-weight: 600; font-size: .88rem; }
+.chip-name { font-weight: 600; font-size: var(--fs-md); }
 .chip-face { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
 .chip-number { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--fg); }
-.chip-eighth { font-size: .78rem; color: var(--magic); text-transform: capitalize; }
+.chip-eighth { font-size: var(--fs-sm); color: var(--magic); text-transform: capitalize; }
 
-.chip-held { display: block; font-size: .72rem; color: var(--magic); margin-top: 2px; }
+.chip-held { display: block; font-size: var(--fs-xs); color: var(--magic); margin-top: 2px; }
 
-/* What is sitting on an army until somebody's next turn. Small, but not muted: an
-   effect is arithmetic you have to plan against, not a footnote. */
-.army-effects {
+/* What is sitting on an army until somebody's next turn, as chips (v2 Phase 3b).
+   Small, but not muted: an effect is arithmetic you have to plan against, not a
+   footnote. When it ends is on hover; the count says the same effect sits there twice. */
+.effect-chips {
   list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
   margin: 2px 0 4px;
   padding: 0;
-  font-size: .72rem;
-  line-height: 1.5;
 }
-.army-effects li {
-  border-left: 2px solid var(--magic);
-  padding-left: 6px;
+.effect-chip {
+  font-size: var(--fs-2xs);
+  line-height: 1.6;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--magic) 45%, var(--line));
+  border-radius: 999px;
+  background: var(--panel);
+  white-space: nowrap;
 }
-
+.effect-chip b { color: var(--magic); font-weight: 700; }
 /* A terrain effect belongs to the place rather than to either army, so it sits
-   between the terrain head and the dragons -- above both sides, not inside one. */
-.terrain-effects {
-  margin: 6px 0 2px;
-}
+   between the terrain head and the dragons, dashed -- above both sides, not inside one. */
+.effect-chips.is-place { margin: 6px 0 2px; }
+.effect-chips.is-place .effect-chip { border-style: dashed; }
 
 /* The spell being aimed says what it does, because a cost and a name are not
    enough to choose between eighteen of them. */
 .rule-text {
   margin: -2px 0 8px;
-  font-size: .78rem;
+  font-size: var(--fs-sm);
   line-height: 1.45;
   max-width: 62ch;
 }
@@ -181,46 +200,48 @@ body {
   margin: 6px 0 2px;
 }
 
-.dragon-wrap {
+/* A dragon is a die, so it draws as a square tile beside the units' (v2 Phase 3b).
+   Tinted by its element, because that is the one thing about a dragon that decides
+   who it will fight -- it never attacks its own colour. The side is 60px, a large
+   unit's: a d12 is the biggest thing on the table after a monster. */
+.dragon-tile {
   position: relative;
-}
-
-/* Tinted by the dragon's element, because that is the one thing about a dragon
-   that decides who it will fight -- it never attacks its own colour. */
-.dragon-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px 2px 6px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  background: none;
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  padding: 3px;
+  border: 1.5px solid currentColor;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 10%, var(--panel));
   font: inherit;
-  font-size: .74rem;
-  line-height: 1.6;
   cursor: pointer;
   color: var(--el-death);
 }
-
-.dragon-chip.dragon-el-air { color: var(--el-air); }
-.dragon-chip.dragon-el-water { color: var(--el-water); }
-.dragon-chip.dragon-el-earth { color: var(--el-earth); }
-.dragon-chip.dragon-el-fire { color: var(--el-fire); }
-.dragon-chip.dragon-el-death { color: var(--el-death); }
-
-.dragon-chip:hover,
-.dragon-chip.is-open {
-  background: color-mix(in srgb, currentColor 14%, transparent);
+.dragon-tile:hover,
+.dragon-tile.is-open {
+  background: color-mix(in srgb, currentColor 22%, var(--panel));
 }
-
-.dragon-chip .glyph {
-  width: 16px;
-  height: 16px;
+/* Drake or wyrm, in the corner where a unit shows its class. Ink, not the tint: the
+   letters are read, the colour is glanced at. */
+.dragon-form {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--fg);
 }
-
-.dragon-chip .muted {
-  color: inherit;
-  opacity: .65;
+.dragon-tile .glyph { width: 26px; height: 26px; color: var(--fg); }
+.dragon-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: currentColor;
+  border-radius: 0 0 4px 4px;
 }
 
 /* One row per dragon in the log: who it went for, the faces it showed, the total. */
@@ -230,7 +251,7 @@ body {
   align-items: center;
   gap: 4px 8px;
   padding: 3px 0;
-  font-size: .8rem;
+  font-size: var(--fs-sm);
 }
 
 .dragon-roll-who { color: var(--el-death); }
@@ -253,7 +274,7 @@ body {
   list-style: none;
   margin: 6px 0 0;
   padding: 0;
-  font-size: .76rem;
+  font-size: var(--fs-xs);
   line-height: 1.5;
 }
 
@@ -278,7 +299,7 @@ body {
 
 .army { margin-bottom: 12px; }
 .army h3 {
-  font-size: .75rem;
+  font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: .05em;
   color: var(--muted);
@@ -300,7 +321,7 @@ body {
   border-radius: 6px;
   background: var(--panel);
   font: inherit;
-  font-size: .8rem;
+  font-size: var(--fs-sm);
   color: inherit;
   text-align: left;
 }
@@ -323,13 +344,12 @@ body {
 
 /* Plain text: colour on the dice is being saved for the species elements. */
 .die-kind {
-  font-size: .68rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   color: inherit;
   min-width: 12px;
   letter-spacing: .02em;
 }
-.die-name { white-space: nowrap; }
 
 /* --- a tile that is the die ------------------------------------------------
    When the ID face stands in for the name the tile goes square and its side is
@@ -348,23 +368,36 @@ body {
   top: 2px;
   left: 4px;
   min-width: 0;
-  font-size: .6rem;
+  font-size: var(--fs-2xs);
   line-height: 1;
 }
 .die-squared .die-health {
   position: absolute;
   right: 4px;
-  bottom: 2px;
+  bottom: 5px; /* clear of the species band */
   border-left: 0;
   padding-left: 0;
-  font-size: .66rem;
+  font-size: var(--fs-2xs);
   line-height: 1;
 }
 .die-portrait { display: block; }
+.die-squared .class-shape { display: block; }
+/* The species along the bottom edge: its two elements, half each (v2 Phase 3b). */
+.die-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  display: flex;
+  border-radius: 0 0 5px 5px;
+  overflow: hidden;
+}
+.die-band i { flex: 1; }
 .die-portrait-slot { display: block; }
 .die-health {
   font-variant-numeric: tabular-nums;
-  font-size: .72rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
   border-left: 1px solid var(--line);
   padding-left: 5px;
@@ -397,7 +430,7 @@ body {
     filter: brightness(0) invert(1);
   }
 }
-.face-count { font-size: .7rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.face-count { font-size: var(--fs-xs); font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .i-ID { color: var(--id); }
 .i-MELEE { color: var(--melee); }
@@ -409,18 +442,65 @@ body {
 
 /* --- log ------------------------------------------------------------------ */
 
+/* The log as one line above the decision (v2 Phase 3b). The line is `LogLine`'s own
+   output cut down here: a roll keeps its heading and its outcome and drops its dice,
+   and whatever does not fit ends in an ellipsis. */
+.log-ticker {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 3px 0;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+.log-ticker-line {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.log-ticker-line > *,
+.log-ticker-line .log-roll > * {
+  display: inline;
+  margin: 0;
+}
+.log-ticker-line .log-roll {
+  background: none;
+  border: none;
+  padding: 0;
+}
+.log-ticker-line .roll-strip,
+.log-ticker-line .roll-head ~ .roll-head { display: none; }
+.log-ticker-line .roll-head { margin-right: 6px; }
+.log-ticker-line .roll-sum + .roll-sum::before { content: ' · '; }
+.log-toggle {
+  flex: none;
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.log-toggle:hover { color: var(--fg); border-color: var(--muted); }
+
 .log {
   margin-top: 16px;
   border-top: 1px solid var(--line);
   padding-top: 10px;
   padding-bottom: 8px;
-  font-size: .84rem;
+  font-size: var(--fs-md);
 }
 .log-line { margin: 3px 0; }
 .log-line.muted { color: var(--muted); }
 .log-line.warn { color: var(--maneuver); }
 .log-line.kill { color: var(--melee); }
-.log-line.big { font-weight: 700; font-size: .95rem; margin: 8px 0; }
+.log-line.big { font-weight: 700; font-size: var(--fs-lg); margin: 8px 0; }
 .log-turn { border: none; border-top: 1px dashed var(--line); margin: 10px 0; }
 
 .log-roll {
@@ -431,7 +511,7 @@ body {
   margin: 6px 0;
 }
 .roll-head {
-  font-size: .68rem;
+  font-size: var(--fs-2xs);
   text-transform: uppercase;
   letter-spacing: .05em;
   color: var(--muted);
@@ -446,7 +526,7 @@ body {
   border-radius: 8px;
   background: var(--line);
 }
-.reroll-arrow { font-size: .8rem; color: var(--muted); line-height: 1; }
+.reroll-arrow { font-size: var(--fs-sm); color: var(--muted); line-height: 1; }
 /* Confuse's before and after, side by side: the same dice thrown twice. */
 .confused-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .confused-pair .roll-strip { margin-bottom: 0; }
@@ -458,7 +538,7 @@ body {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel);
-  font-size: .7rem;
+  font-size: var(--fs-xs);
 }
 .rolled b { font-variant-numeric: tabular-nums; }
 .rolled-blank { opacity: .4; }
@@ -479,7 +559,7 @@ body {
   border: 1px dashed var(--line);
   border-radius: 6px;
   color: var(--muted);
-  font-size: .7rem;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .roll-modified b { color: var(--fg); }
@@ -525,7 +605,7 @@ body {
   flex: 1 0 100%;
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: .72rem;
+  font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: .04em;
 }
@@ -565,7 +645,7 @@ body {
   padding-top: 6px;
 }
 .rolls-behind .log-roll { margin: 0 0 6px; }
-.question { margin: 0 0 9px; font-size: .92rem; }
+.question { margin: 0 0 9px; font-size: var(--fs-lg); }
 /* "Look at dice" (Phase 9e), above the sheet it suspends. */
 .look-toggle {
   display: flex;
@@ -575,7 +655,7 @@ body {
   margin-inline: -12px;
   padding: 6px 12px 0;
   background: var(--panel);
-  font-size: .82rem;
+  font-size: var(--fs-sm);
 }
 .look-toggle.is-looking {
   padding-bottom: max(12px, env(safe-area-inset-bottom));
@@ -585,7 +665,7 @@ body {
   min-height: 34px;
   min-width: 0;
   padding: 5px 10px;
-  font-size: .85rem;
+  font-size: var(--fs-md);
 }
 .pool-head { margin-top: 10px; }
 /* The spell picker's casting count (Phase 9f): − N + beside the targets it applies to. */
@@ -594,18 +674,18 @@ body {
   align-items: center;
   gap: 6px;
   flex-basis: 100%;
-  font-size: .85rem;
+  font-size: var(--fs-md);
 }
 .stepper .choice.minor { min-width: 34px; flex: none; }
 /* The reinforce draft: where each staged die is headed, before it is sent. */
-.staged { margin: -4px 0 9px; font-size: .82rem; }
+.staged { margin: -4px 0 9px; font-size: var(--fs-sm); }
 .staged b { font-weight: 600; }
 
-.question.big { font-weight: 700; font-size: 1.05rem; }
+.question.big { font-weight: 700; font-size: var(--fs-xl); }
 
 .tally {
   margin: 0 0 9px;
-  font-size: .84rem;
+  font-size: var(--fs-md);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -617,7 +697,7 @@ body {
    part of the question a player is least likely to already know. */
 .sai-text {
   margin: 0 0 8px;
-  font-size: .78rem;
+  font-size: var(--fs-sm);
   line-height: 1.45;
   opacity: .85;
   max-width: 64ch;
@@ -650,7 +730,7 @@ body {
 .choice.secondary:hover { border-color: var(--muted); }
 /* Muted text inside a button -- a spell's cost, a partner's price -- takes the button's
    own colour, dimmed. Plain `.muted` is grey, which on the accent green was grey on
-   green and all but unreadable (Phase 9f). `.dragon-chip .muted` did the same first. */
+   green and all but unreadable (Phase 9f). The old dragon chip's `.muted` did the same first. */
 .choice .muted { color: inherit; opacity: .78; }
 
 
@@ -680,7 +760,7 @@ body {
   margin: 0 0 10px;
   padding: 8px 11px;
   border-radius: 7px;
-  font-size: .82rem;
+  font-size: var(--fs-sm);
   background: var(--sunk);
   border: 1px solid var(--line);
 }
@@ -688,10 +768,10 @@ body {
 .banner.muted { color: var(--muted); }
 
 .recovery { padding-block: 24px; }
-.recovery h1 { font-size: 1.15rem; margin: 0 0 8px; }
+.recovery h1 { font-size: var(--fs-2xl); margin: 0 0 8px; }
 .error-message {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: .82rem;
+  font-size: var(--fs-sm);
   background: var(--sunk);
   border: 1px solid var(--line);
   border-left: 3px solid var(--melee);
@@ -700,12 +780,12 @@ body {
   overflow-x: auto;
 }
 .recovery details { margin: 12px 0; }
-.recovery summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+.recovery summary { cursor: pointer; color: var(--muted); font-size: var(--fs-md); }
 .recovery textarea {
   width: 100%;
   margin-top: 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: .72rem;
+  font-size: var(--fs-xs);
   background: var(--sunk);
   color: var(--fg);
   border: 1px solid var(--line);
@@ -721,14 +801,14 @@ body {
  * only ever the whole window, and this project has no modal shell to borrow.
  */
 .new-game { padding-block: 24px; max-width: 460px; }
-.new-game h1 { font-size: 1.15rem; margin: 0 0 6px; }
-.new-game > .muted { margin: 0 0 18px; font-size: .86rem; }
+.new-game h1 { font-size: var(--fs-2xl); margin: 0 0 6px; }
+.new-game > .muted { margin: 0 0 18px; font-size: var(--fs-md); }
 
 .new-game-field { display: block; margin-bottom: 16px; }
 .new-game-label {
   display: block;
   margin-bottom: 5px;
-  font-size: .82rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
 }
 .new-game select,
@@ -747,7 +827,7 @@ body {
 /* The line that says what you just picked: species, health, and how the dice are
    split. Health is the only thing that decides whether two forces may meet, so it
    is on screen before the Start button has to explain itself. */
-.new-game-note { display: block; margin-top: 5px; font-size: .78rem; line-height: 1.35; }
+.new-game-note { display: block; margin-top: 5px; font-size: var(--fs-sm); line-height: 1.35; }
 
 .new-game .banner { margin-bottom: 14px; }
 .new-game .choices { margin-top: 20px; }
@@ -814,7 +894,7 @@ body {
   border: none;
   background: none;
   color: var(--muted);
-  font-size: 1.4rem;
+  font-size: var(--fs-3xl);
   line-height: 1;
   cursor: pointer;
 }
@@ -840,7 +920,7 @@ body {
 }
 .detail-head {
   margin: 0 0 8px;
-  font-size: .82rem;
+  font-size: var(--fs-sm);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -880,7 +960,7 @@ body {
   min-width: 56px;
 }
 .sheet-number {
-  font-size: .64rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -897,7 +977,7 @@ body {
 
 .chip-terrain {
   font-weight: 400;
-  font-size: .76rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
   margin-left: 5px;
 }
@@ -908,7 +988,7 @@ body {
  * the same type differ only by this, and the Frontier is one of them.
  */
 .chip-eighth {
-  font-size: .68rem;
+  font-size: var(--fs-2xs);
   opacity: .72;
   margin-left: 4px;
 }
@@ -961,7 +1041,7 @@ body {
 
 .fallen-toggle {
   font: inherit;
-  font-size: .75rem;
+  font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: .05em;
   font-weight: 600;
@@ -972,7 +1052,15 @@ body {
   cursor: pointer;
 }
 .fallen-toggle:hover { color: var(--fg); }
-.fallen-side { font-size: .72rem; margin: 6px 0 4px; }
+.fallen-side { font-size: var(--fs-xs); margin: 6px 0 4px; }
 .fallen .die { opacity: .62; }
 
 .chip-art { display: block; flex: none; }
+
+/* What an answer is expected to come to (v2 Phase 3b), quieter than the answer. */
+.choice-detail {
+  margin-left: 7px;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}

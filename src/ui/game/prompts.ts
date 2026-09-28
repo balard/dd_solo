@@ -5,6 +5,7 @@
  * bar renders whatever this returns, so no component ever tracks its own wizard
  * state or decides what is legal -- the engine already did both.
  */
+import { expectedArmy, expectedAttack } from '../../ai/estimate'
 import { dragonName, terrainDie, terrainDieName, terrainFaceAction, terrainType, unitType } from '../../data/load'
 import { spell } from '../../data/spells'
 import type { Element, TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
@@ -28,6 +29,7 @@ import {
   armyRefOf,
   livingUnits,
   reserveArmy,
+  type ActionKind,
   type ArmyRef,
   type Direction,
 
@@ -90,6 +92,12 @@ export interface Choice {
   /** Marks the "do nothing" option so it can be styled as secondary. */
   readonly passive?: boolean
   /**
+   * A second, quieter line on the button (v2 Phase 3b): what the answer is expected to
+   * come to -- "expect ≈6, they save ≈3". Read off `estimate.ts`, the one place faces
+   * become numbers, so it is a display of the estimator and never a second calculation.
+   */
+  readonly detail?: string
+  /**
    * The answer that is legal but almost never right (Phase 9f): drawn smaller as well as
    * secondary. Stepping a captured terrain down off its eighth face is the case -- it
    * gives up the capture, and it used to be the green button.
@@ -113,7 +121,34 @@ export function plainLabel(choice: Choice): string {
       const hint = faces[i]
       return hint === undefined ? text : text + describeFace(hint)
     })
-    .join('') + elements
+    .join('') + elements + (choice.detail === undefined ? '' : ` (${choice.detail})`)
+}
+
+/** An expectation, rounded and marked as one. */
+const about = (n: number): string => `≈${Math.round(n)}`
+
+/** "expect ≈6, they save ≈3": both rolls of an attack, before either is thrown. */
+function attackForecast(
+  state: GameState,
+  player: PlayerId,
+  from: ArmyRef,
+  action: 'melee' | 'missile',
+  target: ArmyRef,
+  isCounter = false,
+): string {
+  const expected = expectedAttack(state, player, from, action, target, isCounter)
+  return `expect ${about(expected.attack.total)}, they save ${about(expected.save.total)}`
+}
+
+/**
+ * What choosing `action` is expected to roll. Melee names both rolls, because its
+ * target is fixed: the army facing you. A missile's target is chosen next, so its
+ * button gives the attack alone and the target buttons give both. Magic is its points,
+ * which is what an announcement spends.
+ */
+function actionForecast(state: GameState, player: PlayerId, slot: ArmyRef, action: ActionKind): string {
+  if (action === 'melee' && slot !== 'reserve') return attackForecast(state, player, slot, 'melee', slot)
+  return `expect ${about(expectedArmy(state, player, slot, action).total)} ${action}`
 }
 
 export interface Prompt {
@@ -301,6 +336,7 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         choices: [
           ...pending.legal.map((action) => ({
             label: action[0]!.toUpperCase() + action.slice(1),
+            detail: actionForecast(state, pending.player, pending.slot, action),
             action: { kind: 'choose_action', action } as GameAction,
           })),
           { label: 'No action', action: { kind: 'choose_action', action: null }, passive: true },
@@ -312,6 +348,9 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         question: 'Fire at which army?',
         choices: pending.options.map((slot) => ({
           label: label(slot),
+          ...(state.turn.marchingArmy === null
+            ? {}
+            : { detail: attackForecast(state, pending.player, state.turn.marchingArmy, 'missile', slot) }),
           action: { kind: 'choose_missile_target', slot } as GameAction,
         })),
       }
@@ -320,7 +359,11 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
       return {
         question: 'Counter-attack?',
         choices: [
-          { label: 'Counter-attack', action: { kind: 'choose_counter_attack', counter: true } },
+          {
+            label: 'Counter-attack',
+            detail: attackForecast(state, pending.player, pending.slot, 'melee', pending.slot, true),
+            action: { kind: 'choose_counter_attack', counter: true },
+          },
           { label: 'Decline', action: { kind: 'choose_counter_attack', counter: false }, passive: true },
         ],
       }
@@ -1132,6 +1175,30 @@ export function effectsOnArmy(
   }
 
   return out
+}
+
+/** An effect as the board draws it: identical ones counted, not listed (v2 Phase 3b). */
+export interface EffectChip extends ArmyEffect {
+  readonly count: number
+}
+
+/**
+ * Effects as chips, one per distinct effect, with a count.
+ *
+ * Eight spells on one army used to be eight lines, which on a phone held sideways is
+ * most of the screen (Phase 3a). Identical means the same source, the same arithmetic
+ * and the same end, so two Stone Skins cast on different turns stay two chips: they
+ * run out at different times, and that is a difference you plan against. In the order
+ * each first appears.
+ */
+export function effectChips(effects: readonly ArmyEffect[]): readonly EffectChip[] {
+  const chips = new Map<string, EffectChip>()
+  for (const effect of effects) {
+    const key = JSON.stringify([effect.source, effect.what, effect.until])
+    const seen = chips.get(key)
+    chips.set(key, seen === undefined ? { ...effect, count: 1 } : { ...seen, count: seen.count + 1 })
+  }
+  return [...chips.values()]
 }
 
 /**

@@ -46,6 +46,7 @@ import { DragonFaceArt } from './FaceArt'
 import { ElementDots, speciesInfo } from './Elements'
 import { Glyph, type GlyphName } from './Glyph'
 import {
+  effectChips,
   effectsOnArmy,
   effectsOnTerrain,
   selectableAt,
@@ -183,24 +184,26 @@ function strength(units: readonly { typeId: string }[]) {
 }
 
 /**
- * The dragons at a terrain.
+ * The dragons at a terrain, or in a Summoning Pool.
  *
  * Its own row between the terrain head and the two armies, because a dragon belongs
  * to neither: it attacks the marching player's army whoever brought it, its own
  * summoner included. Rendering it inside an `ArmySide` would say the opposite.
  *
- * Whose pool it came from is still worth showing -- it decides who rolls it, and it
- * is the only thing distinguishing two dragons standing in the same place.
+ * **A dragon is a die like the units, so it draws as one** (v2 Phase 3b): a square
+ * tile, since every unit is a square -- a d12 outline is the plan for the day units are
+ * not. It used to be a pill with "(yours)" or "(enemy)" in it. The pill was too small to
+ * read at a glance, and the owner is the one fact about a dragon that changes nothing in
+ * play, so it moved to the inspector. What stays on the tile is what decides a fight:
+ * the element (the tint, and the band), and whether it is a drake or a wyrm.
  */
 export function DragonRow({
   dragons,
-  human,
   inspecting,
   onInspect,
   inPool = false,
 }: {
   dragons: readonly DragonInPlay[]
-  human: PlayerId
   inspecting: string | null
   onInspect: (id: string | null) => void
   /** A Summoning Pool rather than a terrain (Phase 9e): it attacks nobody from there. */
@@ -212,38 +215,32 @@ export function DragonRow({
       {dragons.map((dragon) => {
         const die = dragonDie(dragon.dieId)
         const isOpen = inspecting === dragon.id
-        const label = `${dragonName(dragon.dieId)} — ${
-          dragon.owner === human ? 'yours' : "the enemy's"
-        }${inPool ? ', waiting to be summoned' : ', and it attacks whoever is marching'}`
+        const label = `${dragonName(dragon.dieId)}${
+          inPool ? ', waiting to be summoned' : ', and it attacks whoever is marching'
+        }`
         return (
-          <div className={`dragon-wrap ${isOpen ? 'is-open' : ''}`} key={dragon.id}>
-            <button
-              type="button"
-              // `dragon-el-`, not `el-`: `.el-<element>` is the element *dot*, and
-              // it paints a background.
-              className={`dragon-chip dragon-el-${die.element} ${isOpen ? 'is-open' : ''}`}
-              onClick={() => onInspect(isOpen ? null : dragon.id)}
-              title={`${label} — tap to see every face`}
-              aria-label={label}
-              aria-expanded={isOpen}
-            >
-              {/* Its Jaws face -- the real one, the heaviest thing a dragon can
-                  roll, standing for the die the way an ID face stands for a unit.
-                  `floor={0}` because this is a label rather than a face to read,
-                  and it falls back to our glyph with no art fetched. */}
-              <DragonFaceArt
-                dieId={dragon.dieId}
-                face={jawsFace(dragon.dieId)}
-                icon="JAWS"
-                size={18}
-                floor={0}
-              />
-              {dragonName(dragon.dieId)}
-              {!inPool && (
-                <span className="muted">{dragon.owner === human ? ' (yours)' : ' (enemy)'}</span>
-              )}
-            </button>
-          </div>
+          <button
+            key={dragon.id}
+            type="button"
+            // `dragon-el-`, not `el-`: `.el-<element>` is the element *dot*, and it
+            // paints a background.
+            className={`dragon-tile dragon-el-${die.element} ${isOpen ? 'is-open' : ''}`}
+            onClick={() => onInspect(isOpen ? null : dragon.id)}
+            title={`${label} — tap to see every face`}
+            aria-label={label}
+            aria-expanded={isOpen}
+          >
+            <span className="dragon-form">{die.form === 'wyrm' ? 'WY' : 'DR'}</span>
+            {/* Its Jaws face stands for the die, the way an ID face stands for a unit.
+                Falls back to our glyph with no art fetched. */}
+            <DragonFaceArt
+              dieId={dragon.dieId}
+              face={jawsFace(dragon.dieId)}
+              icon="JAWS"
+              size={30}
+            />
+            <span className="dragon-band" aria-hidden="true" />
+          </button>
         )
       })}
     </div>
@@ -251,14 +248,16 @@ export function DragonRow({
 }
 
 /** Every face of a dragon die and what kills it, for the floating inspector (9e). */
-export function DragonDetail({ dieId }: { dieId: string }) {
+export function DragonDetail({ dragon, human }: { dragon: DragonInPlay; human: PlayerId }) {
+  const dieId = dragon.dieId
   const die = dragonDie(dieId)
   return (
     <>
       <p className="detail-head">
         <b>{dragonName(dieId)}</b>
         <span className="muted">
-          {DRAGON_HEALTH} health · {DRAGON_AUTOMATIC_SAVES} automatic saves · d12
+          {dragon.owner === human ? 'yours' : "the enemy's"} · {DRAGON_HEALTH} health ·{' '}
+          {DRAGON_AUTOMATIC_SAVES} automatic saves · d12
         </span>
         <ElementDots elements={[die.element]} />
       </p>
@@ -316,19 +315,32 @@ function jawsFace(dieId: string): DragonFaceNumber {
 type Species = readonly NonNullable<ReturnType<typeof speciesInfo>>[]
 
 /**
- * Effects with a duration, as one line each: the source, what it does, and when it ends.
- * Shared by an army's heading and the DUA in the Fallen section, so an effect reads the
- * same wherever it sits.
+ * Effects with a duration, as chips: the source and what it does, counted when the
+ * same one sits there twice, with when it ends on hover (v2 Phase 3b). Shared by an
+ * army's heading, a terrain and the DUA in the Fallen section, so an effect reads the
+ * same wherever it sits. `place` marks a terrain's, which belongs to neither army.
  */
-export function EffectList({ effects }: { effects: readonly ArmyEffect[] }) {
+export function EffectList({
+  effects,
+  place = false,
+}: {
+  effects: readonly ArmyEffect[]
+  place?: boolean
+}) {
   if (effects.length === 0) return null
   return (
-    <ul className="army-effects">
-      {effects.map((effect, i) => (
-        <li key={`${effect.source}-${i}`}>
-          <b>{effect.source}</b>
-          {effect.what !== '' && <> {effect.what}</>}
-          <span className="muted"> &middot; until {effect.until}</span>
+    <ul className={place ? 'effect-chips is-place' : 'effect-chips'}>
+      {effectChips(effects).map((chip) => (
+        <li
+          key={`${chip.source}|${chip.what}|${chip.until}`}
+          className="effect-chip"
+          title={`${chip.source}${chip.count > 1 ? ` ×${chip.count}` : ''}: ${chip.what} — until ${chip.until}`}
+        >
+          <b>
+            {chip.source}
+            {chip.count > 1 && <> &times;{chip.count}</>}
+          </b>
+          {chip.what !== '' && <> {chip.what}</>}
         </li>
       ))}
     </ul>
@@ -526,21 +538,10 @@ export function Board({
                 subtracts from both sides' rolls here and Wall of Fog wards the place
                 against missile fire from anywhere. Drawing it inside an `ArmySide`
                 would say it belonged to that army, which is the opposite of the rule. */}
-            {terrainEffects.length > 0 && (
-              <ul className="army-effects terrain-effects">
-                {terrainEffects.map((effect, i) => (
-                  <li key={`${effect.source}-${i}`}>
-                    <b>{effect.source}</b>
-                    {effect.what !== '' && <> {effect.what}</>}
-                    <span className="muted"> &middot; until {effect.until}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <EffectList effects={terrainEffects} place />
 
             <DragonRow
               dragons={dragonsAt(state, slot)}
-              human={human}
               inspecting={inspecting}
               onInspect={onInspect}
             />

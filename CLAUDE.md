@@ -146,6 +146,12 @@ the dice and the opponent.
 > laptop and phone frames. The landscape board is the phone's layout; identical dice stack when a
 > terrain is crowded; the reserves get their own row. The decisions are under *What 3a found* in
 > `PLAN-V2.md`, and 3b-3d build from them.
+>
+> **v2 Phase 3b has landed: the schematic pass.** A type scale on `:root` (eight steps where the
+> sheet had grown twenty-three), class shapes as the no-art tile, a species band on every tile,
+> dragons as square tiles with no owner on the board, effects as counted chips, the log as a one-line
+> ticker, and a forecast from `estimate.ts` on every attack button. UI only: the engine, the goldens
+> and `SAVE_VERSION` did not move.
 
 ## Read these first
 
@@ -1078,11 +1084,21 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   to be the green button.
 - **Muted text inside a button takes the button's colour** (`.choice .muted`). It was grey on the
   accent green: a spell's cost you could barely read.
-- **An effect with a duration is drawn on the army it sits on** (`.army-effects`, from
+- **An effect with a duration is drawn on the army it sits on** (`EffectList`, from
   `effectsOnArmy`). It is the one thing on the board that is true *between* rolls, and it used to be
   invisible: a Galeforced army saved at minus four with the arithmetic only in a log line that had
   already scrolled away. The modifiers are rendered as arithmetic (`−4 save, −4 maneuver`) rather
   than named, because the name tells you which SAI and the number is what you can plan against.
+  - **They are chips, counted** (v2 Phase 3b, `effectChips` in `prompts.ts`): "Stone Skin ×3 +1
+    save", with when it ends on hover. Eight lines of spells were most of a phone screen.
+    **Identical means source, arithmetic *and* end**, so two Stone Skins that run out on different
+    turns stay two chips -- a difference you plan against. A terrain's effects are dashed chips
+    (`place`), on neither army.
+- **An attack button says what it is expected to come to** (v2 Phase 3b, `Choice.detail`): "expect
+  ≈6, they save ≈3" on Melee, a missile target and a counter-attack; "expect ≈4 missile" and
+  "≈4 magic" where the target is not chosen yet. Read off `estimate.ts` -- the one place faces
+  become numbers -- so it is a display of the estimator, never a second calculation, and
+  `plainLabel` gives it to a screen reader too.
 - **`effectSummary`'s callback is annotated `: string`, and that is load-bearing.** Without it a
   missing `case` returns `undefined`, `join` renders it as nothing, and the roll strip draws
   "Flame — " with an empty half-sentence -- which is what every targeting SAI did from Phase 4b
@@ -1099,6 +1115,14 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **A selection is a draft answer to one question** — `App` clears it whenever `pending` changes.
 - **Glyphs are ours** (`Glyph.tsx`), stroked in `currentColor` on a 24x24 grid, so colour and dark
   mode come from CSS and no glyph needs a second variant.
+  - **`ClassShape` is one shape per class line** (v2 Phase 3b): a block HM, a diamond LM, a
+    triangle MI, a chevron CA, a circle MA, and a hexagon for a monster, which has no class. Its
+    codes are the badge's (`ClassCode`), so a shape and its letters cannot disagree. It is **the
+    tile with no art**, and nothing else yet: with art the corner keeps its letters, which are
+    exact for someone who does not know the shapes. Revisit with the new unit icons.
+- **Sizes come from the type scale** (v2 Phase 3b): `--fs-2xs` to `--fs-3xl` on `:root`. The sheet
+  had grown twenty-three font sizes, most a hair apart. A new rule picks a step rather than a
+  number, so the art pass changes values and not components.
 - **Real face art is used where it is big enough to read**, via `FaceArt` / `useFaceArt`: the die
   inspector and the terrain sheet at 44px, the roll strip at 30px, terrain chips at 28px. Below
   about 30px it is worse than a glyph — measured, not assumed — so small sizes stay glyphs.
@@ -1107,9 +1131,9 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     mean a union at every call site to say which kind of die this is. Its manifest key is the
     dragon *form*, since the art carries no element — all five drakes print the same twelve
     images, checked against the live set rather than assumed.
-  - **Its 30px floor is a default, and the board chip overrides it with `floor={0}`.** At 18px the
-    Jaws mark there is a *label* saying which die is standing at the terrain, not a face to read —
-    the same job an ID face does for a unit tile.
+  - **Its 30px floor is a default.** The dragon tile draws its Jaws face at 30px, the floor
+    itself, standing for the die the way an ID face stands for a unit. (The pill it replaced drew
+    it at 18px with `floor={0}`, as a label.)
   - **Dragon art is white line work and must be tinted**, unlike the black unit art: it is drawn
     for a dark die, so untinted it is white on a white panel. `.dragon-face-art` takes the same
     `brightness(0)` the terrain art does, for the mirror-image reason. It shipped once as blank
@@ -1149,9 +1173,14 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 
 - **A dragon is drawn on its terrain, on neither side** (`.dragon-row`, between the terrain head
   and the two `ArmySide`s). It attacks the marching player's army whoever brought it, so rendering
-  it inside an army would say the opposite. The chip is tinted by element, because the element is
-  the one thing that decides who it will fight; tapping it opens all twelve faces with their
-  counts and rules text, the same gesture a unit tile uses.
+  it inside an army would say the opposite. Tapping it opens all twelve faces with their counts and
+  rules text, the same gesture a unit tile uses.
+  - **It is a die, so it draws as a square tile** (`.dragon-tile`, v2 Phase 3b), 60px, a large
+    unit's side: tinted and banded by element -- the one thing that decides who it will fight --
+    with DR or WY where a unit shows its class. A d12 outline is for the day unit tiles stop being
+    squares. It replaced a pill too small to read.
+  - **The board does not say whose it is.** A dragon behaves the same whoever brought it, so the
+    owner is in the inspector ("yours · 5 health · …"), which is why `Inspector` takes `human`.
 - **A dragon roll is one log line per dragon, never one per face.** It began as a flat list and
   read "Fire Wyrm breath, Fire Wyrm breath, Fire Wyrm tail, Fire Wyrm claw, Earth Drake tail,
   Earth Drake claw" — the name six times, no target, no total, and no sign that four of those
@@ -1181,7 +1210,7 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     `selectMode` is null everywhere, so every tap inspects. The selection draft is left exactly
     as it was. It is cleared, like every draft, when `pending` changes.
 - **Everything off the board is on screen** (Phase 9e): a Reserves section with *both* Reserve
-  Armies, and both Summoning Pools as dragon chips (`DragonRow`'s `inPool`). The enemy's reserve
+  Armies, and both Summoning Pools as dragon tiles (`DragonRow`'s `inPool`). The enemy's reserve
   used to appear only while an SAI was aimed at it, and the pools nowhere. So a Reserve Army able
   to march and cast, and the dragons a Summon Dragon could bring out, were invisible.
 - **A tile is identified by its ID face, not its name, and the whole tile is the die.** The button
@@ -1216,10 +1245,15 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     No health: size *is* health here (small 1, medium 2, large 3, monster 4, across all 40), so
     printing both says it twice. The corner digit stays, where it does arithmetic during damage.
   - **The name still has to reach assistive tech**, so `aria-label` carries the same line.
-  - **Without art every ID face draws the same glyph**, which would make the tiles
-    indistinguishable — so when `useFaceArt` has no URL the tile falls back to the *name* and its
-    original row shape, not to a glyph. Check that path by moving `public/faces/manifest.json`
-    aside; it is the fresh-clone experience and invariant 8 depends on it.
+  - **Without art the tile draws its class shape** (v2 Phase 3b), not a generic ID glyph, which
+    would make every tile the same. Class and size pick out one die of a species and the band says
+    which species, so the tile stays square; a monster's hexagon carries the first two letters of
+    its name, since all five of a species share the shape. It replaced a fallback to the *name* in
+    a row-shaped tile. Check the path by moving `public/faces/manifest.json` aside; it is the
+    fresh-clone experience and invariant 8 depends on it.
+  - **Every tile has a species band** along its bottom edge: the species' two elements, half each.
+    It is the one fact about a die its ID face does not carry, and in a mixed army the one that
+    matters. The health digit sits above it.
   - **`.die-portrait` is a plain `<img>`, not `FaceArt`**, so it must be named explicitly in the
     dark-mode invert rule beside `.face-art`. Miss it and the portraits go dark on dark.
 - **A terrain is inspected from the focus heading**, the same gesture a unit tile uses, opening
@@ -1242,12 +1276,22 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     units wherever they stand" (a retreat); a damage assignment names one terrain and must leave
     the other two alone. While only one terrain was on screen, "selectable" and "selectable
     *here*" were the same question and the distinction did not exist.
-- **The log is newest-first and sits below the board**, full width, inside the one page scroller
-  (`.page`). It had its own column beside the board, which giving every terrain its dice left no
-  width for. Newest-first replaced an auto-scroll that had to pin after every commit, again when
-  late art changed the height, and again when the grid row resolved: the entry you want is now
-  where an unscrolled pane already is. It is reversed in JS, not with
-  `flex-direction: column-reverse`, so DOM order matches visual order for a screen reader.
+- **The log is a one-line ticker above the decision** (`LogTicker`, v2 Phase 3b), collapsed by
+  default, and opens on a tap. Opened, it is newest-first below the board, inside the one page
+  scroller (`.page`).
+  - **The ticker line is `LogLine`'s own output, cut down by CSS**: a roll keeps its heading and
+    its outcome and drops its dice. There is no second summary of forty entry kinds, so the ticker
+    and the log cannot describe one entry two ways. `logShows` names the two kinds `LogLine` draws
+    as nothing, and a comment ties the two lists together.
+  - **Opening scrolls to it, on the tap only.** A log this viewer left open last time does not
+    yank the page down on load.
+  - **Open or closed is a preference** (`prefs.ts`), kept per viewer and wrapped like every
+    `localStorage` access. It is apart from `storage.ts` on purpose: that is the dormant save
+    format, whose version means replay correctness, and a preference needs no version.
+  - Newest-first replaced an auto-scroll that had to pin after every commit, again when late art
+    changed the height, and again when the grid row resolved: the entry you want is where an
+    unscrolled pane already is. It is reversed in JS, not with `flex-direction: column-reverse`, so
+    DOM order matches visual order for a screen reader.
 - **Elements are shown, not just stored.** `ElementDots` renders the species and terrain elements
   that have been in the data since transcription. Inert under `magic: 'simplified'`; since Phase 7
   they are what an army's magic may be spent as, so the dots are now a thing you plan against

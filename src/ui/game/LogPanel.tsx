@@ -954,6 +954,7 @@ export function LogLine({
           to its Summoning Pool
         </p>
       )
+    // `logShows` names these two: keep the lists in step.
     case 'game_start':
     case 'terrain_placed':
       return null
@@ -981,6 +982,49 @@ function answerPhrase(answer: DragonAnswer): string {
 function dragonLabel(state: GameState, dragonId: string): string {
   const dragon = state.dragons[dragonId]
   return dragon === undefined ? dragonId : dragonName(dragon.dieId)
+}
+
+/**
+ * Whether `LogLine` draws anything for this entry. The two kinds it renders as `null`,
+ * named here so the ticker can skip them rather than showing a blank line.
+ */
+export function logShows(entry: LogEntry): boolean {
+  return entry.kind !== 'game_start' && entry.kind !== 'terrain_placed'
+}
+
+/**
+ * The log, collapsed to one line (v2 Phase 3b): the newest entry, and a button that
+ * opens the whole thing.
+ *
+ * The log is still the record of what happened; it just stopped taking half the page.
+ * The line is drawn by `LogLine`, the log's own renderer, cut to one line by CSS --
+ * a roll keeps its heading and its outcome and drops its dice -- so the ticker and the
+ * log cannot describe one entry two ways. What happened since your last decision, in
+ * full, is 3c's roll panel; this is only the latest thing.
+ */
+export function LogTicker({
+  state,
+  human,
+  open,
+  onToggle,
+}: {
+  state: GameState
+  human: PlayerId
+  open: boolean
+  onToggle: () => void
+}) {
+  const shown = state.log.filter(logShows)
+  const latest = shown[shown.length - 1]
+  return (
+    <div className="log-ticker">
+      <div className="log-ticker-line">
+        {latest !== undefined && <LogLine entry={latest} state={state} human={human} />}
+      </div>
+      <button type="button" className="log-toggle" onClick={onToggle} aria-expanded={open}>
+        {open ? 'Hide log' : `Log · ${shown.length}`}
+      </button>
+    </div>
+  )
 }
 
 export function LogPanel({ state, human }: { state: GameState; human: PlayerId }) {

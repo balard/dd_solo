@@ -9,7 +9,7 @@
  * forced rather than tidy: `GameView` holds hooks for the selection and inspection
  * drafts, so the phase check cannot be an early return inside it.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { unitType } from '../data/load'
 import {
@@ -28,7 +28,8 @@ import { ActionBar } from './game/ActionBar'
 import { Board, DragonRow, EffectList } from './game/Board'
 import { DiceGrid } from './game/DiceGrid'
 import { speciesInfo } from './game/Elements'
-import { LogPanel } from './game/LogPanel'
+import { LogPanel, LogTicker } from './game/LogPanel'
+import { readFlag, writeFlag } from './game/prefs'
 import {
   effectsOnPlayer,
   focusedSlot,
@@ -94,6 +95,24 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // here -- a unit or dragon id, and a terrain -- and opening one never closed the other.
   const [inspect, setInspect] = useState<InspectTarget | null>(null)
   const [showFallen, setShowFallen] = useState(false)
+  // The log is a one-line ticker until it is asked for (v2 Phase 3b), and stays the way
+  // this viewer last left it. Reading a preference has no side effect, so the initializer
+  // may do it even though StrictMode runs it twice.
+  const [logOpen, setLogOpen] = useState(() => readFlag('logOpen', false))
+  const logRef = useRef<HTMLDivElement>(null)
+  const toggleLog = () => {
+    const open = !logOpen
+    writeFlag('logOpen', open)
+    setLogOpen(open)
+    // Opening the log scrolls to it: it sits at the foot of the page, below everything
+    // the button is not. After the frame that mounts it, and only on the tap -- a log
+    // left open last time does not yank the page down on load.
+    if (open) {
+      requestAnimationFrame(() =>
+        logRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+      )
+    }
+  }
   // "Look at dice" (Phase 9e): while a decision is selecting dice, a tap inspects instead
   // of selecting -- and the selection draft stays exactly as it was.
   const [looking, setLooking] = useState(false)
@@ -393,13 +412,13 @@ function GameView({ game }: { readonly game: PlayingGame }) {
                 {theirPool.length === 0 ? (
                   <p className="empty">empty</p>
                 ) : (
-                  <DragonRow dragons={theirPool} human={human} inspecting={inspecting} onInspect={onInspect} inPool />
+                  <DragonRow dragons={theirPool} inspecting={inspecting} onInspect={onInspect} inPool />
                 )}
                 <p className="fallen-side muted">Yours</p>
                 {myPool.length === 0 ? (
                   <p className="empty">empty</p>
                 ) : (
-                  <DragonRow dragons={myPool} human={human} inspecting={inspecting} onInspect={onInspect} inPool />
+                  <DragonRow dragons={myPool} inspecting={inspecting} onInspect={onInspect} inPool />
                 )}
               </>
             )}
@@ -489,8 +508,14 @@ function GameView({ game }: { readonly game: PlayingGame }) {
 
         )}
 
-        <LogPanel state={state} human={human} />
+        {logOpen && (
+          <div ref={logRef}>
+            <LogPanel state={state} human={human} />
+          </div>
+        )}
       </main>
+
+      <LogTicker state={state} human={human} open={logOpen} onToggle={toggleLog} />
 
       <ActionBar
         state={state}
@@ -524,7 +549,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
         onInspect={onInspect}
       />
 
-      {inspect !== null && <Inspector target={inspect} state={state} onClose={closeInspector} />}
+      {inspect !== null && <Inspector target={inspect} state={state} human={human} onClose={closeInspector} />}
 
     </div>
   )

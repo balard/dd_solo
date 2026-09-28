@@ -19,6 +19,7 @@ import {
 
 import {
   damageSelection,
+  effectChips,
   effectsOnArmy,
   effectsOnPlayer,
   cityAnswer,
@@ -214,6 +215,32 @@ fresh(),
 fresh(),
 )
     expect(prompt.choices.map((c) => c.label)).toEqual(['Melee', 'No action'])
+  })
+
+  /**
+   * v2 Phase 3b: a button says what the answer is expected to come to, from the
+   * estimator. Melee names both rolls, since its target is the army facing you; the
+   * number is `estimate.ts`'s, rounded, and the screen reader hears it too.
+   */
+  it('forecasts an attack on its button, both rolls for melee', () => {
+    const state = fresh()
+    const prompt = promptFor(
+      { kind: 'choose_action', player: 'p1', slot: 'frontier', legal: ['melee', 'missile', 'magic'] },
+      'p1',
+      state,
+    )
+    const [melee, missile, magic] = prompt.choices
+    expect(melee?.detail).toMatch(/^expect ≈\d+, they save ≈\d+$/)
+    expect(missile?.detail).toMatch(/^expect ≈\d+ missile$/)
+    expect(magic?.detail).toMatch(/^expect ≈\d+ magic$/)
+    expect(prompt.choices.at(-1)?.detail).toBeUndefined()
+    expect(plainLabel(melee!)).toBe(`Melee (${melee?.detail})`)
+  })
+
+  it('forecasts a counter-attack, and not declining one', () => {
+    const prompt = promptFor({ kind: 'choose_counter_attack', player: 'p2', slot: 'frontier' }, 'p2', fresh())
+    expect(prompt.choices[0]?.detail).toMatch(/^expect ≈\d+, they save ≈\d+$/)
+    expect(prompt.choices[1]?.detail).toBeUndefined()
   })
 
   it('says so plainly when there is nothing to do', () => {
@@ -1181,5 +1208,24 @@ describe('the retreat question', () => {
       state,
     )
     expect(flying.question).toMatch(/Air Flight/)
+  })
+})
+
+describe('effectChips', () => {
+  const galeforce = { source: 'Galeforce', what: '−4 save, −4 maneuver', until: 'your next turn' }
+  const stoneSkin = { source: 'Stone Skin', what: '+1 save', until: "the enemy's next turn" }
+
+  it('counts identical effects instead of listing them, in first-seen order', () => {
+    const chips = effectChips([stoneSkin, galeforce, stoneSkin, stoneSkin])
+    expect(chips.map((c) => [c.source, c.count])).toEqual([
+      ['Stone Skin', 3],
+      ['Galeforce', 1],
+    ])
+  })
+
+  /** Two of one spell that end at different times are two things to plan against. */
+  it('keeps effects apart when they end at different times', () => {
+    const later = { ...stoneSkin, until: 'your next turn' }
+    expect(effectChips([stoneSkin, later])).toHaveLength(2)
   })
 })

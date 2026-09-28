@@ -1434,6 +1434,7 @@ function SaiHeader({
           >
             <ChoiceLabel label={choice.label} faces={choice.faces ?? []} />
             {choice.elements !== undefined && <ElementDots elements={choice.elements} />}
+            {choice.detail !== undefined && <span className="muted choice-detail">{choice.detail}</span>}
           </button>
         ))}
       </div>

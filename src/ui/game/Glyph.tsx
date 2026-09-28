@@ -156,6 +156,81 @@ export function Glyph({ name, size = 20 }: { name: GlyphName; size?: number }) {
   )
 }
 
+/**
+ * One shape per class line (v2 Phase 3b), and a hexagon for a monster, which has none.
+ *
+ * The badge codes are `DiceGrid`'s, so a shape and its letters always agree. The
+ * shapes are what a die draws when there is no art for it, and they are why a fresh
+ * clone's tiles are square dice rather than rows of names: class and size together pick
+ * out one die of a species, and the element band says which species. Phase 3a tried
+ * them as a size tier for crowded terrains too, and dropped that: at 22px they read
+ * only because the mockups had no real icons to lose.
+ */
+export type ClassCode = 'HM' | 'LM' | 'MI' | 'CA' | 'MA' | 'MO'
+
+const CLASS_PATHS: Record<ClassCode, JSX.Element> = {
+  // Heavy melee: a block.
+  HM: <rect x="5" y="5" width="14" height="14" rx="1.5" />,
+  // Light melee: a diamond, the block turned onto its point.
+  LM: <polygon points="12,3 21,12 12,21 3,12" />,
+  // Missile: a triangle, pointing where it shoots.
+  MI: <polygon points="12,3.5 21,19.5 3,19.5" />,
+  // Cavalry: a chevron, moving.
+  CA: <polygon points="4,5 14,5 20.5,12 14,19 4,19 10,12" />,
+  // Magic: a circle.
+  MA: <circle cx="12" cy="12" r="8.2" />,
+  // A monster: a hexagon, the one shape no class line uses.
+  MO: <polygon points="12,2.5 20.5,7.2 20.5,16.8 12,21.5 3.5,16.8 3.5,7.2" />,
+}
+
+/**
+ * A class shape, filled faintly with `fill` (an element colour) and stroked in
+ * `currentColor`. `mark` is drawn inside it: a monster's hexagon carries the first two
+ * letters of its name, since every monster of a species shares the one shape.
+ */
+export function ClassShape({
+  code,
+  size = 20,
+  fill,
+  mark,
+}: {
+  code: ClassCode
+  size?: number
+  fill?: string
+  mark?: string
+}) {
+  return (
+    <svg
+      className={`class-shape class-${code}`}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={fill ?? 'none'}
+      fillOpacity={fill === undefined ? undefined : 0.24}
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {CLASS_PATHS[code]}
+      {mark !== undefined && (
+        <text
+          x="12"
+          y="15.2"
+          textAnchor="middle"
+          fontSize="8.5"
+          fontWeight="700"
+          fill="currentColor"
+          fillOpacity="1"
+          stroke="none"
+        >
+          {mark}
+        </text>
+      )}
+    </svg>
+  )
+}
+
 /** A rolled face: its glyph plus how many icons it carries. */
 export function FaceGlyph({ face, size = 20 }: { face: Face; size?: number }) {
   const ruleSet = useRuleSet()

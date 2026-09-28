@@ -12,7 +12,7 @@
  */
 import { useEffect } from 'react'
 
-import type { GameState, TerrainSlot, UnitId } from '../../engine/types'
+import type { GameState, PlayerId, TerrainSlot, UnitId } from '../../engine/types'
 
 import { DragonDetail, TerrainDetail } from './Board'
 import { UnitDetail } from './DiceGrid'
@@ -25,10 +25,14 @@ export type InspectTarget =
 export function Inspector({
   target,
   state,
+  human,
   onClose,
 }: {
   target: InspectTarget
   state: GameState
+  /** Whose dragon it is reads "yours" or "the enemy's" (v2 Phase 3b): the board stopped
+   *  saying, so the inspector is where it is asked. */
+  human: PlayerId
   onClose: () => void
 }) {
   useEffect(() => {
@@ -47,7 +51,7 @@ export function Inspector({
       }
       case 'dragon': {
         const dragon = state.dragons[target.id]
-        return dragon === undefined ? null : <DragonDetail dieId={dragon.dieId} />
+        return dragon === undefined ? null : <DragonDetail dragon={dragon} human={human} />
       }
       case 'terrain':
         return <TerrainDetail terrain={state.terrains[target.slot]} />

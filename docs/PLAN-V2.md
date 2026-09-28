@@ -8,7 +8,7 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0, 1 and 2 have landed, and so has slice 3a**, each with its findings below;
+of work*. **Phases 0, 1 and 2 have landed, and so have slices 3a and 3b**, each with its findings below;
 the rest is still a draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
@@ -507,7 +507,7 @@ real art can drop in later without a layout change.
 | Slice | Scope |
 |---|---|
 | **3a** | Mockups before code: both layouts at 12, 24 and 36 health — **landed** |
-| **3b** | The schematic pass: tokens, shapes, the log out of the way |
+| **3b** | The schematic pass: tokens, shapes, the log out of the way — **landed** |
 | **3c** | The roll presentation |
 | **3d** | The landscape board: the phone's layout, alongside on wide screens, with stacks and a reserves row |
 | **3e** | Playtest tools: concede, turn count, clock, end-of-game summary |
@@ -611,7 +611,7 @@ eighth face move to the inspector. Together these were worth about 80px of a 390
 - **Phones held upright were measured for comparison only.** Landscape is not meant for them, and
   today's board stays their layout.
 
-### 3b — The schematic pass
+### 3b — The schematic pass — **landed**
 
 - **Design tokens**: element colours (now five, with Death), shapes for class lines, a type scale.
   One `:root` of tokens, so the art pass later changes values, not components. The shapes are 3a's
@@ -626,6 +626,68 @@ eighth face move to the inspector. Together these were worth about 80px of a 390
 - **More functionality where it is cheap**: expected results on a pending attack ("expect about 6,
   they save about 3"), from `estimate.ts`, which exists and is the one place faces become numbers.
   This is a display of the estimator, not a new calculation.
+
+### What 3b found
+
+UI only. The engine, both golden corpora and `SAVE_VERSION` did not move, and no test outside
+`src/ui` changed.
+
+**1. The class shapes are the tile with no art, and with art they are not visible.** They shipped
+as `ClassShape` in `Glyph.tsx` and are what a die draws when the manifest has no face for it: a
+fresh clone, or a face `npm run art` could not resolve. That retired the old fallback, a row-shaped
+tile with the die's name in it, so a tile is now always a square die.
+- **A monster's hexagon carries two letters of its name.** Class and size pick out one die of a
+  species, except among monsters, where all five of a species share the hexagon.
+- **With art, the corner keeps its letters (HM, MO).** Putting the shape there instead was
+  considered and left alone. The letters are exact for someone who does not know the shapes yet,
+  and the new unit icons are the moment to decide what the corner says.
+
+**2. The species band is the change you see with art.** Every tile has a thin strip along the
+bottom in its species' two element colours. It is the one fact about a die its ID face does not
+carry, and in a mixed army the one that matters. The health digit moved up to clear it.
+
+**3. Twenty-three font sizes became eight.** `--fs-2xs` to `--fs-3xl` on `:root`. Each size moved
+by a hair at most, so nothing visibly changed. The gain is for the art pass: a rule now picks a step,
+not a number, so one value changes and not twenty rules.
+
+**4. Dragons are square tiles, and the owner went to the inspector** (3a finding 7). The tile is
+60px, a large unit's side, tinted and banded by element, with DR or WY where a unit shows its class.
+The inspector says "yours" or "the enemy's", so `Inspector` gained a `human` prop. The d12 outline
+waits for the day unit tiles stop being squares, which nothing in this plan brings.
+
+**5. Chips count what is identical, and "identical" includes when it ends.** `effectChips` groups by
+source, arithmetic *and* expiry, so two Stone Skins cast on different turns stay two chips: they run
+out at different times, and that is a difference you plan against.
+
+**6. The ticker is the log's own renderer, cut by CSS.** A plain-text summary of each entry would
+have been a second description of some forty entry kinds, the thing the log and the decision sheet
+were made to share `LogLine` to avoid. Instead the ticker draws the newest `LogLine`, and CSS keeps a
+roll's heading and outcome on one line and drops its dice. `logShows` names the two kinds `LogLine`
+draws as nothing, and a comment at each end ties the lists together.
+- **Opening the log scrolls to it on the tap, never on load.** The first draft scrolled whenever
+  the log was open, which would have yanked the page down for anyone who left it open last time.
+- **The open state is a preference, in a new `prefs.ts`**, not in `storage.ts`. That file is the
+  dormant save format, whose version means replay correctness; a preference needs no version.
+
+**7. Forecasts are `Choice.detail`, from `estimate.ts`.** Melee, a missile target and a
+counter-attack show both rolls ("expect ≈6, they save ≈3"). The Missile and Magic *action* buttons
+show the attack alone, because the target is not chosen yet. `plainLabel` gives the forecast to
+screen readers too.
+
+**8. What would have shipped silently: NUL bytes in the source.** The chip key's separator was
+written into `prompts.ts` as real NUL characters by the script that made the edit. `tsc`, the whole
+suite and the running app were all fine with it. The only tool that noticed was `grep`, which
+started calling the file binary, and a file `grep` cannot read is a file the next search misses. The
+key is `JSON.stringify` of its parts now.
+
+**Deliberately not done.**
+- **The larger ID face moved to 3d.** Stacking is what frees the width (3a finding 3), so a bigger
+  portrait now would be sized twice.
+- **No DOM test of the ticker or the tiles.** By the project's rule the logic is in pure functions
+  (`effectChips`, the forecasts, `logShows`), and those are what is tested. The tiles, the no-art
+  path, the ticker and dark mode were checked by eye in the running app.
+- **The forecast is not on the contest-a-maneuver prompt.** `contestOdds` exists, but it is a
+  chance of winning, not an expected roll, and it deserves its own wording.
 
 ### 3c — The roll presentation
 
@@ -658,6 +720,7 @@ the rest (see *What 3a found*):
   no owner (finding 7).
 - **Stacks of identical dice when a terrain is crowded**, at today's size and at most one step down
   to Compact (findings 3 and 4). A stack is a view over `armyAt`, and a targeting view unstacks it.
+- **The ID face larger**, moved here from 3b: stacking is what frees the room for it.
 - **`Board` renders from the same data either way.** `selectableAt`, `pickModeFor` and
   `tapMeaning` do not know the layout, and must not start knowing it.
 - **Side-facing art later means one drawing per unit, mirrored for the enemy.** Nothing to build
