@@ -8,8 +8,8 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0, 1 and 2 have landed** and carry their findings below; the rest is still a
-draft, with predictions where V1 has findings.
+of work*. **Phases 0, 1 and 2 have landed, and so has slice 3a**, each with its findings below;
+the rest is still a draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
 collection, win dice, dragons and terrains, and raise the force cap to 24 and then 36 at set
@@ -506,13 +506,13 @@ real art can drop in later without a layout change.
 
 | Slice | Scope |
 |---|---|
-| **3a** | Mockups before code: both layouts at 12, 24 and 36 health |
+| **3a** | Mockups before code: both layouts at 12, 24 and 36 health — **landed** |
 | **3b** | The schematic pass: tokens, shapes, the log out of the way |
 | **3c** | The roll presentation |
-| **3d** | The landscape board, alongside |
+| **3d** | The landscape board: the phone's layout, alongside on wide screens, with stacks and a reserves row |
 | **3e** | Playtest tools: concede, turn count, clock, end-of-game summary |
 
-### 3a — Mockups first
+### 3a — Mockups first — **landed**
 
 The open question is **density**: can three terrains side by side, each with two armies facing
 each other, hold a 36-health game on a laptop, or on a phone held sideways? That is answered
@@ -523,10 +523,100 @@ fastest by static mockups with real dice counts, not by building the layout and 
 - **Decide 3d's scope from these.** If landscape fails at 36 health, it is still worth having at
   12 and 24, which is what the roguelike's early game plays.
 
+### What 3a found
+
+The mockups are one page, `docs/mockups/phase-3a.html`. It draws both layouts at real pixel sizes,
+from the real dice and today's `TILE_SIZE`, and measures how far the board runs past the bottom of
+the screen. There are four sets of armies (mid-game, all small, setup worst, pile-up) at 12, 24 and
+36 health, and four screens: a laptop (1366×680, a 768px screen less the browser's bars), a desktop
+(1920×960), a phone held sideways (844×390, the installed app) and a phone upright. A table on the
+page holds every combination. It took three rounds of review, and most of what follows came from
+the second and third.
+
+**1. Density is a phone problem, not a laptop one.** At today's tile sizes both layouts fit every
+case on a laptop and a desktop, including the 36-health setup worst case. A phone held sideways is
+under 900px wide, so today's board stacks the three terrains into one column. That needs two to
+four screens of scrolling in every case, even with every tile at its smallest. The landscape board
+fits there. So **landscape is the phone's layout**, and on a laptop it is a matter of taste: the
+"alongside, a toggle" decision stands for wide screens, and a phone held sideways should open on
+landscape.
+
+**2. The plan's worst case was the worst *setup*, not the worst board.** The enemy's Horde at your
+home puts 34 dice there at 36 health. In play every die can end at one terrain: both whole forces,
+72 small dice, every dragon, and a pile of spells, three on each army and two on the place. The
+mockups carry both (*Setup worst* and *Pile-up*), and every rule below was tested against the
+pile-up.
+
+**3. Stacking identical dice beats shrinking them.** Identical dice become one tile with ×N on its
+corner, which costs barely more width than one die. With stacks, the 36-health pile-up fits a laptop
+at today's size and a phone sideways at Compact, 44px, the tap-target floor. The bare-shape tier it
+replaced was 22-32px and still over. A stack reads well enough to go *bigger* than today's tile, not
+smaller.
+- **Identical means the same type in the same state.** A sleeping die is its own tile, and so is a
+  die under any effect aimed at that one unit (`effects.ts` has unit targets). The effect follows
+  that die, not its twins.
+- **A decision that needs one die from a stack unstacks it** in its targeting view: damage, a
+  retreat, "a unit in this army". The engine still receives unit ids. Identical dice are
+  interchangeable, so which of the stack's ids a count selects does not matter. This is a client
+  rule, and `selectableAt`, `pickModeFor` and `tapMeaning` do not learn about stacks.
+- **Roll strips never stack.** Each die rolled its own face, and showing that is the strip's job.
+
+**4. The rule is today's size, stacked when crowded, and at most one step down.** The mockup
+measured the ladder Today → Today stacked → Compact stacked, which never goes under 44px:
+- A laptop fits all twelve cases.
+- A phone sideways fits all but one set of armies, a varied mid-game force: +13px at 24 health and
+  +127px at 36.
+- That force has few twins, so stacking gains it little. The overflow is accepted as a short scroll
+  rather than bought back with tiles under the tap target.
+
+**5. Bare class shapes are not a size tier.** They read at 22-32px in the mockups only because the
+mockups have no real icons, and a detailed icon at that size is lost. Visibility at small sizes is
+part of why better unit icons than the ones printed on the dice are wanted at all. The shapes stay:
+they are 3b's class-line token (square HM, diamond LM, triangle MI, chevron CA, circle MA, hexagon
+for a monster, which has no class) and what a die draws with no art.
+
+**6. Who owns a terrain goes on the owner's side of the die.** A die in the middle of the row reads
+as neutral, which a Home Terrain is not. A tag on the owner's side says so: solid toward you,
+outlined toward the enemy. It reads *HOME* for a Home Terrain and *HELD* for a captured eighth face,
+which also gives the die a double border.
+
+**7. Dragons: drop the owner, keep the twelve sides.** A dragon behaves the same whoever brought it,
+so ownership moves to the inspector. On the board a dragon draws in the units' shape, a square while
+every unit is a square, and a dodecahedron where the units are not, because a d12 is what sets a
+dragon apart. It keeps its element colour and drake or wyrm. The first mockup's pill was too small
+to read.
+
+**8. The reserves need a row, and what is off the board needs only a count.** A Reserve Army
+marches most turns, so it gets a fourth row laid out like a terrain. The DUA, the BUA and the
+Summoning Pool are counts at each side's outer edge of that row ("DUA 3 · BUA 1 · Pool 1") and open
+on a tap. The side rail the first round had is gone, and its width went back to the dice.
+
+**9. Effects are counted chips.** Eight active spells as eight lines is most of a phone screen. As
+chips (*Stone Skin ×3 +3 save*) they are two lines, with the duration in the tooltip. A terrain
+effect is a dashed chip across its row, on neither army, as `Board.tsx` already reasons.
+
+**10. On a phone sideways every line of chrome counts.** The header and the log ticker share one
+line. The terrain column holds the die, the slot's name and the health on each side, and the type and
+eighth face move to the inspector. Together these were worth about 80px of a 390px screen.
+
+**Deliberately not done.**
+- **No code.** Nothing in `src/` moved. The mockup is static HTML with its own renderer, not a
+  component, and nothing in it is meant to be lifted into the app.
+- **The mockup still shows the round-3 drawing** of two things the last review changed: dragons as
+  diamonds with an owner caption (finding 7), and bare shapes on the Auto ladder (finding 5). The
+  page records what was measured. The findings are the decisions, and redrawing the page would
+  have measured nothing new.
+- **Art density was not measured.** The mockups draw our own glyphs, never SFR's art (invariant 8
+  holds for `docs/` too). A real ID face at today's size is what the app already shows.
+- **Phones held upright were measured for comparison only.** Landscape is not meant for them, and
+  today's board stays their layout.
+
 ### 3b — The schematic pass
 
 - **Design tokens**: element colours (now five, with Death), shapes for class lines, a type scale.
-  One `:root` of tokens, so the art pass later changes values, not components.
+  One `:root` of tokens, so the art pass later changes values, not components. The shapes are 3a's
+  (finding 5), and a dragon's is a square or a dodecahedron (finding 7).
+- **Effects as counted chips** (3a finding 9), in both layouts.
 - **The ID face as the die's identity, larger.** It is the digital-native move from the direction
   dialogue: a die on the board always shows its ID, which a table die cannot. Today's tiles already
   lean this way; the pass makes it the rule.
@@ -557,10 +647,17 @@ pipeline's own order ("roll, then SAIs, then totals", as today).
 ### 3d — The landscape board
 
 Three rows, one per terrain: **your army on the left, the terrain die in the middle, the enemy on
-the right**, so the armies face each other the way the art wants to eventually. Reserves, DUA and
-summoning pools go to the side rails or a drawer.
-- **Alongside, not instead**: a toggle, remembered per viewer, and `?layout=landscape`, which
-  joins the link parameters `parseGameRequest` already reads.
+the right**, so the armies face each other the way the art wants to eventually. 3a settled most of
+the rest (see *What 3a found*):
+- **The phone's layout, and alongside on wide screens** (finding 1). A phone held sideways opens
+  on it. Elsewhere it is a toggle, remembered per viewer, and `?layout=landscape`, which joins the
+  link parameters `parseGameRequest` already reads.
+- **A fourth row for the Reserve Armies**, with the DUA, BUA and Summoning Pool as counts at its
+  outer edges that open on a tap (finding 8).
+- **Ownership tags on the owner's side of the terrain die** (finding 6), and dragons under it with
+  no owner (finding 7).
+- **Stacks of identical dice when a terrain is crowded**, at today's size and at most one step down
+  to Compact (findings 3 and 4). A stack is a view over `armyAt`, and a targeting view unstacks it.
 - **`Board` renders from the same data either way.** `selectableAt`, `pickModeFor` and
   `tapMeaning` do not know the layout, and must not start knowing it.
 - **Side-facing art later means one drawing per unit, mirrored for the enemy.** Nothing to build
@@ -797,8 +894,9 @@ phase's *b* slice is where to find out, before any SAI is built on top.
 test of the rules than it was of v1's. Re-run greedy against passive after each species, as v1's
 notes say, to catch a scorer that has started to stall games.
 
-**The landscape board may not fit a 36-health game.** That is what 3a is for, and it is why the
-board is an option and not a replacement.
+**The landscape board may not fit a 36-health game.** Answered by 3a: it fits once identical dice
+stack. The risk that is left is a varied force of few twins on a phone held sideways, which scrolls
+a little rather than shrinking its tiles under the tap target.
 
 ---
 

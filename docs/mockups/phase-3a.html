@@ -1,0 +1,1024 @@
+<title>Board Density Mockups</title>
+<style>
+/*
+ * v2 Phase 3a: static mockups before code. The tokens are the app's own
+ * (src/ui/index.css), so the frames look like the board they are testing and the
+ * page around them does too.
+ */
+:root {
+  --bg: #fbfaf8;
+  --panel: #ffffff;
+  --sunk: #f2efea;
+  --fg: #1d1c1a;
+  --muted: #6b6762;
+  --line: #e2ded8;
+  --accent: #2f6f4f;
+  --accent-fg: #ffffff;
+  --bezel: #2b2a2e;
+
+  --melee: #b4401f;
+  --missile: #1f6f4a;
+  --magic: #5b3fa8;
+  --save: #2a5c8f;
+  --maneuver: #8a6a15;
+
+  --el-air: #5b8dd6;
+  --el-water: #2f9c77;
+  --el-earth: #c9a227;
+  --el-fire: #d1552f;
+  --el-death: #5a5560;
+
+  --ok: #2f6f4f;
+  --warn: #9a6a00;
+  --bad: #b4401f;
+  --ok-bg: #e5f1ea;
+  --warn-bg: #f8eed6;
+  --bad-bg: #f7e3dc;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16151a; --panel: #201e26; --sunk: #1a181f; --fg: #ece9e4; --muted: #9b958c;
+    --line: #322f3a; --accent: #4f9d74; --accent-fg: #0d1a13; --bezel: #050507;
+    --melee: #f0866a; --missile: #6fc99a; --magic: #b39ef0; --save: #7bb3e8; --maneuver: #d9b955;
+    --el-air: #7fb0f0; --el-water: #54c69c; --el-earth: #e0c04c; --el-fire: #f0805a; --el-death: #8b8496;
+    --ok: #6fc99a; --warn: #e0b64c; --bad: #f0866a;
+    --ok-bg: #1d3328; --warn-bg: #3a3018; --bad-bg: #3d231c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #16151a; --panel: #201e26; --sunk: #1a181f; --fg: #ece9e4; --muted: #9b958c;
+  --line: #322f3a; --accent: #4f9d74; --accent-fg: #0d1a13; --bezel: #050507;
+  --melee: #f0866a; --missile: #6fc99a; --magic: #b39ef0; --save: #7bb3e8; --maneuver: #d9b955;
+  --el-air: #7fb0f0; --el-water: #54c69c; --el-earth: #e0c04c; --el-fire: #f0805a; --el-death: #8b8496;
+  --ok: #6fc99a; --warn: #e0b64c; --bad: #f0866a;
+  --ok-bg: #1d3328; --warn-bg: #3a3018; --bad-bg: #3d231c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.wrap { max-width: 1400px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: 1.35rem; margin: 0 0 4px; text-wrap: balance; }
+h2 { font-size: 1.02rem; margin: 0 0 8px; text-wrap: balance; }
+.lede { margin: 0 0 18px; color: var(--muted); max-width: 72ch; font-size: .92rem; }
+.muted { color: var(--muted); }
+
+/* --- controls ------------------------------------------------------------- */
+.controls {
+  display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: flex-end;
+  padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  margin-bottom: 14px;
+}
+.control { display: grid; gap: 4px; justify-items: start; }
+.control > span { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label {
+  padding: 5px 10px; font-size: .82rem; cursor: pointer; border-right: 1px solid var(--line);
+  background: var(--panel); white-space: nowrap;
+}
+.seg label:last-of-type { border-right: none; }
+.seg input:checked + label { background: var(--accent); color: var(--accent-fg); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -3px; }
+
+/* --- the verdict above a frame ------------------------------------------- */
+.verdict { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin: 0 0 8px; font-size: .88rem; }
+.pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-weight: 600; font-size: .8rem; font-variant-numeric: tabular-nums; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+
+/* --- device frame ---------------------------------------------------------- */
+.stage { position: relative; overflow: hidden; margin-bottom: 26px; }
+.device {
+  position: absolute; top: 0; left: 0; transform-origin: top left;
+  border: 10px solid var(--bezel); border-radius: 14px; background: var(--bg);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 14%);
+}
+.device.phone { border-radius: 26px; border-width: 12px; }
+.screen { position: relative; overflow: hidden; background: var(--bg); }
+.more {
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 5;
+  background: var(--bad); color: #fff; font-size: 12px; font-weight: 700; padding: 3px 10px;
+  border-radius: 999px; pointer-events: none; white-space: nowrap;
+}
+
+/* --- matrix ----------------------------------------------------------------- */
+.matrix-wrap { overflow-x: auto; margin-bottom: 26px; }
+table.matrix { border-collapse: collapse; font-size: .8rem; min-width: 980px; }
+.matrix th, .matrix td { border: 1px solid var(--line); padding: 4px 6px; text-align: center; font-variant-numeric: tabular-nums; }
+.matrix th { background: var(--sunk); font-weight: 600; }
+.matrix th.row { text-align: left; white-space: nowrap; }
+.matrix td { background: var(--panel); cursor: pointer; line-height: 1.25; }
+.matrix td small { display: block; font-size: .68rem; opacity: .8; }
+.matrix td:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+.matrix td.cur { outline: 2px solid var(--fg); outline-offset: -2px; }
+.matrix td.ok { color: var(--ok); background: var(--ok-bg); }
+.matrix td.warn { color: var(--warn); background: var(--warn-bg); }
+.matrix td.bad { color: var(--bad); background: var(--bad-bg); }
+
+.notes { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.notes section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.notes ul { margin: 0; padding-left: 18px; font-size: .86rem; }
+.notes li { margin-bottom: 4px; }
+.legend-shapes { display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: .82rem; margin-top: 6px; }
+.legend-shapes span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ==========================================================================
+   The mockup app. Everything below is inside a frame, at real pixel sizes.
+   ========================================================================== */
+.m-app { display: flex; flex-direction: column; height: 100%; font-size: 15px; }
+.m-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.m-head h3 { margin: 0; font-size: 1.05rem; }
+.m-head .sub { margin: 0; font-size: .78rem; color: var(--muted); }
+.m-btn {
+  font: inherit; font-size: .8rem; padding: 5px 11px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--fg); white-space: nowrap;
+}
+.m-btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.m-btn .x { opacity: .8; font-size: .72rem; margin-left: 5px; }
+.m-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.m-ticker {
+  flex: none; font-size: .78rem; color: var(--muted); padding: 4px 0; border-top: 1px solid var(--line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.m-ticker b { color: var(--fg); font-weight: 600; }
+.m-dock { flex: none; background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -6px 20px rgb(0 0 0 / 7%); }
+.m-q { margin: 0; font-size: .92rem; }
+.m-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.m-strip { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.m-rolldie {
+  width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel);
+  display: grid; place-items: center; font-size: 11px; font-weight: 700;
+}
+.m-rolldie.blank { opacity: .35; }
+.m-rollmath { font-size: .78rem; color: var(--muted); }
+
+/* A die tile: the class badge and health in the corners, the class shape in the
+   middle, and the species' two elements as a band along the bottom. */
+.m-dice { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 5px; }
+.m-die {
+  position: relative; flex: none; border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
+  display: grid; place-items: center; overflow: hidden;
+}
+.m-die svg { display: block; }
+.m-die .b { position: absolute; top: 2px; left: 3px; font-size: 9px; font-weight: 700; letter-spacing: .02em; line-height: 1; }
+.m-die .h { position: absolute; bottom: 5px; right: 4px; font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.m-die .band { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; display: flex; }
+.m-die .band i { flex: 1; }
+.m-die.enemy { background: var(--sunk); }
+.m-die.asleep { border-style: dashed; opacity: .5; }
+/* The shape tier: the class shape alone, sized by health. What a crowded terrain
+   falls back to, and the reason the shapes exist. */
+.m-dice.shapes { gap: 3px; }
+.m-die.shape { border: none; border-radius: 3px; background: none; overflow: visible; }
+.m-die.shape .band { height: 2px; bottom: -3px; }
+.m-die.shape.asleep { outline: 1px dashed var(--muted); }
+/* A stack: the tile with a second edge behind it and the count on its corner. The
+   count sits on the tile rather than beside it, so a stack costs little more width
+   than one die and the grid keeps its rhythm. */
+.m-dice.stacked { gap: 9px 10px; padding-top: 4px; }
+.stack { position: relative; flex: none; display: grid; }
+.stack::before {
+  content: ''; position: absolute; inset: 0; transform: translate(3px, -3px);
+  border: 1px solid var(--line); border-radius: 6px; background: var(--sunk);
+}
+.stack > .m-die { position: relative; }
+.stack .xn {
+  position: absolute; top: -7px; right: -9px; z-index: 2; font-size: 10px; font-weight: 800; line-height: 1;
+  padding: 2px 4px; border-radius: 999px; background: var(--fg); color: var(--bg); font-variant-numeric: tabular-nums;
+}
+.stack.small::before { border-radius: 3px; }
+.stack.small .xn { font-size: 9px; padding: 1px 3px; top: -6px; right: -8px; }
+
+.el-air { background: var(--el-air); } .el-water { background: var(--el-water); }
+.el-earth { background: var(--el-earth); } .el-fire { background: var(--el-fire); }
+.el-death { background: var(--el-death); }
+.dots { display: inline-flex; gap: 2px; vertical-align: middle; margin-left: 3px; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+.m-face {
+  flex: none; display: grid; place-items: center; border: 1.5px solid var(--fg); border-radius: 7px;
+  background: var(--panel); font-weight: 800; position: relative; align-content: center;
+}
+.m-face .n { font-size: 16px; line-height: 1; }
+.m-face .a { font-size: 8px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+.m-face.eighth { border-style: double; border-width: 3px; }
+.m-face.eighth .a { color: var(--magic); font-size: 7px; }
+.a-MELEE { color: var(--melee); } .a-MISSILE { color: var(--missile); } .a-MAGIC { color: var(--magic); }
+
+.m-dragon {
+  display: inline-flex; align-items: center; gap: 4px; border: 1px solid currentColor; border-radius: 999px;
+  padding: 1px 7px 1px 5px; font-size: .72rem; line-height: 1.5; white-space: nowrap; background: var(--panel);
+}
+.m-dragon i { width: 8px; height: 8px; border-radius: 2px; transform: rotate(45deg); display: inline-block; }
+.dr-air { color: var(--el-air); } .dr-water { color: var(--el-water); } .dr-earth { color: var(--el-earth); }
+.dr-fire { color: var(--el-fire); }
+.m-effect { font-size: .72rem; line-height: 1.45; border-left: 2px solid var(--magic); padding-left: 6px; }
+
+/* Effects as chips: one per spell, counted, so eight of them are two lines and not eight. */
+.chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.chip {
+  font-size: 10.5px; line-height: 1.55; padding: 0 6px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--line); background: var(--panel);
+}
+.chip b { font-weight: 700; }
+.chip.up b { color: var(--ok); }
+.chip.down b { color: var(--bad); }
+.chip.place { border-style: dashed; }
+
+/* --- today's layout (Board.tsx): three cards, Enemy above Yours ------------ */
+.cur .m-app { padding: 10px 12px 0; }
+.cur .m-head { margin-bottom: 10px; }
+.cur .m-scroll { margin-top: 4px; }
+.cur .m-board { display: grid; gap: 10px; }
+.cur.wide .m-board { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+.cur .m-card { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 7px; padding: 7px 10px 9px; }
+.cur .m-card.focus { border-left-color: var(--accent); background: var(--sunk); }
+.cur .m-cardhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; font-size: .88rem; }
+.cur .m-cardhead .t { font-weight: 400; color: var(--muted); font-size: .8rem; }
+.cur .m-cardhead .m-face { width: 34px; height: 34px; }
+.cur .m-army { margin-top: 8px; }
+.cur .m-army h4 { margin: 0 0 4px; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.cur .m-army h4 .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.cur .m-dragons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.cur .m-off { margin-top: 12px; font-size: .8rem; }
+.cur .m-off h4 { margin: 8px 0 3px; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
+.cur .m-dock { margin-inline: -12px; padding: 12px 12px 12px; display: grid; gap: 9px; }
+.cur .m-maxw { max-width: 1080px; margin: 0 auto; width: 100%; height: 100%; }
+
+/* --- the landscape board (3d): rows, yours | terrain | theirs ------------- */
+.land .m-app { padding: 6px 10px 0; }
+.land .m-head { margin-bottom: 6px; }
+.land .m-head h3 { font-size: .95rem; }
+.land .m-head.small { gap: 8px; margin-bottom: 4px; }
+.land .m-head.small .turn { font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.land .m-head.small .m-ticker { flex: 1; min-width: 0; border-top: none; padding: 0; }
+.land .m-head.small .m-btn { padding: 2px 9px; }
+.land .m-rows { display: grid; gap: 6px; align-content: start; }
+.land .m-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) var(--mid) minmax(0, 1fr); gap: 4px 8px; align-items: center;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px;
+}
+.land .m-row.focus { background: var(--sunk); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.land .m-row .tfx { grid-column: 1 / -1; justify-content: center; }
+.land .m-row.reserve { background: transparent; border-style: dashed; }
+.land .m-side { display: grid; gap: 3px; min-width: 0; }
+.land .m-side.mine { justify-items: end; }
+.land .m-side.mine .m-dice, .land .m-side.mine .chips { justify-content: flex-end; }
+.land .m-mid { display: grid; justify-items: center; gap: 2px; text-align: center; }
+.land .m-mid .slot { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.land .m-mid .t { font-size: .68rem; color: var(--muted); line-height: 1.2; }
+.land .m-mid .str { font-size: .68rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.land .m-mid .compact { display: flex; gap: 6px; align-items: center; text-align: left; }
+.land .m-mid .compact > span:last-child { display: grid; }
+.land .m-dock { margin-inline: -10px; padding: 7px 10px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.land .m-dock .m-q { flex: 1 1 220px; }
+.land .m-dock .m-strip { flex-basis: 100%; }
+
+/* Who a terrain belongs to, or who holds it, is marked on *that player's side* of the
+   die: a solid tag toward you, an outlined one toward the enemy. The die itself stays
+   in the middle, which is where it sits on a table. */
+.facewrap { display: inline-flex; align-items: stretch; gap: 2px; }
+.tag {
+  writing-mode: vertical-rl; transform: rotate(180deg); font-size: 8px; font-weight: 800; letter-spacing: .1em;
+  padding: 3px 1px; border-radius: 3px; text-align: center; width: 13px; line-height: 11px;
+}
+.tag.you { background: var(--fg); color: var(--bg); }
+.tag.them { border: 1.5px solid var(--fg); color: var(--fg); }
+.tag.none { visibility: hidden; }
+
+/* A dragon as a token rather than a pill: a diamond in its element's colour, drake or
+   wyrm on it, and whose pool it came from underneath. */
+.dtoks { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
+.dtok { display: grid; justify-items: center; gap: 0; font-size: 9px; line-height: 1.1; color: var(--muted); }
+.dtok svg { display: block; }
+
+/* The reserve row: the counts of what is off the board sit at each side's outer edge. */
+.resline { display: flex; align-items: flex-end; gap: 8px; width: 100%; }
+.resline .m-dice { flex: 1; min-width: 0; }
+.count {
+  flex: none; font-size: 10.5px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px;
+  background: var(--panel); white-space: nowrap; line-height: 1.4; font-variant-numeric: tabular-nums;
+}
+.count b { font-weight: 700; }
+</style>
+
+<div class="wrap">
+  <h1>Board density mockups</h1>
+  <p class="lede">
+    v2 Phase 3a, second round. Each frame is drawn at its real pixel size and scaled down to fit this
+    page, using the real dice and the app's real tile sizes. The number above a frame is how far the
+    board (three terrains and the reserves) runs past the bottom of the screen. With tile size on
+    <b>Auto</b>, each terrain steps its dice down a size until the board fits, ending at bare class
+    shapes.
+  </p>
+
+  <form class="controls" id="controls" onsubmit="return false">
+    <div class="control"><span>Layout</span><div class="seg" id="c-layout"></div></div>
+    <div class="control"><span>Force health (each side)</span><div class="seg" id="c-health"></div></div>
+    <div class="control"><span>Armies</span><div class="seg" id="c-scen"></div></div>
+    <div class="control"><span>Screen</span><div class="seg" id="c-screen"></div></div>
+    <div class="control"><span>Tile size</span><div class="seg" id="c-tiles"></div></div>
+    <div class="control"><span>Group identical dice</span><div class="seg" id="c-group"></div></div>
+    <div class="control"><span>Decision on screen</span><div class="seg" id="c-dock"></div></div>
+  </form>
+
+  <p class="verdict" id="verdict"></p>
+  <div class="stage" id="stage"></div>
+
+  <h2>Every combination, at the tile size and decision chosen above</h2>
+  <p class="lede" style="margin-bottom:10px">
+    How much of the board is below the bottom of the screen. Green fits, amber needs under a
+    quarter-screen of scrolling, red needs more. On Auto, the small line says the smallest size any
+    terrain had to take. Click a cell to open it above.
+  </p>
+  <div class="matrix-wrap"><table class="matrix" id="matrix"></table></div>
+
+  <div class="notes">
+    <section>
+      <h2>What the armies are</h2>
+      <ul>
+        <li><b>Mid-game</b>: a mix of sizes, a few dice in each Reserve Army, some dead in the DUA,
+          the Frontier held by you and one enemy dragon summoned there. At 12 health the force is
+          <code>data/forces/mixed-12.json</code>, so your side is mixed Treefolk and Firewalkers.</li>
+        <li><b>All small</b>: setup, every die a 1-health small, three equal armies.</li>
+        <li><b>Setup worst</b>: all small, Home and Horde at the half-force cap and a 2-die Campaign.
+          The enemy's Horde is at your Home: 34 dice there at 36 health.</li>
+        <li><b>Pile-up</b>: both whole forces, all small, at the Frontier. Impossible at setup and
+          possible in play: 72 dice in one terrain at 36 health. Every dragon is there, two of your
+          dice are asleep, and eight spells are active: three on each army and two on the place.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>The landscape board</h2>
+      <ul>
+        <li>One row per terrain: your army left, the terrain die in the middle, the enemy right,
+          both packed toward the die.</li>
+        <li><b>Ownership sits on the owner's side of the die</b>: a solid tag on your side, an
+          outlined one on the enemy's. <i>HOME</i> for a Home Terrain, <i>HELD</i> for a captured
+          eighth face, which also draws the die with a double border.</li>
+        <li><b>A fourth row for the Reserve Armies</b>, laid out the same way, since a Reserve Army
+          marches most turns.</li>
+        <li><b>The DUA, the BUA and the Summoning Pool are counts</b> at each side's outer edge of the
+          reserve row, and open on a tap. The side rail is gone.</li>
+        <li><b>Dragons are tokens</b> under the die, in the element's colour, D or W for drake or wyrm.</li>
+        <li><b>Effects are counted chips</b> over the army they sit on. A terrain effect gets a dashed
+          chip across the whole row.</li>
+        <li>The log is the one-line ticker from 3b in both layouts.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Tile sizes</h2>
+      <ul>
+        <li><b>Today</b> is <code>TILE_SIZE</code> (48/54/60/70), <b>Compact</b> keeps the 44px tap
+          target (44/46/50/56), <b>Tight</b> goes under it (36/38/42/48).</li>
+        <li><b>Shapes</b> drops the badge and the digit: the class shape alone, 22/25/28/32 by health,
+          so size still reads as health. At that size a tap needs a zoom step to pick one die.</li>
+        <li><b>Auto</b> starts every terrain at Today and steps down the tallest one at a time until
+          the board fits or everything is shapes. Both armies at one terrain share a size, so they
+          stay comparable.</li>
+        <li><b>Stacks</b>: identical dice become one tile with <i>×N</i> on its corner. Identical
+          means the same unit type in the same state: a sleeping die, or one under an effect aimed at
+          that unit, gets its own tile. <i>When crowded</i> puts stacking into Auto's ladder right after
+          Compact (Today → Compact → Compact stacked → Tight stacked → Shapes stacked), so it is tried
+          before any tile drops under the 44px tap target.</li>
+      </ul>
+      <div class="legend-shapes" id="legend"></div>
+    </section>
+    <section>
+      <h2>Screens</h2>
+      <ul>
+        <li><b>Laptop</b>: 1366 × 680, a 768-pixel screen less the browser's own bars.</li>
+        <li><b>Desktop</b>: 1920 × 960.</li>
+        <li><b>Phone sideways</b>: 844 × 390, the installed app on an iPhone 14-class phone. In a
+          browser tab it loses about 50 more.</li>
+        <li><b>Phone upright</b>: 390 × 844, for comparison. Landscape is not meant for it.</li>
+        <li><b>Today</b> is <code>Board.tsx</code> as it stands: three columns from 900px, stacked
+          below. Its reserves sit under the board and are measured as part of it.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+<div id="measure" aria-hidden="true" style="position:absolute;left:-20000px;top:0;visibility:hidden"></div>
+
+<script>
+// ---------------------------------------------------------------------------
+// The dice, from data/starter/units.json: species -> class line -> [small, medium, large, monster].
+// ---------------------------------------------------------------------------
+const ROSTER = {
+  treefolk: {
+    heavy_melee: ['Oakling', 'Oak', 'Oak Lord', 'Darktree'],
+    light_melee: ['Willowling', 'Willow', 'Noble Willow', 'Redwood'],
+    cavalry: ['Nymph', 'Naiad', 'Lady Nereid', 'Satyr'],
+    missile: ['Pineling', 'Pine', 'Pine Prince', 'Strangle Vine'],
+    magic: ['Hamadryad', 'Dryad', 'Eldar Dryad', 'Unicorn'],
+  },
+  firewalkers: {
+    heavy_melee: ['Guardian', 'Watcher', 'Sentinel', 'Fireshadow'],
+    light_melee: ['Explorer', 'Adventurer', 'Expeditioner', 'Genie'],
+    cavalry: ['Shadowchaser', 'Nightsbane', 'Daybringer', 'Gorgon'],
+    missile: ['Firestarter', 'Firemaster', 'Firestormer', 'Phoenix'],
+    magic: ['Sunburst', 'Sunflare', 'Ashbringer', 'Salamander'],
+  },
+}
+const SPECIES = {
+  treefolk: { name: 'Treefolk', elements: ['water', 'earth'] },
+  firewalkers: { name: 'Firewalkers', elements: ['air', 'fire'] },
+}
+const CLASSES = ['heavy_melee', 'light_melee', 'missile', 'cavalry', 'magic']
+const ABBR = { heavy_melee: 'HM', light_melee: 'LM', missile: 'MI', cavalry: 'CA', magic: 'MA' }
+const SIZE_NAME = ['small', 'medium', 'large', 'monster']
+
+// One shape per class line, and the hexagon for a monster, which has no class (CLAUDE.md: "MO").
+const SHAPES = {
+  HM: '<rect x="5" y="5" width="14" height="14" rx="1.5"/>',
+  LM: '<polygon points="12,3 21,12 12,21 3,12"/>',
+  MI: '<polygon points="12,3.5 21,19.5 3,19.5"/>',
+  CA: '<polygon points="4,5 14,5 20.5,12 14,19 4,19 10,12"/>',
+  MA: '<circle cx="12" cy="12" r="8.2"/>',
+  MO: '<polygon points="12,2.5 20.5,7.2 20.5,16.8 12,21.5 3.5,16.8 3.5,7.2"/>',
+}
+
+// Largest first: Auto steps down this list.
+const TIERS = [
+  { key: 'today', label: 'Today', tile: [48, 54, 60, 70], mark: [30, 34, 38, 46] },
+  { key: 'compact', label: 'Compact', tile: [44, 46, 50, 56], mark: [26, 28, 31, 36] },
+  { key: 'tight', label: 'Tight', tile: [36, 38, 42, 48], mark: [21, 23, 26, 30] },
+  { key: 'shapes', label: 'Shapes', tile: [22, 25, 28, 32], shape: true },
+]
+const TILE_OPTIONS = [['auto', 'Auto'], ...TIERS.map((t) => [t.key, t.label])]
+
+/**
+ * What Auto steps down through. Grouping "when crowded" comes in after Compact:
+ * stacking keeps the 44px tap target, so it is tried before any tile gets smaller
+ * than that, and once a terrain has stacked it stays stacked at smaller sizes.
+ */
+function ladder(group) {
+  const [today, compact, tight, shapes] = [0, 1, 2, 3]
+  if (group === 'never') return [today, compact, tight, shapes].map((tier) => ({ tier, group: false }))
+  if (group === 'always') return [today, compact, tight, shapes].map((tier) => ({ tier, group: true }))
+  return [
+    { tier: today, group: false }, { tier: compact, group: false },
+    { tier: compact, group: true }, { tier: tight, group: true }, { tier: shapes, group: true },
+  ]
+}
+const stepLabel = (step) => TIERS[step.tier].label.toLowerCase() + (step.group ? ', stacked' : '')
+const SCREENS = {
+  laptop: { label: 'Laptop', w: 1366, h: 680, phone: false },
+  desktop: { label: 'Desktop', w: 1920, h: 960, phone: false },
+  sideways: { label: 'Phone sideways', w: 844, h: 390, phone: true },
+  upright: { label: 'Phone upright', w: 390, h: 844, phone: true },
+}
+const LAYOUTS = { today: 'Today', landscape: 'Landscape' }
+const HEALTHS = [12, 24, 36]
+const SCENARIOS = { mid: 'Mid-game', small: 'All small', setup: 'Setup worst', pileup: 'Pile-up' }
+const GROUPS = { crowded: 'When crowded', always: 'Always', never: 'Never' }
+const DOCKS = { action: 'Choose an action', damage: 'Assign damage' }
+
+// ---------------------------------------------------------------------------
+// Forces. A die is { species, cls, size (1-4), asleep? }.
+// ---------------------------------------------------------------------------
+function die(species, cls, size) { return { species, cls, size } }
+
+/** Sizes into dice, walking the class lines so an army is not five of one die. */
+function army(species, sizes, offset) {
+  return sizes.map((size, i) => die(species, CLASSES[(i + offset) % 5], size))
+}
+
+// 12 health, mid-game: data/forces/mixed-12.json, die for die.
+const T = 'treefolk', F = 'firewalkers'
+const MIXED_12 = () => ({
+  you: {
+    home: [die(T, 'heavy_melee', 2), die(F, 'magic', 2), die(T, 'magic', 1)],
+    campaign: [die(F, 'light_melee', 2), die(T, 'missile', 2)],
+    horde: [die(T, 'cavalry', 1), die(F, 'cavalry', 1), die(T, 'heavy_melee', 1)],
+  },
+  them: {
+    home: [die(F, 'heavy_melee', 2), die(F, 'missile', 2), die(F, 'magic', 1)],
+    campaign: [die(F, 'cavalry', 2), die(F, 'light_melee', 1), die(F, 'missile', 1)],
+    horde: [die(F, 'heavy_melee', 1), die(F, 'cavalry', 1), die(F, 'light_melee', 1)],
+  },
+})
+const TYPICAL = {
+  24: {
+    you: { home: [3, 2, 2, 1], campaign: [4, 2, 1, 1], horde: [3, 2, 1, 1, 1] },
+    them: { home: [3, 3, 1, 1], campaign: [4, 2, 2], horde: [2, 2, 2, 1, 1] },
+  },
+  36: {
+    you: { home: [4, 3, 2, 2, 1], campaign: [3, 3, 2, 2, 1, 1], horde: [4, 2, 2, 2, 1, 1] },
+    them: { home: [3, 3, 3, 2, 1], campaign: [4, 2, 2, 1, 1, 1, 1], horde: [4, 3, 2, 1, 1, 1] },
+  },
+}
+const ones = (n) => Array(n).fill(1)
+
+function forces(health, scenario) {
+  if (scenario === 'mid' && health === 12) return MIXED_12()
+  const side = (species, off) => {
+    let sizes
+    if (scenario === 'mid') sizes = TYPICAL[health][species === T ? 'you' : 'them']
+    else if (scenario === 'small') sizes = { home: ones(health / 3), campaign: ones(health / 3), horde: ones(health / 3) }
+    else if (scenario === 'setup') sizes = { home: ones(health / 2 - 1), campaign: [1, 1], horde: ones(health / 2 - 1) }
+    else sizes = { home: [], campaign: ones(health), horde: [] }
+    return {
+      home: army(species, sizes.home, off),
+      campaign: army(species, sizes.campaign, off + 2),
+      horde: army(species, sizes.horde, off + 4),
+    }
+  }
+  return { you: side(T, 0), them: side(F, 1) }
+}
+
+// Real spells from data/spells.json and SAIs from sai.ts; `sign` colours the chip.
+const FX = {
+  stoneSkin: (n) => ({ name: 'Stone Skin', count: n, what: `+${n} save`, sign: 'up' }),
+  fiery: { name: 'Fiery Weapon', what: '+2 melee, +2 missile', sign: 'up' },
+  windWalk: { name: 'Wind Walk', what: '+4 maneuver', sign: 'up' },
+  galeforce: { name: 'Galeforce', what: '−4 save, −4 maneuver', sign: 'down' },
+  dancing: { name: 'Dancing Lights', what: '−6 melee', sign: 'down' },
+  mud: { name: 'Transmute Rock to Mud', what: '−6 maneuver', sign: 'down' },
+  ash: { name: 'Ash Storm', what: '−1 every roll here', sign: 'down' },
+  fog: { name: 'Wall of Fog', what: '−6 missile against it', sign: 'down' },
+}
+
+/**
+ * The board. Your home holds your Home army and their Horde; the Frontier both
+ * Campaigns; their home their Home army and your Horde.
+ */
+function board(health, scenario) {
+  const f = forces(health, scenario)
+  const nDragons = Math.ceil(health / 24)
+  const yourDragons = ['water_wyrm', 'earth_drake'].slice(0, nDragons)
+  const theirDragons = ['fire_drake', 'air_wyrm'].slice(0, nDragons)
+  const reserves = { you: [], them: [] }
+  const counts = { you: { dua: 0, bua: 0 }, them: { dua: 0, bua: 0 } }
+
+  const terrains = [
+    { key: 'home', slot: 'Your home', type: 'Swampland', eighth: 'Temple', elements: ['water', 'earth'],
+      face: 5, action: 'MELEE', owner: 'you', you: f.you.home, them: f.them.horde },
+    { key: 'frontier', slot: 'Frontier', type: 'Flatland', eighth: 'Standing Stones', elements: ['air', 'earth'],
+      face: 3, action: 'MISSILE', owner: null, you: f.you.campaign, them: f.them.campaign },
+    { key: 'enemy', slot: 'Enemy home', type: 'Wasteland', eighth: 'City', elements: ['air', 'fire'],
+      face: 6, action: 'MELEE', owner: 'them', you: f.you.horde, them: f.them.home },
+  ]
+  for (const t of terrains) Object.assign(t, { dragons: [], fxYou: [], fxThem: [], fxPlace: [], held: null })
+  const [home, frontier] = terrains
+  let pools = { you: yourDragons, them: theirDragons }
+
+  if (scenario === 'mid') {
+    const k = health === 12 ? 1 : 2
+    reserves.you = terrains[2].you.splice(-k)
+    reserves.them = frontier.them.splice(-k)
+    counts.you = { dua: health / 12 + 1, bua: 0 }
+    counts.them = { dua: health / 12 + 2, bua: health === 36 ? 1 : 0 }
+    frontier.held = 'you'
+    frontier.face = 8
+    frontier.dragons = [{ id: theirDragons[0], owner: 'them' }]
+    pools = { you: yourDragons, them: theirDragons.slice(1) }
+    home.fxThem = [FX.galeforce]
+    frontier.fxYou = [FX.stoneSkin(1)]
+  } else if (scenario === 'setup') {
+    home.dragons = [{ id: theirDragons[0], owner: 'them' }]
+    frontier.dragons = [{ id: yourDragons[0], owner: 'you' }]
+    pools = { you: yourDragons.slice(1), them: theirDragons.slice(1) }
+    home.fxThem = [FX.galeforce]
+    frontier.fxYou = [FX.stoneSkin(1)]
+  } else if (scenario === 'pileup') {
+    frontier.dragons = [
+      ...yourDragons.map((id) => ({ id, owner: 'you' })),
+      ...theirDragons.map((id) => ({ id, owner: 'them' })),
+    ]
+    pools = { you: [], them: [] }
+    frontier.fxYou = [FX.stoneSkin(3), FX.fiery, FX.windWalk]
+    frontier.fxThem = [FX.galeforce, FX.dancing, FX.mud]
+    frontier.fxPlace = [FX.ash, FX.fog]
+    frontier.you[3].asleep = true
+    frontier.you[8].asleep = true
+  }
+  return { terrains, reserves, counts, pools, health, scenario }
+}
+
+// ---------------------------------------------------------------------------
+// Rendering.
+// ---------------------------------------------------------------------------
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+const dots = (els) => `<span class="dots">${els.map((e) => `<i class="el-${e}"></i>`).join('')}</span>`
+const health = (dice) => dice.reduce((n, d) => n + d.size, 0)
+const strength = (dice) => `${dice.length}d / ${health(dice)}h`
+const DRAGON_NAME = (id) => id.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ')
+
+function speciesIn(dice) {
+  return [...new Set(dice.map((d) => d.species))].map((s) => SPECIES[s])
+}
+
+function tile(d, tier, enemy) {
+  const monster = d.size === 4
+  const badge = monster ? 'MO' : ABBR[d.cls]
+  const name = ROSTER[d.species][d.cls][d.size - 1]
+  const els = SPECIES[d.species].elements
+  const what = monster ? 'monster' : `${SIZE_NAME[d.size - 1]} ${d.cls.replace('_', ' ')}`
+  const title = `${esc(name)} — ${what}${d.asleep ? ' — asleep' : ''}`
+  const S = tier.tile[d.size - 1]
+  const band = `<span class="band">${els.map((e) => `<i class="el-${e}"></i>`).join('')}</span>`
+  if (tier.shape) {
+    return `<span class="m-die shape${d.asleep ? ' asleep' : ''}" style="width:${S}px;height:${S}px" title="${title}">
+      <svg width="${S}" height="${S}" viewBox="0 0 24 24" fill="var(--el-${els[0]})" fill-opacity="${enemy ? '.45' : '.2'}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round">${SHAPES[badge]}</svg>${band}</span>`
+  }
+  const M = tier.mark[d.size - 1]
+  return `<span class="m-die${enemy ? ' enemy' : ''}${d.asleep ? ' asleep' : ''}" style="width:${S}px;height:${S}px" title="${title}">
+    <span class="b">${badge}</span>
+    <svg width="${M}" height="${M}" viewBox="0 0 24 24" fill="var(--el-${els[0]})" fill-opacity=".22" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">${SHAPES[badge]}</svg>
+    <span class="h">${d.size}</span>${band}
+  </span>`
+}
+/**
+ * Identical dice as one tile with a count. Identical means the same unit type *and*
+ * the same state: a sleeping die, or one carrying any effect aimed at that one unit,
+ * is its own tile, because the effect follows that die and not its twins.
+ */
+function stacks(dice) {
+  const byKey = new Map()
+  for (const d of dice) {
+    const key = `${d.species}|${d.cls}|${d.size}|${d.asleep ? 'z' : ''}`
+    const seen = byKey.get(key)
+    if (seen) seen.n++
+    else byKey.set(key, { d, n: 1 })
+  }
+  return [...byKey.values()]
+}
+
+function stackTile(d, n, tier, enemy) {
+  const inner = tile(d, tier, enemy)
+  if (n === 1) return inner
+  return `<span class="stack${tier.shape ? ' small' : ''}" title="${n} × ${esc(ROSTER[d.species][d.cls][d.size - 1])}">${inner}<span class="xn">×${n}</span></span>`
+}
+
+const grid = (dice, tier, enemy, emptyText = '', group = false) =>
+  `<div class="m-dice${tier.shape ? ' shapes' : ''}${group ? ' stacked' : ''}">${
+    (group ? stacks(dice).map(({ d, n }) => stackTile(d, n, tier, enemy)) : dice.map((d) => tile(d, tier, enemy))).join('')
+    || (emptyText && `<span class="muted" style="font-size:.8rem">${emptyText}</span>`)}</div>`
+
+function face(t, size) {
+  const eighth = t.face === 8
+  return `<span class="m-face${eighth ? ' eighth' : ''}" style="width:${size}px;height:${size}px" title="${t.type} · ${t.eighth}${eighth ? ', captured' : ''}">
+    <span class="n">${t.face}</span><span class="a ${eighth ? '' : `a-${t.action}`}">${eighth ? t.eighth.split(' ')[0] : t.action.toLowerCase()}</span></span>`
+}
+
+/** The die between two tags, one per side: whichever side owns or holds it says so. */
+function faceWithTags(t, size) {
+  const tagFor = (side) => (t.held === side ? 'HELD' : t.owner === side ? 'HOME' : '')
+  const tag = (side) => {
+    const word = tagFor(side)
+    return `<span class="tag ${word ? side : 'none'}" style="height:${size}px">${word || '·'}</span>`
+  }
+  return `<span class="facewrap">${tag('you')}${face(t, size)}${tag('them')}</span>`
+}
+
+const dragonChip = (id, owner) =>
+  `<span class="m-dragon dr-${id.split('_')[0]}"><i style="background:currentColor"></i>${DRAGON_NAME(id)}${owner ? `<span class="muted">&nbsp;(${owner === 'you' ? 'yours' : 'enemy'})</span>` : ''}</span>`
+
+function dragonToken(d, size) {
+  const el = d.id.split('_')[0]
+  const letter = d.id.endsWith('wyrm') ? 'W' : 'D'
+  return `<span class="dtok" title="${DRAGON_NAME(d.id)} — ${d.owner === 'you' ? 'yours' : 'the enemy’s'}">
+    <svg width="${size}" height="${size}" viewBox="0 0 24 24">
+      <rect x="4.5" y="4.5" width="15" height="15" rx="2.5" transform="rotate(45 12 12)" fill="var(--el-${el})" stroke="var(--fg)" stroke-width="1.2"/>
+      <text x="12" y="15.6" text-anchor="middle" font-size="10" font-weight="800" fill="#fff" font-family="system-ui, sans-serif">${letter}</text>
+    </svg>${d.owner === 'you' ? 'yours' : 'enemy'}</span>`
+}
+
+const chips = (fx, extra = '') => fx.length === 0 ? '' :
+  `<div class="chips ${extra}">${fx.map((e) => `<span class="chip ${e.sign}${extra.includes('tfx') ? ' place' : ''}" title="until the caster’s next turn"><b>${e.name}${e.count > 1 ? ` ×${e.count}` : ''}</b> ${e.what}</span>`).join('')}</div>`
+const effectLines = (fx, until) => fx.map((e) => `<div class="m-effect"><b>${e.name}</b>${e.count > 1 ? ` ×${e.count}` : ''} ${e.what} <span class="muted">· until ${until}</span></div>`).join('')
+
+function dock(b, mode) {
+  if (mode === 'action') {
+    return `<div class="m-dock">
+      <p class="m-q"><b>Your march at the Frontier.</b> Choose an action.</p>
+      <div class="m-choices">
+        <span class="m-btn primary">Melee<span class="x">expect ~6, they save ~3</span></span>
+        <span class="m-btn">Magic</span><span class="m-btn">Pass</span>
+      </div>
+    </div>`
+  }
+  // The attack that just landed: every die of the biggest enemy army, on the roll strip.
+  const attackers = b.terrains.map((t) => t.them).sort((a, c) => c.length - a.length)[0]
+  const total = Math.round(health(attackers) * 0.66), dmg = Math.max(0, total - 4)
+  const faces = attackers.map((d, i) => `<span class="m-rolldie${i % 3 === 2 ? ' blank' : ''}">${i % 3 === 2 ? '' : d.size}</span>`).join('')
+  return `<div class="m-dock">
+    <div class="m-strip">${faces}<span class="m-rollmath">&nbsp; ${total} melee − 4 saves = ${dmg}</span></div>
+    <p class="m-q"><b>Assign ${dmg} damage</b> to your army there.</p>
+    <div class="m-choices"><span class="m-btn primary">Confirm</span><span class="m-btn">Look at dice</span></div>
+  </div>`
+}
+
+const TICKER = `<div class="m-ticker"><b>Latest:</b> the enemy’s Horde maneuvered at Your home, 9 vs 6 · Your home turned to face 5 (melee) · <span style="text-decoration:underline">show log</span></div>`
+
+/** `tiers` is one tier index per measured block: the three terrains, then the reserves. */
+function renderToday(b, opts, screen, tiers) {
+  const wide = screen.w >= 900
+  const cards = b.terrains.map((t, i) => {
+    const step = tiers[i], tier = TIERS[step.tier]
+    return `
+    <section class="m-card${i === 1 ? ' focus' : ''}" data-terrain data-idx="${i}">
+      <div class="m-cardhead"><span>${t.slot} <span class="t">${t.type} · ${t.eighth}</span>${dots(t.elements)}</span>${face(t, 34)}</div>
+      ${t.held ? `<div style="font-size:.72rem;color:var(--magic)">held by ${t.held === 'you' ? 'you' : 'the enemy'}</div>` : ''}
+      ${effectLines(t.fxPlace, 'the caster’s next turn')}
+      ${t.dragons.length ? `<div class="m-dragons">${t.dragons.map((d) => dragonChip(d.id, d.owner)).join('')}</div>` : ''}
+      <div class="m-army"><h4>Enemy ${speciesIn(t.them).map((s) => `<span class="muted">${s.name}</span>${dots(s.elements)}`).join(' ')} <span class="muted">${strength(t.them)}</span></h4>
+        ${effectLines(t.fxThem, 'your next turn')}${grid(t.them, tier, true, 'no units here', step.group)}</div>
+      <div class="m-army"><h4>Yours ${speciesIn(t.you).map((s) => `<span class="muted">${s.name}</span>${dots(s.elements)}`).join(' ')} <span class="muted">${strength(t.you)}</span></h4>
+        ${effectLines(t.fxYou, 'the enemy’s next turn')}${grid(t.you, tier, false, 'no units here', step.group)}</div>
+    </section>`
+  }).join('')
+  const rs = tiers[3], rt = TIERS[rs.tier]
+  return `<div class="cur ${wide ? 'wide' : ''}" style="height:100%"><div class="m-maxw"><div class="m-app">
+    <div class="m-head"><div><h3>dd_solo</h3><p class="sub">Turn 3 · your march · vs greedy · seed 7</p></div><span class="m-btn">New game</span></div>
+    <div class="m-scroll" data-scroll>
+      <div class="m-board">${cards}</div>
+      <div class="m-off">
+        <div data-terrain data-idx="3">
+          <h4>Reserves</h4>
+          <div class="muted">Enemy ${strength(b.reserves.them)}</div>${grid(b.reserves.them, rt, true, 'no units here', rs.group)}
+          <div class="muted">Yours ${strength(b.reserves.you)}</div>${grid(b.reserves.you, rt, false, 'no units here', rs.group)}
+        </div>
+        <h4>Summoning pools</h4><div style="display:flex;gap:6px;flex-wrap:wrap">${b.pools.them.map((d) => dragonChip(d)).join('')}${b.pools.you.map((d) => dragonChip(d)).join('')}</div>
+        <h4>Fallen</h4><div class="muted">tap to open</div>
+      </div>
+    </div>
+    ${TICKER}
+    ${dock(b, opts.dock)}
+  </div></div></div>`
+}
+
+function renderLandscape(b, opts, screen, tiers) {
+  const small = screen.h < 500
+  const faceSize = small ? 34 : 44
+  const tokenSize = small ? 26 : 32
+  const mid = small ? 158 : 132
+  const rows = b.terrains.map((t, i) => {
+    const step = tiers[i], tier = TIERS[step.tier]
+    const tokens = t.dragons.length ? `<div class="dtoks">${t.dragons.map((d) => dragonToken(d, tokenSize)).join('')}</div>` : ''
+    const midHtml = small
+      ? `<span class="compact">${faceWithTags(t, faceSize)}<span>
+           <span class="slot">${t.slot}${dots(t.elements)}</span>
+           <span class="str">${health(t.you)}h <span class="muted">vs</span> ${health(t.them)}h</span></span></span>${tokens}`
+      : `<span class="slot">${t.slot}</span>${faceWithTags(t, faceSize)}
+         <span class="t">${t.type}${dots(t.elements)}<br>${t.eighth}</span>
+         <span class="str">${health(t.you)}h <span class="muted">vs</span> ${health(t.them)}h</span>${tokens}`
+    return `
+    <section class="m-row${i === 1 ? ' focus' : ''}" data-terrain data-idx="${i}">
+      ${chips(t.fxPlace, 'tfx')}
+      <div class="m-side mine">${chips(t.fxYou)}${grid(t.you, tier, false, '', step.group)}</div>
+      <div class="m-mid">${midHtml}</div>
+      <div class="m-side">${chips(t.fxThem)}${grid(t.them, tier, true, '', step.group)}</div>
+    </section>`
+  }).join('')
+
+  const rs = tiers[3], rt = TIERS[rs.tier]
+  const count = (side) => {
+    const c = b.counts[side]
+    return `<span class="count" title="tap to open">DUA <b>${c.dua}</b> · BUA <b>${c.bua}</b> · Pool <b>${b.pools[side].length}</b></span>`
+  }
+  const reserveRow = `
+    <section class="m-row reserve" data-terrain data-idx="3">
+      <div class="m-side mine"><div class="resline">${count('you')}${grid(b.reserves.you, rt, false, '', rs.group)}</div></div>
+      <div class="m-mid"><span class="slot">Reserves</span><span class="str">${health(b.reserves.you)}h <span class="muted">vs</span> ${health(b.reserves.them)}h</span></div>
+      <div class="m-side"><div class="resline">${grid(b.reserves.them, rt, true, '', rs.group)}${count('them')}</div></div>
+    </section>`
+
+  const mixed = b.health === 12 && b.scenario === 'mid'
+  const head = small
+    ? `<div class="m-head small"><span class="turn">Turn 3 · your march</span>${TICKER}<span class="m-btn">☰</span></div>`
+    : `<div class="m-head">
+      <h3>dd_solo <span class="muted" style="font-weight:400;font-size:.78rem">Turn 3 · your march · vs greedy</span></h3>
+      <span class="m-btn">New game</span>
+    </div>`
+  return `<div class="land" style="--mid:${mid}px;height:100%"><div class="m-app">
+    ${head}
+    <div class="m-scroll" data-scroll><div class="m-rows">
+      <div ${small ? 'hidden ' : ''}style="display:grid;grid-template-columns:minmax(0,1fr) var(--mid) minmax(0,1fr);gap:8px;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:0 9px">
+        <span style="text-align:right">Yours · Treefolk${dots(SPECIES.treefolk.elements)}${mixed ? ' + Firewalkers' + dots(SPECIES.firewalkers.elements) : ''}</span><span></span><span>Enemy · Firewalkers${dots(SPECIES.firewalkers.elements)}</span>
+      </div>
+      ${rows}
+      ${reserveRow}
+    </div></div>
+    ${small ? '' : TICKER}
+    ${dock(b, opts.dock)}
+  </div></div>`
+}
+
+function renderInto(el, opts, tiers) {
+  const screen = SCREENS[opts.screen]
+  const b = board(opts.health, opts.scen)
+  el.innerHTML = opts.layout === 'today' ? renderToday(b, opts, screen, tiers) : renderLandscape(b, opts, screen, tiers)
+}
+
+/**
+ * How far the lowest block of the board runs past the bottom of the scroller's
+ * visible area -- the lowest, not the last: in three columns the tallest card is
+ * usually not the last one. Always measured off-screen at full size, never on the
+ * scaled frame, whose rects shrink with it (and read as zero in a tab not drawing).
+ */
+function measure(opts, tiers) {
+  const screen = SCREENS[opts.screen]
+  const host = document.getElementById('measure')
+  host.innerHTML = `<div class="screen" style="width:${screen.w}px;height:${screen.h}px"></div>`
+  const screenEl = host.firstElementChild
+  renderInto(screenEl, opts, tiers)
+  const scroll = screenEl.querySelector('[data-scroll]')
+  const top = screenEl.getBoundingClientRect().top
+  const scrollBottom = scroll.getBoundingClientRect().bottom - top
+  const blocks = [...screenEl.querySelectorAll('[data-terrain]')]
+  const bottom = Math.max(...blocks.map((t) => t.getBoundingClientRect().bottom - top))
+  const heights = blocks.map((t) => t.getBoundingClientRect().height)
+  const visible = scroll.clientHeight
+  host.innerHTML = ''
+  return { overflow: Math.max(0, Math.ceil(bottom - scrollBottom)), visible, scrollBottom, heights }
+}
+
+/**
+ * Auto: every block starts at the largest tier, and the tallest block that still has
+ * a smaller tier and any dice steps down, one at a time, until the board fits.
+ */
+function fit(opts) {
+  const b = board(opts.health, opts.scen)
+  const diceIn = [...b.terrains.map((t) => t.you.length + t.them.length), b.reserves.you.length + b.reserves.them.length]
+  if (opts.tiles !== 'auto') {
+    const step = { tier: TIERS.findIndex((t) => t.key === opts.tiles), group: opts.group === 'always' }
+    const tiers = [step, step, step, step]
+    return { tiers, m: measure(opts, tiers), last: 0, steps: [step] }
+  }
+  const steps = ladder(opts.group)
+  const at = [0, 0, 0, 0]
+  const tiersOf = () => at.map((i) => steps[i])
+  const done = diceIn.map((n) => n === 0)
+  let m = measure(opts, tiersOf())
+  while (m.overflow > 0) {
+    let pick = -1
+    for (let i = 0; i < 4; i++) {
+      if (done[i] || at[i] >= steps.length - 1) continue
+      if (pick === -1 || m.heights[i] > m.heights[pick]) pick = i
+    }
+    if (pick === -1) break
+    // Try the steps below in order and take the first that shortens this block. One
+    // may not -- stacking an army with no two dice alike -- and a block whose height
+    // is set by something else (the terrain die, a row of chips) gains from none of
+    // them, so it keeps the bigger tiles.
+    const from = at[pick]
+    let next = null
+    for (let s = from + 1; s < steps.length; s++) {
+      at[pick] = s
+      const tryM = measure(opts, tiersOf())
+      if (tryM.heights[pick] < m.heights[pick]) { next = tryM; break }
+    }
+    if (next === null) { at[pick] = from; done[pick] = true; continue }
+    m = next
+  }
+  return { tiers: tiersOf(), m, last: Math.max(...at), steps }
+}
+
+function grade(m) {
+  if (m.overflow <= 0) return 'ok'
+  return m.overflow <= m.visible / 4 ? 'warn' : 'bad'
+}
+function words(m) {
+  if (m.overflow <= 0) return 'fits'
+  const screens = m.overflow / m.visible
+  return `+${m.overflow}px` + (screens >= 1 ? ` (${screens.toFixed(1)} screens)` : '')
+}
+
+// ---------------------------------------------------------------------------
+// Controls, the big frame and the matrix.
+// ---------------------------------------------------------------------------
+const DEFAULTS = { layout: 'landscape', health: 36, scen: 'pileup', screen: 'sideways', tiles: 'auto', group: 'crowded', dock: 'action' }
+const STORE = 'dd-3a-opts-3'
+let opts = { ...DEFAULTS }
+try {
+  const saved = JSON.parse(localStorage.getItem(STORE) || 'null')
+  if (saved) opts = { ...opts, ...saved }
+} catch (e) { /* a private window: the defaults will do */ }
+
+function seg(id, key, entries) {
+  const host = document.getElementById(id)
+  host.setAttribute('role', 'radiogroup')
+  host.innerHTML = entries.map(([value, label]) =>
+    `<input type="radio" name="${key}" id="${key}-${value}" value="${value}"${String(opts[key]) === String(value) ? ' checked' : ''}><label for="${key}-${value}">${label}</label>`).join('')
+  host.addEventListener('change', (e) => {
+    const v = e.target.value
+    opts[key] = key === 'health' ? Number(v) : v
+    update(true)
+  })
+}
+seg('c-layout', 'layout', Object.entries(LAYOUTS))
+seg('c-health', 'health', HEALTHS.map((h) => [h, String(h)]))
+seg('c-scen', 'scen', Object.entries(SCENARIOS))
+seg('c-screen', 'screen', Object.entries(SCREENS).map(([k, v]) => [k, v.label]))
+seg('c-tiles', 'tiles', TILE_OPTIONS)
+seg('c-group', 'group', Object.entries(GROUPS))
+seg('c-dock', 'dock', Object.entries(DOCKS))
+
+function syncControls() {
+  for (const key of Object.keys(opts)) {
+    const input = document.getElementById(`${key}-${opts[key]}`)
+    if (input) input.checked = true
+  }
+}
+
+const BLOCK_NAMES = ['Your home', 'Frontier', 'Enemy home', 'Reserves']
+
+function drawStage() {
+  const stage = document.getElementById('stage')
+  const screen = SCREENS[opts.screen]
+  const bezel = screen.phone ? 12 : 10
+  const { tiers, m } = fit(opts)
+  stage.innerHTML = `<div class="device${screen.phone ? ' phone' : ''}"><div class="screen" style="width:${screen.w}px;height:${screen.h}px"></div></div>`
+  const device = stage.firstElementChild
+  const screenEl = device.firstElementChild
+  renderInto(screenEl, opts, tiers)
+
+  const outerW = screen.w + bezel * 2, outerH = screen.h + bezel * 2
+  const scaleToFit = () => {
+    const scale = Math.min(1, stage.clientWidth / outerW) || 1
+    device.style.transform = `scale(${scale})`
+    stage.style.height = `${Math.ceil(outerH * scale) + 4}px`
+  }
+  scaleToFit()
+  window.onresize = scaleToFit
+
+  if (m.overflow > 0) {
+    const badge = document.createElement('span')
+    badge.className = 'more'
+    badge.textContent = `↓ ${m.overflow}px more board below`
+    badge.style.top = `${m.scrollBottom - 30}px`
+    screenEl.appendChild(badge)
+  }
+  const b = board(opts.health, opts.scen)
+  const densest = Math.max(...b.terrains.map((t) => t.you.length + t.them.length))
+  const sizes = opts.tiles === 'auto'
+    ? `<span class="muted">Auto sizes: ${tiers.map((t, i) => `${BLOCK_NAMES[i]} <b>${stepLabel(t)}</b>`).join(' · ')}</span>`
+    : ''
+  document.getElementById('verdict').innerHTML =
+    `<span class="pill ${grade(m)}">${m.overflow > 0 ? words(m) + ' of board below the screen' : 'The whole board on one screen'}</span>
+     <span class="muted">${LAYOUTS[opts.layout]} · ${opts.health} health · ${SCENARIOS[opts.scen]} · ${screen.label} ${screen.w}×${screen.h}</span>
+     <span class="muted">Busiest terrain: ${densest} dice</span>${sizes}`
+}
+
+function drawMatrix() {
+  const table = document.getElementById('matrix')
+  const cols = []
+  for (const h of HEALTHS) for (const s of Object.keys(SCENARIOS)) cols.push([h, s])
+  let html = `<tr><th rowspan="2"></th>${HEALTHS.map((h) => `<th colspan="${Object.keys(SCENARIOS).length}">${h} health</th>`).join('')}</tr>
+    <tr>${cols.map(([, s]) => `<th>${SCENARIOS[s]}</th>`).join('')}</tr>`
+  for (const [sk, screen] of Object.entries(SCREENS)) {
+    for (const [lk, label] of Object.entries(LAYOUTS)) {
+      html += `<tr><th class="row">${screen.label} · ${label}</th>`
+      for (const [h, s] of cols) {
+        const o = { ...opts, layout: lk, health: h, scen: s, screen: sk }
+        const { m, last, steps } = fit(o)
+        const note = opts.tiles === 'auto' && last > 0 ? `<small>${stepLabel(steps[last])}</small>` : ''
+        const cur = lk === opts.layout && h === opts.health && s === opts.scen && sk === opts.screen
+        html += `<td class="${grade(m)}${cur ? ' cur' : ''}" data-o='${JSON.stringify({ layout: lk, health: h, scen: s, screen: sk })}'>${words(m)}${note}</td>`
+      }
+      html += '</tr>'
+    }
+  }
+  table.innerHTML = html
+}
+document.getElementById('matrix').addEventListener('click', (e) => {
+  const td = e.target.closest('td[data-o]')
+  if (!td) return
+  opts = { ...opts, ...JSON.parse(td.dataset.o) }
+  syncControls()
+  update(false)
+  document.getElementById('controls').scrollIntoView({ behavior: 'smooth', block: 'start' })
+})
+
+document.getElementById('legend').innerHTML = Object.entries(SHAPES).map(([k, s]) =>
+  `<span><svg width="18" height="18" viewBox="0 0 24 24" fill="var(--el-water)" fill-opacity=".22" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">${s}</svg>${k}</span>`).join('')
+
+let lastMatrixKey = null
+function update(save) {
+  if (save) { try { localStorage.setItem(STORE, JSON.stringify(opts)) } catch (e) { /* not kept */ } }
+  drawStage()
+  const key = `${opts.tiles}|${opts.group}|${opts.dock}`
+  if (key !== lastMatrixKey) { drawMatrix(); lastMatrixKey = key }
+  else {
+    // Only the highlight moved.
+    for (const td of document.querySelectorAll('#matrix td[data-o]')) {
+      const o = JSON.parse(td.dataset.o)
+      td.classList.toggle('cur', o.layout === opts.layout && o.health === opts.health && o.scen === opts.scen && o.screen === opts.screen)
+    }
+  }
+}
+update(false)
+</script>

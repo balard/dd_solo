@@ -141,6 +141,11 @@ the dice and the opponent.
 > can be `mixed`, and the live fuzz plays one game in five that way: its first mixed game found two
 > Phase 1 bugs (below, under `SpellTargetOffer`). `npm run play -- --forces built:<file>` plays a
 > file; `data/forces/` holds examples. Both golden corpora are still byte-identical and unregenerated.
+>
+> **v2 Phase 3a has landed: mockups, no code.** `docs/mockups/phase-3a.html` measures both boards on
+> laptop and phone frames. The landscape board is the phone's layout; identical dice stack when a
+> terrain is crowded; the reserves get their own row. The decisions are under *What 3a found* in
+> `PLAN-V2.md`, and 3b-3d build from them.
 
 ## Read these first
 
