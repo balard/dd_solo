@@ -28,6 +28,7 @@ import {
 
 
 import { RollStrip } from './DiceGrid'
+import { logShows, type CombatEntry, type ManeuverEntry } from './presentation'
 import { DragonFaceArt } from './FaceArt'
 import { speciesInfo } from './Elements'
 import { proposalLabel, slotLabel } from './prompts'
@@ -170,17 +171,12 @@ export function LogLine({
       )
     case 'maneuver_allowed':
       return <p className="log-line muted">unopposed</p>
+    // In two parts, which the roll step-through (v2 Phase 3c) shows one at a time.
     case 'maneuver_contested':
       return (
         <div className="log-roll">
-          <div className="roll-head">maneuver</div>
-          <RollStrip dice={entry.marcherDice} total={entry.marcher} {...withMath(entry.marcherMath)} />
-          <div className="roll-head">opposing maneuver</div>
-          <RollStrip dice={entry.defenderDice} total={entry.defender} {...withMath(entry.defenderMath)} />
-          <div className="roll-sum">
-            {entry.marcher} vs {entry.defender} maneuver;{' '}
-            <b>{entry.marcherWins ? 'the marcher wins' : 'the marcher loses'}</b>
-          </div>
+          <ManeuverPart entry={entry} part="maneuver" />
+          <ManeuverPart entry={entry} part="opposing" />
         </div>
       )
     case 'terrain_moved':
@@ -230,76 +226,14 @@ export function LogLine({
         </p>
       )
 
+    // In three parts, which the feed (v2 Phase 3c) draws as separate steps. Composed
+    // here, so the log and the feed draw one exchange with the same pieces.
     case 'combat_resolved':
       return (
         <div className="log-roll">
-          {/* Name both ends whenever they differ — a missile shot across the board,
-              or a counter coming back the other way. Melee and magic hit the army in
-              front of them, so repeating one terrain twice would be noise. */}
-          <div className="roll-head">
-            {entry.isCounter ? 'counter-attack' : entry.action}
-            {entry.attackerSlot === entry.defenderSlot ? (
-              <> · {where(entry.defenderSlot)}</>
-            ) : (
-              <>
-                {' · '}
-                {where(entry.attackerSlot)} &rarr; {where(entry.defenderSlot)}
-              </>
-            )}
-          </div>
-          <RollStrip dice={entry.attackDice} total={entry.attackTotal} {...withMath(entry.attackMath)} />
-          {entry.saveDice !== null && (
-            <>
-              <div className="roll-head">saves</div>
-              <RollStrip
-                dice={entry.saveDice}
-                {...(entry.saveTotal === null ? {} : { total: entry.saveTotal })}
-                {...withMath(entry.saveMath)}
-              />
-            </>
-          )}
-          {/* The SAI is named, not just its arithmetic. "3 melee - 11 saves = 0
-              damage and 4 straight back" is a correct sum that explains nothing:
-              which die did that, and why is it not saveable? The names come off the
-              dice above, where `resolveRoll` stamped them. */}
-          <div className="roll-sum">
-            {entry.saveTotal === null
-              ? `${entry.attackTotal} ${entry.action}${entry.action === 'magic' ? ' ÷ 2' : ''}`
-              : `${entry.attackTotal} ${entry.action} − ${entry.saveTotal} saves`}
-            {entry.unsavable !== undefined && (
-              <>
-                {' + '}
-                {entry.unsavable} unsavable
-                {namesIn(entry, 'unsavable') === null ? '' : ` from ${namesIn(entry, 'unsavable')}`}
-              </>
-            )}
-            {' = '}
-            <b>{entry.damage}</b> damage
-          </div>
-          {/* A save face in a melee attack is otherwise a number from nowhere: the
-              strip shows a shield, the total counts it as melee, and only this line
-              says why (Phase 8). */}
-          {entry.flamingShields !== undefined && (
-            <div className="roll-sum">
-              <b>Flaming Shields</b> counts {entry.flamingShields}{' '}
-              {entry.flamingShields === 1 ? 'save' : 'saves'} as melee
-            </div>
-          )}
-          {entry.riposte !== undefined && (
-            <div className="roll-sum">
-              {namesIn(entry, 'riposte') === null ? (
-                <>
-                  and <b>{entry.riposte}</b> straight back, which no save can stop
-                </>
-              ) : (
-                <>
-                  <b>{namesIn(entry, 'riposte')}</b> {plural(entry, 'riposte') ? 'send' : 'sends'}{' '}
-                  <b>{entry.riposte}</b> straight back, which no save can stop
-                </>
-              )}
-            </div>
-          )}
-
+          <CombatPart entry={entry} part="attack" human={human} />
+          <CombatPart entry={entry} part="saves" human={human} />
+          <CombatPart entry={entry} part="outcome" human={human} />
         </div>
       )
 
@@ -961,6 +895,123 @@ export function LogLine({
   }
 }
 
+/** One side of a contested maneuver: the marcher's roll, or the opposing roll and who won. */
+export function ManeuverPart({
+  entry,
+  part,
+}: {
+  entry: ManeuverEntry
+  part: 'maneuver' | 'opposing'
+}): ReactElement {
+  return part === 'maneuver' ? (
+    <>
+      <div className="roll-head">maneuver</div>
+      <RollStrip dice={entry.marcherDice} total={entry.marcher} {...withMath(entry.marcherMath)} />
+    </>
+  ) : (
+    <>
+      <div className="roll-head">opposing maneuver</div>
+      <RollStrip dice={entry.defenderDice} total={entry.defender} {...withMath(entry.defenderMath)} />
+      <div className="roll-sum">
+        {entry.marcher} vs {entry.defender} maneuver;{' '}
+        <b>{entry.marcherWins ? 'the marcher wins' : 'the marcher loses'}</b>
+      </div>
+    </>
+  )
+}
+
+/** One part of a combat exchange: its attack roll, its save roll, or what they came to. */
+export function CombatPart({
+  entry,
+  part,
+  human,
+}: {
+  entry: CombatEntry
+  part: 'attack' | 'saves' | 'outcome'
+  human: PlayerId
+}): ReactElement | null {
+  const where = (slot: ArmyRef) => slotLabel(slot, human)
+  switch (part) {
+    case 'attack':
+      return (
+        <>
+          {/* Name both ends whenever they differ — a missile shot across the board,
+              or a counter coming back the other way. Melee and magic hit the army in
+              front of them, so repeating one terrain twice would be noise. */}
+          <div className="roll-head">
+            {entry.isCounter ? 'counter-attack' : entry.action}
+            {entry.attackerSlot === entry.defenderSlot ? (
+              <> · {where(entry.defenderSlot)}</>
+            ) : (
+              <>
+                {' · '}
+                {where(entry.attackerSlot)} &rarr; {where(entry.defenderSlot)}
+              </>
+            )}
+          </div>
+          <RollStrip dice={entry.attackDice} total={entry.attackTotal} {...withMath(entry.attackMath)} />
+        </>
+      )
+    case 'saves':
+      return entry.saveDice === null ? null : (
+        <>
+          <div className="roll-head">saves</div>
+          <RollStrip
+            dice={entry.saveDice}
+            {...(entry.saveTotal === null ? {} : { total: entry.saveTotal })}
+            {...withMath(entry.saveMath)}
+          />
+        </>
+      )
+    case 'outcome':
+      return (
+        <>
+          {/* The SAI is named, not just its arithmetic. "3 melee - 11 saves = 0
+              damage and 4 straight back" is a correct sum that explains nothing:
+              which die did that, and why is it not saveable? The names come off the
+              dice above, where `resolveRoll` stamped them. */}
+          <div className="roll-sum">
+            {entry.saveTotal === null
+              ? `${entry.attackTotal} ${entry.action}${entry.action === 'magic' ? ' ÷ 2' : ''}`
+              : `${entry.attackTotal} ${entry.action} − ${entry.saveTotal} saves`}
+            {entry.unsavable !== undefined && (
+              <>
+                {' + '}
+                {entry.unsavable} unsavable
+                {namesIn(entry, 'unsavable') === null ? '' : ` from ${namesIn(entry, 'unsavable')}`}
+              </>
+            )}
+            {' = '}
+            <b>{entry.damage}</b> damage
+          </div>
+          {/* A save face in a melee attack is otherwise a number from nowhere: the
+              strip shows a shield, the total counts it as melee, and only this line
+              says why (Phase 8). */}
+          {entry.flamingShields !== undefined && (
+            <div className="roll-sum">
+              <b>Flaming Shields</b> counts {entry.flamingShields}{' '}
+              {entry.flamingShields === 1 ? 'save' : 'saves'} as melee
+            </div>
+          )}
+          {entry.riposte !== undefined && (
+            <div className="roll-sum">
+              {namesIn(entry, 'riposte') === null ? (
+                <>
+                  and <b>{entry.riposte}</b> straight back, which no save can stop
+                </>
+              ) : (
+                <>
+                  <b>{namesIn(entry, 'riposte')}</b> {plural(entry, 'riposte') ? 'send' : 'sends'}{' '}
+                  <b>{entry.riposte}</b> straight back, which no save can stop
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )
+  }
+}
+
 /** `math` only when the entry has one: `exactOptionalPropertyTypes` will not take an
  *  `undefined` for an optional prop. */
 function withMath(math: RollMath | undefined): { math?: RollMath } {
@@ -982,14 +1033,6 @@ function answerPhrase(answer: DragonAnswer): string {
 function dragonLabel(state: GameState, dragonId: string): string {
   const dragon = state.dragons[dragonId]
   return dragon === undefined ? dragonId : dragonName(dragon.dieId)
-}
-
-/**
- * Whether `LogLine` draws anything for this entry. The two kinds it renders as `null`,
- * named here so the ticker can skip them rather than showing a blank line.
- */
-export function logShows(entry: LogEntry): boolean {
-  return entry.kind !== 'game_start' && entry.kind !== 'terrain_placed'
 }
 
 /**

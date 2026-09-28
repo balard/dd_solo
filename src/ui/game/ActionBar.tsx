@@ -69,7 +69,6 @@ import {
   type SpellDraftCast,
 } from '../../engine/magic'
 
-import { LogLine } from './LogPanel'
 import { useFaceArt } from './useFaceArt'
 
 /**
@@ -187,26 +186,25 @@ function RollsBehindBlock({
   onInspect: (unitId: string) => void
 }) {
   const behind = rollsBehind(state, pending)
-  if (behind === null) return null
+  // A roll already in the log was just shown, one step at a time, before this decision
+  // was offered (v2 Phase 3c), so it is not drawn a second time. A roll still on the
+  // table is: it is not in the log yet, and its dice may be the answer.
+  if (behind === null || behind.kind === 'logged') return null
 
   return (
     <div className="rolls-behind">
-      {behind.kind === 'live'
-        ? behind.rolls.map((roll, i) => (
-            <div className="sai-roll" key={i}>
-              <div className="roll-head">{tableRollHeading(roll, human)}</div>
-              <RollStrip
-                dice={roll.roll.dice}
-                {...(roll.roll.total === undefined ? {} : { total: roll.roll.total })}
-                {...(roll.roll.math === undefined ? {} : { math: roll.roll.math })}
-                {...(pick === undefined ? {} : { pick })}
-                onInspect={onInspect}
-              />
-            </div>
-          ))
-        : behind.entries.map((entry, i) => (
-            <LogLine key={i} entry={entry} state={state} human={human} />
-          ))}
+      {behind.rolls.map((roll, i) => (
+        <div className="sai-roll" key={i}>
+          <div className="roll-head">{tableRollHeading(roll, human)}</div>
+          <RollStrip
+            dice={roll.roll.dice}
+            {...(roll.roll.total === undefined ? {} : { total: roll.roll.total })}
+            {...(roll.roll.math === undefined ? {} : { math: roll.roll.math })}
+            {...(pick === undefined ? {} : { pick })}
+            onInspect={onInspect}
+          />
+        </div>
+      ))}
     </div>
   )
 }

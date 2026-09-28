@@ -8,7 +8,7 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0, 1 and 2 have landed, and so have slices 3a and 3b**, each with its findings below;
+of work*. **Phases 0, 1 and 2 have landed, and so have slices 3a to 3c**, each with its findings below;
 the rest is still a draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
@@ -508,7 +508,7 @@ real art can drop in later without a layout change.
 |---|---|
 | **3a** | Mockups before code: both layouts at 12, 24 and 36 health — **landed** |
 | **3b** | The schematic pass: tokens, shapes, the log out of the way — **landed** |
-| **3c** | The roll presentation |
+| **3c** | The roll presentation — **landed**: every roll stops, in a dialog floating over the board |
 | **3d** | The landscape board: the phone's layout, alongside on wide screens, with stacks and a reserves row |
 | **3e** | Playtest tools: concede, turn count, clock, end-of-game summary |
 
@@ -689,7 +689,7 @@ key is `JSON.stringify` of its parts now.
 - **The forecast is not on the contest-a-maneuver prompt.** `contestOdds` exists, but it is a
   chance of winning, not an expected roll, and it deserves its own wording.
 
-### 3c — The roll presentation
+### 3c — The roll presentation — **landed**
 
 "A different interface to show the dice rolling results." Today a roll's evidence is a strip above
 the decision sheet plus a log line. The new presentation is a **panel that walks through what
@@ -706,6 +706,74 @@ pipeline's own order ("roll, then SAIs, then totals", as today).
 - **Dismissable, and skippable.** A live test at ten minutes a game cannot afford a panel that has
   to be clicked through.
 
+### What 3c found
+
+**1. The plan's shape was built first and rejected in review.** It was a panel over the board
+listing everything since your last decision, opening by itself after the enemy acted, with a
+Recap button on the ticker. It worked, and it was the wrong shape: the evidence was still somewhere
+other than the decision, arriving as a block. What shipped instead is the review's own design:
+- **The game stops at every roll.** The opponent does not act, and your next decision is not
+  offered, until you press Continue. A tap per roll, knowingly: seeing each roll is the point, and
+  a faster path (auto-advance, hold to skip) is later work. "Skip N more" is there meanwhile.
+- **The decision dialog floats over the terrains** (`.float-dock`), and a roll card takes its place
+  until you continue. So the eye stays in one spot for the whole exchange: the dice, then the
+  question they lead to. The page is padded by the dialog's measured height, so the last terrain
+  can always be scrolled out from under it.
+
+**2. The gate is a client cursor, not an engine pause.** `useGame` holds one `RollCursor` (a log
+index and a step within it); the stops are `rollSteps(log.slice(cursor.log), human)`, pure, in
+`presentation.ts`. The AI's effect waits while a step waits. The engine did not change, so no
+golden can see any of it. The plan's "one query over state the app already has" held, with one
+number beside the state, because the log does not record what the player has looked at.
+
+**3. The rules' order, per kind of roll.** A resisted roll -- melee, missile, a contested maneuver
+-- is the roller's dice, then the resisting roll (saves, or the opposing maneuver) with what the
+two came to. A roll nobody resists -- magic above all -- is one stop, then what it was for (spell
+picking). The roll-off, sub-rolls, spell saves, Replanting, Rise from the Ashes and the dragons'
+rolls are one stop each. Everything else (a march begun, a terrain turned, a unit killed) is on the
+board as it happens and in the ticker, and stops nothing.
+
+**4. An SAI is a stop only when it has something to resolve.** The first cut made every die with an
+effect a stop. Review cut it back: Smite, Counter, Surprise and Cantrip only change the numbers, and
+the roll's card already marks them (`+4` on the die, named in the sum). A targeting SAI, Sleep,
+Galeforce, Choke, Confuse, Wild Growth and the free moves still get their own card, after the attack.
+
+**5. The log writes causes after their consequences, twice, and the steps put them back in
+order.** Neither needed an engine change, and an engine change would have moved the v1 goldens:
+- **An exchange's SAI resolution is logged before the exchange.** `combat_resolved` is written when
+  the exchange ends, so the Flame's `sai_resolved`, its sub-roll and its kills sit *ahead* of the
+  attack that rolled it. They are held and carried onto the SAI's own card.
+- **A spell's consequences are logged before its `spell_cast`** (`turn.ts` resolves, then logs the
+  cast), and `spell_cast` does not say where the spell went at all. So a spell run is read
+  backwards from each name, and the card puts each "casts X" first with the lines that say what it
+  did and where: "The enemy casts Lightning Strike", its save-or-die roll, "You lose Strangle Vine".
+
+**6. The enemy's spells are a stop; yours are not.** You just chose yours. A roll inside them still
+stops (the enemy's saves against your Hailstorm).
+
+**7. One way to draw a roll, still.** The log's combat and maneuver entries are now composed from
+`CombatPart` and `ManeuverPart`, and the cards draw the same parts, so a card and the log cannot
+describe one roll two ways. The decision dialog stopped drawing a roll already in the log above the
+sheet (it was just shown, step by step). A roll still on the table is drawn as before: it is not in
+the log yet, and its dice may be the answer.
+
+**8. Two slips that would have shipped quietly.**
+- **`Feed.tsx` beside `feed.ts`** is one file to Windows, and `tsc` refused the pair. Moot now, but
+  a component and a module must not differ only by case.
+- **A scripted edit truncated `index.css`** to the block it replaced, dropping 700 lines. The
+  typecheck and the tests cannot see CSS; the line count can. It was rebuilt from the committed file
+  plus this slice's block, and the diff checked to be exactly that block.
+
+**Deliberately not done.**
+- **A roll shown live at a mid-roll pause is shown again as a card.** Rapid Growth and a targeting
+  SAI ask their question with the dice on the table, before the exchange is logged; the cards come
+  after it is.
+- **The board can run ahead of the card.** When one action kills by itself (a sub-roll, a Flame),
+  the board shows the deaths before the card shows the roll.
+- **Skipping loses the roll behind the decision.** The ticker still has the latest line.
+- **Phone held sideways is cramped** by today's header and banner. 3d's chrome is the fix.
+- **The "since your last move" overlay and its Recap are gone**, replaced by the step-through.
+
 ### 3d — The landscape board
 
 Three rows, one per terrain: **your army on the left, the terrain die in the middle, the enemy on
@@ -721,6 +789,8 @@ the rest (see *What 3a found*):
 - **Stacks of identical dice when a terrain is crowded**, at today's size and at most one step down
   to Compact (findings 3 and 4). A stack is a view over `armyAt`, and a targeting view unstacks it.
 - **The ID face larger**, moved here from 3b: stacking is what frees the room for it.
+- **The decision dialog already floats over the terrains** (3c), which the 3a mockups drew as a
+  docked bar. Landscape takes it as given.
 - **`Board` renders from the same data either way.** `selectableAt`, `pickModeFor` and
   `tapMeaning` do not know the layout, and must not start knowing it.
 - **Side-facing art later means one drawing per unit, mirrored for the enemy.** Nothing to build

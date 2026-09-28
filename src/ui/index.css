@@ -290,12 +290,81 @@ body {
 
 /* --- focused terrain ------------------------------------------------------ */
 
-.page {
+/* The page and the floating dialog share this box (v2 Phase 3c): the dialog is
+   positioned inside it, over the terrains. */
+.page-wrap {
+  position: relative;
   flex: 1;
   min-height: 0; /* lets the flex child actually shrink and scroll */
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   margin-top: 14px;
 }
+.page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* --- the floating dialog (v2 Phase 3c) ------------------------------------ */
+
+/* The decision, and before it every roll it follows from, float over the terrains
+   rather than sitting under the board. The page is padded by the dialog's height (App
+   measures it), so the last terrain can always be scrolled out from under it. */
+.float-dock {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  width: min(760px, calc(100% - 16px));
+  max-height: calc(100% - 20px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgb(0 0 0 / 20%);
+}
+/* Inside it the dock's parts lose the full-bleed edges they had at the foot of the
+   screen: the card is the edge now. */
+.float-dock .action-bar,
+.float-dock .rolls-behind,
+.float-dock .look-toggle {
+  margin-inline: 0;
+  border-top: none;
+  box-shadow: none;
+  background: none;
+}
+.float-dock .action-bar { padding: 12px 14px 14px; }
+.float-dock .rolls-behind { padding: 10px 14px 0; max-height: none; }
+.float-dock .look-toggle { padding: 8px 14px 0; }
+
+/* One roll, before the game moves on. */
+.roll-card { padding: 12px 14px 12px; }
+.roll-card-title {
+  margin: 0 0 6px;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+.roll-card-body .log-roll { margin: 0; }
+.roll-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.roll-card-foot .muted { margin-right: auto; font-size: var(--fs-xs); }
+.roll-card-foot .choice { flex: none; min-width: 140px; }
+.roll-card-sai {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.roll-card-sai .roll-strip { margin: 0; }
 
 .army { margin-bottom: 12px; }
 .army h3 {

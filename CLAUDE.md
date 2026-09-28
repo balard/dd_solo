@@ -152,6 +152,11 @@ the dice and the opponent.
 > dragons as square tiles with no owner on the board, effects as counted chips, the log as a one-line
 > ticker, and a forecast from `estimate.ts` on every attack button. UI only: the engine, the goldens
 > and `SAVE_VERSION` did not move.
+>
+> **v2 Phase 3c has landed: every roll stops.** The decision dialog floats over the terrains, and a
+> roll card takes its place until the player continues; the opponent waits too. The stops are
+> `rollSteps` in `presentation.ts`, a pure function of the log from a client-side cursor, so the
+> engine and the goldens did not move.
 
 ## Read these first
 
@@ -995,9 +1000,25 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   and dispatched on the spot, which is half the Reserves Phase and the half that matters when two
   fronts both need a die. The `reinforced` log entry names each destination for the same reason.
 
-- **Every decision shows the roll behind it, above the sheet** (`RollsBehindBlock` in
+- **Every roll stops the game until the player has seen it** (v2 Phase 3c). The decision dialog
+  (`.float-dock`) floats over the terrains, and a `RollCard` takes its place until Continue; the
+  opponent's effect in `useGame` waits too. The stops are `rollSteps(log.slice(cursor.log), human)`
+  in `presentation.ts`, and the cursor (`Session.rolls`) is the only state, in the client.
+  - **Resisted rolls are two stops** -- the roller's dice, then the saves or the opposing maneuver
+    with the outcome. Magic is one, then spell picking.
+  - **An SAI is a stop only when it resolves something** (targets, Sleep, Galeforce, Choke,
+    Confuse, Wild Growth, a free move). Smite, Counter, Surprise and Cantrip ride on the roll's
+    card.
+  - **The log writes some causes after their consequences**: an exchange's SAI resolution before
+    `combat_resolved`, a spell's effects before its `spell_cast`. `rollSteps` carries the first onto
+    the SAI's card and reorders the second so each spell is named first. `spell_cast` carries no
+    target; "where" is its consequence lines.
+  - **The enemy's spells are a stop; yours are not**, though a roll inside yours is.
+  - The cards draw with `CombatPart`, `ManeuverPart` and `LogLine`, the log's own pieces.
+- **A decision shows the roll still on the table, above the sheet** (`RollsBehindBlock` in
   `ActionBar`, v1 Phase 9d). **The same block shows while the enemy is deciding**, which is when a
-  Confuse or a Flame is chosen against you. `rollsBehind` in `prompts.ts` has two sources:
+  Confuse or a Flame is chosen against you. `rollsBehind` in `prompts.ts` has two sources, and since
+  v2 Phase 3c only the first is drawn -- a logged roll was just shown as cards:
   - **live**: `rollsOnTheTable(state)` in the engine, every roll parked mid-decision. At the
     delayed pause that is the attack roll **and** the save roll, and at Rapid Growth it is both
     maneuver rolls. Showing only the save strip there is how Confuse was reported as firing on

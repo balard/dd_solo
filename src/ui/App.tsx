@@ -28,6 +28,7 @@ import { ActionBar } from './game/ActionBar'
 import { Board, DragonRow, EffectList } from './game/Board'
 import { DiceGrid } from './game/DiceGrid'
 import { speciesInfo } from './game/Elements'
+import { RollCard } from './game/RollCard'
 import { LogPanel, LogTicker } from './game/LogPanel'
 import { readFlag, writeFlag } from './game/prefs'
 import {
@@ -62,7 +63,7 @@ export function App() {
 }
 
 function GameView({ game }: { readonly game: PlayingGame }) {
-  const { state, human, seed, opponent, origin, dispatch, newGame, opponentThinking } = game
+  const { state, human, seed, opponent, origin, dispatch, newGame, opponentThinking, rollShown } = game
   const enemy: PlayerId = human === 'p1' ? 'p2' : 'p1'
   const pending = state.pending
 
@@ -95,6 +96,18 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // here -- a unit or dragon id, and a terrain -- and opening one never closed the other.
   const [inspect, setInspect] = useState<InspectTarget | null>(null)
   const [showFallen, setShowFallen] = useState(false)
+
+  // The dialog floats over the terrains (v2 Phase 3c), so the page is padded by its
+  // height: the last terrain can always be scrolled out from under it.
+  const dockRef = useRef<HTMLDivElement>(null)
+  const [dockHeight, setDockHeight] = useState(0)
+  useEffect(() => {
+    const dock = dockRef.current
+    if (dock === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => setDockHeight(dock.offsetHeight))
+    observer.observe(dock)
+    return () => observer.disconnect()
+  }, [])
   // The log is a one-line ticker until it is asked for (v2 Phase 3b), and stays the way
   // this viewer last left it. Reading a preference has no side effect, so the initializer
   // may do it even though StrictMode runs it twice.
@@ -351,7 +364,10 @@ function GameView({ game }: { readonly game: PlayingGame }) {
       {/* One scrolling page: board, then what is off the board, then the log.
           The log used to sit in its own column beside the board, which does not
           survive giving every terrain its dice -- there is no width left for it. */}
-      <main className="page">
+      {/* The page and the dialog share one box: the dialog floats over the terrains
+          (v2 Phase 3c), inside it. */}
+      <div className="page-wrap">
+      <main className="page" style={{ paddingBottom: dockHeight + 16 }}>
         <Board
           state={state}
           human={human}
@@ -515,8 +531,12 @@ function GameView({ game }: { readonly game: PlayingGame }) {
         )}
       </main>
 
-      <LogTicker state={state} human={human} open={logOpen} onToggle={toggleLog} />
-
+      {/* One dialog, floating over the terrains: a roll not yet seen, and only then the
+          decision it leads to. The game waits on the roll -- see `useGame`. */}
+      <div className="float-dock" ref={dockRef}>
+      {rollShown !== null ? (
+        <RollCard shown={rollShown} state={state} human={human} onInspect={onInspect} />
+      ) : (
       <ActionBar
         state={state}
         human={human}
@@ -548,6 +568,11 @@ function GameView({ game }: { readonly game: PlayingGame }) {
         onLook={setLooking}
         onInspect={onInspect}
       />
+      )}
+      </div>
+      </div>
+
+      <LogTicker state={state} human={human} open={logOpen} onToggle={toggleLog} />
 
       {inspect !== null && <Inspector target={inspect} state={state} human={human} onClose={closeInspector} />}
 

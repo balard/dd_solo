@@ -31,6 +31,7 @@ import {
 } from '../../engine/setup'
 import { V1_RULES, type GameAction, type GameState, type PlayerId } from '../../engine/types'
 
+import { advanceCursor, rollSteps, type RollCursor, type RollStep } from './presentation'
 import { clearSave } from './storage'
 
 /** How long to let the player read the opponent's move before the next one. */
@@ -58,12 +59,29 @@ export interface PlayingGame {
   readonly origin: GameOrigin
   readonly opponentThinking: boolean
   readonly dispatch: (action: GameAction) => void
+  /**
+   * The roll the player has not seen yet (v2 Phase 3c), or null when none is waiting.
+   * While one is, the game does not move on: the opponent does not act, and the
+   * player's own decision is not offered until they continue.
+   */
+  readonly rollShown: RollShown | null
   /** Back to the start screen, to pick forces again. */
   readonly newGame: () => void
   readonly record: GameRecord
 }
 
 export type Game = ChoosingGame | PlayingGame
+
+export interface RollShown {
+  readonly step: RollStep
+  /** 1-based, out of `of`: the rolls waiting since the game last moved on. */
+  readonly number: number
+  readonly of: number
+  /** On to the next roll, or back to the game after the last one. */
+  readonly next: () => void
+  /** Past every roll still waiting. */
+  readonly skip: () => void
+}
 
 export const newSeed = () => Math.floor(Math.random() * 100_000)
 
@@ -165,10 +183,16 @@ interface Session {
   readonly opponent: OpponentName
   readonly actions: readonly GameAction[]
   readonly origin: GameOrigin
+  /**
+   * How far through the log's rolls the player has looked (v2 Phase 3c). The one
+   * thing the step-through needs that the state does not hold; the steps themselves
+   * are `rollSteps` of the log from here.
+   */
+  readonly rolls: RollCursor
 }
 
 function sessionFrom(setup: SetupOptions, opponent: OpponentName, origin: GameOrigin): Session {
-  return { state: begin(setupGame(setup)), setup, opponent, actions: [], origin }
+  return { state: begin(setupGame(setup)), setup, opponent, actions: [], origin, rolls: { log: 0, step: 0 } }
 }
 
 /** The address bar, or the start screen. Nothing is read from storage: saving is
@@ -224,6 +248,16 @@ export function useGame(): Game {
           },
     )
   }, [])
+  const nextRoll = useCallback(() => {
+    setSession((current) =>
+      current === null ? current : { ...current, rolls: advanceCursor(current.state.log, current.rolls, human) },
+    )
+  }, [])
+  const skipRolls = useCallback(() => {
+    setSession((current) =>
+      current === null ? current : { ...current, rolls: { log: current.state.log.length, step: 0 } },
+    )
+  }, [])
 
   const start = useCallback((setup: SetupOptions, opponent: OpponentName) => {
     aiRng.current = rngFrom(setup.seed ^ 0x5eed)
@@ -237,8 +271,11 @@ export function useGame(): Game {
   const state = session?.state ?? null
   const pending = state?.pending ?? null
   const ai = OPPONENTS[session?.opponent ?? DEFAULT_OPPONENT]
+  const steps = session === null ? [] : rollSteps(session.state.log.slice(session.rolls.log), human)
+  const waiting = session === null ? 0 : steps.length - session.rolls.step
   useEffect(() => {
-    if (state === null || state.winner !== null || pending === null || pending.player === human) {
+    // A roll the player has not seen yet holds the game where it is.
+    if (state === null || state.winner !== null || pending === null || pending.player === human || waiting > 0) {
       setOpponentThinking(false)
       return
     }
@@ -251,7 +288,7 @@ export function useGame(): Game {
     }, AI_THINKING_MS)
 
     return () => clearTimeout(timer)
-  }, [state, pending, ai, dispatch, human])
+  }, [state, pending, ai, dispatch, human, waiting])
 
   if (session === null) {
     lastRecord = null
@@ -270,6 +307,16 @@ export function useGame(): Game {
     origin: session.origin,
     opponentThinking,
     dispatch,
+    rollShown:
+      waiting > 0
+        ? {
+            step: steps[session.rolls.step] as RollStep,
+            number: session.rolls.step + 1,
+            of: steps.length,
+            next: nextRoll,
+            skip: skipRolls,
+          }
+        : null,
     newGame,
     record,
   }
