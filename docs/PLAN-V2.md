@@ -8,7 +8,7 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0 and 1 have landed** and carry their findings below; the rest is still a
+of work*. **Phases 0, 1 and 2 have landed** and carry their findings below; the rest is still a
 draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
@@ -64,7 +64,7 @@ start.
 |
 1  Mixed species                      engine only; a single-species game does not move   [landed]
 |
-2  Built forces                       ForceSpec 'built', any size, unequal totals
+2  Built forces                       ForceSpec 'built', any size, unequal totals   [landed]
 |
 +------------------------------+
 |                              |
@@ -354,7 +354,7 @@ Home, and Phase 2's built force names its Home die.
 
 ---
 
-## Phase 2 — Built forces
+## Phase 2 — Built forces — **landed**
 
 **Deliverable.** `setupGame` accepts a force it did not generate: exact armies, a chosen Home
 Terrain, a Frontier proposal and dragons, at any size, with the two sides of unequal size allowed.
@@ -424,6 +424,74 @@ exchange moving a die between players' areas would break it.
 A 12-health mixed force plays to the end in the terminal against a 12-health greedy force
 (`npm run play --forces built:<file>` or similar). A 12-against-24 game sets up without throwing.
 Both golden corpora are unchanged.
+
+> **Landed in one commit.** Both golden corpora replay byte-identical and unregenerated, the suite
+> and the 1000-game live fuzz are green, and the fuzz now plays a **mixed** rolled force one game in
+> five. `src/engine/built.test.ts` holds the built path; the exit criterion is met in the terminal
+> with `npm run play -- --forces built:data/forces/mixed-12.json --p1-ai greedy`, and as tests
+> (`data/forces/` holds that file and a 12-against-24 one, both loaded by the tests). No `RuleSet`
+> flag: a built force is a way of *specifying* a game, not a rule.
+
+### Where this section was wrong
+
+**1. The first mixed game found two bugs Phase 1 left, and neither was in this section.** Phase 1
+could only prove itself on hand-built boards, and said so. The moment the fuzz rolled a mixed force
+it threw, twice, on the first game:
+- **`RandomAI` announced spells by the pool's one number.** Greedy had learned the per-species pool
+  in Phase 1; the fuzz opponent had not, so it bought a Firewalker spell with Treefolk magic. It now
+  keeps only an element some split pays for. That filters nothing in a one-species game, so every
+  such game draws what it always drew.
+- **Resurrect Dead's offer said which dice, not which colour raises which.** Phase 1 filtered the
+  dead to those the offered elements could raise *at all*; both AIs then paid for a Firewalker in
+  water. `SpellTargetOffer.elements` now carries the narrower list, **present only when it narrows**
+  (so never in a one-species game, and never in a golden digest). `elementsFor` reads it for a client
+  that picks the target first (both AIs), `targetsFor` for one that picks the element first (the app's
+  die picker and the terminal). It is `minCount`'s lesson again: a rule the clients do not know is
+  one both clients break.
+
+**2. The candidate home rule would have moved a mixed force off its own terrain.** "One uniform draw
+among the dice sharing an element with the largest species" gives a Treefolk-heavy mixed force any
+of 20 dice, where a Treefolk force gets one of the four Swamplands. The rule shipped is the largest
+species' **own type**, falling back to the element draw only for a species with no own type (every
+Death species). One rule, and for a one-species force it is exactly Phase 10's. Largest is by health,
+and a tie goes to the first species by id.
+
+**3. `named` becoming "a lookup that returns a `BuiltForce`" was exactly right, and is now a test.**
+The starter pair built by hand opens on the same board, die for die and RNG counter included, as the
+named pair, under `V0_RULES`, `SPECIES_RULES` and `V1_RULES`. Every force, named, rolled or built, is
+checked by `builtForceProblem` in `setupGame`, so a preset and a file from the builder are held to one
+statement of the p. 8 rules.
+
+**4. A pinned dragon list is the last draw setup skips, which gave the cleanest test in the phase:**
+a game whose forces both name their dragons ends on the same RNG counter, with the same terrains, as
+the same game with `dragons: false`.
+
+**5. Force size is invariant, as predicted, and is checked rather than assumed.** `forceSize(state,
+player)` is the health of every unit the player owns; nothing in scope changes an owner or adds a
+unit. The live fuzz asserts every game ends at the size it started. No rule reads it yet: Foul
+Stench and Cursed Bullets arrive with Goblins and Dwarves.
+
+**6. The terminal needed a way to play a game it cannot answer.** "Plays to the end in the terminal"
+asks for a whole game, and piping fixed input cannot answer the damage picker. `--p1-ai <name>` lets
+an AI play your seat and the terminal narrate: a watch mode, and the first of Phase 3e's live-testing
+tools. `--forces mixed` rolls a mixed pair.
+
+**7. `dragonCount` was already right for 12.** `max(1, ceil(h / 24))` gives one at 12. It moved to
+`force.ts` beside the validator that uses it, and `setup.ts` re-exports it.
+
+**Deliberately not done.**
+- **No route to a built force in the app.** `?forces=` names only `FORCE_SETS`, and the start screen
+  pairs presets of equal health and calls anything else a slip. The builder (Phase 4) is where a
+  built force and "unequal on purpose" reach the screen.
+- **Presets still carry a `species` and are validated as one species.** A mixed preset would also
+  become a monster-mirror fixture by the registry's naming rule. The example mixed forces live in
+  `data/forces/` instead.
+- **A built force ignores its dragons under `dragons: false`**, rather than refusing them: a force
+  describes what a player brings, and the ruleset is a separate choice.
+- **The roll-off choice still opens when both proposals are the same die.** Choosing between two
+  identical dice is a real if pointless decision, and a built force can now make one on purpose.
+- **No `SAVE_VERSION` bump.** Saving is off, `ForceSpec` only gained a kind and an optional field,
+  and no existing record draws differently.
 
 ---
 

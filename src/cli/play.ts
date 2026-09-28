@@ -11,7 +11,11 @@
  *   npm run play -- --ai random         -- the fuzz opponent, for poking at rules
  *   npm run play -- --forces starter    -- the two hand-authored 30-health lists
  *   npm run play -- --forces bestiary   -- every monster and large die, so every SAI
+ *   npm run play -- --forces mixed      -- rolled forces drawing from every species
+ *   npm run play -- --forces built:data/forces/mixed-12.json   -- the exact forces in a file
+ *   npm run play -- --p1-ai greedy      -- an AI plays your side too, and you watch
  */
+import { readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
 
@@ -30,9 +34,10 @@ import { rngFrom, type RngState } from '../engine/rng'
 import { mathPhrase, saiPhrase, type DieRoll, type RollMath } from '../engine/roll'
 import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../engine/sai'
 import { rollOnTheTable } from '../engine/turn'
-import { OWN_ARMY_NOTE, poolSplit, spellPlan, spellTargetLabel, stageCast } from '../engine/magic'
+import { OWN_ARMY_NOTE, poolSplit, spellPlan, spellTargetLabel, stageCast, targetsFor } from '../engine/magic'
 
 
+import { readBuiltForces } from '../engine/force'
 import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
 import {
   V1_RULES,
@@ -43,6 +48,7 @@ import {
   buriedUnits,
   deadUnits,
 
+  forceSize,
   forceSpecies,
   livingUnits,
   type AnnouncedSpell,
@@ -890,12 +896,14 @@ ${bold('Magic')} ${dim(`— ${plan.remaining} of ${pending.pool.points} left`)}`
       element = picked
     }
 
+    // Only what this element can reach: a mixed DUA's Firewalker is not raised by water.
+    const targets = targetsFor(offer.castable, element)
     console.log(dim(`  aim ${offer.castable.spell.name} where?`))
-    offer.castable.targets.forEach((aim, i) => {
+    targets.forEach((aim, i) => {
       const price = aim.minCount > 1 ? dim(` (${aim.minCount} castings)`) : ''
       console.log(`    ${i + 1}) ${spellName(state, aim.target)}${price}`)
     })
-    const aimed = offer.castable.targets[Number((await ask('> ')).trim()) - 1]
+    const aimed = targets[Number((await ask('> ')).trim()) - 1]
     if (aimed === undefined) {
       console.log(red('  no target chosen; nothing staged'))
       continue
@@ -1556,17 +1564,40 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
 // --- main --------------------------------------------------------------------
 
 /** `--forces <name>`, or rolled from the seed when it is absent. An unknown name is
- *  answered with the list rather than a silent fallback to random. */
+ *  answered with the list rather than a silent fallback to random. `mixed` rolls forces
+ *  from every species at once, and `built:<file>` reads the exact forces from JSON
+ *  (v2 Phase 2; `data/forces/` holds examples). */
 function forcesArg(name: string | undefined): ForceSpec {
   if (name === undefined) return { kind: 'random' }
+  if (name === 'mixed') return { kind: 'random', mixed: true }
+  if (name.startsWith('built:')) return builtArg(name.slice('built:'.length))
   const found = namedForces(name)
   if (found === null) {
     console.error(
-      `unknown --forces ${name}; try ${Object.keys(FORCE_SETS).join(', ')}, or omit it to roll them`,
+      `unknown --forces ${name}; try ${[...Object.keys(FORCE_SETS), 'mixed', 'built:<file>'].join(', ')}, ` +
+        'or omit it to roll them',
     )
     process.exit(1)
   }
   return found
+}
+
+/** A built-force file: read, parsed and shape-checked here, so a typo is a sentence
+ *  rather than a stack trace. Whether the forces are legal, `setupGame` says. */
+function builtArg(path: string): ForceSpec {
+  let json: unknown
+  try {
+    json = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error: unknown) {
+    console.error(`--forces built:${path}: ${error instanceof Error ? error.message : String(error)}`)
+    process.exit(1)
+  }
+  const read = readBuiltForces(json)
+  if ('problem' in read) {
+    console.error(`--forces built:${path}: ${read.problem}`)
+    process.exit(1)
+  }
+  return { kind: 'built', forces: read.forces }
 }
 
 /** `--ai <name>`: an opponent from the registry the app uses, or the fuzz opponent,
@@ -1592,6 +1623,9 @@ function parseArgs() {
   return {
     seed: seedArg === undefined ? Math.floor(Math.random() * 100_000) : Number(seedArg),
     ai: aiArg(get('--ai')),
+    // Watching a whole game is how a force is judged before there is a screen for it,
+    // and the only way to play one through this client without typing every answer.
+    self: get('--p1-ai') === undefined ? null : aiArg(get('--p1-ai')),
     // The seed decides the forces now. A name brings back one of the hand-authored
     // pairs instead -- `starter` is what the tests and the goldens play, `bestiary`
     // puts every monster and large die on the board.
@@ -1600,18 +1634,20 @@ function parseArgs() {
 }
 
 async function main() {
-  const { seed, ai, forces }: { seed: number; ai: AiPlayer; forces: ForceSpec } = parseArgs()
+  const { seed, ai, self, forces }: { seed: number; ai: AiPlayer; self: AiPlayer | null; forces: ForceSpec } =
+    parseArgs()
   const human: PlayerId = 'p1'
 
   let state = begin(setupGame({ seed, forces, ruleSet: V1_RULES }))
 
   // Which species you are is a roll now, so the banner reads it off the board
-  // rather than stating it.
-  const fielding = (player: PlayerId) => speciesNames(forceSpecies(state, player))
+  // rather than stating it -- and the size too, since two sides need not match.
+  const fielding = (player: PlayerId) =>
+    `${speciesNames(forceSpecies(state, player))}, ${forceSize(state, player)} health`
   console.log(bold('\ndd_solo — Dragon Dice'))
   console.log(
     dim(
-      `seed ${seed} · you are p1 (${fielding('p1')}) · ` +
+      `seed ${seed} · ${self === null ? 'you are' : `${self.name} plays`} p1 (${fielding('p1')}) · ` +
         `opponent is ${ai.name} (${fielding('p2')})`,
     ),
   )
@@ -1644,7 +1680,13 @@ async function main() {
         lastBoard = key
       }
       flush()
-      action = await askHuman(state, pending)
+      if (self === null) {
+        action = await askHuman(state, pending)
+      } else {
+        const [selfAction, nextRng] = self.decide(state, pending, aiRng)
+        aiRng = nextRng
+        action = selfAction
+      }
     } else {
       const [aiAction, nextRng] = ai.decide(state, pending, aiRng)
       aiRng = nextRng
@@ -1657,7 +1699,11 @@ async function main() {
 
   console.log(board(state, human))
   console.log(
-    state.winner === human ? bold(green('\nYou win.')) : bold(red('\nYou lose.')),
+    self !== null
+      ? bold(`\n${state.winner} wins.`)
+      : state.winner === human
+        ? bold(green('\nYou win.'))
+        : bold(red('\nYou lose.')),
   )
   rl.close()
 }

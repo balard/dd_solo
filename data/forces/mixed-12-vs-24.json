@@ -1,0 +1,20 @@
+{
+  "_comment": "A built force pair of unequal size (v2 Phase 2): `npm run play -- --forces built:data/forces/mixed-12-vs-24.json`. p1 is 12 health, mixed, and names everything setup would otherwise draw -- its Home, its Frontier proposal and its one dragon -- so it consumes no draw at all. p2 is a 24-health Treefolk force with everything drawn. Each force reads its own size: one dragon each (24 is still 'one per 24'), and p2's armies may each hold up to 12. The engine allows the mismatch; the start screen is what calls an unequal pairing a mistake. src/engine/built.test.ts sets it up.",
+  "p1": {
+    "armies": {
+      "home": ["treefolk.oak", "firewalkers.sunflare", "treefolk.hamadryad"],
+      "campaign": ["firewalkers.adventurer", "treefolk.pine"],
+      "horde": ["treefolk.nymph", "firewalkers.shadowchaser", "treefolk.oakling"]
+    },
+    "homeTerrain": "swampland_temple",
+    "frontierProposal": "highland_tower",
+    "dragons": ["water_drake"]
+  },
+  "p2": {
+    "armies": {
+      "home": ["treefolk.darktree", "treefolk.oak_lord", "treefolk.naiad", "treefolk.oakling"],
+      "campaign": ["treefolk.noble_willow", "treefolk.pine", "treefolk.willow", "treefolk.nymph"],
+      "horde": ["treefolk.eldar_dryad", "treefolk.dryad", "treefolk.pineling"]
+    }
+  }
+}

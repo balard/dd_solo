@@ -13,6 +13,7 @@ import {
   castingsFor,
   magicRolled,
   spellTargetLabel as engineSpellTargetLabel,
+  targetsFor,
   type SpellAim,
   type SpellTargetOffer,
 } from '../../engine/magic'
@@ -1258,7 +1259,7 @@ export function spellUnitOffers(
   const element = aiming.element ?? (castable.elements.length === 1 ? castable.elements[0] : undefined)
   if (element === undefined) return null
   const offers = new Map<UnitId, SpellTargetOffer>()
-  for (const offer of castable.targets) {
+  for (const offer of targetsFor(castable, element)) {
     if (offer.target.kind !== 'units') continue
     const [only] = offer.target.unitIds
     if (only !== undefined && offer.target.unitIds.length === 1) offers.set(only, offer)

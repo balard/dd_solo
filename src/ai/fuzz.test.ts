@@ -39,9 +39,9 @@ import { describe, expect, it } from 'vitest'
 import { UNIT_TYPES } from '../data/load'
 import { SPELLS } from '../data/spells'
 import { resolvesSpell } from '../engine/spells'
-import { BESTIARY_FORCES, FORCE_SETS, STARTER_FORCES, type ForceSpec } from '../engine/setup'
+import { BESTIARY_FORCES, FORCE_SETS, STARTER_FORCES, setupGame, type ForceSpec } from '../engine/setup'
 import { dragonDie } from '../data/load'
-import { V1_RULES, type GameAction, type LogEntry } from '../engine/types'
+import { V1_RULES, forceSize, type GameAction, type LogEntry } from '../engine/types'
 
 import { randomAi } from './random'
 import { runGame } from './run'
@@ -191,6 +191,8 @@ const RULES: Readonly<Record<string, Reach>> = {
   flaming_shields: 'every',
   growth_taken: 'every',
   growth_declined: 'every',
+  // v2 Phase 2: a rolled force may mix species, and one in five here does.
+  mixed_force: 'every',
 }
 
 function tally(games: number): { counts: Map<string, number>; stuck: number; capped: number; longest: number } {
@@ -208,17 +210,20 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
   for (let i = 0; i < games; i++) {
     const seed = i + 1
     // Rolled forces twice in five, because they are what reaches every die and every
-    // species in the data; the named sets once each put the bestiary's 25 SAIs and the
-    // monster mirrors' concentrated faces on the board every few games.
+    // species in the data -- one of the two mixed (v2 Phase 2), since a mixed force
+    // is where Phase 1's per-unit species and per-species magic pool actually run.
+    // The named sets once each put the bestiary's 25 SAIs and the monster mirrors'
+    // concentrated faces on the board every few games.
     const forces: ForceSpec = [
       { kind: 'random' } as const,
       STARTER_FORCES,
       BESTIARY_FORCES,
       mirrors[i % mirrors.length] as ForceSpec,
-      { kind: 'random' } as const,
+      { kind: 'random', mixed: true } as const,
     ][i % 5] as ForceSpec
+    const setup = { seed, forces, ruleSet: V1_RULES }
     const result = runGame({
-      setup: { seed, forces, ruleSet: V1_RULES },
+      setup,
       players: { p1: randomAi, p2: randomAi },
       aiSeed: 300_000 + seed,
       maxDecisions: MAX_DECISIONS,
@@ -228,6 +233,15 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
     if (result.stoppedBecause === 'cap') capped += 1
     longest = Math.max(longest, result.decisions)
 
+    // Force size is derived, not stored (`forceSize`), which is sound only while it
+    // cannot change. A game that ends at another size has found the rule that moves it.
+    const opening = setupGame(setup)
+    for (const player of ['p1', 'p2'] as const) {
+      expect(forceSize(result.state, player), `seed ${seed}: ${player}'s force size moved`).toBe(
+        forceSize(opening, player),
+      )
+    }
+
     for (const action of result.record.actions) {
       bump(`decision:${action.kind}`)
       if (action.kind === 'rapid_growth') bump(action.unitIds.length > 0 ? 'growth_taken' : 'growth_declined')
@@ -236,6 +250,9 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
       bump(`log:${entry.kind}`)
       rolledSais(entry, bump)
       switch (entry.kind) {
+        case 'forces_drawn':
+          if (entry.species.p1.length > 1 || entry.species.p2.length > 1) bump('mixed_force')
+          break
         case 'roll_off_decided':
           bump(`took:${entry.took}`)
           break

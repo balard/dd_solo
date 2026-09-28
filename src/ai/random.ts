@@ -9,6 +9,7 @@ import type { ResultType } from '../data/types'
 import { damageOptions, healthsOf } from '../engine/damage'
 import { growthPartners } from '../engine/dua'
 import { isAsleep } from '../engine/effects'
+import { announcementProblem, elementsFor } from '../engine/magic'
 import { nextInt, type RngState } from '../engine/rng'
 import { DRAGON_ROLL_KINDS } from '../engine/sai'
 import {
@@ -143,7 +144,15 @@ export const randomAi: AiPlayer = {
           if (extra === 0) continue
           const count = aim.minCount + extra - 1
 
-          const [element, afterElement] = pick(state, offer.elements)
+          // Only an element this target takes and some split of the pool can pay. A
+          // one-species game narrows neither, so this filters nothing there and draws
+          // what it always drew; a mixed one (v2 Phase 2) has a pool per species -- six
+          // points of Treefolk magic buy no Firewalker spell -- and a DUA of two colours.
+          const payable = elementsFor(offer, aim.target).filter(
+            (e) => announcementProblem(pending.pool, [...casts, { spell: offer.spell.id, element: e, count, target: aim.target }]) === null,
+          )
+          if (payable.length === 0) continue
+          const [element, afterElement] = pick(state, payable)
           state = afterElement
 
           casts.push({ spell: offer.spell.id, element, count, target: aim.target })

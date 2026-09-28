@@ -64,6 +64,7 @@ import {
   OWN_ARMY_NOTE,
   repeatBuysNothing,
   spellPlan,
+  targetsFor,
   type SpellAim,
   type SpellDraftCast,
 } from '../../engine/magic'
@@ -1078,7 +1079,7 @@ function SaiHeader({
                     : 'tap a lit die on the board'}
                 </span>
               ) : (
-                aimed.castable.targets.map((aim, i) => (
+                (element === undefined ? aimed.castable.targets : targetsFor(aimed.castable, element)).map((aim, i) => (
                   <button
                     key={i}
                     type="button"

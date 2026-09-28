@@ -1,0 +1,17 @@
+{
+  "_comment": "A built force pair (v2 Phase 2): `npm run play -- --forces built:data/forces/mixed-12.json`. p1 is a 12-health mixed force, Treefolk the larger share, so its Home is drawn from Swampland; p2 is 12 health of Firewalkers. Each side brings one dragon, one per 24 health or part of it. Nothing here pins a terrain or a dragon, so both are drawn -- add homeTerrain, frontierProposal or dragons to a side to name them. Hand-authored; no importer touches this directory. src/engine/built.test.ts plays it.",
+  "p1": {
+    "armies": {
+      "home": ["treefolk.oak", "firewalkers.sunflare", "treefolk.hamadryad"],
+      "campaign": ["firewalkers.adventurer", "treefolk.pine"],
+      "horde": ["treefolk.nymph", "firewalkers.shadowchaser", "treefolk.oakling"]
+    }
+  },
+  "p2": {
+    "armies": {
+      "home": ["firewalkers.watcher", "firewalkers.firemaster", "firewalkers.sunburst"],
+      "campaign": ["firewalkers.nightsbane", "firewalkers.explorer", "firewalkers.firestarter"],
+      "horde": ["firewalkers.guardian", "firewalkers.shadowchaser", "firewalkers.explorer"]
+    }
+  }
+}

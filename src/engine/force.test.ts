@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { SPECIES, terrainDie, terrainType, unitType, unitsOfSpecies } from '../data/load'
 import { PRESET_ARMY_NAMES, maxArmyHealth } from '../data/presets'
 
-import { FORCE_SIZES, drawForce, generateForces, repairSplit, splitForce, type GeneratedForce } from './force'
+import { FORCE_SIZES, drawForce, generateForces, repairSplit, splitForce, type BuiltForce } from './force'
 import { rngFrom } from './rng'
 import { setupGame, STARTER_FORCES } from './setup'
 import { TERRAIN_SLOTS, armyAt, forceSpecies, opponentOf, unitsOf, type PlayerId } from './types'
@@ -103,7 +103,7 @@ describe('splitForce', () => {
 
 describe('generateForces', () => {
   /** A generated force's species, read off its dice -- it carries no field for them. */
-  const speciesOfForce = (force: GeneratedForce): readonly string[] => [
+  const speciesOfForce = (force: BuiltForce): readonly string[] => [
     ...new Set(PRESET_ARMY_NAMES.flatMap((name) => force.armies[name]).map((id) => unitType(id).species)),
   ]
 

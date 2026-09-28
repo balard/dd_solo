@@ -225,6 +225,32 @@ draw put Treefolk at home on a Wasteland, carrying neither of their elements. Th
 derived from the data (`homeTerrainType`), not tabled, so "which terrain a species brings" still
 has one copy.
 
+**Built forces (v2 Phase 2).** A force may be handed to setup whole: the dice of each starting
+army, and optionally its Home Terrain, its Frontier proposal and its dragons. A named preset is a
+built force with only its armies, and a rolled force is one the seed wrote. Whatever a force names
+is used as it stands and **draws nothing**; whatever it leaves out is drawn exactly as above.
+`SetupOptions.terrains`, the testing pin, still wins over both.
+
+Three house rules come with it:
+
+1. **The two sides need not be the same size.** Step 1's agreed total becomes each player's own.
+   The p. 8 rules are checked **per force**: every army holds at least one unit, none holds more
+   than half *that force's* health (rounded down), and a force that names its dragons names exactly
+   one per 24 health of *its own* size, or part of it (one at 12, not none). Whether an unequal
+   pairing is intended is not the engine's question; the start screen still refuses one, having
+   only presets to offer.
+2. **A player's force size is the total health of every unit they own**, dead and buried included.
+   Any "per 24 points of total force size" limit (p. 21) reads the player's own. It is derived, not
+   stored, because nothing in scope moves a unit between players or into or out of the game.
+3. **A drawn Home Terrain is drawn for the force's largest species** (most health; a tie goes to
+   the first species by id): a random die of that species' own type, as above. A species whose
+   elements make no terrain type (every Death species) draws uniformly among the dice sharing an
+   element with it instead. For a one-species Treefolk or Firewalkers force this is exactly the
+   rule above.
+
+A rolled force may also be **mixed**: each side draws from every die in the data, and the race draw
+is skipped.
+
 ## 8. SAIs under `sai: 'results'` (v1 Phase 1)
 
 `V0_RULES` is unchanged and still plays with every SAI inert. This section describes the rung

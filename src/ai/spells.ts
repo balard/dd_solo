@@ -20,6 +20,7 @@ import type { Spell } from '../data/spells'
 import { missileTargets } from '../engine/combat'
 import {
   announcementProblem,
+  elementsFor,
   castableSpells,
   magicPool,
   sameSpellTarget,
@@ -377,7 +378,7 @@ function payableElement(
 ): Element | null {
   const first = elementFor(state, offer, target)
   if (pool.suppliers === undefined) return first
-  const candidates = first === null ? [] : [first, ...offer.elements.filter((e) => e !== first)]
+  const candidates = first === null ? [] : [first, ...elementsFor(offer, target).filter((e) => e !== first)]
   for (const element of candidates) {
     if (offer.spell.id === 'summon_dragon' && target.kind === 'terrain' && summonable(state, element, target.slot).length === 0) {
       continue
@@ -388,14 +389,14 @@ function payableElement(
   return null
 }
 
-/** The element a casting at this target is paid in: the first the offer accepts,
+/** The element a casting at this target is paid in: the first the target accepts,
  *  except Summon Dragon, whose colour decides which dragons can come. */
 function elementFor(state: GameState, offer: Castable, target: SpellTarget) {
   if (offer.spell.id === 'summon_dragon') {
     if (target.kind !== 'terrain') return null
     return offer.elements.find((e) => summonable(state, e, target.slot).length > 0) ?? null
   }
-  return offer.elements[0] ?? null
+  return elementsFor(offer, target)[0] ?? null
 }
 
 /**

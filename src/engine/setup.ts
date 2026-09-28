@@ -6,22 +6,24 @@
  * players propose one and the winner chooses the first turn or the pick -- see
  * `rollOffPending` at the bottom of this file.
  *
- * The terrain dice are drawn, not chosen (a house rule, `RULES-V0.md` section 7): each
- * Home Terrain is a random die of the species' own type -- Swampland for Treefolk,
- * Wasteland for Firewalkers, `homeTerrainType` -- and a Frontier proposal is any die
- * sharing at least one element with its proposer's species, uniformly. See
- * `drawHomeDie` / `drawFrontierDie`.
+ * A terrain die a force does not name is drawn, not chosen (a house rule, `RULES-V0.md`
+ * section 7): each Home Terrain is a random die of the species' own type -- Swampland
+ * for Treefolk, Wasteland for Firewalkers -- and a Frontier proposal is any die sharing
+ * at least one element with its proposer's species, uniformly. See `drawHomeDie` /
+ * `drawFrontierDie`.
  *
- * A force is either named -- a preset, for tests and the golden corpus -- or rolled
- * from the seed. **The named path must consume no generation draws at all**, or a
- * named game lands on a different board than v0 gave it and every golden quietly
- * changes meaning. The same is true of a pinned terrain slot (`SetupOptions.terrains`):
- * it consumes no draw either, not "the same draw" -- so the goldens' three pins leave
- * the whole terrain-draw stream skipped.
+ * A force is named -- a preset, for tests and the golden corpus -- rolled from the seed,
+ * or built: handed over whole (v2 Phase 2). All three become a `BuiltForce` before
+ * anything else happens, so there is one path into a game. **A named or built force
+ * consumes no generation draws at all**, or a named game lands on a different board
+ * than v0 gave it and every golden quietly changes meaning. The same is true of
+ * anything a force or `SetupOptions.terrains` pins: it consumes no draw either, not
+ * "the same draw" -- so the goldens' three pins leave the whole terrain-draw stream
+ * skipped.
  */
 import {
   DRAGON_DICE,
-  homeTerrainType,
+  ownTerrainType,
   speciesElements,
   TERRAIN_DICE,
   terrainDie,
@@ -31,7 +33,13 @@ import {
 import type { Element } from '../data/types'
 import { preset, PRESET_ARMY_NAMES, PRESETS, type PresetArmyName } from '../data/presets'
 
-import { generateForces, type GeneratedForce } from './force'
+import {
+  builtForceHealth,
+  builtForceProblem,
+  dragonCount,
+  generateForces,
+  type BuiltForce,
+} from './force'
 import { nextInt, rngFrom, type RngState } from './rng'
 import { expectNoEffects, rollArmy, type DieRoll } from './roll'
 import type { RollContext } from './sai'
@@ -63,7 +71,11 @@ import {
  */
 export type ForceSpec =
   | { readonly kind: 'named'; readonly forces: Readonly<Record<PlayerId, string>> }
-  | { readonly kind: 'random' }
+  /** `mixed` draws each side from every die in the data rather than one species. */
+  | { readonly kind: 'random'; readonly mixed?: true }
+  /** The exact forces, with whatever they pin (v2 Phase 2). A record carries them
+   *  whole, so a built game replays without the file or screen that built it. */
+  | { readonly kind: 'built'; readonly forces: Readonly<Record<PlayerId, BuiltForce>> }
 
 /** The two hand-authored 30-health forces. Most tests want exactly this. */
 export const STARTER_FORCES: ForceSpec = {
@@ -142,17 +154,10 @@ export interface SetupOptions {
   readonly ruleSet?: RuleSet
 }
 
-/**
- * A force once it is resolved, whichever way it was obtained: its dice, and nothing
- * else. The species follow from the dice (v2 Phase 1) -- a `species` field beside them
- * was a second copy of a fact that could drift, and a false one for a mixed force.
- */
-interface ResolvedForce {
-  readonly armies: Readonly<Record<PresetArmyName, readonly string[]>>
-}
+export { dragonCount, type BuiltForce } from './force'
 
 /** The species a force's dice belong to, each once, sorted. */
-function speciesOfForce(force: ResolvedForce): readonly string[] {
+function speciesOfForce(force: BuiltForce): readonly string[] {
   const ids = PRESET_ARMY_NAMES.flatMap((name) => force.armies[name])
   return [...new Set(ids.map((id) => unitType(id).species))].sort()
 }
@@ -162,7 +167,7 @@ function speciesOfForce(force: ResolvedForce): readonly string[] {
  * one-species force, which is what every draw below consumed before v2 Phase 1 and so
  * what keeps a single-species game on the board it always had.
  */
-function forceElements(force: ResolvedForce): readonly Element[] {
+function forceElements(force: BuiltForce): readonly Element[] {
   const out: Element[] = []
   for (const species of speciesOfForce(force)) {
     for (const element of speciesElements(species)) if (!out.includes(element)) out.push(element)
@@ -195,27 +200,47 @@ function startingSlot(armyName: PresetArmyName, player: PlayerId): TerrainSlot {
 const SORTED_TERRAIN_DICE: readonly string[] = [...TERRAIN_DICE].map((d) => d.id).sort()
 
 /**
- * Draws a Home Terrain die: uniformly among the four dice of the species' own type, so
- * the one thing the draw decides is the eighth-face icon.
+ * The species a drawn Home Terrain is chosen for: the one holding the most health in
+ * the force, ties to the first by id. For a one-species force, that species.
+ */
+function homeSpecies(force: BuiltForce): string {
+  const health = new Map<string, number>()
+  for (const name of PRESET_ARMY_NAMES) {
+    for (const id of force.armies[name]) {
+      const type = unitType(id)
+      health.set(type.species, (health.get(type.species) ?? 0) + type.health)
+    }
+  }
+  let best: string | null = null
+  for (const species of speciesOfForce(force)) {
+    if (best === null || (health.get(species) ?? 0) > (health.get(best) ?? 0)) best = species
+  }
+  if (best === null) throw new Error('a force with no dice has no home terrain to draw')
+  return best
+}
+
+/**
+ * Draws a Home Terrain die for a force that does not name one (a house rule,
+ * `RULES-V0.md` section 7). It is drawn for the force's largest species:
+ * - **uniformly among the four dice of that species' own type**, so the one thing the
+ *   draw decides is the eighth-face icon -- which is exactly the rule a one-species
+ *   Treefolk or Firewalkers force has had since Phase 10, and draws what it drew;
+ * - for a species whose elements make no terrain type (every Death species), uniformly
+ *   among the dice sharing an element with it, the Frontier's rule.
  *
  * It was uniform over all 24 from Phase 5b, which put a Treefolk force at home on a
  * Wasteland -- a terrain carrying neither of its elements, where Replanting and Rapid
  * Growth never fire and its spells need a Standing Stones to be cast at all.
  */
-function drawHomeDie(force: ResolvedForce, rng: RngState): readonly [string, RngState] {
-  // A mixed force has no one "own type" to draw from. Built forces (v2 Phase 2) name
-  // their Home die; until then a mixed force has to pin it, and says so rather than
-  // quietly drawing from the first species' type.
-  const species = speciesOfForce(force)
-  const [only] = species
-  if (only === undefined || species.length > 1) {
-    throw new Error(
-      `a force of ${species.join(' and ') || 'no dice'} has no one home terrain type to draw ` +
-        `from; pin its Home Terrain with SetupOptions.terrains`,
-    )
-  }
-  const own = homeTerrainType(only).id
-  const eligible = SORTED_TERRAIN_DICE.filter((dieId) => terrainDie(dieId).type === own)
+function drawHomeDie(force: BuiltForce, rng: RngState): readonly [string, RngState] {
+  const species = homeSpecies(force)
+  const own = ownTerrainType(species)
+  const elements = speciesElements(species)
+  const eligible = SORTED_TERRAIN_DICE.filter((dieId) =>
+    own !== null
+      ? terrainDie(dieId).type === own.id
+      : terrainType(terrainDie(dieId).type).elements.some((e) => elements.includes(e)),
+  )
   const [index, next] = nextInt(rng, eligible.length)
   const dieId = eligible[index]
   if (dieId === undefined) throw new Error(`drew home terrain ${index} of ${eligible.length}`)
@@ -230,7 +255,7 @@ function drawHomeDie(force: ResolvedForce, rng: RngState): readonly [string, Rng
  * Phase 5b drew an element first and then a die carrying it, which made the species'
  * own type twice as likely as any other. Every eligible die is equally likely now.
  */
-function drawFrontierDie(force: ResolvedForce, rng: RngState): readonly [string, RngState] {
+function drawFrontierDie(force: BuiltForce, rng: RngState): readonly [string, RngState] {
   const elements = forceElements(force)
   const eligible = SORTED_TERRAIN_DICE.filter((dieId) =>
     terrainType(terrainDie(dieId).type).elements.some((e) => elements.includes(e)),
@@ -239,14 +264,6 @@ function drawFrontierDie(force: ResolvedForce, rng: RngState): readonly [string,
   const dieId = eligible[index]
   if (dieId === undefined) throw new Error(`drew frontier die ${index} of ${eligible.length}`)
   return [dieId, next] as const
-}
-
-/**
- * How many dragons a force brings: one per 24 points, or part thereof (full rules
- * p. 12). One at 24 health, two at 30 or 36.
- */
-export function dragonCount(health: number): number {
-  return Math.max(1, Math.ceil(health / 24))
 }
 
 /**
@@ -267,7 +284,7 @@ export function dragonCount(health: number): number {
  * chest against two wings.
  */
 function drawDragonDice(
-  force: ResolvedForce,
+  force: BuiltForce,
   count: number,
   rng: RngState,
 ): readonly [readonly string[], RngState] {
@@ -321,7 +338,7 @@ type ArmyGroups = Readonly<Record<PresetArmyName, readonly UnitInstance[]>>
 
 function buildUnits(
   player: PlayerId,
-  force: ResolvedForce,
+  force: BuiltForce,
 ): { all: UnitInstance[]; byArmy: ArmyGroups } {
   const all: UnitInstance[] = []
   const byArmy = {} as Record<PresetArmyName, UnitInstance[]>
@@ -406,42 +423,60 @@ function rollForFirstPlayer(
   return [coin === 0 ? 'p1' : 'p2', { p1: 0, p2: 0 }, { p1: [], p2: [] }, next] as const
 }
 
-const countDice = (force: GeneratedForce): number =>
+const countDice = (force: BuiltForce): number =>
   PRESET_ARMY_NAMES.reduce((sum, name) => sum + force.armies[name].length, 0)
 
-const forceHealth = (force: ResolvedForce): number =>
-  PRESET_ARMY_NAMES.reduce(
-    (sum, name) => sum + force.armies[name].reduce((n, id) => n + unitType(id).health, 0),
-    0,
-  )
+/**
+ * The two forces as `BuiltForce`s, whichever way they were specified, and the log entry
+ * a draw leaves. A preset is a built force with only its armies, so it pins nothing and
+ * every draw after this one runs as it always did.
+ */
+function resolveForces(
+  spec: ForceSpec,
+  rng: RngState,
+): readonly [Readonly<Record<PlayerId, BuiltForce>>, RngState, LogEntry | null] {
+  switch (spec.kind) {
+    case 'named':
+      return [
+        { p1: { armies: preset(spec.forces.p1).armies }, p2: { armies: preset(spec.forces.p2).armies } },
+        rng,
+        null,
+      ] as const
+    case 'built':
+      return [spec.forces, rng, null] as const
+    case 'random': {
+      const [rolled, next] = generateForces(rng, { mixed: spec.mixed === true })
+      return [
+        rolled,
+        next,
+        {
+          kind: 'forces_drawn',
+          health: builtForceHealth(rolled.p1),
+          species: { p1: speciesOfForce(rolled.p1), p2: speciesOfForce(rolled.p2) },
+          dice: { p1: countDice(rolled.p1), p2: countDice(rolled.p2) },
+        },
+      ] as const
+    }
+  }
+}
 
 export function setupGame(options: SetupOptions): GameState {
   const ruleSet = options.ruleSet ?? V0_RULES
   const log: LogEntry[] = []
   let rng = rngFrom(options.seed)
 
-  // Steps 1 to 3: the forces. Named forces take no draws, so a named game opens on
-  // the board it always opened on.
-  let forces: Readonly<Record<PlayerId, ResolvedForce>>
-  if (options.forces.kind === 'named') {
-    forces = { p1: preset(options.forces.forces.p1), p2: preset(options.forces.forces.p2) }
-  } else {
-    const [rolled, next] = generateForces(rng)
-    rng = next
-    forces = rolled
-    log.push({
-      kind: 'forces_drawn',
-      health: forceHealth(rolled.p1),
-      species: { p1: speciesOfForce(rolled.p1), p2: speciesOfForce(rolled.p2) },
-      dice: { p1: countDice(rolled.p1), p2: countDice(rolled.p2) },
-    })
-  }
+  // Steps 1 to 3: the forces. Named and built forces take no draws, so a named game
+  // opens on the board it always opened on.
+  const [forces, afterForces, drawn] = resolveForces(options.forces, rng)
+  rng = afterForces
+  if (drawn !== null) log.push(drawn)
 
-  if (forceHealth(forces.p1) !== forceHealth(forces.p2)) {
-    throw new Error(
-      `the two forces are ${forceHealth(forces.p1)} and ${forceHealth(forces.p2)} health; ` +
-        `both sides bring the same, or the game is unfair before it starts`,
-    )
+  // Checked per force (p. 8), and for every force, not only a built one: one path in.
+  // The two sides need not be the same size any more (v2 Phase 2) -- whether an unequal
+  // pairing is a mistake is the start screen's question, not the engine's.
+  for (const player of ['p1', 'p2'] as const) {
+    const problem = builtForceProblem(forces[player])
+    if (problem !== null) throw new Error(`${player}'s force cannot start a game: ${problem}`)
   }
 
   const p1Units = buildUnits('p1', forces.p1)
@@ -497,13 +532,15 @@ export function setupGame(options: SetupOptions): GameState {
   const frontierSetter = opponentOf(firstPlayer)
 
   // Step 5: the three terrain dice, drawn in this order -- p1_home, then the
-  // Frontier (one proposal, or two under the choice), then p2_home -- and only for the slots
-  // `options.terrains` does not pin. A pinned slot consumes no draw at all, the
-  // named-force rule again: not "the same draws", none, or a partly pinned game
+  // Frontier (one proposal, or two under the choice), then p2_home -- and only for what
+  // neither `options.terrains` nor the force pins. A pinned die consumes no draw at all,
+  // the named-force rule again: not "the same draws", none, or a partly pinned game
   // would land on a different board than the same seed gives a fully pinned one.
+  // `options.terrains` wins over the force, being applied last.
+  const p1HomePin = options.terrains?.p1_home ?? forces.p1.homeTerrain
   let p1HomeDie: string
-  if (options.terrains?.p1_home !== undefined) {
-    p1HomeDie = options.terrains.p1_home
+  if (p1HomePin !== undefined) {
+    p1HomeDie = p1HomePin
   } else {
     const [dieId, next] = drawHomeDie(forces.p1, rng)
     p1HomeDie = dieId
@@ -512,26 +549,32 @@ export function setupGame(options: SetupOptions): GameState {
 
   // Under the choice both players propose, in player order -- each from a terrain
   // sharing an element with their own species, the same draw the `split` rung gives
-  // the loser alone. Pinning the Frontier never reaches here (see `choosing`).
+  // the loser alone. A force's own proposal is used as it stands. Pinning the Frontier
+  // through `options.terrains` never reaches here (see `choosing`).
+  const proposalOf = (player: PlayerId, from: RngState): readonly [string, RngState] => {
+    const named = forces[player].frontierProposal
+    return named !== undefined ? ([named, from] as const) : drawFrontierDie(forces[player], from)
+  }
   let frontierDie: string
   let proposals: Readonly<Record<PlayerId, string>> | null = null
   if (options.terrains?.frontier !== undefined) {
     frontierDie = options.terrains.frontier
   } else if (choosing) {
-    const [p1Proposal, afterP1] = drawFrontierDie(forces.p1, rng)
-    const [p2Proposal, afterP2] = drawFrontierDie(forces.p2, afterP1)
+    const [p1Proposal, afterP1] = proposalOf('p1', rng)
+    const [p2Proposal, afterP2] = proposalOf('p2', afterP1)
     rng = afterP2
     proposals = { p1: p1Proposal, p2: p2Proposal }
     frontierDie = p1Proposal
   } else {
-    const [dieId, next] = drawFrontierDie(forces[frontierSetter], rng)
+    const [dieId, next] = proposalOf(frontierSetter, rng)
     frontierDie = dieId
     rng = next
   }
 
+  const p2HomePin = options.terrains?.p2_home ?? forces.p2.homeTerrain
   let p2HomeDie: string
-  if (options.terrains?.p2_home !== undefined) {
-    p2HomeDie = options.terrains.p2_home
+  if (p2HomePin !== undefined) {
+    p2HomeDie = p2HomePin
   } else {
     const [dieId, next] = drawHomeDie(forces.p2, rng)
     p2HomeDie = dieId
@@ -572,9 +615,14 @@ export function setupGame(options: SetupOptions): GameState {
     const pools = {} as Record<PlayerId, readonly DragonInPlay[]>
 
     for (const player of ['p1', 'p2'] as const) {
-      const count = dragonCount(forceHealth(forces[player]))
-      const [dieIds, next] = drawDragonDice(forces[player], count, rng)
-      rng = next
+      // A force that names its dragons draws none; `builtForceProblem` has already held
+      // the list to the force's own dragon count.
+      let dieIds = forces[player].dragons
+      if (dieIds === undefined) {
+        const [drawnIds, next] = drawDragonDice(forces[player], dragonCount(builtForceHealth(forces[player])), rng)
+        rng = next
+        dieIds = drawnIds
+      }
       pools[player] = dieIds.map((dieId, ordinal) => ({
         id: `${player}:${dieId}#${ordinal}`,
         dieId,

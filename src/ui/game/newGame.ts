@@ -6,9 +6,12 @@
  * -- is here instead, for the same reason `prompts.ts` holds the rules about which
  * dice are selectable: it is testable, and this project has no jsdom.
  *
- * The one rule with teeth is health parity. `setupGame` throws when the two sides
- * bring different totals, and a throw out of a click handler is a blank page, so the
- * pairing is checked here and the Start button reports it instead.
+ * The one rule with teeth is health parity, and it lives here rather than in the
+ * engine. `setupGame` stopped caring in v2 Phase 2 -- a 12-health force may face a
+ * 24-health one on purpose, which v3's encounters will -- so whether an unequal pairing
+ * is a choice or a slip is a question only the screen that made it can answer. This
+ * one has only presets to offer and no way to say "on purpose", so it calls it a slip,
+ * and the Start button reports it.
  */
 import { DEFAULT_OPPONENT, OPPONENT_NAMES, type OpponentName } from '../../ai/opponents'
 import { PRESETS, preset, presetHealth, PRESET_ARMY_NAMES } from '../../data/presets'
@@ -145,6 +148,7 @@ export function newGameSetup(
   const seed = withSeed(seedText, randomSeed)
   if (seed.kind === 'bad') return { kind: 'problem', problem: seed.problem }
 
+  // Unequal by mistake, as far as this screen can tell: see the header.
   const health = { p1: presetHealth(preset(p1)), p2: presetHealth(preset(p2)) }
   if (health.p1 !== health.p2) {
     return {

@@ -335,15 +335,26 @@ export function speciesElements(speciesId: string): readonly Element[] {
  * so the match is always exactly one, and this throws if the data ever stops saying so.
  */
 export function homeTerrainType(speciesId: string): TerrainType {
+  const only = ownTerrainType(speciesId)
+  if (only === null) throw new DataError(`${speciesId} matches no terrain type`)
+  return only
+}
+
+/**
+ * `homeTerrainType`, or null for a species whose elements make no terrain type -- which
+ * is every species carrying Death, since no terrain does (v2 Phase 2). Still throws if
+ * two types match, since that is the data contradicting itself rather than a species
+ * the rule does not cover.
+ */
+export function ownTerrainType(speciesId: string): TerrainType | null {
   const own = speciesElements(speciesId)
   const found = TERRAIN_TYPES.filter(
     (t) => t.elements.length === own.length && own.every((e) => t.elements.includes(e)),
   )
-  const [only] = found
-  if (only === undefined || found.length > 1) {
+  if (found.length > 1) {
     throw new DataError(`${speciesId} matches ${found.length} terrain types, not exactly one`)
   }
-  return only
+  return found[0] ?? null
 }
 
 /** Units of one species, in the data's order (by class, then size). */

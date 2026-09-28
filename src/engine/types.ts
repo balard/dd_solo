@@ -1174,10 +1174,11 @@ export type LogEntry =
   | {
       /** Only when the forces were rolled: a named force is a choice, not a draw. */
       readonly kind: 'forces_drawn'
-      /** Health per side. Both sides always bring the same. */
+      /** Health per side. A rolled pair is always one size; a built pair need not be
+       *  (v2 Phase 2), but a built force is not drawn and logs no entry here. */
       readonly health: number
-      /** The species present in each force, read off its dice (v2 Phase 1): one today,
-       *  since a rolled force is one species, and a list because a force need not be. */
+      /** The species present in each force, read off its dice (v2 Phase 1): one for an
+       *  ordinary rolled force, more for a `mixed` one (v2 Phase 2). */
       readonly species: Readonly<Record<PlayerId, readonly string[]>>
       readonly dice: Readonly<Record<PlayerId, number>>
     }
@@ -2001,6 +2002,21 @@ export function speciesIn(units: readonly UnitInstance[]): readonly string[] {
  */
 export function forceSpecies(state: GameState, player: PlayerId): readonly string[] {
   return speciesIn(unitsOf(state, player))
+}
+
+/**
+ * A player's force size: the total health of every unit they own, wherever it stands --
+ * dead and buried included (v2 Phase 2). "Per 24 points of total force size" (p. 21) is
+ * a limit some abilities scale by, and with unequal forces each player reads their own.
+ *
+ * **Derived, never stored**, the rule armies and species follow, and sound only because
+ * it is invariant in this scope: no unit enters or leaves the game, an exchange swaps two
+ * dice of one owner, and nothing changes a unit's owner. The live-rules fuzz asserts that
+ * every game ends at the size it started. Dragonkin, or anything that captures a die,
+ * would break it -- store it at setup then.
+ */
+export function forceSize(state: GameState, player: PlayerId): number {
+  return unitsOf(state, player).reduce((sum, u) => sum + unitType(u.typeId).health, 0)
 }
 
 export function unitsOf(state: GameState, player: PlayerId): readonly UnitInstance[] {

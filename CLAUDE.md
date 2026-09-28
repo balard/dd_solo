@@ -133,13 +133,21 @@ the dice and the opponent.
 > mixed force is a valid state. Nothing can *set up* a mixed force until Phase 2 (built forces), so
 > `mixed.test.ts` builds mixed boards directly -- one test per call site that moved -- and both golden
 > corpora replay byte-identical and unregenerated.
+>
+> **v2 Phase 2 has landed: a force is input.** `ForceSpec` gained `built` -- exact armies, and
+> optionally the Home, the Frontier proposal and the dragons -- and every force (named, rolled or
+> built) becomes a `BuiltForce` checked by `builtForceProblem` before setup does anything else. The
+> two sides may differ in size; parity is `newGame.ts`'s rule now, not the engine's. A rolled force
+> can be `mixed`, and the live fuzz plays one game in five that way: its first mixed game found two
+> Phase 1 bugs (below, under `SpellTargetOffer`). `npm run play -- --forces built:<file>` plays a
+> file; `data/forces/` holds examples. Both golden corpora are still byte-identical and unregenerated.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 and 1 landed; the rest is a draft). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0, 1 and 2 landed; the rest is a draft). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
@@ -166,7 +174,8 @@ npm run typecheck   # tsc --noEmit
 npm run build       # typecheck + production build
 npm run data        # regenerate and validate data/starter/ from data/raw/
 npm run art         # optional: mirror real face art into public/faces/ + assets/faces/ (both gitignored)
-npm run play        # play a game in the terminal (--seed N, --ai greedy|passive|random, --forces starter|bestiary)
+npm run play        # play a game in the terminal (--seed N, --ai greedy|passive|random,
+                    #   --forces starter|bestiary|mixed|built:<file>, --p1-ai <ai> to watch)
 npm run fuzz        # the live-rules fuzz at 1000 games instead of 200 (about a minute)
 npm run goldens -- v1   # re-record one golden corpus (v0 or v1) -- see below before you do
 ```
@@ -391,12 +400,27 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
        -> terrain faces
   ```
 
-  **A named force must consume no generation draws at all** -- not "the same draws", none -- or a
-  named game lands on a different board than v0 gave it and the golden corpus quietly changes
-  meaning. The generation steps live inside the random branch, not before it. The same rule applies
-  to a pinned terrain slot (Phase 5b): it consumes no draw either, which is why the die draws sit
+  **A named or built force must consume no generation draws at all** -- not "the same draws", none
+  -- or a named game lands on a different board than v0 gave it and the golden corpus quietly
+  changes meaning. The generation steps live inside the random branch, not before it. The same rule
+  applies to a pinned terrain slot (Phase 5b) and to anything a built force names -- its Home, its
+  proposal, its dragons (v2 Phase 2): each consumes no draw either, which is why the die draws sit
   after the roll-off and before the faces, and why a partly pinned game draws only for what is left
-  unpinned.
+  unpinned. A mixed rolled force skips the race draw: `size -> p1 units -> p1 split -> p2 ...`.
+- **Every force is a `BuiltForce` before setup does anything with it** (v2 Phase 2, `force.ts`):
+  a preset resolves to one with only its armies, a rolled force is one the RNG wrote, and a
+  `{ kind: 'built' }` spec carries two whole. `builtForceProblem` checks each **per force**, never
+  per pair -- armies non-empty and at most half *that* force's health, dice that exist, named
+  dragons exactly `dragonCount` of its own size -- and `setupGame` throws naming the player.
+  - **Setup no longer requires equal sides.** Whether an unequal pairing is intended is a question
+    only the screen that made it can answer, so `newGame.ts` asks it; the engine does not.
+  - **`forceSize(state, player)` is derived**: every unit the player owns, dead and buried
+    included. Sound only because it is invariant in this scope -- no unit changes owner, enters or
+    leaves -- and the live fuzz asserts every game ends at the size it started.
+  - A built force's dragons are ignored under `dragons: false`, not refused: a force describes
+    what a player brings, and the ruleset is a separate choice.
+  - `readBuiltForces` shape-checks JSON a person wrote (the terminal's `built:<file>`), so a typo
+    is a sentence rather than a stack trace.
 - **The roll-off is a real choice under `rollOff: 'choice'`** (v1 Phase 10e, what `V1_RULES`
   plays): each player proposes a Frontier, and the winner takes the first turn *or* the pick of the
   two, the loser the other prize. Below that rung the two prizes are still split one each (winner
@@ -419,6 +443,9 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   **derived, not tabled** -- `homeTerrainType` in `data/load.ts` finds the one terrain type whose
   elements are exactly the species' two, because the six basic types carry the six pairs of four
   elements, one each. So there is still no second copy of "which terrain a species brings" to drift.
+  - **A mixed force draws for its largest species** by health, a tie to the first by id (v2 Phase
+    2). A species with no own type -- every Death species -- draws among the dice sharing one of
+    its elements instead (`ownTerrainType` returns null for it).
   - **A Frontier (or a proposal) is one uniform draw among every die sharing at least one
     element** with the species -- 20 of the 24 for either species here. Phase 5b drew an element
     first and then a die, which made the species' own type twice as likely; that is gone.
@@ -440,9 +467,12 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     Flashfire is Firewalkers-only, the human plays p1, and `bestiary` puts Treefolk there. The
     registry is derived from `PRESETS`, so a monster added later is playable in the same edit that
     gives it a fixture.
-  - **A preset is not required to be 30 health.** The rule is that the two sides of a *game* bring
-    the same total and no army exceeds half of it; "every preset is 30" was a fact about there
-    being only two of them, and `setup.test.ts` used to assert it.
+  - **A preset is not required to be 30 health.** The rule is that no army exceeds half of the
+    force; "every preset is 30" was a fact about there being only two of them, and `setup.test.ts`
+    used to assert it. The start screen still pairs only presets of equal health.
+  - **A preset is still one species**, validated so at load. A mixed preset would also turn into a
+    monster-mirror fixture by `FORCE_SETS`' naming rule, so example mixed forces are built-force
+    files in `data/forces/`, which the tests load.
 - **The ten monster fixtures are one preset per monster die** -- `treefolk_satyr`,
   `firewalkers_gorgon` and so on -- **six copies of that one monster, split 3/2/1** across home,
   Frontier and the enemy home. They exist because a bestiary buries the die you are testing among
@@ -454,7 +484,7 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     split is 3/2/1 rather than the 4/1/1 it reads like it wants to be.
   - All ten are 24 health, so **any two of them pair, mirrors included** -- a mirror is the most
     useful board of the lot, being one die read against itself. None of them pairs with a starter
-    (30) or a bestiary (35); `newGame.ts` refuses that before `setupGame` can throw.
+    (30) or a bestiary (35); `newGame.ts` refuses that pairing on the start screen.
   - `setup.test.ts` derives the roster from `UNIT_TYPES` rather than listing it, so **a monster
     added to the data later fails there** instead of quietly going without a fixture.
 - **Species belongs to a unit, not a player** (v2 Phase 1). `unitType(unit.typeId).species` is the
@@ -466,9 +496,8 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     Flaming Shields' `counts_as` modifier names the species whose dice convert; Air Flight needs a
     *Firewalker* at the destination; Accelerated Growth exchanges only a dying unit of the spell's
     own species. `forceSpecies` is for what a client shows as the force's name.
-  - **A force carries no species field.** `ResolvedForce` and `GeneratedForce` are dice only; setup
-    derives the species (and the elements its draws use) from them. A mixed force has no one
-    "own type" to draw a Home die from, so it must pin its Home until Phase 2 names one.
+  - **A force carries no species field.** `BuiltForce` is dice (and optional pins) only; setup
+    derives the species (and the elements its draws use) from them.
   - **The magic pool is per species, and only for a mixed force** (`MagicPool.suppliers`). Paying
     for an announcement is a transport problem, solved exactly by Hall's condition in
     `allocationProblem`, behind `announcementProblem(pool, casts)` -- the one validator, which
@@ -637,6 +666,13 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   property of what it is aimed at -- a 2-health die needs two castings -- so the number travels with
   the target and every chooser respects it for free. A rule the clients do not know is a rule both
   clients will violate, and the fuzz proved exactly that within a hundred games.
+  - **`SpellTargetOffer.elements` is the same lesson for colour** (v2 Phase 2): in a mixed DUA a
+    Firewalker is raised by air or fire and not water. Present **only when it narrows** the
+    castable's list, so it never appears in a one-species game or a golden digest. Read it through
+    `elementsFor(castable, target)` (a chooser that aims first: both AIs) or `targetsFor(castable,
+    element)` (one that pays first: the app's die picker, the terminal). The first mixed fuzz game
+    found both AIs paying for a Firewalker in water, and `RandomAI` spending one species' magic on
+    another's spell -- it now keeps only an element some split of the pool pays.
 - **`MagicState.returnTo` is what lets a casting window nest.** Cantrip's second sentence suspends an
   exchange, announces and resolves spells, and hands the march back where it came from; a magic
   action has no `returnTo` and ends its march instead. That one optional field is the whole of the

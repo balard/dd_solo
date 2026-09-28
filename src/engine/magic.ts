@@ -305,10 +305,33 @@ export interface Castable {
  * a hundred games.
  *
  * 1 for every other spell, where a target is a target and the count is free.
+ *
+ * `elements` is the same idea for colour (v2 Phase 2): the elements a casting at this
+ * target may be paid in, **present only when narrower** than the castable's own list.
+ * Resurrect Dead raises only a die whose species "contains the element of magic used",
+ * and a mixed force's DUA holds dice of two colours, so a Firewalker in it takes air
+ * or fire and not the water the same casting could otherwise be paid in. A single-species
+ * DUA never narrows anything, which keeps the field out of every recorded game. Read it
+ * through `elementsFor`.
  */
 export interface SpellTargetOffer {
   readonly target: SpellTarget
   readonly minCount: number
+  readonly elements?: readonly Element[]
+}
+
+/** The elements a casting of `castable` at `target` may be paid in -- the one rule every
+ *  client applies before it asks which element, so none offers a colour the engine then
+ *  refuses (`spellTargetProblem`). */
+export function elementsFor(castable: Castable, target: SpellTarget): readonly Element[] {
+  const offer = castable.targets.find((t) => sameSpellTarget(t.target, target))
+  return offer?.elements ?? castable.elements
+}
+
+/** `elementsFor` the other way round, for a client that asks the element first: the
+ *  targets a casting paid in `element` may be aimed at. */
+export function targetsFor(castable: Castable, element: Element): readonly SpellTargetOffer[] {
+  return castable.targets.filter((t) => t.elements === undefined || t.elements.includes(element))
 }
 
 /**
@@ -583,19 +606,22 @@ export function castableSpells(
 
     let targets = spellTargets(state, caster, s).filter((t) => t.minCount * s.cost <= reach)
     // A mixed force's dead are of more than one species: a unit whose species carries
-    // none of these elements could never be raised by this casting, so it is not offered.
+    // none of these elements could never be raised by this casting, so it is not offered,
+    // and one carrying only some of them says which (`SpellTargetOffer.elements`).
     if (s.id === 'resurrect_dead') {
-      targets = targets.filter(
-        (t) =>
-          t.target.kind !== 'units' ||
-          t.target.unitIds.every((id) => {
-            const unit = state.units[id]
-            return (
-              unit !== undefined &&
-              speciesElements(unitType(unit.typeId).species).some((e) => elements.includes(e))
-            )
-          }),
-      )
+      const offered = elements
+      targets = targets.flatMap((t): SpellTargetOffer[] => {
+        if (t.target.kind !== 'units') return [t]
+        let raising: readonly Element[] = offered
+        for (const id of t.target.unitIds) {
+          const unit = state.units[id]
+          if (unit === undefined) return []
+          const carries = speciesElements(unitType(unit.typeId).species)
+          raising = raising.filter((e) => carries.includes(e))
+        }
+        if (raising.length === 0) return []
+        return raising.length < offered.length ? [{ ...t, elements: raising }] : [t]
+      })
     }
     if (s.id === 'summon_dragon') {
       targets = targets.filter(
@@ -790,7 +816,7 @@ export function spellPlan(
       offer !== undefined &&
       cast.count >= 1 &&
       (offer.spell.cumulative || cast.count === 1) &&
-      offer.elements.includes(cast.element) &&
+      elementsFor(offer, cast.target).includes(cast.element) &&
       offer.targets.some((t) => sameSpellTarget(t.target, cast.target) && cast.count >= t.minCount)
     )
   })

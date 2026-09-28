@@ -21,11 +21,14 @@ import {
   cantripPool,
   castableSpells,
   castingElements,
+  elementsFor,
   magicBySpecies,
   magicPool,
   magicRolled,
   poolSplit,
   spellPlan,
+  spellTargetProblem,
+  targetsFor,
   type MagicPool,
 } from './magic'
 import { savesAsMelee } from './pipeline'
@@ -447,6 +450,33 @@ describe('the magic pool of a mixed force', () => {
     const offer = castableSpells(state, 'p1', mixed(6, 0), V1_RULES).find((c) => c.spell.id === 'resurrect_dead')
     const ids = offer?.targets.flatMap((t) => (t.target.kind === 'units' ? t.target.unitIds : []))
     expect(ids).toEqual(['dead_t'])
+  })
+
+  // v2 Phase 2's fuzz found this on its first mixed game: the offer said which dice,
+  // not which colour raises which, and both AIs paid for a Firewalker in water.
+  it('says which elements raise which dead die, and only where that narrows the choice', () => {
+    const offer = castableSpells(state, 'p1', mixed(3, 3), V1_RULES).find((c) => c.spell.id === 'resurrect_dead')
+    if (offer === undefined) throw new Error('Resurrect Dead is not offered')
+    const tree = { kind: 'units', unitIds: ['dead_t'] } as const
+    const fire = { kind: 'units', unitIds: ['dead_f'] } as const
+    expect([...offer.elements].sort()).toEqual(['air', 'earth', 'fire', 'water'])
+    expect([...elementsFor(offer, tree)].sort()).toEqual(['earth', 'water'])
+    expect([...elementsFor(offer, fire)].sort()).toEqual(['air', 'fire'])
+    const reached = (element: AnnouncedSpell['element']) =>
+      targetsFor(offer, element).flatMap((t) => (t.target.kind === 'units' ? t.target.unitIds : []))
+    expect(reached('water')).toEqual(['dead_t'])
+    expect(reached('fire')).toEqual(['dead_f'])
+    // And every pairing the offer allows, the engine accepts.
+    for (const t of offer.targets) {
+      for (const element of elementsFor(offer, t.target)) {
+        expect(spellTargetProblem(state, { spell: 'resurrect_dead', element, count: 1, target: t.target })).toBeNull()
+      }
+    }
+  })
+
+  it('leaves the field off where the offered elements already decide it', () => {
+    const offer = castableSpells(state, 'p1', mixed(6, 0), V1_RULES).find((c) => c.spell.id === 'resurrect_dead')
+    expect(offer?.targets.every((t) => !('elements' in t))).toBe(true)
   })
 
   it("names each supplier's elements, and the whole force's by default", () => {

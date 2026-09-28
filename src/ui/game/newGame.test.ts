@@ -89,8 +89,8 @@ describe('newGameSetup', () => {
     expect(newGameSetup('treefolk_unicorn', 'treefolk_unicorn', '1', 0).kind).toBe('ok')
   })
 
-  /** `setupGame` throws on this, and a throw out of a click handler is a blank page.
-   *  Caught here so the screen can say it instead. */
+  /** `setupGame` allows this since v2 Phase 2 -- unequal can be on purpose -- but a
+   *  screen that offers only presets can only have got here by a slip. */
   it('refuses two forces of different health', () => {
     const result = newGameSetup('treefolk_satyr', 'firewalkers_starter', '1', 0)
     expect(result.kind).toBe('problem')
