@@ -1133,3 +1133,230 @@ body {
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
+
+/* --- stacks (v2 Phase 3d) ------------------------------------------------- */
+
+/* Identical dice as one tile with a count: the tile with a second edge behind it and
+   ×N on its corner. On the tile rather than beside it, so a stack costs barely more
+   width than one die (3a finding 3). A stacked grid stands its tiles further apart
+   because the edge and the badge stick out -- `STACKED_GAP` in stacks.ts, which the
+   density ladder measures with. */
+.dice-grid.is-stacked { gap: 5px 12px; padding-top: 4px; }
+.die-wrap.die-stack {
+  position: relative;
+  display: grid;
+  flex: none;
+}
+.die-wrap.die-stack::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translate(3px, -3px);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--sunk);
+}
+.die-wrap.die-stack > .die { position: relative; }
+.die-count {
+  position: absolute;
+  z-index: 2;
+  top: -7px;
+  right: -9px;
+  padding: 2px 4px;
+  border-radius: 999px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: var(--fs-2xs);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* --- the header, both layouts ---------------------------------------------- */
+
+.app-title { min-width: 0; }
+.app-head-actions { display: flex; gap: 6px; flex: none; }
+.app-head-actions .choice { min-width: 0; }
+
+/* A phone held sideways (3a finding 10): the header and the log ticker share one line,
+   the title goes, and the buttons shrink to the text. Worth about 80px of 390. */
+.app.is-short { padding-block: 4px 0; }
+.app.is-short .page-wrap { margin-top: 4px; }
+.app-head.is-one-line { margin-bottom: 0; gap: 8px; }
+.app-head.is-one-line h1,
+.app-head.is-one-line .app-sub-extra { display: none; }
+.app-head.is-one-line .sub { color: var(--fg); font-weight: 700; white-space: nowrap; }
+.app-head.is-one-line .log-ticker { flex: 1; min-width: 0; min-height: 0; border-top: none; padding: 0; }
+.app-head.is-one-line .choice {
+  min-height: 30px;
+  padding: 2px 10px;
+  font-size: var(--fs-sm);
+}
+
+/* --- the landscape board (v2 Phase 3d) -------------------------------------- */
+
+/* A row per terrain: yours | the die | theirs. The middle column is fixed so the three
+   dice line up down the board, and each side is one `1fr` -- which is why the board
+   measures one side and knows them all. */
+.ls-board {
+  --ls-mid: 132px;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+.ls-board.is-short { --ls-mid: 156px; }
+.ls-heads,
+.ls-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--ls-mid) minmax(0, 1fr);
+  gap: 4px 8px;
+}
+.ls-heads {
+  padding: 0 9px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+.ls-heads .is-mine { text-align: right; }
+.ls-heads .elements { margin-left: 3px; }
+.ls-board.is-short .ls-heads { display: none; }
+
+.ls-row {
+  align-items: center;
+  padding: 5px 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.ls-row.is-focused { background: var(--sunk); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.ls-row.is-reserve { background: transparent; border-style: dashed; }
+
+/* A terrain effect across the whole row, on neither side. */
+.ls-place { grid-column: 1 / -1; }
+.ls-place:empty { display: none; }
+.ls-place .effect-chips { justify-content: center; margin: 0; }
+
+.ls-side { display: grid; gap: 3px; min-width: 0; align-content: center; }
+.ls-side .effect-chips { margin: 0; }
+/* Your dice run toward the die in the middle, as the enemy's do from the other side. */
+.ls-side.is-mine .dice-grid,
+.ls-side.is-mine .effect-chips { justify-content: flex-end; }
+
+.ls-mid {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  text-align: center;
+  min-width: 0;
+}
+.ls-slot {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.ls-slot .elements { margin-left: 4px; }
+.ls-type,
+.ls-note { font-size: var(--fs-2xs); color: var(--muted); line-height: 1.25; }
+.ls-type .chip-eighth { display: block; font-size: var(--fs-2xs); }
+.ls-type .chip-eighth::before { content: none; }
+.ls-str { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* The die between its two tags. The whole thing is the inspect affordance, the same
+   gesture a unit tile uses. */
+.ls-die {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.ls-face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 42px;
+  height: 42px;
+  border: 1.5px solid var(--fg);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--muted);
+  overflow: hidden;
+}
+.ls-die:hover .ls-face { background: var(--sunk); }
+/* A held eighth face takes a double edge, beside the HELD tag on the holder's side. */
+.ls-face.is-held { border: 4px double var(--magic); }
+.ls-face .chip-eighth {
+  font-size: var(--fs-2xs);
+  line-height: 1.05;
+  text-align: center;
+}
+.ls-face .chip-eighth::before { content: none; }
+
+/* Who owns it, on the owner's side (3a finding 6): solid toward you, outlined toward
+   the enemy. An empty tag keeps its width so the die stays centred. */
+.ls-tag {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  width: 14px;
+  padding: 3px 0;
+  border-radius: 3px;
+  font-size: var(--fs-2xs);
+  font-weight: 800;
+  letter-spacing: .08em;
+  line-height: 14px;
+  text-align: center;
+}
+.ls-tag.is-mine { background: var(--fg); color: var(--bg); }
+.ls-tag.is-theirs { border: 1.5px solid var(--fg); color: var(--fg); }
+.ls-tag.is-none { visibility: hidden; }
+
+/* Dragons under the die, on neither side, at the 44px tap floor rather than 60. */
+.ls-mid .dragon-row { justify-content: center; gap: 4px; margin: 2px 0 0; }
+.ls-mid .dragon-tile { width: 44px; height: 44px; }
+
+/* The reserve row's outer edges: what is off the board, counted. */
+.ls-resline { display: flex; align-items: center; gap: 8px; }
+.ls-resline .dice-grid { flex: 1; min-width: 0; }
+.ls-count {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-2xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ls-count b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.ls-count:hover,
+.ls-count[aria-expanded='true'] { border-color: var(--muted); color: var(--fg); }
+
+/* Short: the column holds the die, the slot and the health, side by side (3a finding
+   10). The type and the eighth face are in the inspector, one tap on the die away. */
+.ls-board.is-short .ls-mid {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: 'die slot' 'die str' 'dragons dragons';
+  justify-items: start;
+  column-gap: 6px;
+  text-align: left;
+}
+.ls-board.is-short .ls-die { grid-area: die; }
+.ls-board.is-short .ls-slot { grid-area: slot; align-self: end; }
+.ls-board.is-short .ls-str { grid-area: str; align-self: start; }
+.ls-board.is-short .ls-mid .dragon-row { grid-area: dragons; }
+.ls-board.is-short .ls-mid .ls-type,
+.ls-board.is-short .ls-slot .elements { display: none; }
+.ls-board.is-short .ls-slot { letter-spacing: 0; font-size: var(--fs-2xs); }
+.ls-board.is-short .ls-row { padding: 3px 6px; }

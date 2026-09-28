@@ -65,7 +65,7 @@ import { useRuleSet } from './useRuleSet'
  * both the number and the glyph -- it *is* the die face. Without it, the number
  * plus our glyph says the same thing.
  */
-function renderFace(
+export function renderFace(
   art: ReturnType<typeof useFaceArt>,
   terrain: GameState['terrains'][TerrainSlot],
   icon: GlyphName | null,
@@ -312,7 +312,7 @@ function jawsFace(dieId: string): DragonFaceNumber {
 }
 
 /** The species a force holds -- one, or several for a mixed force (v2 Phase 1). */
-type Species = readonly NonNullable<ReturnType<typeof speciesInfo>>[]
+export type Species = readonly NonNullable<ReturnType<typeof speciesInfo>>[]
 
 /**
  * Effects with a duration, as chips: the source and what it does, counted when the

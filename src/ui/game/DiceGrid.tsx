@@ -23,6 +23,7 @@ import { ElementDots, speciesInfo } from './Elements'
 import { FaceArt } from './FaceArt'
 import { ClassShape, faceLabel, type ClassCode } from './Glyph'
 import { orderedForDisplay } from './prompts'
+import { portraitSize, stackIdentical, tileSize } from './stacks'
 import { useFaceArt } from './useFaceArt'
 import { useRuleSet } from './useRuleSet'
 
@@ -54,33 +55,6 @@ const MONSTER_LABEL = 'monster'
 /** The class a die actually has, or null for a monster, which has none. */
 function classOf(type: UnitType): UnitClass | null {
   return type.size === 'monster' ? null : type.unitClass
-}
-
-/**
- * Tile and portrait size per die size, so a tile reads at a glance the way the
- * physical dice do -- a monster die really is the big one in the hand.
- *
- * The *whole tile* is square and scales, not just the art inside it; a big portrait
- * in a name-shaped box does not read as a bigger die. Size badge and health become
- * corner annotations so neither one drives the width.
- *
- * Two floors constrain this. The portrait floor is 30px: below roughly that, face
- * art is less legible than our own glyph (measured, see OVERVIEW section 5), so
- * `small` sits *at* the floor and the spread comes from raising the larger sizes.
- * The tile floor is 44px, the smallest comfortable tap on a phone.
- */
-const TILE_SIZE: Record<string, number> = {
-  small: 48,
-  medium: 54,
-  large: 60,
-  monster: 70,
-}
-
-const PORTRAIT_SIZE: Record<string, number> = {
-  small: 30,
-  medium: 34,
-  large: 38,
-  monster: 46,
 }
 
 /**
@@ -151,6 +125,9 @@ export function DiceGrid({
   inspecting,
   onInspect,
   only,
+  compact = false,
+  stacked = false,
+  singled,
 }: {
   units: readonly UnitInstance[]
   selectable?: boolean
@@ -164,46 +141,74 @@ export function DiceGrid({
   onToggle?: (id: UnitId) => void
   inspecting?: UnitId | null
   onInspect?: (id: UnitId | null) => void
+  /** One step down the size ladder, to the 44px tap floor (v2 Phase 3d). */
+  compact?: boolean
+  /**
+   * Identical dice as one tile with a count (v2 Phase 3d). Ignored whenever a die in
+   * this grid answers the current decision: a targeting view unstacks, because the
+   * decision is about *which* dice, and the engine still receives unit ids.
+   */
+  stacked?: boolean
+  /** Dice under an effect aimed at them alone, which never share a tile. */
+  singled?: ReadonlySet<UnitId>
 }) {
   const art = useFaceArt()
 
   if (units.length === 0) return <p className="empty">no units here</p>
 
+  const canSelect = (id: UnitId) =>
+    selectable && !(asleep?.has(id) ?? false) && (only === undefined || only.has(id))
+  // The rule lives here, not in the board, so no caller can stack a grid that is
+  // being picked from: `selectableAt`, `pickModeFor` and `tapMeaning` never learn
+  // about stacks, and must not have to.
+  const grouped = stacked && !units.some((unit) => canSelect(unit.id))
+  const apart = new Set([...(singled ?? []), ...(asleep ?? [])])
+  const tiles = grouped
+    ? stackIdentical(units, apart)
+    : orderedForDisplay(units).map((unit) => [unit])
+
   return (
-    <div className="dice-grid">
-      {orderedForDisplay(units).map((unit) => {
+    <div className={grouped ? 'dice-grid is-stacked' : 'dice-grid'}>
+      {tiles.map((stack) => {
+        const unit = stack[0] as UnitInstance
+        const count = stack.length
         const type = unitType(unit.typeId)
         const isAsleep = asleep?.has(unit.id) ?? false
-        const canSelect = selectable && !isAsleep && (only === undefined || only.has(unit.id))
+        const selectableHere = canSelect(unit.id)
         const isSelected = selected?.has(unit.id) ?? false
         // A sleeping die is never pickable, so tapping it inspects even while the
-        // rest of the army is being selected from.
-        const isOpen = !canSelect && inspecting === unit.id
+        // rest of the army is being selected from. A stack is open when any of its
+        // dice is: they are the same die as far as the inspector can tell.
+        const isOpen = !selectableHere && stack.some((one) => one.id === inspecting)
         // The ID face is the die's portrait -- it is the one face that is a picture
         // of the unit rather than of an action. It sits at index 0 on all 40 dice,
         // but ask the data rather than trusting that.
         const idIndex = type.faces.findIndex((face) => face.icon === 'ID')
         const portrait = idIndex < 0 ? null : art.unitFace(unit.typeId, idIndex)
-        const portraitSize = PORTRAIT_SIZE[type.size] ?? 30
-        const tileSize = TILE_SIZE[type.size] ?? 48
+        const portraitSide = portraitSize(unit.typeId, compact)
+        const tileSide = tileSize(unit.typeId, compact)
         const elements = speciesInfo(type.species)?.elements ?? []
-        const label = isAsleep ? `${describe(type)} — asleep` : describe(type)
+        const what = count > 1 ? `${count} × ${describe(type)}` : describe(type)
+        const label = isAsleep ? `${what} — asleep` : what
 
         return (
-          <div key={unit.id} className={`die-wrap ${isOpen ? 'is-open' : ''}`}>
+          <div
+            key={unit.id}
+            className={`die-wrap ${isOpen ? 'is-open' : ''} ${count > 1 ? 'die-stack' : ''}`}
+          >
             <button
               type="button"
               className={
                 'die' +
                 (isSelected ? ' die-selected' : '') +
-                (canSelect ? ' die-selectable' : '') +
+                (selectableHere ? ' die-selectable' : '') +
                 (isAsleep ? ' die-asleep' : '') +
                 (isOpen ? ' die-open' : '') +
                 ' die-squared'
               }
-              style={{ width: tileSize, height: tileSize }}
+              style={{ width: tileSide, height: tileSide }}
               onClick={() =>
-                canSelect ? onToggle?.(unit.id) : onInspect?.(isOpen ? null : unit.id)
+                selectableHere ? onToggle?.(unit.id) : onInspect?.(isOpen ? null : unit.id)
               }
               // The portrait carries no name, so the tooltip and the accessible name
               // both have to. What a die *is* -- monster heavy melee, medium magic --
@@ -223,21 +228,21 @@ export function DiceGrid({
               {!art.ready ? (
                 <span
                   className="die-portrait-slot"
-                  style={{ width: portraitSize, height: portraitSize }}
+                  style={{ width: portraitSide, height: portraitSide }}
                 />
               ) : portrait !== null ? (
                 <img
                   className="die-portrait"
                   src={portrait}
-                  width={portraitSize}
-                  height={portraitSize}
+                  width={portraitSide}
+                  height={portraitSide}
                   alt={type.name}
                   draggable={false}
                 />
               ) : (
                 <ClassShape
                   code={badgeFor(type)}
-                  size={portraitSize}
+                  size={portraitSide}
                   {...(elements[0] === undefined ? {} : { fill: `var(--el-${elements[0]})` })}
                   {...(classOf(type) === null ? { mark: type.name.slice(0, 2) } : {})}
                 />
@@ -251,7 +256,13 @@ export function DiceGrid({
                 ))}
               </span>
             </button>
-
+            {/* On the tile rather than beside it, so a stack costs barely more width
+                than one die and the grid keeps its rhythm (3a finding 3). */}
+            {count > 1 && (
+              <span className="die-count" aria-hidden="true">
+                &times;{count}
+              </span>
+            )}
           </div>
         )
       })}

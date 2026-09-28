@@ -8,7 +8,7 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0, 1 and 2 have landed, and so have slices 3a to 3c**, each with its findings below;
+of work*. **Phases 0, 1 and 2 have landed, and so have slices 3a to 3d**, each with its findings below;
 the rest is still a draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
@@ -509,7 +509,7 @@ real art can drop in later without a layout change.
 | **3a** | Mockups before code: both layouts at 12, 24 and 36 health — **landed** |
 | **3b** | The schematic pass: tokens, shapes, the log out of the way — **landed** |
 | **3c** | The roll presentation — **landed**: every roll stops, in a dialog floating over the board |
-| **3d** | The landscape board: the phone's layout, alongside on wide screens, with stacks and a reserves row |
+| **3d** | The landscape board — **landed**: the phone's layout, alongside on wide screens, with stacks and a reserves row |
 | **3e** | Playtest tools: concede, turn count, clock, end-of-game summary |
 
 ### 3a — Mockups first — **landed**
@@ -774,7 +774,7 @@ the log yet, and its dice may be the answer.
 - **Phone held sideways is cramped** by today's header and banner. 3d's chrome is the fix.
 - **The "since your last move" overlay and its Recap are gone**, replaced by the step-through.
 
-### 3d — The landscape board
+### 3d — The landscape board — **landed**
 
 Three rows, one per terrain: **your army on the left, the terrain die in the middle, the enemy on
 the right**, so the armies face each other the way the art wants to eventually. 3a settled most of
@@ -795,6 +795,85 @@ the rest (see *What 3a found*):
   `tapMeaning` do not know the layout, and must not start knowing it.
 - **Side-facing art later means one drawing per unit, mirrored for the enemy.** Nothing to build
   now, but the layout should leave the tile shape free to widen.
+
+### What 3d found
+
+UI only. The engine, both golden corpora and `SAVE_VERSION` did not move, and no test outside
+`src/ui` changed. The new logic is two pure modules, `layout.ts` (which board) and `stacks.ts`
+(sizes, stacks, the ladder), with their own tests; `LandscapeBoard.tsx` draws from them.
+
+**1. The ladder is a line count per row, not a fit of the whole screen.** The 3a mockup measured
+the board's overflow and stepped the tallest block down until everything fitted. The app cannot
+lay a board out three times per render to find that out, and does not need to: a row's height is
+its taller side's lines of dice. So `densityFor` takes one measured side width (every side is one
+`1fr` of the same grid, so one `ResizeObserver` measures them all) and returns the first rung
+(today, today stacked, Compact stacked) whose taller side fits in two lines, or one on a phone held
+sideways. A pile-up that fits nowhere stays on the last rung and scrolls. Both sides of a place
+take the same rung, so the two armies facing each other are drawn at one scale.
+
+**2. Unstacking lives in `DiceGrid`, not in the board.** A grid with any die that answers the
+current decision draws unstacked, whatever it was asked to do. That puts 3a's "a targeting view
+unstacks" in the one component every grid goes through, so `selectableAt`, `pickModeFor` and
+`tapMeaning` never learn about stacks and no caller can stack a grid being picked from. Checked
+in the running app: an enemy counter-attack on a ×3 Satyr stack drew three pickable Satyrs, while
+the enemy's own ×3 at its home stayed stacked.
+- **"Identical" means the same type and not `singledIds`**: any die under an effect aimed at that
+  one unit (Sleep is one) is always its own tile.
+
+**3. The ID face grew inside the same tiles.** Portraits went from 30/34/38/46 to 34/38/44/54;
+the tile sides did not move, so no board got taller for it. Compact is 44/46/50/56 with portraits
+of at least 32, above the 30px art floor. The corner badge and health overlap the portrait's
+margins, and an ID face's figure is in its middle. The tables moved from `DiceGrid` to
+`stacks.ts`, since the ladder measures with them.
+
+**4. Which board is a rule with three inputs, and the link is kept apart from the game.**
+`layoutFor(viewport, chosen, linked)`: an upright phone always gets the cards and no toggle; a
+`?layout=` link beats the viewer's choice, which beats the default; the default is landscape on a
+phone held sideways and the cards everywhere else.
+- **`?layout=` is not read by `parseGameRequest`**, though the plan said it would join it. A
+  layout is how a board is drawn, not which game is played, so on its own it must start nothing,
+  and `parseGameRequest` returning non-null *is* starting a game. `parseLayout` reads the same
+  query string beside it.
+- **It is read once at module load**, because `useGame` clears the query in an effect once a
+  linked game starts, and the board mounts after that. A link is never written to the preference:
+  it says how to show *this* board, not how the viewer likes boards.
+
+**5. The phone's chrome.** On a phone held sideways in landscape the header and the log ticker
+share one line, with the title and the "vs greedy · seed" dropped. The "as the link asked" banner
+now shows only until the first march, in both layouts: after that it was a line of chrome the game
+had outgrown. On an 800×398 frame the whole board (three terrains and the reserve row) fits under
+the header with the dock closed.
+
+**6. The reserve row is always drawn**, and its outer edges carry "DUA n · BUA n · Pool n" for
+each side. A tap opens the Fallen section below the board, which in landscape has no heading until
+something opens it (the counts, or a decision that picks from the DUA) and holds the Summoning
+Pools as well. HOME and HELD tags sit on the owner's side of the die, solid toward you and outlined
+toward the enemy; HELD wins over HOME when you hold your own home, and a held face takes a double
+edge.
+
+**7. Two things that would have shipped quietly.**
+- **Scripted edits on Windows wrote CRLF.** Python's text mode turned every `\n` into `\r\n` in
+  the files it rewrote. `.gitattributes` would have normalised them on commit, so nothing would
+  have broken; the only sign was git's warning on `diff --stat`. The files were put back to LF.
+  (3c's truncation and 3b's NUL bytes were the same class of slip: a scripted edit, and a check
+  only a byte-level tool makes.)
+- **The browser pane's device emulation fires neither `resize` nor a media-query change, and a
+  `ResizeObserver` waits for a painted frame.** So a resized frame kept the old layout until
+  something forced a render. A `matchMedia` listener was added as a fallback and then removed:
+  nothing in reach could show that it helped, and a rotated phone fires `resize`.
+
+**Deliberately not done.**
+- **The cards do not stack.** 3a measured them fitting a laptop at today's size, and a phone
+  sideways now opens on landscape. It is one prop on `DiceGrid` if that changes.
+- **The mockup's 36-health pile-up was not reproduced in the app**: nothing on the start screen
+  builds that board. The ladder is tested in node against constructed armies, and the stacks and
+  the unstacking were checked by eye on a monster mirror at 640×360.
+- **No real phone was rotated.** The frames checked were 640×360, 800×398 and 1366×680, by
+  emulation.
+- **Dragons stay square tiles**, 44px in the terrain column. The d12 outline waits for unit tiles
+  that are not squares.
+- **The tile shape is left free to widen** for side-facing art: every size is a side length in
+  one table, and the ladder asks `tileSize` for widths rather than assuming squares.
 
 ### 3e — Playtest tools
 

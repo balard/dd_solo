@@ -157,6 +157,11 @@ the dice and the opponent.
 > roll card takes its place until the player continues; the opponent waits too. The stops are
 > `rollSteps` in `presentation.ts`, a pure function of the log from a client-side cursor, so the
 > engine and the goldens did not move.
+>
+> **v2 Phase 3d has landed: the landscape board.** A row per terrain, yours | die | theirs, plus a
+> reserve row; a phone held sideways opens on it, an upright one keeps the cards, and elsewhere it
+> is a toggle. Identical dice stack when a row is crowded (`stacks.ts`), and the ID face is larger.
+> UI only again.
 
 ## Read these first
 
@@ -993,6 +998,24 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     A link you cannot get back out of is a worse feature than no link.
 - **The dice grid is also the selection surface** for damage, retreat and reinforce. One gesture,
   no modals.
+- **Two boards over one set of data** (v2 Phase 3d): `Board` (the cards) and `LandscapeBoard` (a
+  row per terrain, yours | die | theirs, and a reserve row). Both take the same `selectMode`, and
+  neither knows a rule. Which one is `layoutFor(viewport, chosen, linked)` in `layout.ts`: an
+  upright phone always gets the cards, else a `?layout=` link, else the viewer's toggle (a
+  preference), else landscape on a phone held sideways and the cards elsewhere.
+  - **`?layout=` is `parseLayout`, not part of `parseGameRequest`**: on its own it must start no
+    game. It is read at module load in `useLayout.ts`, because `useGame` strips the query in an
+    effect before the board mounts, and it is never written to the preference.
+  - **Stacks are a view, and `DiceGrid` owns unstacking.** `stacked` is ignored whenever any die
+    in the grid answers the decision, so `selectableAt`, `pickModeFor` and `tapMeaning` never learn
+    about stacks. Identical is the same type and not in `singledIds` (any unit-targeted effect).
+  - **The ladder is a line count per row** (`densityFor`): today → today stacked → Compact
+    stacked, the first whose taller side fits two lines (one on a phone sideways) in one measured
+    side width. Never below Compact's 44px: an overflow is a scroll, not a smaller die.
+  - **Tile and portrait sizes live in `stacks.ts`** now, since the ladder measures with them.
+  - **Device emulation in the browser pane fires no `resize`, and `ResizeObserver` waits for a
+    painted frame**, so a resized frame can show the old layout until something renders. That is
+    the harness; dispatch a `resize` or take a screenshot before believing it.
 - **A Reinforce Step sends dice to any and all terrains**, so its destination buttons *stage* into
   the `reinforcePlan` draft rather than dispatching. One action still reaches the engine -- the
   draft is `App` state, cleared with the selection, not wizard state in a component. `GameAction`
@@ -1236,7 +1259,7 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   to march and cast, and the dragons a Summon Dragon could bring out, were invisible.
 - **A tile is identified by its ID face, not its name, and the whole tile is the die.** The button
   goes square and its side scales with die size — `TILE_SIZE` 48/54/60/70 around `PORTRAIT_SIZE`
-  30/34/38/46 for small/medium/large/monster — because a big portrait in a name-shaped box does not
+  34/38/44/54 for small/medium/large/monster (30/34/38/46 until 3d; both in `stacks.ts`) — because a big portrait in a name-shaped box does not
   read as a bigger die. Consequences worth knowing:
   - **Class badge and health are corner-positioned**, or their text would set the width and
     flatten the size difference back out.

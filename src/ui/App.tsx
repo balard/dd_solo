@@ -1,9 +1,10 @@
 /**
  * The game.
  *
- * Layout is phone-first: a compact always-visible board strip, one focused terrain
- * where the playing happens, the running log, and a sticky action bar driven
- * entirely by `state.pending`. Wider screens just get more room.
+ * One scrolling page -- the board, what is off it, the log -- under a dialog floating
+ * over the terrains, driven entirely by `state.pending`. The board is one of two
+ * layouts over the same data (v2 Phase 3d): the cards, or the landscape rows a phone
+ * held sideways opens on. `useLayout` decides which.
  *
  * `App` itself is only the fork between the start screen and the board. The split is
  * forced rather than tidy: `GameView` holds hooks for the selection and inspection
@@ -43,8 +44,11 @@ import {
 import { stageCast, type SpellAim, type SpellDraftCast } from '../engine/magic'
 
 import { Inspector, type InspectTarget } from './game/Inspector'
+import { LandscapeBoard } from './game/LandscapeBoard'
+import { isPhoneSideways } from './game/layout'
 import { NewGameScreen } from './game/NewGameScreen'
 import { useGame, type PlayingGame } from './game/useGame'
+import { useLayout } from './game/useLayout'
 import { RuleSetProvider } from './game/useRuleSet'
 
 export function App() {
@@ -96,6 +100,17 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // here -- a unit or dragon id, and a terrain -- and opening one never closed the other.
   const [inspect, setInspect] = useState<InspectTarget | null>(null)
   const [showFallen, setShowFallen] = useState(false)
+  const fallenRef = useRef<HTMLElement>(null)
+
+  // Which board (v2 Phase 3d). A phone held sideways opens on landscape, an upright one
+  // keeps the cards, and anywhere else it is a toggle remembered per viewer.
+  const { layout, toggle: toggleLayout, viewport } = useLayout()
+  const landscape = layout === 'landscape'
+  // On a phone held sideways every line of chrome counts (3a finding 10): the header
+  // and the log ticker share one line, and a row of dice gets one line before it steps
+  // down the ladder rather than two.
+  const short = isPhoneSideways(viewport)
+  const oneLine = landscape && short
 
   // The dialog floats over the terrains (v2 Phase 3c), so the page is padded by its
   // height: the last terrain can always be scrolled out from under it.
@@ -301,11 +316,44 @@ function GameView({ game }: { readonly game: PlayingGame }) {
     units.reduce((n, u) => n + unitType(u.typeId).health, 0)
 
   const turn = state.log.filter((e) => e.kind === 'turn_end').length + 1
+  const started = state.log.some((e) => e.kind === 'march_begin')
+
+  // In landscape the Fallen section has no heading until something opens it: a tap on
+  // the reserve row's counts, or a decision that picks from the DUA.
+  const toggleOffBoard = () => {
+    const open = !fallenOpen
+    setShowFallen(open)
+    if (open) {
+      requestAnimationFrame(() =>
+        fallenRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+      )
+    }
+  }
+
+  const pools = (myPool.length > 0 || theirPool.length > 0) && (
+    <>
+      <h3 className="pool-head">Summoning pools</h3>
+      <p className="fallen-side muted">Enemy</p>
+      {theirPool.length === 0 ? (
+        <p className="empty">empty</p>
+      ) : (
+        <DragonRow dragons={theirPool} inspecting={inspecting} onInspect={onInspect} inPool />
+      )}
+      <p className="fallen-side muted">Yours</p>
+      {myPool.length === 0 ? (
+        <p className="empty">empty</p>
+      ) : (
+        <DragonRow dragons={myPool} inspecting={inspecting} onInspect={onInspect} inPool />
+      )}
+    </>
+  )
+
+  const ticker = <LogTicker state={state} human={human} open={logOpen} onToggle={toggleLog} />
 
   return (
-    <div className="app">
-      <header className="app-head">
-        <div>
+    <div className={short ? 'app is-short' : 'app'}>
+      <header className={oneLine ? 'app-head is-one-line' : 'app-head'}>
+        <div className="app-title">
           <h1>dd_solo</h1>
           <p className="sub">
             Turn {turn} ·{' '}
@@ -315,26 +363,45 @@ function GameView({ game }: { readonly game: PlayingGame }) {
                 ? 'roll-off'
                 : state.turn.marching === human
                 ? 'your march'
-                : 'enemy march'}{' '}
-            · vs {opponent} · seed {seed}
+                : 'enemy march'}
+            <span className="app-sub-extra">
+              {' '}
+              · vs {opponent} · seed {seed}
+            </span>
           </p>
         </div>
-        <button
-          type="button"
-          className="choice secondary"
-          onClick={() => {
-            const started = state.log.some((e) => e.kind === 'march_begin')
-            if (
-              state.winner !== null ||
-              !started ||
-              window.confirm('Abandon this game and pick new forces?')
-            ) {
-              newGame()
-            }
-          }}
-        >
-          New game
-        </button>
+        {oneLine && ticker}
+        <div className="app-head-actions">
+          {toggleLayout !== null && (
+            <button
+              type="button"
+              className="choice secondary"
+              onClick={toggleLayout}
+              title={
+                landscape
+                  ? 'Switch to the card board: a card per terrain, the enemy above you'
+                  : 'Switch to the landscape board: a row per terrain, you facing the enemy'
+              }
+            >
+              {landscape ? 'Cards' : 'Landscape'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="choice secondary"
+            onClick={() => {
+              if (
+                state.winner !== null ||
+                !started ||
+                window.confirm('Abandon this game and pick new forces?')
+              ) {
+                newGame()
+              }
+            }}
+          >
+            New game
+          </button>
+        </div>
       </header>
 
       {origin.kind === 'recovered' && (
@@ -346,7 +413,9 @@ function GameView({ game }: { readonly game: PlayingGame }) {
           the start screen rather than running the link again. Saying so is the only
           sign the request was honoured -- a bestiary board otherwise just looks like
           a lucky roll. */}
-      {origin.kind === 'requested' && (
+      {/* Until the first march: after that it is a line of chrome the game has
+          outgrown, and on a phone held sideways chrome is what there is least room for. */}
+      {origin.kind === 'requested' && !started && (
         <p className="banner muted">
           {origin.forces === null ? (
             <>
@@ -368,6 +437,36 @@ function GameView({ game }: { readonly game: PlayingGame }) {
           (v2 Phase 3c), inside it. */}
       <div className="page-wrap">
       <main className="page" style={{ paddingBottom: dockHeight + 16 }}>
+        {landscape ? (
+          <LandscapeBoard
+            state={state}
+            human={human}
+            focused={focused}
+            onInspectTerrain={(slot) => setInspect({ kind: 'terrain', slot })}
+            selectMode={selectMode}
+            selected={selection}
+            onToggle={onTap}
+            inspecting={inspecting}
+            onInspect={onInspect}
+            mySpecies={mySpecies}
+            theirSpecies={theirSpecies}
+            reserves={{
+              mine: reserveShown,
+              theirs: theirReserve,
+              mineSelectable: mineReserveSelectable,
+              theirSelectable: theirReserveSelectable,
+              note: plan !== null && plan.moves.length > 0 ? 'still to place' : null,
+              counts: {
+                mine: { dua: myFallen.length, bua: myBuried.length, pool: myPool.length },
+                theirs: { dua: theirFallen.length, bua: theirBuried.length, pool: theirPool.length },
+              },
+            }}
+            offBoardOpen={fallenOpen}
+            onToggleOffBoard={toggleOffBoard}
+            short={short}
+          />
+        ) : (
+          <>
         <Board
           state={state}
           human={human}
@@ -421,28 +520,16 @@ function GameView({ game }: { readonly game: PlayingGame }) {
               inspecting={inspecting}
               onInspect={onInspect}
             />
-            {(myPool.length > 0 || theirPool.length > 0) && (
-              <>
-                <h3 className="pool-head">Summoning pools</h3>
-                <p className="fallen-side muted">Enemy</p>
-                {theirPool.length === 0 ? (
-                  <p className="empty">empty</p>
-                ) : (
-                  <DragonRow dragons={theirPool} inspecting={inspecting} onInspect={onInspect} inPool />
-                )}
-                <p className="fallen-side muted">Yours</p>
-                {myPool.length === 0 ? (
-                  <p className="empty">empty</p>
-                ) : (
-                  <DragonRow dragons={myPool} inspecting={inspecting} onInspect={onInspect} inPool />
-                )}
-              </>
-            )}
+            {pools}
           </section>
         )}
+          </>
+        )}
 
-        {(myFallen.length > 0 || theirFallen.length > 0 || anyBuried || anyDuaEffect) && (
-          <section className="army off-board">
+        {(landscape
+          ? fallenOpen || anyDuaEffect
+          : myFallen.length > 0 || theirFallen.length > 0 || anyBuried || anyDuaEffect) && (
+          <section className="army off-board" ref={fallenRef}>
             <h3>
               <button
                 type="button"
@@ -472,6 +559,9 @@ function GameView({ game }: { readonly game: PlayingGame }) {
             )}
             {fallenOpen && (
               <div className="fallen">
+                {/* In landscape the pools are counted on the reserve row and open here,
+                    beside the dead: everything off the board in one place. */}
+                {landscape && pools}
                 {growth !== null && (
                   <>
                     <p className="fallen-side">Dying — tap the ones to save</p>
@@ -572,7 +662,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
       </div>
       </div>
 
-      <LogTicker state={state} human={human} open={logOpen} onToggle={toggleLog} />
+      {!oneLine && ticker}
 
       {inspect !== null && <Inspector target={inspect} state={state} human={human} onClose={closeInspector} />}
 
