@@ -40,3 +40,7 @@ docs/PLAN-V2-Phase*.md
 # The v4.02 rulebook: a local reference only. v4.01 stays the rules this project implements,
 # and at 92 MB the newer book is not worth carrying in the history. See PLAN-V2.md, Phase 0.
 docs/rules/V4.02 Dragon Dice rules.pdf
+
+# Local reference images (species art and the like): a working reference only, never
+# committed -- the same reason as public/faces/ above.
+image_references/
