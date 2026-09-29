@@ -708,6 +708,46 @@ describe('the sub-rolls', () => {
    * this unit again". So the Double Strike is asked, resolved and its deaths logged, and
    * only then is the die thrown again; what it shows joins the roll after that.
    */
+  /**
+   * Hypnotic Glare's third end condition (v2 Phase 5b): "the effect ends if the glaring
+   * unit ... is rolled". A glaring die sits out every army roll, so a sub-roll is the one
+   * roll that can reach it -- and a die rolling for its life must be allowed to, or a
+   * Bullseye would simply kill it. The hypnotized attacker beside the Firestormer sits
+   * out the attack roll, which is why the sequence has one attack die in it.
+   */
+  it('ends a glare when the glaring die is made to roll for its life', () => {
+    /** Leviathan face 6 is `4 SAVE`. */
+    const LEVIATHAN_SAVE = 6
+    const anchor = { unitId: 'p2:frontier:0', slot: 'frontier', untilRolled: true } as const
+    const glare = (unitId: string, status: 'hypnotized' | 'glaring'): Effect => ({
+      source: 'Hypnotic Glare',
+      target: { kind: 'unit', unitId },
+      modifiers: [],
+      [status]: true,
+      anchor,
+      expiresAtStartOfTurnOf: 'p2',
+    })
+    const start = advance(
+      stage({
+        attackers: ['firewalkers.firestormer', 'firewalkers.guardian'],
+        defenders: ['coral_elves.leviathan'],
+        action: 'missile',
+        effects: [glare('p1:frontier:1', 'hypnotized'), glare('p2:frontier:0', 'glaring')],
+        rng: rngShowing(
+          ['firewalkers.firestormer', 'coral_elves.leviathan', 'firewalkers.firestormer'],
+          [BULLSEYE_FACE, LEVIATHAN_SAVE, FIRESTORMER_ID],
+        ),
+      }),
+    )
+    expect(start.pending).toMatchObject({ kind: 'sai_target', sai: 'Bullseye' })
+    expect(start.effects).toHaveLength(2)
+
+    const done = applyAction(start, { kind: 'sai_target', unitIds: ['p2:frontier:0'] })
+    expect(subRollEntry(done)).toMatchObject({ test: 'save', escaped: ['p2:frontier:0'] })
+    expect(done.units['p2:frontier:0']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(done.effects).toEqual([])
+  })
+
   it('resolves a Double Strike fully before its die is thrown again', () => {
     /** Strangle Vine face 2 is `4 SAI:Double Strike`; Darktree face 4 is Smother. */
     const VINE_DOUBLE_STRIKE = 2

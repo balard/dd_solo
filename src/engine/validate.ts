@@ -175,6 +175,9 @@ export function validateState(state: GameState): string[] {
     if (effect.target.kind === 'unit' && state.units[effect.target.unitId] === undefined) {
       problems.push(`effect ${effect.source}: names unit ${effect.target.unitId}, which does not exist`)
     }
+    if (effect.anchor !== undefined && state.units[effect.anchor.unitId] === undefined) {
+      problems.push(`effect ${effect.source}: is anchored to unit ${effect.anchor.unitId}, which does not exist`)
+    }
     if (effect.expiresAtStartOfTurnOf !== 'p1' && effect.expiresAtStartOfTurnOf !== 'p2') {
       problems.push(
         `effect ${effect.source}: expires at the start of ` +

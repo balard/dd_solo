@@ -925,3 +925,34 @@ Firewalker unit."
 - **A sleeping Treefolk cannot come up.** Sleep is on Treefolk dice only and targets an opponent's
   unit, so no Treefolk is ever asleep, and "does a sleeping die replant?" has no case. `species.test.ts`
   checks that against the data.
+
+## 17. Coral Elves (v2 Phase 5)
+
+Air & Water; own terrain type Coastland. Twenty dice, six new SAIs (Entangle, Ferry, Hypnotic
+Glare, Swallow, Tail, Wave), two abilities (Coastal Dodge, Defensive Volley), two spells (Blizzard,
+Deluge). A species in the data is **playable** only once every SAI on its dice has a handler and its
+abilities are known (`src/engine/playable.ts`); until then no rolled force, builder palette or
+random opponent can reach its dice, and `builtForceProblem` refuses them.
+
+### Hypnotic Glare's duration (5b)
+
+"All units that roll an ID icon are hypnotized and may not be rolled until the beginning of your
+next turn ... The effect ends if the glaring unit leaves the terrain, is killed, or is rolled. The
+glaring unit may be excluded from any roll until the effect expires."
+
+- **The first effect that ends on something other than a turn.** Each effect carries an **anchor**:
+  the glaring unit and the terrain it glared from. It ends when that unit is anywhere else (moved,
+  retreated, killed -- the DUA is not the terrain), and when that unit is rolled -- beside, not
+  instead of, "until the beginning of your next turn".
+- **Hypnotized is half of Sleep.** The die takes no part in any roll, army or unit; unlike a
+  sleeping die it may still retreat, be moved and be carried by a free move.
+
+### House rules this species adds
+
+- **The glaring unit sits out every army roll while its glare lasts**, automatically. "May be
+  excluded" is a choice before every roll its army makes -- attack, save, counter-maneuver, dragon
+  attack, a spell's save roll -- and a question in all of those places is a pause the machine does
+  not have. Keeping the glare is the answer a player wants almost every time, since rolling the die
+  ends it.
+- **A unit roll still rolls it**, and so ends the glare. A die made to roll for its own life (a
+  Bullseye, a Swallow) that sat out would simply fail and die; no player chooses that.

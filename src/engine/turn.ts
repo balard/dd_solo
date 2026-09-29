@@ -64,6 +64,7 @@ import {
   doublesIds,
   expireEffects,
   iconAt,
+  endGlaresOf,
   isAsleep,
   pruneEffects,
   unitRoll,
@@ -1891,7 +1892,10 @@ function subRoll(
       : {}),
   }
 
-  const logged = withLog({ ...state, rng }, entry)
+  // A glaring die that was just rolled has ended its glare (Hypnotic Glare, v2 Phase 5b):
+  // the one roll it does not sit out is this one, a die rolling for its life.
+  const rolled = dice.map((die) => die.unitId)
+  const logged = endGlaresOf(withLog({ ...state, rng }, entry), rolled)
   return { state: moveEscapees(logged, task, escaped), escaped }
 }
 

@@ -18,13 +18,16 @@ import { unitType } from '../data/load'
 import { exchangeWithDua, type Exchange } from './dua'
 import {
   armyRoll,
+  cannotRoll,
   doublesIds,
   eighthFaceLabel,
+  endGlaresOf,
   expireEffects,
   iconAt,
   isAsleep,
   pruneEffects,
   resolvesIcon,
+  unitRoll,
   type Effect,
 } from './effects'
 import { applyModifiers, type Modifier } from './pipeline'
@@ -343,6 +346,93 @@ describe('a sleeping unit', () => {
     expect(reduce(atRetreat, { kind: 'retreat', unitIds: ['a'] }).units['a']?.location).toEqual({
       kind: 'reserve',
     })
+  })
+})
+
+/**
+ * Hypnotic Glare's seam (v2 Phase 5b), hand-built the way Phase 3 built Sleep's: "All
+ * units that roll an ID icon are hypnotized and may not be rolled until the beginning
+ * of your next turn ... The effect ends if the glaring unit leaves the terrain, is
+ * killed, or is rolled. The glaring unit may be excluded from any roll until the effect
+ * expires." Nothing produces these until Phase 5c's Leviathan.
+ */
+describe('an anchored effect (Hypnotic Glare)', () => {
+  const anchor = { unitId: 'lev', slot: 'p1_home', untilRolled: true } as const
+  const hypnotized = (unitId: string): Effect => ({
+    source: 'Hypnotic Glare',
+    target: { kind: 'unit', unitId },
+    modifiers: [],
+    hypnotized: true,
+    anchor,
+    expiresAtStartOfTurnOf: 'p1',
+  })
+  const glaring: Effect = {
+    source: 'Hypnotic Glare',
+    target: { kind: 'unit', unitId: 'lev' },
+    modifiers: [],
+    glaring: true,
+    anchor,
+    expiresAtStartOfTurnOf: 'p1',
+  }
+  const specs: readonly Spec[] = [
+    { id: 'lev', typeId: 'coral_elves.leviathan', at: home },
+    { id: 'elf', typeId: 'coral_elves.knight', at: home },
+    { id: 'a', typeId: OAK, owner: 'p2', at: home },
+    { id: 'b', typeId: OAKLING, owner: 'p2', at: home },
+  ]
+  const glared = () => board(specs, [hypnotized('b'), glaring])
+
+  it('keeps a hypnotized die out of every roll, army and unit, but not out of its army', () => {
+    const state = glared()
+    expect(armyRoll(state, 'p2', 'p1_home', 'save').units.map((u) => u.id)).toEqual(['a'])
+    expect(unitRoll(state, 'b').rollable).toBe(false)
+    expect(cannotRoll(state, 'b')).toBe(true)
+    // Sleep's other half is not Glare's: the die is not asleep, so it may still leave.
+    expect(isAsleep(state, 'b')).toBe(false)
+    expect(armyAt(state, 'p2', 'p1_home').map((u) => u.id)).toEqual(['a', 'b'])
+  })
+
+  it('sits the glaring die out of its army rolls, but lets it roll for its life', () => {
+    const state = glared()
+    expect(armyRoll(state, 'p1', 'p1_home', 'save').units.map((u) => u.id)).toEqual(['elf'])
+    expect(unitRoll(state, 'lev').rollable).toBe(true)
+  })
+
+  it('ends when the glaring unit leaves the terrain', () => {
+    const state = glared()
+    const moved: GameState = {
+      ...state,
+      units: { ...state.units, lev: { ...state.units['lev']!, location: { kind: 'terrain', slot: 'frontier' } } },
+    }
+    expect(pruneEffects(moved).effects).toEqual([])
+  })
+
+  it('ends when the glaring unit is killed, even though its victims are still in play', () => {
+    const state = glared()
+    const killed: GameState = { ...state, units: { ...state.units, lev: { ...state.units['lev']!, location: dua } } }
+    expect(pruneEffects(killed).effects).toEqual([])
+  })
+
+  it('ends when the glaring unit is rolled, and not when anything else is', () => {
+    const state = glared()
+    expect(endGlaresOf(state, ['elf', 'a'])).toBe(state)
+    expect(endGlaresOf(state, ['lev']).effects).toEqual([])
+  })
+
+  it('holds while the anchor stays put, so pruning returns the same object', () => {
+    const state = glared()
+    expect(pruneEffects(state)).toBe(state)
+  })
+
+  it("still expires at the start of the caster's next turn", () => {
+    const state = glared()
+    const next: GameState = { ...state, turn: { ...state.turn, marching: 'p1' } }
+    expect(expireEffects(next).effects).toEqual([])
+  })
+
+  it('is refused by validateState when its anchor is a unit that does not exist', () => {
+    const state = board(specs, [{ ...glaring, anchor: { ...anchor, unitId: 'ghost' } }])
+    expect(validateState(state).join(' ')).toMatch(/anchored to unit ghost/)
   })
 })
 

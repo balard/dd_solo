@@ -102,6 +102,35 @@ export interface Effect {
   /** Sleep: the unit cannot be rolled, and cannot leave the terrain it occupies. */
   readonly asleep?: true
   /**
+   * Hypnotic Glare (v2 Phase 5b): the unit "may not be rolled" -- Sleep's first half
+   * without its second. A hypnotized die may still retreat, be moved or be killed; it
+   * simply takes no part in any roll, army or unit.
+   */
+  readonly hypnotized?: true
+  /**
+   * Hypnotic Glare's *source*: "the glaring unit may be excluded from any roll until the
+   * effect expires". Excluded from every **army** roll, automatically -- a house rule,
+   * `RULES-V0.md` section 11: the choice would be a pause before every roll its army
+   * makes, and rolling the die ends the glare. A **unit** roll still rolls it, because a
+   * die rolling for its life that sat out would simply die; that roll ends the glare.
+   */
+  readonly glaring?: true
+  /**
+   * The effect lasts only while this unit stands at this terrain (v2 Phase 5b): it ends
+   * the moment the unit leaves it or leaves play, and -- with `untilRolled` -- the moment
+   * the unit is rolled. Hypnotic Glare's end conditions: "if the glaring unit leaves the
+   * terrain, is killed, or is rolled". The first duration in the game that is not "until
+   * the beginning of somebody's turn", and it runs *beside* that one, not instead of it.
+   *
+   * Named for a unit that may be neither the effect's target nor its caster's army:
+   * a hypnotized die's effect is anchored to the Leviathan that glared at it.
+   */
+  readonly anchor?: {
+    readonly unitId: UnitId
+    readonly slot: TerrainSlot
+    readonly untilRolled?: true
+  }
+  /**
    * Wall of Thorns: damage an army takes for successfully maneuvering this terrain.
    *
    * A field rather than a `Modifier`, for `asleep`'s reason: it is not arithmetic on a
@@ -148,9 +177,34 @@ const targetsTerrain = (effect: Effect, ref: ArmyRef, scope: TerrainScope): bool
   ref !== 'reserve' &&
   effect.target.slot === ref
 
-/** Sleep, and anything later that stops a die being rolled. */
+/** Sleep: the die cannot be rolled *and* cannot leave its terrain. The second half is
+ *  what the retreat and free-move checks ask; `cannotRoll` is the first. */
 export function isAsleep(state: GameState, unitId: UnitId): boolean {
   return state.effects.some((effect) => targetsUnit(effect, unitId) && effect.asleep === true)
+}
+
+/** Hypnotic Glare's victims: may not be rolled, may still move. */
+export function isHypnotized(state: GameState, unitId: UnitId): boolean {
+  return state.effects.some((effect) => targetsUnit(effect, unitId) && effect.hypnotized === true)
+}
+
+/** Hypnotic Glare's source, sitting out its army's rolls to keep the glare alive. */
+export function isGlaring(state: GameState, unitId: UnitId): boolean {
+  return state.effects.some((effect) => targetsUnit(effect, unitId) && effect.glaring === true)
+}
+
+/**
+ * Whether this die may be rolled at all -- the question every roll asks, army or unit.
+ * Sleep and Hypnotic Glare both say no; neither asks where the die may go.
+ */
+export function cannotRoll(state: GameState, unitId: UnitId): boolean {
+  return isAsleep(state, unitId) || isHypnotized(state, unitId)
+}
+
+/** Whether this die sits out an *army* roll: everything `cannotRoll` refuses, and a
+ *  glaring die keeping its glare (`Effect.glaring`). A unit roll asks `cannotRoll`. */
+export function sitsOutArmyRoll(state: GameState, unitId: UnitId): boolean {
+  return cannotRoll(state, unitId) || isGlaring(state, unitId)
 }
 
 /**
@@ -287,7 +341,7 @@ export function armyRoll(
   // one of those without a call site learning about it. `resolveFaces` refuses it on a
   // counter-attack, because only the roll knows what it is for. It names the species
   // whose dice convert (v2 Phase 1), because a mixed army's other dice do not.
-  const units = armyOf(state, player, ref).filter((unit) => !isAsleep(state, unit.id))
+  const units = armyOf(state, player, ref).filter((unit) => !sitsOutArmyRoll(state, unit.id))
   if (resultType === 'melee' && terrainHas(state, ref, 'fire')) {
     const shielded = speciesIn(units.filter((unit) => unitHasAbility(state.ruleSet, unit, 'Flaming Shields')))
     if (shielded.length > 0) modifiers.push(savesAsMelee(shielded))
@@ -300,8 +354,10 @@ export function armyRoll(
  *  modifying it. `armyRoll`'s sibling, and deliberately not its subset. */
 export interface UnitRollInput {
   readonly unit: UnitInstance
-  /** Sleep: "cannot be rolled". A unit that cannot be rolled generates nothing at all,
-   *  which for Phase 4d's sub-rolls means it fails whatever it was asked to roll. */
+  /** Sleep, Hypnotic Glare: "cannot be rolled". A unit that cannot be rolled generates
+   *  nothing at all, which for Phase 4d's sub-rolls means it fails whatever it was asked
+   *  to roll. A *glaring* die is rollable here -- see `Effect.glaring` -- and the roll
+   *  ends its glare (`endGlaresOf`). */
   readonly rollable: boolean
   readonly modifiers: readonly Modifier[]
 }
@@ -336,7 +392,7 @@ export function unitRoll(state: GameState, unitId: UnitId): UnitRollInput {
     if (targetsUnit(effect, unitId)) modifiers.push(...sourced(effect))
   }
 
-  return { unit, rollable: !isAsleep(state, unitId), modifiers }
+  return { unit, rollable: !cannotRoll(state, unitId), modifiers }
 }
 
 /**
@@ -414,6 +470,10 @@ export function expireEffects(state: GameState): GameState {
  */
 export function pruneEffects(state: GameState): GameState {
   const kept = state.effects.filter((effect) => {
+    // An anchored effect ends when its anchor leaves the terrain or play (v2 Phase 5b),
+    // whatever its target is doing: a hypnotized die stays hypnotized only while the
+    // Leviathan that glared at it is still standing where it glared.
+    if (effect.anchor !== undefined && !anchorHolds(state, effect.anchor)) return false
     // Exhaustive on purpose: a fifth `EffectTarget` member is a compile error here
     // rather than a silently immortal effect.
     switch (effect.target.kind) {
@@ -438,5 +498,25 @@ export function pruneEffects(state: GameState): GameState {
     }
   })
 
+  return kept.length === state.effects.length ? state : { ...state, effects: kept }
+}
+
+function anchorHolds(state: GameState, anchor: NonNullable<Effect['anchor']>): boolean {
+  const location = state.units[anchor.unitId]?.location
+  return location?.kind === 'terrain' && location.slot === anchor.slot
+}
+
+/**
+ * Ends every effect anchored to one of these dice "until rolled", because they just were.
+ *
+ * Hypnotic Glare's third end condition. Only a unit roll can reach it -- a glaring die
+ * sits out every army roll -- so the one caller is the sub-roll. Same-object rule as
+ * `pruneEffects`: nothing anchored there, nothing changes.
+ */
+export function endGlaresOf(state: GameState, rolled: readonly UnitId[]): GameState {
+  const kept = state.effects.filter(
+    (effect) =>
+      effect.anchor?.untilRolled !== true || !rolled.includes(effect.anchor.unitId),
+  )
   return kept.length === state.effects.length ? state : { ...state, effects: kept }
 }

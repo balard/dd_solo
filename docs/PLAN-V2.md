@@ -1290,7 +1290,7 @@ V1 goldens move only with a written reason (the riposte slice in Dwarves is the 
 
 ## Phase 5 — Coral Elves — in progress
 
-5a has landed: the data. 5b (the seams) is next.
+5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c (the SAIs) is next.
 
 ### What 5a found
 
@@ -1334,6 +1334,33 @@ every name it could meet in v1 and not of Tail; it names the SAI now.
 - **No preset, fixture or art.** A fixture for an unplayable species could only throw; 5f and 5g.
 - **`validate_data.py` still holds spells to two species.** Blizzard and Deluge are 5e.
 - **The eight raw files for later species stay unimported**: no entry in `tools/species.py`.
+
+### What 5b found
+
+One seam, landed alone the way 4a was: `Effect` gained `hypnotized`, `glaring` and an `anchor`,
+with no caller until 5c. `stepGame` already prunes after every action, so "ends if the glaring unit
+leaves the terrain or is killed" is one more check in `pruneEffects`, and the golden digests do not
+move because every new field is optional and omitted.
+
+**1. "Effects gain end conditions" was the smaller half; "may be excluded from any roll" is the
+larger.** The plan read Hypnotic Glare as a new *duration*. Its last sentence is a new *choice* --
+before every roll the glaring unit's army makes, keep the glare or roll the die -- and a choice is a
+pause (invariant 3) at every site that throws an army's dice: attack, save, counter-maneuver,
+dragon attack, a spell's save roll. None of those has a pause before its roll. So it is a house rule
+(`RULES-V0.md` section 17): the glaring die sits out every army roll, and rolls only when made to
+roll for its own life, which ends the glare.
+
+**2. So "is rolled" has exactly one door: the sub-roll.** `endGlaresOf` is called from `subRoll` and
+nowhere else, and a test drives it through a real Bullseye: the glaring die rolls its save and both
+the glare and its victim's hypnosis end.
+
+**3. Hypnotized is half of Sleep, not Sleep.** "May not be rolled" says nothing about leaving, so a
+hypnotized die may retreat. `cannotRoll` is the question every roll asks; `isAsleep` stays the one
+the retreat and free-move checks ask, and `sitsOutArmyRoll` adds the glaring die for army rolls.
+
+**4. The anchor is a terrain, not a location.** Glare is a melee SAI and melee happens at a terrain,
+so the glaring unit always stands on one. The later end conditions (Stun, Net, Web: "leaves its
+terrain") are the same shape with the affected unit as its own anchor.
 
 ---
 
