@@ -8,13 +8,14 @@ import {
   builtForceHealth,
   builtForceProblem,
   drawForce,
+  drawSpeciesPair,
   generateForces,
   repairSplit,
   rollForce,
   splitForce,
   type BuiltForce,
 } from './force'
-import { rngFrom } from './rng'
+import { nextInt, rngFrom, type RngState } from './rng'
 import { setupGame, STARTER_FORCES } from './setup'
 import { TERRAIN_SLOTS, armyAt, forceSpecies, opponentOf, unitsOf, type PlayerId } from './types'
 import { validateState } from './validate'
@@ -297,5 +298,37 @@ describe('a game set up from nothing but a seed', () => {
     for (const player of PLAYERS) {
       expect(entry.dice[player]).toBe(unitsOf(state, player).length)
     }
+  })
+})
+
+describe('drawSpeciesPair (v2 Phase 5d)', () => {
+  /** What v1's race draw did: one `nextInt(2)`, 0 keeping the sorted order. */
+  const v1Draw = (ids: readonly string[], rng: RngState) => {
+    const [first, next] = nextInt(rng, ids.length)
+    return [first === 0 ? [...ids] : [...ids].reverse(), next] as const
+  }
+
+  it('is the draw v1 made when there are two species, pair for pair and draw for draw', () => {
+    const ids = ['firewalkers', 'treefolk']
+    for (let seed = 0; seed < 50; seed++) {
+      const [pair, after] = drawSpeciesPair(ids, rngFrom(seed))
+      const [old, oldAfter] = v1Draw(ids, rngFrom(seed))
+      expect(pair).toEqual(old)
+      expect(after).toEqual(oldAfter)
+    }
+  })
+
+  it('reaches every ordered pair of three species, and never a species against itself', () => {
+    const seen = new Set<string>()
+    for (let seed = 0; seed < 300; seed++) {
+      const [[a, b]] = drawSpeciesPair(['a', 'b', 'c'], rngFrom(seed))
+      expect(a).not.toBe(b)
+      seen.add(`${a}-${b}`)
+    }
+    expect([...seen].sort()).toEqual(['a-b', 'a-c', 'b-a', 'b-c', 'c-a', 'c-b'])
+  })
+
+  it('refuses a draw with fewer than two species', () => {
+    expect(() => drawSpeciesPair(['treefolk'], rngFrom(1))).toThrow(/two playable species/)
   })
 })

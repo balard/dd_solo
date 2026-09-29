@@ -395,6 +395,31 @@ export function rollForce(
 }
 
 /**
+ * The race draw: two different playable species, p1's first, in one draw (v2 Phase 5d).
+ *
+ * One draw over the `n × (n - 1)` ordered pairs. With two species that is `nextInt(2)`,
+ * and draw 0 is (first, second) and draw 1 (second, first) -- exactly the draw v1 made
+ * when it only had to decide which side was which. So every rolled game from before a
+ * third species became playable replays unchanged, and a third one widens the draw
+ * rather than reseating it. A species merely in the data is not in `ids`: `playable.ts`.
+ */
+export function drawSpeciesPair(
+  ids: readonly string[],
+  rng: RngState,
+): readonly [readonly [string, string], RngState] {
+  const n = ids.length
+  if (n < 2) throw new Error(`a race draw needs two playable species, found ${n}`)
+  const [k, next] = nextInt(rng, n * (n - 1))
+  const first = Math.floor(k / (n - 1))
+  const rest = k % (n - 1)
+  const second = rest >= first ? rest + 1 : rest
+  const a = ids[first]
+  const b = ids[second]
+  if (a === undefined || b === undefined) throw new Error(`drew species pair ${k} of ${n}`)
+  return [[a, b], next] as const
+}
+
+/**
  * The whole draw, in the order the RNG stream runs it:
  *
  *     race -> size -> p1 units -> p1 split -> p2 units -> p2 split
@@ -430,19 +455,7 @@ export function generateForces(
     return [forces, state] as const
   }
 
-  // Two species is the whole of v1's scope, and one draw decides which side is
-  // which. A third *playable* species would need a different draw here, and this is
-  // the only place that would have to change. One merely in the data does not count:
-  // v2 Phase 5a transcribed the Coral Elves ahead of their rules.
-  if (PLAYABLE_SPECIES.length !== 2) {
-    throw new Error(
-      `force generation assumes exactly two playable species, found ${PLAYABLE_SPECIES.length}; ` +
-        `see PLAN-V1.md, scope`,
-    )
-  }
-  const speciesIds = PLAYABLE_SPECIES.map((s) => s.id).sort()
-  const [first, afterRace] = nextInt(rng, speciesIds.length)
-  const order: string[] = first === 0 ? speciesIds : [...speciesIds].reverse()
+  const [order, afterRace] = drawSpeciesPair(PLAYABLE_SPECIES.map((s) => s.id).sort(), rng)
 
   const [sizeIndex, afterSize] = nextInt(afterRace, FORCE_SIZES.length)
   const budget = FORCE_SIZES[sizeIndex]
