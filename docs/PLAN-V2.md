@@ -1290,8 +1290,9 @@ V1 goldens move only with a written reason (the riposte slice in Dwarves is the 
 
 ## Phase 5 — Coral Elves — in progress
 
-5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c has landed: all six SAIs. 5d
-(the abilities) is next, and it is the slice that makes the Coral Elves playable.
+5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c has landed: all six SAIs. 5d is
+in progress: the race draw widened, and Coastal Dodge made the Coral Elves playable; Defensive
+Volley is next.
 
 ### What 5a found
 
@@ -1420,6 +1421,40 @@ status: a label and a look (dotted and dimmed; the glaring die gets an accent ed
 
 **4. Glare needs a save roll to look at**, like Choke: an attack that rolls no results earns no save
 roll, and the Glare on it does nothing. A Leviathan alone that rolls Glare glares at nobody.
+
+### What 5d found (the race draw, Coastal Dodge, the flip)
+
+**1. The race draw widened without reseating anything.** One draw over the `n(n - 1)` ordered pairs
+of different species is, at two species, v1's `nextInt(2)` with the same mapping -- so it landed
+first, alone, with a test holding the two draws equal, and the flip then only widened it.
+
+**2. The flip came with the ability table's entry, as 5a predicted, and cost what 5a said it
+would.** Five monster fixtures (six of one monster, 3/2/1); tests that counted two species (the
+race draw, the mixed pool, the builder palette, the opponent's pools, the preset list); fuzz
+counters for every new SAI and ability. The playable tests lost their subject -- every species in
+the data is playable again -- so the rule moved into a pure `problemFor` and is tested on made-up
+species, which is the only way to test it between species phases.
+
+**3. Hypnotic Glare fires too rarely for 200 random games** -- a Leviathan face in ten, in a melee
+attack that earns a save roll, and a defender's ID -- so its counter is `'full'`, and the 1000-game
+run reaches it. Every other new rule fires in 200.
+
+**4. "Counts as" had one direction, and Coastal Dodge is the other.** `counts_as` was save to melee
+and nothing else; it gained maneuver to save, with its own rule for when it applies (a roll that
+counts saves and not maneuver) beside Flaming Shields' (a melee roll, not a counter). The dragon
+combination roll gathers its modifiers as a *melee* roll, so Coastal Dodge is gathered at every
+water terrain and applied only by a roll that counts saves -- keying it on "a save roll" in
+`armyRoll` would have missed the dragon roll silently. `countedAs` and the log's `flamingShields`
+stay Flaming Shields' alone, since the golden digest records them; Coastal Dodge is a note on the
+roll's arithmetic line.
+
+**5. A dev server can serve half an edit.** In the browser pass greedy threw `cannotRoll is not
+defined`: Vite had picked up the body of an edit to `greedy.ts` and missed its import line two
+seconds later. The file on disk was right and every test passed. Touch the file before believing a
+`ReferenceError` from a module that typechecks.
+
+**Deliberately not done.** Defensive Volley, which is 5d's last part and the missile counter-attack.
+Until it lands the Coral Elves play without it: a "may" left out, never a rule played wrong.
 
 ---
 

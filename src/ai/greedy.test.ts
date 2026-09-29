@@ -448,6 +448,36 @@ describe('GreedyAI: self-play', () => {
     }
   })
 
+  /**
+   * PLAN-V2's exit check for a species (v2 Phase 5d): its monster mirrors finish against
+   * `PassiveAI` and against greedy itself. Against random greedy wins whatever it does;
+   * every stall found so far showed up only as a capped game against these two.
+   */
+  it('finishes every Coral Elves mirror against passive and against itself', () => {
+    const coral = Object.entries(FORCE_SETS).filter(([name, spec]) => isMirror(spec) && name.startsWith('coral_elves_'))
+    expect(coral.map(([name]) => name).sort()).toEqual([
+      'coral_elves_coral_giant',
+      'coral_elves_gryphon',
+      'coral_elves_leviathan',
+      'coral_elves_sprite_swarm',
+      'coral_elves_tako',
+    ])
+    for (const [name, forces] of coral) {
+      for (let seed = 1; seed <= 4; seed++) {
+        for (const [label, p2] of [['passive', passiveAi], ['greedy', greedyAi]] as const) {
+          const result = runGame({
+            setup: { seed, forces, ruleSet: V1_RULES },
+            players: { p1: greedyAi, p2 },
+            aiSeed: seed,
+            maxDecisions: 20_000,
+            validate: true,
+          })
+          expect(result.stoppedBecause, `${name} against ${label}, seed ${seed}`).toBe('winner')
+        }
+      }
+    }
+  })
+
   it('never draws from the rng it is handed', () => {
     const state = board([{ id: 'a', typeId: 'treefolk.oak', at: at('frontier') }])
     const rng = rngFrom(5)

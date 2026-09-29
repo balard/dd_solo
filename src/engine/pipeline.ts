@@ -88,8 +88,14 @@ type ModifierBody =
    */
   | {
       readonly kind: 'counts_as'
-      readonly from: 'save'
-      readonly resultType: 'melee'
+      /**
+       * Two directions, one per ability that has them (v2 Phase 5d): Flaming Shields'
+       * saves as melee, and Coastal Dodge's maneuver as saves. A union of the two pairs
+       * rather than any `ResultType` to any other, because each pair has its own rule
+       * about when it applies -- see `convertsSaves` and `dodgesManeuver` in `roll.ts`.
+       */
+      readonly from: 'save' | 'maneuver'
+      readonly resultType: 'melee' | 'save'
       readonly species: readonly string[]
     }
 
@@ -97,6 +103,16 @@ type ModifierBody =
  *  may count their rolled saves as melee. */
 export function savesAsMelee(species: readonly string[]): Modifier {
   return { kind: 'counts_as', from: 'save', resultType: 'melee', species, source: 'Flaming Shields' }
+}
+
+/**
+ * Coastal Dodge's permission (v2 Phase 5d): "When at a terrain that contains water, Coral
+ * Elves may count maneuver results as if they were save results." Gathered at every
+ * water terrain whatever the roll, and applied only by a roll that counts saves and not
+ * maneuver -- where converting can only help, so it is automatic.
+ */
+export function maneuverAsSaves(species: readonly string[]): Modifier {
+  return { kind: 'counts_as', from: 'maneuver', resultType: 'save', species, source: 'Coastal Dodge' }
 }
 
 /** The eighth-face holder's doubled ID results, as the step-9 modifier it is. */

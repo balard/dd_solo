@@ -20,22 +20,37 @@ import type { Species, UnitType } from '../data/types'
 import { saiBuilt } from './sai'
 import { SPECIES_ABILITIES } from './species'
 
-/** Why a species is not playable yet, or null when it is. */
-export function speciesProblem(speciesId: string): string | null {
-  const species = SPECIES.find((s) => s.id === speciesId)
-  if (species === undefined) return `there is no species ${speciesId}`
-
+/**
+ * The rule itself, over whatever it is handed: why this species is not playable, or null.
+ *
+ * Pure, so it can be tested when every species in the data *is* playable -- which is
+ * the normal state between species phases, and the one in which a test against the real
+ * tables would have nothing to say.
+ */
+export function problemFor(
+  species: Species,
+  types: readonly UnitType[],
+  built: (sai: string) => boolean,
+  hasAbilities: boolean,
+): string | null {
   const unbuilt = new Set<string>()
-  for (const type of UNIT_TYPES) {
-    if (type.species !== speciesId) continue
-    for (const face of type.faces) if (face.icon === 'SAI' && !saiBuilt(face.sai)) unbuilt.add(face.sai)
+  for (const type of types) {
+    if (type.species !== species.id) continue
+    for (const face of type.faces) if (face.icon === 'SAI' && !built(face.sai)) unbuilt.add(face.sai)
   }
 
   const missing: string[] = []
   if (unbuilt.size > 0) missing.push(`the SAI${unbuilt.size > 1 ? 's' : ''} ${[...unbuilt].sort().join(', ')}`)
-  if (SPECIES_ABILITIES[speciesId] === undefined) missing.push('its species abilities')
+  if (!hasAbilities) missing.push('its species abilities')
   if (missing.length === 0) return null
   return `${species.name} are not playable yet: ${missing.join(' and ')} are not implemented`
+}
+
+/** Why a species in the data is not playable yet, or null when it is. */
+export function speciesProblem(speciesId: string): string | null {
+  const species = SPECIES.find((s) => s.id === speciesId)
+  if (species === undefined) return `there is no species ${speciesId}`
+  return problemFor(species, UNIT_TYPES, saiBuilt, SPECIES_ABILITIES[speciesId] !== undefined)
 }
 
 /** Every species the engine can play, in the data's order. */

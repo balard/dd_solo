@@ -187,6 +187,16 @@ const RULES: Readonly<Record<string, Reach>> = {
   'resolved:Smother': 'every',
   'effect:Sleep': 'every',
   'effect:Galeforce': 'every',
+  // The Coral Elves (v2 Phase 5): three by the entry they leave, Ferry by its move, and
+  // Wave by the step it writes into the other army's roll.
+  'resolved:Entangle': 'every',
+  'resolved:Swallow': 'every',
+  // A Leviathan face in ten, in a melee attack that earns a save roll, and a defender's
+  // ID on it: too rare for 200 games.
+  'resolved:Hypnotic Glare': 'full',
+  'moved:Ferry': 'every',
+  'wave:saves': 'every',
+  'wave:maneuver': 'every',
   // The eighth face: a missile at a Reserve Army is Tower's; City and Temple are
   // their own decisions above.
   tower_reserve: 'every',
@@ -199,6 +209,7 @@ const RULES: Readonly<Record<string, Reach>> = {
   replant_rooted: 'every',
   replant_missed: 'every',
   flaming_shields: 'every',
+  coastal_dodge: 'every',
   growth_taken: 'every',
   growth_declined: 'every',
   // v2 Phase 2: a rolled force may mix species, and one in five here does.
@@ -293,6 +304,14 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
         case 'combat_resolved':
           if (entry.action === 'missile' && entry.defenderSlot === 'reserve') bump('tower_reserve')
           if (entry.flamingShields !== undefined) bump('flaming_shields')
+          if (entry.saveMath?.steps.some((step) => step.source === 'Wave')) bump('wave:saves')
+          if (entry.saveMath?.notes.some((note) => note.includes('Coastal Dodge'))) bump('coastal_dodge')
+          break
+        case 'maneuver_contested':
+          if (entry.defenderMath?.steps.some((step) => step.source === 'Wave')) bump('wave:maneuver')
+          break
+        case 'units_moved':
+          bump(`moved:${entry.sai}`)
           break
         case 'replanting':
           bump('replant_rooted', entry.rooted.length)

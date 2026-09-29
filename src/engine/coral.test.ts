@@ -13,7 +13,10 @@ import { describe, expect, it } from 'vitest'
 
 import { unitType } from '../data/load'
 
+import { maneuverAsSaves } from './pipeline'
 import { advance, reduce } from './reduce'
+import { resolveFaces } from './roll'
+import { DRAGON_ROLL_KINDS } from './sai'
 import { rollDice, type RngState } from './rng'
 import {
   V0_RULES,
@@ -49,7 +52,13 @@ function rngShowing(typeIds: readonly string[], faces: readonly number[]): RngSt
 }
 
 /** p1's dice and p2's dice at the Frontier, with p1 marching and the turn as given. */
-function board(p1: readonly string[], p2: readonly string[], rng: RngState, turn: Partial<TurnState>): GameState {
+function board(
+  p1: readonly string[],
+  p2: readonly string[],
+  rng: RngState,
+  turn: Partial<TurnState>,
+  options: { readonly ruleSet?: RuleSet; readonly frontier?: string } = {},
+): GameState {
   const units: Record<string, UnitInstance> = {}
   for (const [owner, typeIds] of [['p1', p1], ['p2', p2]] as const) {
     typeIds.forEach((typeId, i) => {
@@ -57,9 +66,14 @@ function board(p1: readonly string[], p2: readonly string[], rng: RngState, turn
       units[id] = { id, typeId, owner, location: { kind: 'terrain', slot: 'frontier' } }
     })
   }
-  const terrain = (slot: TerrainSlot) => ({ slot, dieId: 'highland_tower', face: 6 as const, capturedBy: null })
+  const terrain = (slot: TerrainSlot) => ({
+    slot,
+    dieId: slot === 'frontier' ? (options.frontier ?? 'highland_tower') : 'highland_tower',
+    face: 6 as const,
+    capturedBy: null,
+  })
   return {
-    ruleSet: RULES,
+    ruleSet: options.ruleSet ?? RULES,
     rng,
     units,
     effects: [],
@@ -184,5 +198,86 @@ describe('Hypnotic Glare', () => {
     )
     expect(state.effects).toEqual([])
     expect(logged(state, 'sai_resolved')).toBeUndefined()
+  })
+})
+
+describe('Coastal Dodge', () => {
+  /** Knight face 2 is `3 MANEUVER`; Willow face 2 is `2 MANEUVER`. Coastland is air and
+   *  water, Highland fire and earth. */
+  const KNIGHT_MANEUVER = 2
+  const ABILITIES: RuleSet = { ...RULES, speciesAbilities: true }
+
+  /** Oak Lords attack at the Frontier, and whatever p2 stands there saves. */
+  const saving = (defenders: readonly string[], faces: readonly number[], frontier: string) =>
+    advance(
+      board(
+        ['treefolk.oak_lord'],
+        defenders,
+        // Oak Lord face 1 is `3 MELEE`.
+        rngShowing(['treefolk.oak_lord', ...defenders], [1, ...faces]),
+        { combat: { action: 'melee', targetSlot: 'frontier', damage: 0 } },
+        { ruleSet: ABILITIES, frontier },
+      ),
+    )
+
+  it("counts a Coral Elf's maneuver as saves at a terrain containing water", () => {
+    const state = saving([KNIGHT], [KNIGHT_MANEUVER], 'coastland_tower')
+    const exchange = logged(state, 'combat_resolved')
+    expect(exchange).toMatchObject({ attackTotal: 3, saveTotal: 3 })
+    expect(exchange?.saveMath?.notes).toContain('3 maneuver counted as saves (Coastal Dodge)')
+    // The die draws its three, so the strip adds up to the total.
+    expect(exchange?.saveDice?.map((d) => d.results)).toEqual([3])
+  })
+
+  it('does nothing at a terrain without water', () => {
+    const state = saving([KNIGHT], [KNIGHT_MANEUVER], 'highland_tower')
+    expect(logged(state, 'combat_resolved')).toMatchObject({ saveTotal: 0 })
+  })
+
+  it('converts only the Coral Elves in a mixed army', () => {
+    const state = saving([KNIGHT, WILLOW], [KNIGHT_MANEUVER, WILLOW_MANEUVER], 'coastland_tower')
+    expect(logged(state, 'combat_resolved')).toMatchObject({ saveTotal: 3 })
+  })
+
+  it('is off without species abilities', () => {
+    const state = advance(
+      board(
+        ['treefolk.oak_lord'],
+        [KNIGHT],
+        rngShowing(['treefolk.oak_lord', KNIGHT], [1, KNIGHT_MANEUVER]),
+        { combat: { action: 'melee', targetSlot: 'frontier', damage: 0 } },
+        { frontier: 'coastland_tower' },
+      ),
+    )
+    expect(logged(state, 'combat_resolved')).toMatchObject({ saveTotal: 0 })
+  })
+
+  it('leaves a maneuver roll alone, where converting could only hurt', () => {
+    const state = reduce(
+      {
+        ...board([WILLOW], [KNIGHT], rngShowing([WILLOW, KNIGHT], [WILLOW_MANEUVER, KNIGHT_MANEUVER]), { marchStep: 'contest_maneuver' }, {
+          ruleSet: ABILITIES,
+          frontier: 'coastland_tower',
+        }),
+        pending: { kind: 'contest_maneuver', player: 'p2', slot: 'frontier' },
+      },
+      { kind: 'contest_maneuver', contest: true },
+    )
+    expect(logged(state, 'maneuver_contested')).toMatchObject({ marcher: 2, defender: 3, marcherWins: false })
+  })
+
+  it('converts every maneuver in the dragon combination roll too, which counts saves and not maneuver', () => {
+    const outcome = resolveFaces(
+      [{ unitId: 'k', typeId: KNIGHT, faceIndex: KNIGHT_MANEUVER }],
+      {
+        kinds: DRAGON_ROLL_KINDS,
+        modifiers: [maneuverAsSaves(['coral_elves'])],
+        context: { purpose: { kind: 'dragon_attack' }, isCounter: false },
+        // No ID on the table, so nothing to allocate -- but a combination roll must say so.
+        idAllocation: {},
+      },
+      ABILITIES,
+    )
+    expect(outcome.totals.save).toBe(3)
   })
 })

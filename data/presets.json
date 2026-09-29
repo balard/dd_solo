@@ -276,6 +276,96 @@
           "firewalkers.salamander"
         ]
       }
+    },
+    "coral_elves_coral_giant": {
+      "name": "Coral Giant x6",
+      "species": "coral_elves",
+      "armies": {
+        "home": [
+          "coral_elves.coral_giant",
+          "coral_elves.coral_giant",
+          "coral_elves.coral_giant"
+        ],
+        "campaign": [
+          "coral_elves.coral_giant",
+          "coral_elves.coral_giant"
+        ],
+        "horde": [
+          "coral_elves.coral_giant"
+        ]
+      }
+    },
+    "coral_elves_gryphon": {
+      "name": "Gryphon x6",
+      "species": "coral_elves",
+      "armies": {
+        "home": [
+          "coral_elves.gryphon",
+          "coral_elves.gryphon",
+          "coral_elves.gryphon"
+        ],
+        "campaign": [
+          "coral_elves.gryphon",
+          "coral_elves.gryphon"
+        ],
+        "horde": [
+          "coral_elves.gryphon"
+        ]
+      }
+    },
+    "coral_elves_leviathan": {
+      "name": "Leviathan x6",
+      "species": "coral_elves",
+      "armies": {
+        "home": [
+          "coral_elves.leviathan",
+          "coral_elves.leviathan",
+          "coral_elves.leviathan"
+        ],
+        "campaign": [
+          "coral_elves.leviathan",
+          "coral_elves.leviathan"
+        ],
+        "horde": [
+          "coral_elves.leviathan"
+        ]
+      }
+    },
+    "coral_elves_sprite_swarm": {
+      "name": "Sprite Swarm x6",
+      "species": "coral_elves",
+      "armies": {
+        "home": [
+          "coral_elves.sprite_swarm",
+          "coral_elves.sprite_swarm",
+          "coral_elves.sprite_swarm"
+        ],
+        "campaign": [
+          "coral_elves.sprite_swarm",
+          "coral_elves.sprite_swarm"
+        ],
+        "horde": [
+          "coral_elves.sprite_swarm"
+        ]
+      }
+    },
+    "coral_elves_tako": {
+      "name": "Tako x6",
+      "species": "coral_elves",
+      "armies": {
+        "home": [
+          "coral_elves.tako",
+          "coral_elves.tako",
+          "coral_elves.tako"
+        ],
+        "campaign": [
+          "coral_elves.tako",
+          "coral_elves.tako"
+        ],
+        "horde": [
+          "coral_elves.tako"
+        ]
+      }
     }
   }
 }

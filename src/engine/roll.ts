@@ -434,6 +434,29 @@ function convertsDie(converts: ReadonlySet<string> | null, die: RawDie): boolean
 }
 
 /**
+ * Whose dice this roll counts maneuver results from as saves, or null: Coastal Dodge's
+ * permission is on it, and the roll counts saves and not maneuver (v2 Phase 5d). Every
+ * such roll -- a save roll, a spell's save roll, the dragon combination roll -- gains by
+ * converting and loses nothing, so it is automatic: there is never a trade to ask about.
+ * No counter-attack clause, unlike Flaming Shields': the ability states none.
+ */
+function dodgesManeuver(spec: RollSpec): ReadonlySet<string> | null {
+  if (!spec.kinds.includes('save') || spec.kinds.includes('maneuver')) return null
+  const species = spec.modifiers.flatMap((m) =>
+    m.kind === 'counts_as' && m.from === 'maneuver' ? m.species : [],
+  )
+  return species.length > 0 ? new Set(species) : null
+}
+
+/** The maneuver results one die *rolled* -- `rolledSaves`' twin, for Coastal Dodge.
+ *  A Trample in a save roll generates maneuver too, and those are rolled results. */
+function rolledManeuver(face: Face, contribution: Contribution, ruleSet: RuleSet): number {
+  if (face.icon === 'ID') return 0
+  if (face.icon === 'SAI') return contribution.saiResults.maneuver ?? 0
+  return faceResults(face, 'maneuver', ruleSet)
+}
+
+/**
  * The save results one die *rolled*: a save icon's count, or an SAI's save results.
  *
  * Never an ID -- in a melee roll an ID is already melee, and in a combination roll the
@@ -601,12 +624,16 @@ export function resolveFaces(
   // (the dragon's) converts only what its owner chose.
   const convertsAll = converts !== null && !spec.kinds.includes('save')
   let convertible = 0
+  const dodges = dodgesManeuver(spec)
+  let dodged = 0
 
   for (const die of dice) {
     const face = faceOf(die)
     const contribution = classify(face, spec, ruleSet)
     const saves = convertsDie(converts, die) ? rolledSaves(face, contribution, ruleSet) : 0
     convertible += saves
+    const dodge = convertsDie(dodges, die) ? rolledManeuver(face, contribution, ruleSet) : 0
+    dodged += dodge
 
     idPool += contribution.idPool
     for (const kind of spec.kinds) {
@@ -622,7 +649,7 @@ export function resolveFaces(
       typeId: die.typeId,
       faceIndex: die.faceIndex,
       face,
-      results: perDieResults(face, contribution, spec, convertsAll ? saves : 0),
+      results: perDieResults(face, contribution, spec, (convertsAll ? saves : 0) + dodge),
       ...(die.reroll === true ? { reroll: true as const } : {}),
       ...(contribution.effects.length > 0 ? { effects: contribution.effects } : {}),
     })
@@ -650,8 +677,13 @@ export function resolveFaces(
     countedAs > 0
       ? { kind: 'add', resultType: 'melee', amount: countedAs, source: 'Flaming Shields' }
       : null
-  const modifiers: readonly Modifier[] =
-    converted === null ? spec.modifiers : [...spec.modifiers, converted]
+  // Coastal Dodge: every maneuver result a Coral Elf rolled joins the saves at step 10.
+  const dodgedIn: Modifier | null =
+    dodged > 0 ? { kind: 'add', resultType: 'save', amount: dodged, source: 'Coastal Dodge' } : null
+  const onDice: Modifier[] = []
+  if (converted !== null) onDice.push(converted)
+  if (dodgedIn !== null) onDice.push(dodgedIn)
+  const modifiers: readonly Modifier[] = [...spec.modifiers, ...onDice]
   const math: Partial<Record<ResultType, RollMath>> = {}
 
   for (const kind of spec.kinds) {
@@ -667,7 +699,7 @@ export function resolveFaces(
     const share = { id: allocation.get(kind) ?? 0, normal, sai }
     totals[kind] = applyModifiers(share, kind, modifiers)
 
-    const explained = explainRoll(share, kind, modifiers, converted, spec)
+    const explained = explainRoll(share, kind, modifiers, onDice, spec)
     if (explained !== null) math[kind] = explained
   }
 
@@ -706,12 +738,13 @@ function explainRoll(
   share: { readonly id: number; readonly normal: number; readonly sai: number },
   kind: ResultType,
   modifiers: readonly Modifier[],
-  converted: Modifier | null,
+  /** The conversions the dice already show: Flaming Shields', Coastal Dodge's. */
+  converted: readonly Modifier[],
   spec: RollSpec,
 ): RollMath | null {
   const own = modifiers.filter((m) => m.resultType === kind)
   const onDice = own.filter(
-    (m) => m === converted || (m.kind === 'multiply' && m.share === 'id'),
+    (m) => converted.includes(m) || (m.kind === 'multiply' && m.share === 'id'),
   )
   const named = own
     .filter((m) => !onDice.includes(m) && m.kind !== 'counts_as')
@@ -726,6 +759,12 @@ function explainRoll(
     notes.push(`IDs doubled (${doubling.source ?? 'eighth face'})`)
   }
   if (spec.countIds === false) notes.push('Tower: ID results do not count')
+  // Coastal Dodge's maneuver is on the dice, like the eighth face's doubling -- so it
+  // is a note, and the dice strip already shows each die's share of it.
+  const dodge = onDice.find((m) => m.kind === 'add' && m.source === 'Coastal Dodge')
+  if (dodge !== undefined && dodge.kind === 'add') {
+    notes.push(`${dodge.amount} maneuver counted as saves (Coastal Dodge)`)
+  }
 
   if (named.length === 0 && offDice === 0 && notes.length === 0) return null
 

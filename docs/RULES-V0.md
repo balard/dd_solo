@@ -961,6 +961,17 @@ glaring unit may be excluded from any roll until the effect expires."
 A die that cannot be rolled (asleep, hypnotized) fails a Swallow's roll and is buried -- the
 sub-roll rule of section 11, which makes a sleeping die the best target for one.
 
+### The abilities (5d)
+
+- **Coastal Dodge** -- "When at a terrain that contains water, Coral Elves may count maneuver results
+  as if they were save results." A step-10 "counts as", Flaming Shields' shape the other way round,
+  and **automatic**: every roll that counts saves (a save roll, a spell's save roll, the dragon
+  combination roll) counts no maneuver, so converting only ever adds, and in a maneuver roll it
+  would only take away, so it never applies there. Only rolled results convert -- a maneuver face,
+  and an SAI's maneuver results such as a Trample's -- and only a Coral Elf's, in a mixed army. No
+  counter-attack clause, unlike Flaming Shields'. A roll says so in its arithmetic line: "3
+  maneuver counted as saves (Coastal Dodge)".
+
 ### House rules this species adds
 
 - **The glaring unit sits out every army roll while its glare lasts**, automatically. "May be

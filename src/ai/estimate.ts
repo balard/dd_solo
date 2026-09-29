@@ -65,6 +65,8 @@ export interface ExpectedDie {
   readonly targeted: number
   /** Save results this die rolled, for Flaming Shields to turn into melee. */
   readonly rolledSaves: number
+  /** Maneuver results this die rolled, for Coastal Dodge to turn into saves (v2 Phase 5d). */
+  readonly rolledManeuver: number
   /** Wave (v2 Phase 5c): results taken off the *other* army's roll -- its saves when
    *  this is a melee attack. */
   readonly wave: number
@@ -85,6 +87,7 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
       riposte: 0,
       targeted: 0,
       rolledSaves: face.icon === 'SAVE' ? face.count : 0,
+      rolledManeuver: face.icon === 'MANEUVER' ? face.count : 0,
       wave: 0,
       reroll: false,
     }
@@ -142,6 +145,7 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
     riposte,
     targeted,
     rolledSaves: outcome.results.save ?? 0,
+    rolledManeuver: outcome.results.maneuver ?? 0,
     wave,
     reroll: outcome.reroll,
   }
@@ -172,6 +176,7 @@ export function expectedDie(
   let riposte = 0
   let targeted = 0
   let rolledSaves = 0
+  let rolledManeuver = 0
   let wave = 0
 
   for (const face of faces) {
@@ -184,6 +189,7 @@ export function expectedDie(
     riposte += worth.riposte
     targeted += worth.targeted
     rolledSaves += worth.rolledSaves
+    rolledManeuver += worth.rolledManeuver
     wave += worth.wave
   }
 
@@ -198,6 +204,7 @@ export function expectedDie(
     riposte: riposte / divisor,
     targeted: targeted / divisor,
     rolledSaves: rolledSaves / divisor,
+    rolledManeuver: rolledManeuver / divisor,
     wave: wave / divisor,
   }
 }
@@ -232,7 +239,8 @@ export interface ExpectedArmyOptions {
  * Flaming Shields permission rides the modifier list as a `counts_as`, which
  * `applyModifiers` ignores because only the dice can say how many saves there were --
  * so it is added here from the expected rolled saves, at step 10 where the roll adds it,
- * and never on a counter-attack, where the roll refuses it.
+ * and never on a counter-attack, where the roll refuses it. Coastal Dodge (v2 Phase 5d)
+ * is the same shape the other way: expected rolled maneuver, added to a save roll.
  */
 export function expectedArmy(
   state: GameState,
@@ -251,7 +259,14 @@ export function expectedArmy(
   let riposte = 0
   let targeted = 0
   let rolledSaves = 0
+  let dodged = 0
   let wave = 0
+  // Whose maneuver Coastal Dodge converts: a roll that counts saves (v2 Phase 5d).
+  const dodging = new Set(
+    resultType === 'save'
+      ? modifiers.flatMap((m) => (m.kind === 'counts_as' && m.from === 'maneuver' ? m.species : []))
+      : [],
+  )
   // Whose saves Flaming Shields converts: only its own species' dice (v2 Phase 1).
   const shielded = new Set(
     resultType === 'melee' && !context.isCounter
@@ -268,13 +283,14 @@ export function expectedArmy(
     targeted += die.targeted
     wave += die.wave
     if (shielded.has(unitType(unit.typeId).species)) rolledSaves += die.rolledSaves
+    if (dodging.has(unitType(unit.typeId).species)) dodged += die.rolledManeuver
   }
 
   const share: Share = { id: options.countIds === false ? 0 : id, normal, sai }
 
   return {
     share,
-    total: applyModifiers(share, resultType, modifiers) + rolledSaves,
+    total: applyModifiers(share, resultType, modifiers) + rolledSaves + dodged,
     unsavable,
     riposte,
     targeted,

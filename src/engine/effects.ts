@@ -33,7 +33,7 @@
  * 4a seam exists for. They are on the `sai: 'full'` rung, so `state.effects` is still
  * always empty in a `DUA_RULES` game, which is what the app plays.
  */
-import { doubleIdsModifier, savesAsMelee, type Modifier } from './pipeline'
+import { doubleIdsModifier, maneuverAsSaves, savesAsMelee, type Modifier } from './pipeline'
 import { terrainHas, unitHasAbility } from './species'
 import { terrainDie } from '../data/load'
 import type { EighthFaceIcon, ResultType } from '../data/types'
@@ -345,6 +345,13 @@ export function armyRoll(
   if (resultType === 'melee' && terrainHas(state, ref, 'fire')) {
     const shielded = speciesIn(units.filter((unit) => unitHasAbility(state.ruleSet, unit, 'Flaming Shields')))
     if (shielded.length > 0) modifiers.push(savesAsMelee(shielded))
+  }
+  // Coastal Dodge (v2 Phase 5d): gathered at a water terrain whatever the roll -- the
+  // dragon's combination roll is gathered as a melee roll and counts saves too -- and
+  // applied by `resolveFaces` only to a roll that counts saves and not maneuver.
+  if (terrainHas(state, ref, 'water')) {
+    const dodgers = speciesIn(units.filter((unit) => unitHasAbility(state.ruleSet, unit, 'Coastal Dodge')))
+    if (dodgers.length > 0) modifiers.push(maneuverAsSaves(dodgers))
   }
 
   return { units, modifiers }

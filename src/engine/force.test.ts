@@ -15,6 +15,7 @@ import {
   splitForce,
   type BuiltForce,
 } from './force'
+import { PLAYABLE_SPECIES } from './playable'
 import { nextInt, rngFrom, type RngState } from './rng'
 import { setupGame, STARTER_FORCES } from './setup'
 import { TERRAIN_SLOTS, armyAt, forceSpecies, opponentOf, unitsOf, type PlayerId } from './types'
@@ -127,12 +128,14 @@ describe('generateForces', () => {
     }
   })
 
-  it('reaches both race assignments', () => {
-    const firsts = new Set<string>()
-    for (let seed = 1; seed <= 50; seed++) {
-      firsts.add(speciesOfForce(generateForces(rngFrom(seed))[0].p1).join())
+  it('reaches every race assignment: each playable species on each side', () => {
+    const pairs = new Set<string>()
+    for (let seed = 1; seed <= 200; seed++) {
+      const [forces] = generateForces(rngFrom(seed))
+      pairs.add(`${speciesOfForce(forces.p1).join()}-${speciesOfForce(forces.p2).join()}`)
     }
-    expect(firsts.size).toBe(2)
+    // n species make n(n - 1) ordered pairs of different species; a mirror is never drawn.
+    expect(pairs.size).toBe(PLAYABLE_SPECIES.length * (PLAYABLE_SPECIES.length - 1))
   })
 
   it('gives both players the same size, and only ever a legal one', () => {

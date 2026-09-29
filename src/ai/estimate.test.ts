@@ -196,6 +196,22 @@ describe('expectedArmy', () => {
     })
     expect(attack.total - counter.total).toBeCloseTo(2 / 6)
   })
+
+  it('adds Coastal Dodge to a save roll at a water terrain (v2 Phase 5d)', () => {
+    // Knight: 3 MANEUVER and 2 MANEUVER on two faces in six. p1's home is a Swampland
+    // (water and earth), the Frontier a Wasteland (air and fire).
+    const state = board([
+      { id: 'k', typeId: 'coral_elves.knight', at: at('p1_home') },
+      { id: 'j', typeId: 'coral_elves.knight', owner: 'p2', at: at('frontier') },
+    ])
+    const wet = expectedArmy(state, 'p1', 'p1_home', 'save').total
+    const dry = expectedArmy(state, 'p2', 'frontier', 'save').total
+    expect(wet - dry).toBeCloseTo(5 / 6)
+    // And never on a maneuver roll, where it would take away what it gave.
+    expect(expectedArmy(state, 'p1', 'p1_home', 'maneuver').total).toBeCloseTo(
+      expectedArmy(state, 'p2', 'frontier', 'maneuver').total,
+    )
+  })
 })
 
 describe('expectedAttack', () => {

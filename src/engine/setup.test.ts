@@ -57,6 +57,11 @@ const presetHealthOf = (p: (typeof PRESETS)[number]) =>
 describe('presets', () => {
   it('loads every hand-authored force', () => {
     expect(PRESETS.map((p) => p.id).sort()).toEqual([
+      'coral_elves_coral_giant',
+      'coral_elves_gryphon',
+      'coral_elves_leviathan',
+      'coral_elves_sprite_swarm',
+      'coral_elves_tako',
       'firewalkers_bestiary',
       'firewalkers_fireshadow',
       'firewalkers_genie',
@@ -85,7 +90,7 @@ describe('presets', () => {
     // Playable, not every monster in the data: a species transcribed ahead of its rules
     // (v2 Phase 5a) cannot start a game, so a fixture for it could only throw.
     const monsters = PLAYABLE_UNITS.filter((t) => t.size === 'monster')
-    expect(monsters.length).toBe(10)
+    expect(monsters.length).toBe(15)
 
     for (const monster of monsters) {
       const id = `${monster.species}_${monster.id.split('.')[1]}`
