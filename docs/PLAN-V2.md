@@ -1292,7 +1292,7 @@ V1 goldens move only with a written reason (the riposte slice in Dwarves is the 
 
 5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c has landed: all six SAIs. 5d has
 landed: the race draw, Coastal Dodge (which made the Coral Elves playable), and Defensive Volley.
-5e (Blizzard and Deluge) is next.
+5e has landed: Blizzard and Deluge. 5f (presets, AI) and 5g (art) are left.
 
 ### What 5a found
 
@@ -1478,6 +1478,21 @@ every terrain but the one its *army* rolled at -- including the one the Ferry ha
 and drew its passengers from an army it had left. A free move now starts from where its die stands
 and carries from the army it stands in. Reachable since mixed forces (Phase 2) could put two free
 movers in one army; the 200-game run never drew it, and Ferry made it common enough to land.
+
+### What 5e found
+
+**1. Two `effect` blocks and no code**, as the table predicted: Ash Storm's shape with three and two
+result types. `npm run data` reports no spell without code behind it.
+
+**2. "Cumulative" was read off the page's colours, not its image.** The plan's warning stands --
+text extraction drops the red -- but PyMuPDF reports each span's colour, and the page's own
+known-cumulative spells (Wind Walk, Watery Double, Wall of Fog) are the check that the red is the
+marker. Both Coral spells are cumulative. Worth reusing for every later species' spells.
+
+**3. Two checks were about "the two species", not about spells.** The validator refused a spell of
+any third species outright, and the spell fuzz required every resolvable spell to be cast by a fuzz
+that only ever fields Treefolk and Firewalkers. The first now checks against the imported species;
+the second is scoped to the species it plays, and the live fuzz, which draws Coral Elves, casts both.
 
 ---
 

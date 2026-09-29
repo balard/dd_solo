@@ -66,14 +66,13 @@ const pool = (over: Partial<MagicPool> = {}): MagicPool => ({
 })
 
 describe('the spell data', () => {
-  it('holds exactly the eighteen spells these two species can cast', () => {
-    expect(SPELLS).toHaveLength(18)
-    // Four per element plus the two Elemental (full rules pp. 46-51). A nineteenth
-    // entry means a spell belonging to a species outside this plan slipped in.
-    for (const element of ['air', 'water', 'earth', 'fire'] as const) {
-      expect(SPELLS.filter((s) => s.element === element)).toHaveLength(4)
-    }
-    expect(SPELLS.filter((s) => s.element === 'elemental')).toHaveLength(2)
+  it('holds exactly the spells the species in the data can cast', () => {
+    expect(SPELLS).toHaveLength(20)
+    // Four per element plus the two Elemental (full rules pp. 46-51), and the Coral
+    // Elves' air and water spell (v2 Phase 5e). Another entry means a spell belonging to
+    // a species nobody has imported slipped in.
+    const count = (element: string) => SPELLS.filter((s) => s.element === element).length
+    expect([count('air'), count('water'), count('earth'), count('fire'), count('elemental')]).toEqual([5, 5, 4, 4, 2])
   })
 
   it('records the two non-cumulative spells, which no extraction could tell us', () => {
@@ -109,13 +108,15 @@ describe('the spell data', () => {
     for (const s of SPELLS) expect(s.text.trim().length).toBeGreaterThan(20)
   })
 
-  it('gives the four species spells to the two species in scope', () => {
+  it('gives the six species spells to their three species', () => {
     const byId = (id: string) => spell(id).species
     expect(byId('mirage')).toBe('firewalkers')
     expect(byId('flashfire')).toBe('firewalkers')
     expect(byId('accelerated_growth')).toBe('treefolk')
     expect(byId('wall_of_thorns')).toBe('treefolk')
-    expect(SPELLS.filter((s) => s.species !== 'any')).toHaveLength(4)
+    expect(byId('blizzard')).toBe('coral_elves')
+    expect(byId('deluge')).toBe('coral_elves')
+    expect(SPELLS.filter((s) => s.species !== 'any')).toHaveLength(6)
   })
 
   it('lets an Elemental spell take any element and a single-element spell only its own', () => {
@@ -1527,7 +1528,11 @@ describe('the fuzz', () => {
     // reached would be green and prove nothing. **Every spell this build resolves
     // fires**, which is a stronger claim than a list, and it tightens on its own as
     // each later slice moves a name out of the unbuilt set.
-    const live = SPELLS.filter((s) => resolvesSpell(s.id, SPELL_RULES)).map((s) => s.id)
+    // The spells these two species can cast: the Coral Elves' two are the live fuzz's
+    // (`fuzz.test.ts`), which is the one that draws Coral Elves.
+    const live = SPELLS.filter(
+      (s) => resolvesSpell(s.id, SPELL_RULES) && ['any', 'treefolk', 'firewalkers'].includes(s.species),
+    ).map((s) => s.id)
     expect(live).toHaveLength(18)
     for (const id of live) expect(cast.get(id) ?? 0).toBeGreaterThan(0)
 

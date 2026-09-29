@@ -1,6 +1,6 @@
 {
   "$schema": "./schema/spells.schema.json",
-  "_comment": "Hand-authored content. NOT generated -- the importers never touch this file, the same way they never touch presets.json. The eighteen spells Treefolk and Firewalkers can cast between them, transcribed from the full rules pp. 46-51 (verified with `pdftotext -table`; -layout interleaves the two columns and pairs names with the wrong effects). `cumulative` is the rulebook's red-highlighted number, which text extraction drops entirely -- it has to be read off the rendered page. A spell with neither `effect` nor `handler` is transcribed but not implemented: `resolvesSpell` answers false and `castableSpells` never offers it, which is the same deliberate silence the `sai: 'results'` rung gives an unbuilt SAI. Every spell has one by the end of Phase 7f.",
+  "_comment": "Hand-authored content. NOT generated -- the importers never touch this file, the same way they never touch presets.json. The spells Treefolk, Firewalkers and Coral Elves can cast between them (eighteen for the first two; Blizzard and Deluge are the Coral Elves', v2 Phase 5e), transcribed from the full rules pp. 46-51 (verified with `pdftotext -table`; -layout interleaves the two columns and pairs names with the wrong effects). `cumulative` is the rulebook's red-highlighted number, which text extraction drops entirely -- it has to be read off the rendered page. A spell with neither `effect` nor `handler` is transcribed but not implemented: `resolvesSpell` answers false and `castableSpells` never offers it, which is the same deliberate silence the `sai: 'results'` rung gives an unbuilt SAI. Every spell has one by the end of Phase 7f.",
   "spells": [
     {
       "id": "hailstorm",
@@ -14,6 +14,29 @@
       "cantrip": true,
       "text": "Target any opposing army. Inflict one point of damage on the target.",
       "handler": "hailstorm"
+    },
+    {
+      "id": "blizzard",
+      "name": "Blizzard",
+      "element": "air",
+      "cost": 3,
+      "species": "coral_elves",
+      "target": "terrain",
+      "cumulative": true,
+      "reserves": false,
+      "cantrip": false,
+      "text": "Target any terrain. Subtract three melee results from all army rolls at that terrain until the beginning of your next turn.",
+      "effect": {
+        "scope": "all_armies",
+        "modifiers": [
+          {
+            "kind": "subtract",
+            "resultType": "melee",
+            "amount": 3
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
     },
     {
       "id": "wind_walk",
@@ -200,6 +223,34 @@
       "cantrip": false,
       "text": "Target any terrain. Reduce that terrain one step unless an opposing army at that terrain generates at least six maneuver results. A terrain may never be reduced by more than one step during a player's turn from the effects of Flash Flood.",
       "handler": "flash_flood"
+    },
+    {
+      "id": "deluge",
+      "name": "Deluge",
+      "element": "water",
+      "cost": 5,
+      "species": "coral_elves",
+      "target": "terrain",
+      "cumulative": true,
+      "reserves": false,
+      "cantrip": false,
+      "text": "Target any terrain. Subtract three maneuver and three missile results from all army rolls at that terrain until the beginning of your next turn.",
+      "effect": {
+        "scope": "all_armies",
+        "modifiers": [
+          {
+            "kind": "subtract",
+            "resultType": "maneuver",
+            "amount": 3
+          },
+          {
+            "kind": "subtract",
+            "resultType": "missile",
+            "amount": 3
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
     },
     {
       "id": "wall_of_fog",

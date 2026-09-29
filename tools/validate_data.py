@@ -273,13 +273,11 @@ def check_spells():
                 if m["resultType"] not in RESULT_TYPES:
                     err(f"spell {sid}: unknown result type {m['resultType']}")
 
-    # Scope is two species; a spell for anyone else is a transcription slip.
-    for s in doc["spells"]:
-        if s["species"] not in ("any", "treefolk", "firewalkers"):
-            err(f"spell {s['id']}: {s['species']} is outside this project's scope")
-
-    if len(doc["spells"]) != 18:
-        err(f"expected 18 spells in scope, found {len(doc['spells'])}")
+    # A species spell belongs to an imported species -- checked above against units.json,
+    # which is what tools/species.py puts there. Twenty spells: the starter set's eighteen
+    # and the Coral Elves' two (v2 Phase 5e); a later species' phase moves this number.
+    if len(doc["spells"]) != 20:
+        err(f"expected 20 spells in scope, found {len(doc['spells'])}")
 
 
 def main():

@@ -980,6 +980,18 @@ sub-roll rule of section 11, which makes a sleeping die the best target for one.
   The shooter saves against a missile, so a Volley SAI on its dice sends damage back. Never at a
   Reserve Army (no terrain, no air), and a counter is never itself countered.
 
+### The spells (5e)
+
+| Spell | Element, cost | Effect |
+|---|---|---|
+| **Blizzard** | Air, 3 | Target any terrain: every army roll there subtracts three melee results until the beginning of your next turn. |
+| **Deluge** | Water, 5 | Target any terrain: every army roll there subtracts three maneuver and three missile results until the beginning of your next turn. |
+
+Both are Coral Elves spells (only Coral Elves magic pays for them), neither is marked `R` or `C`,
+and both are **cumulative** -- read off the rendered page, where the "three"s are printed in red, as
+Ash Storm's "one" is. Ash Storm's shape exactly: an `effect` block with scope `all_armies`, so it
+reaches both sides' armies at the terrain, the caster's included.
+
 ### House rules this species adds
 
 - **The glaring unit sits out every army roll while its glare lasts**, automatically. "May be
