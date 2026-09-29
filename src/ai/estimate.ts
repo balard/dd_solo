@@ -129,6 +129,9 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
       case 'galeforce':
       case 'confuse':
       case 'free_move':
+      // Hypnotic Glare: dice taken out of the other army's save roll, which depends on
+      // which of them come up ID -- too rough to price, and never counted as results.
+      case 'glare':
         break
     }
   }

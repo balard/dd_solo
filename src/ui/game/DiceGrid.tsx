@@ -22,7 +22,7 @@ import type { UnitId, UnitInstance } from '../../engine/types'
 import { ElementDots, speciesInfo } from './Elements'
 import { FaceArt } from './FaceArt'
 import { ClassShape, faceLabel, type ClassCode } from './Glyph'
-import { orderedForDisplay } from './prompts'
+import { orderedForDisplay, type GlareStatus } from './prompts'
 import { portraitSize, stackIdentical, tileSize } from './stacks'
 import { useFaceArt } from './useFaceArt'
 import { useRuleSet } from './useRuleSet'
@@ -120,6 +120,7 @@ export function DiceGrid({
   units,
   selectable = false,
   asleep,
+  glare,
   selected,
   onToggle,
   inspecting,
@@ -137,6 +138,9 @@ export function DiceGrid({
   /** Dice that cannot be rolled or moved. They still show, still take damage and
    *  still inspect -- they are simply not pickable, and say so. */
   asleep?: ReadonlySet<UnitId>
+  /** Hypnotic Glare (v2 Phase 5c): a label and a look, and still pickable -- neither
+   *  status stops a die being moved. */
+  glare?: ReadonlyMap<UnitId, GlareStatus>
   selected?: ReadonlySet<UnitId>
   onToggle?: (id: UnitId) => void
   inspecting?: UnitId | null
@@ -160,7 +164,7 @@ export function DiceGrid({
   // being picked from: `selectableAt`, `pickModeFor` and `tapMeaning` never learn
   // about stacks, and must not have to.
   const grouped = stacked && !units.some((unit) => canSelect(unit.id))
-  const apart = new Set([...(singled ?? []), ...(asleep ?? [])])
+  const apart = new Set([...(singled ?? []), ...(asleep ?? []), ...(glare?.keys() ?? [])])
   const tiles = grouped
     ? stackIdentical(units, apart)
     : orderedForDisplay(units).map((unit) => [unit])
@@ -180,7 +184,14 @@ export function DiceGrid({
         const isOpen = !selectableHere && stack.some((one) => one.id === inspecting)
         const tileSide = tileSize(unit.typeId, compact)
         const what = count > 1 ? `${count} × ${describe(type)}` : describe(type)
-        const label = isAsleep ? `${what} — asleep` : what
+        const status = glare?.get(unit.id)
+        const label = isAsleep
+          ? `${what} — asleep`
+          : status === 'hypnotized'
+            ? `${what} — hypnotized, cannot be rolled`
+            : status === 'glaring'
+              ? `${what} — glaring, sits out its army's rolls`
+              : what
 
         return (
           <div
@@ -194,6 +205,8 @@ export function DiceGrid({
                 (isSelected ? ' die-selected' : '') +
                 (selectableHere ? ' die-selectable' : '') +
                 (isAsleep ? ' die-asleep' : '') +
+                (status === 'hypnotized' ? ' die-hypnotized' : '') +
+                (status === 'glaring' ? ' die-glaring' : '') +
                 (isOpen ? ' die-open' : '') +
                 ' die-squared'
               }
@@ -357,6 +370,8 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
                 : `${effect.health} health-worth seized — an ID goes to reserves`
           }
         // eslint-disable-next-line no-fallthrough -- every arm above returns
+        case 'glare':
+          return 'every die that rolls its ID is hypnotized'
         case 'wave':
           return `${effect.amount} off the other army's roll`
         case 'sleep':

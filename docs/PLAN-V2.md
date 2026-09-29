@@ -1290,8 +1290,8 @@ V1 goldens move only with a written reason (the riposte slice in Dwarves is the 
 
 ## Phase 5 — Coral Elves — in progress
 
-5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c is in progress: Tail, Entangle,
-Swallow, Ferry and Wave have landed; Hypnotic Glare is next.
+5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c has landed: all six SAIs. 5d
+(the abilities) is next, and it is the slice that makes the Coral Elves playable.
 
 ### What 5a found
 
@@ -1401,6 +1401,25 @@ shared by the marcher, the counter-maneuver and the roll-off. `RollPurpose`'s ma
 nothing.** A Swallow is now a likely kill of a middling die, and a Wave comes off the expected saves.
 The browser's roll strip described every ID-escape as "seized -- an ID goes to reserves", which
 Swallow is not.
+
+### What 5c found (Hypnotic Glare)
+
+**1. The first delayed task that owes no decision.** Choke and Confuse ask "which", and every task
+before this one either raised a pending or was dropped for having nothing to land on. Glare takes
+"all units that roll an ID icon", so `stepTasks` applies it on its own, ahead of `taskHasWork`, and
+`taskPending` refuses it outright. It reuses `sai_resolved` for its log line and Choke's eligibility
+for its victims.
+
+**2. Two glaring dice make one task with two sources**, combined by name as a union. Each victim then
+carries one effect per source, so it stays hypnotized while any of them still glares, and each ends
+on its own anchor.
+
+**3. A hypnotized die could not join the board's `asleep` set**, which is also the set of dice that
+may not be *picked* -- and a hypnotized die may still retreat. So the boards gained a separate glare
+status: a label and a look (dotted and dimmed; the glaring die gets an accent edge), never a lock.
+
+**4. Glare needs a save roll to look at**, like Choke: an attack that rolls no results earns no save
+roll, and the Glare on it does nothing. A Leviathan alone that rolls Glare glares at nobody.
 
 ---
 

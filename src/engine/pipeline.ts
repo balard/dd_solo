@@ -261,6 +261,13 @@ export type RollEffectBody =
    * (`PendingSaves.wave`) or is read straight off the marcher's dice.
    */
   | { readonly kind: 'wave'; readonly amount: number }
+  /**
+   * Hypnotic Glare (v2 Phase 5c): every defender whose save die came up an ID is
+   * hypnotized, and none of their results count. Delayed, like Choke -- the question is
+   * which dice came up ID -- but it picks nobody: "all units that roll an ID icon". So
+   * it owes no decision, and the delayed pause applies it on its own.
+   */
+  | { readonly kind: 'glare' }
 
 /** A `RollEffectBody` once `resolveRoll` has stamped it with the die that made it,
  *  so the log can say *which* Fireshadow smote you. */

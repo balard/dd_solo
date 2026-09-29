@@ -439,6 +439,7 @@ export function attackFacts(state: GameState, spec: AttackSpec, attack: AttackRo
       'free_move',
       'cantrip',
       'wave',
+      'glare',
     ],
     `a ${spec.action} attack`,
   )

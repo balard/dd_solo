@@ -955,6 +955,7 @@ glaring unit may be excluded from any roll until the effect expires."
 | **Entangle** | Melee | Up to X health-worth of the defenders are killed. Flame without the burial; combined by name. |
 | **Swallow** | Melee | **One** unit, whatever its health (Sleep's count), rolls; unless it shows its ID it is killed and buried. Survivors stay where they stood, unlike Seize's. Never combined (p. 32: individual-unit SAIs). |
 | **Wave** | Melee, maneuver | X off the **other** army's roll, and no results of its own: in a melee attack (a counter-attack is one) the defender's save roll subtracts X; in a contested maneuver, rolled by the *marching* army, the counter-maneuvering army subtracts X. Rolled on a counter-maneuver it does nothing. Several Waves in one roll add up. |
+| **Hypnotic Glare** | Melee (delayed) | Every defender whose save die shows its ID is hypnotized, and none of their results count (Choke's second half). No X and no choice, so it asks nobody: the delayed pause applies it. Each victim's effect is anchored to every die that glared (5b), and a glaring die sits out its army's rolls. If no defender rolled an ID, nothing happens -- not even the glaring status. |
 | **Ferry** | Non-maneuver | A free move of the unit and up to **four** health-worth of its army. Firewalking's move with no maneuver half: on a maneuver roll it does nothing. |
 
 A die that cannot be rolled (asleep, hypnotized) fails a Swallow's roll and is buried -- the

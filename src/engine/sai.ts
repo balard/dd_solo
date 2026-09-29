@@ -694,6 +694,18 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
     return { results: {}, effects: [{ kind: 'wave', amount: x }], reroll: false }
   },
 
+  /**
+   * "During a melee attack, this effect is applied when resolving Delayed Effects. All
+   * units that roll an ID icon are hypnotized and may not be rolled until the beginning
+   * of your next turn. None of their results are counted towards the army's save
+   * results." (v2 Phase 5c.)
+   *
+   * No X and no choice: "all". The end conditions and the glaring die sitting out its
+   * army's rolls are `effects.ts`'s (5b), and the house rule is `RULES-V0.md` section 17.
+   */
+  'Hypnotic Glare': (_x, ctx) =>
+    isAttack(ctx, 'melee') ? { results: {}, effects: [{ kind: 'glare' }], reroll: false } : NOTHING,
+
   Ferry: (_x, ctx) => {
     if (ctx.purpose.kind === 'maneuver' || noSideDecision(ctx)) return NOTHING
     return { results: {}, effects: [{ kind: 'free_move', health: FERRY_HEALTH }], reroll: false }
@@ -781,6 +793,12 @@ export const SAI_TEXT: Readonly<Record<string, string>> = {
   Tail:
     'During a dragon or melee attack, Tail generates two melee results. Roll this unit ' +
     'again and apply the new result as well.',
+  'Hypnotic Glare':
+    'During a melee attack, this effect is applied when resolving Delayed Effects. All ' +
+    'units that roll an ID icon are hypnotized and may not be rolled until the beginning ' +
+    "of your next turn. None of their results are counted towards the army's save " +
+    'results. The effect ends if the glaring unit leaves the terrain, is killed, or is ' +
+    'rolled. The glaring unit may be excluded from any roll until the effect expires.',
   Wave:
     'During a melee attack, the defending army subtracts X save results. During a ' +
     "maneuver roll while marching, subtract X from each counter-maneuvering army's " +

@@ -72,9 +72,15 @@ export type TargetTask =
    * their sum, which is the ordinary rule and not a special case.
    */
   | { readonly kind: 'cantrip'; readonly sai: string; readonly points: number }
+  /**
+   * Hypnotic Glare: every defender that rolled an ID, hypnotized. No decision -- the
+   * delayed pause applies it on its own -- and `sources` is every die that glared, so a
+   * victim stays hypnotized while any of them still does. Combined by name, as a union.
+   */
+  | { readonly kind: 'glare'; readonly sai: string; readonly sources: readonly string[] }
 
 /** The effect kinds that wait for the save dice: step 2, "Delayed Effects". */
-const DELAYED: readonly RollEffect['kind'][] = ['choke', 'confuse']
+const DELAYED: readonly RollEffect['kind'][] = ['choke', 'confuse', 'glare']
 
 /**
  * The tasks a roll owes, in roll order, with same-SAI budgets summed.
@@ -164,6 +170,8 @@ function taskFor(effect: RollEffect): TargetTask | null {
       return { kind: 'cantrip', sai: effect.sai, points: effect.points }
     case 'wild_growth':
       return { kind: 'promote', sai: effect.sai, budget: effect.budget }
+    case 'glare':
+      return { kind: 'glare', sai: effect.sai, sources: [effect.unitId] }
     default:
       return null
   }
@@ -182,6 +190,11 @@ function combined(existing: TargetTask, effect: RollEffect): TargetTask {
   }
   if (existing.kind === 'cantrip' && effect.kind === 'cantrip') {
     return { ...existing, points: existing.points + effect.points }
+  }
+  if (existing.kind === 'glare' && effect.kind === 'glare') {
+    return existing.sources.includes(effect.unitId)
+      ? existing
+      : { ...existing, sources: [...existing.sources, effect.unitId] }
   }
   return existing
 }

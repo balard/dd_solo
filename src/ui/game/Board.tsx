@@ -51,6 +51,8 @@ import {
   effectsOnTerrain,
   selectableAt,
   sleepingIds,
+  glareStatuses,
+  type GlareStatus,
   slotLabel,
   type ArmyEffect,
   type SelectMode,
@@ -373,6 +375,7 @@ function ArmySide({
   effects,
   selectable,
   asleep,
+  glare,
   selected,
   onToggle,
   inspecting,
@@ -386,6 +389,7 @@ function ArmySide({
   effects: readonly ArmyEffect[]
   selectable: boolean
   asleep: ReadonlySet<UnitId>
+  glare: ReadonlyMap<UnitId, GlareStatus>
   selected: ReadonlySet<UnitId>
   onToggle: (id: UnitId) => void
   inspecting: UnitId | null
@@ -419,6 +423,7 @@ function ArmySide({
         units={units}
         selectable={selectable}
         asleep={asleep}
+        glare={glare}
         selected={selected}
         onToggle={onToggle}
         inspecting={inspecting}
@@ -461,6 +466,7 @@ export function Board({
   // Both sides: a sleeping enemy die is not selectable either way, but it should read
   // as asleep when you are looking at what you are about to attack.
   const asleep = sleepingIds(state)
+  const glare = glareStatuses(state)
   const art = useFaceArt()
   const ruleSet = useRuleSet()
 
@@ -571,6 +577,7 @@ export function Board({
               effects={effectsOnArmy(state, enemy, slot, human)}
               selectable={enemySelectableHere}
               asleep={asleep}
+              glare={glare}
               selected={selected}
               onToggle={onToggle}
               inspecting={inspecting}
@@ -584,6 +591,7 @@ export function Board({
               effects={effectsOnArmy(state, human, slot, human)}
               selectable={selectableHere}
               asleep={asleep}
+              glare={glare}
               selected={selected}
               onToggle={onToggle}
               inspecting={inspecting}

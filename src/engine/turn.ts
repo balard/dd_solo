@@ -894,6 +894,9 @@ function taskHasWork(
       const mover = state.units[task.unitId]
       return mover !== undefined && mover.location.kind === 'terrain'
     }
+    // Glare owes no decision at all: `stepTasks` applies it before asking this.
+    case 'glare':
+      return true
     case 'cantrip':
       // A pool that can buy nothing is not a decision. Under `magic: 'simplified'`
       // the SAI never produces one at all, so this is about a pool too small or a
@@ -958,6 +961,8 @@ function taskPending(
     // `stepTasks` does before it ever gets here.
     case 'cantrip':
       throw new Error('a Cantrip pool opens a casting window rather than a targeting pending')
+    case 'glare':
+      throw new Error('Hypnotic Glare picks nobody, so it never raises a pending')
     case 'move':
       return {
         kind: 'sai_move',
@@ -1002,6 +1007,10 @@ function stepTasks(state: GameState, isCounter: boolean, delayed: boolean): Game
       marchStep: nextStepAfterTasks(isCounter, delayed),
     })
   }
+
+  // Hypnotic Glare takes "all units that roll an ID icon" -- a fact of the roll, not a
+  // choice -- so it is applied here rather than asked about.
+  if (head.kind === 'glare') return applyGlare(state, spec, head)
 
   if (!taskHasWork(state, spec, head, delayed)) return autoResolve(state, spec, head, delayed)
 
@@ -1467,7 +1476,8 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
     task.kind === 'galeforce' ||
     task.kind === 'promote' ||
     task.kind === 'move' ||
-    task.kind === 'cantrip'
+    task.kind === 'cantrip' ||
+    task.kind === 'glare'
   ) {
     throw new IllegalActionError('no SAI is waiting for unit targets')
   }
@@ -1643,6 +1653,54 @@ function applyChoke(
 
   const dice = saves.dice.filter((die) => !unitIds.includes(die.unitId))
   void task
+  return dropHeadTask(withTurn(logged, { combat: withSaves(combat, saves, { dice }) }))
+}
+
+/**
+ * Hypnotic Glare (v2 Phase 5c): "All units that roll an ID icon are hypnotized and may
+ * not be rolled until the beginning of your next turn. None of their results are
+ * counted towards the army's save results."
+ *
+ * Choke's two halves with a status in place of the kill: the dice come out of the
+ * parked save roll before anything is counted, and each victim carries an effect
+ * anchored to every die that glared (5b), which the glaring die itself carries too, so
+ * it sits out its own army's rolls while the glare lasts. Nobody rolled an ID, nothing
+ * happens -- not even the glaring status, since there is no glare to keep alive.
+ */
+function applyGlare(
+  state: GameState,
+  spec: AttackSpec,
+  task: Extract<TargetTask, { kind: 'glare' }>,
+): GameState {
+  const combat = requireCombat(state)
+  const saves = requireSaves(state, combat)
+  const victims = chokeEligible(state, spec, saves)
+  // A melee attack is made from a terrain, so the glaring dice stand on one.
+  const slot = spec.attackerSlot
+  const sources = task.sources.filter((id) => {
+    const location = state.units[id]?.location
+    return location?.kind === 'terrain' && location.slot === slot
+  })
+  if (victims.length === 0 || sources.length === 0 || slot === 'reserve') return dropHeadTask(state)
+
+  const lasting = (target: UnitId, source: UnitId, status: 'hypnotized' | 'glaring'): Effect => ({
+    source: task.sai,
+    target: { kind: 'unit', unitId: target },
+    modifiers: [],
+    [status]: true,
+    anchor: { unitId: source, slot, untilRolled: true },
+    expiresAtStartOfTurnOf: spec.attacker,
+  })
+  const effects: Effect[] = [
+    ...victims.flatMap((victim) => sources.map((source) => lasting(victim, source, 'hypnotized'))),
+    ...sources.map((source) => lasting(source, source, 'glaring')),
+  ]
+
+  const logged = withLog(
+    { ...state, effects: [...state.effects, ...effects] },
+    { kind: 'sai_resolved', player: spec.attacker, sai: task.sai, slot: spec.defenderSlot, unitIds: victims },
+  )
+  const dice = saves.dice.filter((die) => !victims.includes(die.unitId))
   return dropHeadTask(withTurn(logged, { combat: withSaves(combat, saves, { dice }) }))
 }
 

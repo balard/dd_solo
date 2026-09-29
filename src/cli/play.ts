@@ -28,7 +28,7 @@ import type { Element, ResultType, TerrainFaceNumber } from '../data/types'
 import { damageOptions } from '../engine/damage'
 import { BREATH_NAME } from '../engine/dragons'
 import { growthPartners, promotionGain } from '../engine/dua'
-import { isAsleep } from '../engine/effects'
+import { isAsleep, isGlaring, isHypnotized } from '../engine/effects'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
 import { mathPhrase, saiPhrase, type DieRoll, type RollMath } from '../engine/roll'
@@ -150,8 +150,9 @@ function effectsOn(state: GameState, player: PlayerId, slot: TerrainSlot): reado
   }
 
   for (const unit of armyAt(state, player, slot)) {
-    if (!isAsleep(state, unit.id)) continue
-    out.push(`${name(unit)} is asleep — cannot be rolled or leave`)
+    if (isAsleep(state, unit.id)) out.push(`${name(unit)} is asleep — cannot be rolled or leave`)
+    else if (isHypnotized(state, unit.id)) out.push(`${name(unit)} is hypnotized — cannot be rolled`)
+    else if (isGlaring(state, unit.id)) out.push(`${name(unit)} is glaring — sits out its army's rolls`)
   }
 
   return out

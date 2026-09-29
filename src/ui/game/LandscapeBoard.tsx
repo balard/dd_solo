@@ -37,6 +37,7 @@ import {
   effectsOnTerrain,
   selectableAt,
   sleepingIds,
+  glareStatuses,
   slotLabel,
   type SelectMode,
 } from './prompts'
@@ -142,6 +143,7 @@ export function LandscapeBoard({
   const lines = short ? 1 : 2
   const enemy: PlayerId = human === 'p1' ? 'p2' : 'p1'
   const asleep = sleepingIds(state)
+  const glare = glareStatuses(state)
   const singled = singledIds(state)
   const art = useFaceArt()
   const ruleSet = useRuleSet()
@@ -170,6 +172,7 @@ export function LandscapeBoard({
         units={units}
         selectable={selectable}
         asleep={asleep}
+        glare={glare}
         singled={singled}
         selected={selected}
         onToggle={onToggle}

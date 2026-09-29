@@ -124,3 +124,65 @@ describe('Wave', () => {
     expect(logged(state, 'maneuver_contested')).toMatchObject({ marcher: 4, defender: 0, marcherWins: true })
   })
 })
+
+describe('Hypnotic Glare', () => {
+  /** Leviathan face 7 is Hypnotic Glare. Willow face 0 is its ID, 1 is `3 SAVE`. */
+  const GLARE = 7
+  const WILLOW_ID = 0
+
+  const glared = () =>
+    advance(
+      board(
+        [LEVIATHAN, KNIGHT],
+        [WILLOW, WILLOW],
+        rngShowing([LEVIATHAN, KNIGHT, WILLOW, WILLOW], [GLARE, KNIGHT_MELEE, WILLOW_ID, WILLOW_SAVE]),
+        { combat: { action: 'melee', targetSlot: 'frontier', damage: 0 } },
+      ),
+    )
+
+  it('hypnotizes the defenders that rolled an ID, and does not count their results', () => {
+    const state = glared()
+    // The first Willow's ID was worth two saves; hypnotized, only the other's three count.
+    expect(logged(state, 'combat_resolved')).toMatchObject({ attackTotal: 2, saveTotal: 3 })
+    expect(logged(state, 'sai_resolved')).toMatchObject({ sai: 'Hypnotic Glare', unitIds: ['p2:0'] })
+
+    const hypnotized = state.effects.filter((e) => e.hypnotized === true)
+    expect(hypnotized.map((e) => e.target)).toEqual([{ kind: 'unit', unitId: 'p2:0' }])
+    expect(hypnotized[0]).toMatchObject({
+      anchor: { unitId: 'p1:0', slot: 'frontier', untilRolled: true },
+      expiresAtStartOfTurnOf: 'p1',
+    })
+    // The Leviathan keeps its glare alive by sitting out its army's rolls.
+    expect(state.effects.filter((e) => e.glaring === true).map((e) => e.target)).toEqual([
+      { kind: 'unit', unitId: 'p1:0' },
+    ])
+    expect(validateState(state)).toEqual([])
+  })
+
+  it('keeps both out of the counter-attack: the hypnotized die cannot roll, the glaring one sits out', () => {
+    const offered = glared()
+    expect(offered.pending).toMatchObject({ kind: 'choose_counter_attack', player: 'p2' })
+    // Willow face 5 is `3 MELEE`, Knight face 5 is `2 SAVE`: a counter with a save roll.
+    const pinned = { ...offered, rng: rngShowing([WILLOW, KNIGHT], [5, 5]) }
+    const countered = advance(reduce(pinned, { kind: 'choose_counter_attack', counter: true }))
+    const exchange = countered.log.filter((e) => e.kind === 'combat_resolved').at(-1)
+    if (exchange?.kind !== 'combat_resolved') throw new Error('no counter-attack resolved')
+    // One Willow attacked and one Knight saved: the hypnotized Willow and the glaring
+    // Leviathan both sat out.
+    expect(exchange.attackDice.map((d) => d.unitId)).toEqual(['p2:1'])
+    expect(exchange.saveDice?.map((d) => d.unitId)).toEqual(['p1:1'])
+  })
+
+  it('does nothing, not even glare, when no defender rolled an ID', () => {
+    const state = advance(
+      board(
+        [LEVIATHAN, KNIGHT],
+        [WILLOW, WILLOW],
+        rngShowing([LEVIATHAN, KNIGHT, WILLOW, WILLOW], [GLARE, KNIGHT_MELEE, WILLOW_SAVE, WILLOW_SAVE]),
+        { combat: { action: 'melee', targetSlot: 'frontier', damage: 0 } },
+      ),
+    )
+    expect(state.effects).toEqual([])
+    expect(logged(state, 'sai_resolved')).toBeUndefined()
+  })
+})

@@ -410,6 +410,19 @@ body {
   border-style: dashed;
   opacity: .55;
 }
+/*
+ * Hypnotic Glare (v2 Phase 5c). Hypnotized is asleep's look without its lock: the die
+ * cannot roll but may still be moved, so it dims and dots rather than dashes. Glaring is
+ * the source, sitting out its own army's rolls: an accent edge, full strength.
+ */
+.die-hypnotized {
+  border-style: dotted;
+  opacity: .6;
+}
+.die-glaring {
+  border-style: double;
+  border-color: var(--accent);
+}
 
 /* Plain text: colour on the dice is being saved for the species elements. */
 .die-kind {

@@ -42,6 +42,7 @@ import {
   selectModeFor,
   selectableAt,
   sleepingIds,
+  glareStatuses,
   slotLabel,
 } from './prompts'
 
@@ -1003,6 +1004,49 @@ describe('effectsOnArmy', () => {
         until: 'your next turn',
       },
     ])
+  })
+})
+
+describe('Hypnotic Glare on the board', () => {
+  /** A glare from a p1 die at the Frontier onto a p2 die there, hand-built (v2 Phase 5c). */
+  const glared = () => {
+    const base = fresh()
+    const [victim] = armyAt(base, 'p2', 'frontier')
+    const [source] = armyAt(base, 'p1', 'frontier')
+    const anchor = { unitId: source!.id, slot: 'frontier', untilRolled: true } as const
+    const state: GameState = {
+      ...base,
+      effects: [
+        { source: 'Hypnotic Glare', target: { kind: 'unit', unitId: victim!.id }, modifiers: [], hypnotized: true, anchor, expiresAtStartOfTurnOf: 'p1' },
+        { source: 'Hypnotic Glare', target: { kind: 'unit', unitId: source!.id }, modifiers: [], glaring: true, anchor, expiresAtStartOfTurnOf: 'p1' },
+      ],
+    }
+    return { state, victim: victim!, source: source! }
+  }
+
+  it('marks both dice, and neither as asleep -- both may still be moved', () => {
+    const { state, victim, source } = glared()
+    expect([...glareStatuses(state)]).toEqual(
+      expect.arrayContaining([
+        [victim.id, 'hypnotized'],
+        [source.id, 'glaring'],
+      ]),
+    )
+    expect(sleepingIds(state).size).toBe(0)
+  })
+
+  it('names each on the army it stands in, with the end conditions a turn does not cover', () => {
+    const { state, victim, source } = glared()
+    expect(effectsOnArmy(state, 'p2', 'frontier', 'p1')).toEqual([
+      {
+        source: 'Hypnotic Glare',
+        what: `${unitType(victim.typeId).name} cannot be rolled`,
+        until: 'your next turn, or until the glaring die moves, dies or rolls',
+      },
+    ])
+    expect(effectsOnArmy(state, 'p1', 'frontier', 'p1')[0]?.what).toBe(
+      `${unitType(source.typeId).name} sits out its army's rolls`,
+    )
   })
 })
 

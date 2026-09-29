@@ -20,7 +20,7 @@ import {
 } from '../../engine/magic'
 import { growthPartners, promotionGain } from '../../engine/dua'
 import { ALL_RESULT_TYPES, type Modifier } from '../../engine/pipeline'
-import { isAsleep, type Effect } from '../../engine/effects'
+import { isAsleep, isGlaring, isHypnotized, type Effect } from '../../engine/effects'
 import { legalDirections, rollsOnTheTable, type TableRoll } from '../../engine/turn'
 import {
   TERRAIN_SLOTS,
@@ -1174,6 +1174,27 @@ export function effectsOnArmy(
     })
   }
 
+  // Hypnotic Glare's two statuses (v2 Phase 5c), for the same reason. A hypnotized die
+  // carries one effect per die that glared at it; the chip is per die, not per effect.
+  const glare = glareStatuses(state)
+  for (const unit of armyAt(state, player, slot)) {
+    const status = glare.get(unit.id)
+    if (status === undefined) continue
+    const effect = state.effects.find(
+      (e) => e.target.kind === 'unit' && e.target.unitId === unit.id && e[status] === true,
+    )
+    out.push({
+      source: effect?.source ?? 'Hypnotic Glare',
+      what:
+        status === 'hypnotized'
+          ? `${unitType(unit.typeId).name} cannot be rolled`
+          : `${unitType(unit.typeId).name} sits out its army's rolls`,
+      until:
+        (effect?.expiresAtStartOfTurnOf === human ? 'your next turn' : "the enemy's next turn") +
+        ', or until the glaring die moves, dies or rolls',
+    })
+  }
+
   return out
 }
 
@@ -1627,6 +1648,23 @@ function describeTerrainEffect(effect: Effect): string {
  * stops the button being offered in the first place, and what gives the die a visible
  * reason for being unpickable.
  */
+/**
+ * Hypnotic Glare's two statuses (v2 Phase 5c), for drawing: a hypnotized die cannot be
+ * rolled, a glaring one sits out its army's rolls to keep its glare alive. Neither is
+ * asleep -- both may still be picked to move -- so they are a label and a look, never a
+ * reason a die cannot be selected. That is `sleepingIds`' job alone.
+ */
+export type GlareStatus = 'hypnotized' | 'glaring'
+
+export function glareStatuses(state: GameState): ReadonlyMap<UnitId, GlareStatus> {
+  const out = new Map<UnitId, GlareStatus>()
+  for (const unit of Object.values(state.units)) {
+    if (isHypnotized(state, unit.id)) out.set(unit.id, 'hypnotized')
+    else if (isGlaring(state, unit.id)) out.set(unit.id, 'glaring')
+  }
+  return out
+}
+
 export function sleepingIds(state: GameState): ReadonlySet<UnitId> {
   const ids = new Set<UnitId>()
   for (const unit of Object.values(state.units)) {
