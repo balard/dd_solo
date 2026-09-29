@@ -19,7 +19,7 @@
  */
 import { DEFAULT_OPPONENT, OPPONENT_NAMES, type OpponentName } from '../../ai/opponents'
 import { FULL_COLLECTION, collectionNamed } from '../../data/collections'
-import { SPECIES } from '../../data/load'
+import { PLAYABLE_SPECIES } from '../../engine/playable'
 import { PRESETS, preset, presetHealth, PRESET_ARMY_NAMES } from '../../data/presets'
 import { builtForceHealth, rollForce, type BuiltForce, type ForcePool } from '../../engine/force'
 import { rngFrom } from '../../engine/rng'
@@ -342,11 +342,11 @@ export function newGameSetup(
   return { kind: 'ok', setup: { seed: seed.seed, forces, ruleSet: V1_RULES }, health }
 }
 
-/** The pools a random opponent may be drawn from: every species together, or one. */
+/** The pools a random opponent may be drawn from: every playable species together, or one. */
 export function poolChoices(): readonly { readonly value: string; readonly label: string; readonly pool: ForcePool }[] {
   return [
     { value: 'mixed', label: 'Every species, mixed', pool: { kind: 'mixed' } },
-    ...SPECIES.map((s) => ({
+    ...PLAYABLE_SPECIES.map((s) => ({
       value: s.id,
       label: `${s.name} only`,
       pool: { kind: 'species', species: s.id } as const,

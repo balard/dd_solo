@@ -31,6 +31,7 @@ import {
 } from '../../data/load'
 import { PRESET_ARMY_NAMES, maxArmyHealth, type PresetArmyName } from '../../data/presets'
 import { dragonCount, type BuiltForce } from '../../engine/force'
+import { PLAYABLE_SPECIES, speciesProblem, unitPlayable } from '../../engine/playable'
 
 import { compareForDisplay } from './prompts'
 
@@ -137,6 +138,9 @@ export function forceProblems(collection: Collection, cap: number, force: BuiltF
       continue
     }
     for (const id of ids.filter((i) => !UNIT_IDS.has(i))) add(name, `the ${name} army names ${id}, which is not a unit die`)
+    for (const id of ids.filter((i) => UNIT_IDS.has(i) && !unitPlayable(i))) {
+      add(name, `the ${name} army names ${id}, and ${speciesProblem(unitType(id).species)}`)
+    }
     const health = healthOf(ids)
     if (health > half) {
       add(name, `the ${name} army is ${health} health, over half the force (${half} of ${total})`)
@@ -290,7 +294,9 @@ export interface UnitPaletteGroup {
  * still owned, and taking it off the list would move every die after it under the thumb.
  */
 export function unitPalette(collection: Collection, force: BuiltForce): readonly UnitPaletteGroup[] {
-  return SPECIES.map((species) => ({
+  // Playable species only: a species transcribed ahead of its rules is owned and in the
+  // data, and still nothing the engine would let a game start with.
+  return PLAYABLE_SPECIES.map((species) => ({
     species: species.id,
     dice: UNIT_TYPES.filter((u) => u.species === species.id && owned(collection, 'units', u.id) > 0)
       .sort(compareForDisplay)

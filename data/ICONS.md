@@ -29,8 +29,9 @@ enforces it.
 **On monsters**, every normal icon counts as 4, so monster faces all read `4 X`.
 
 **SAI names must match the rulebook.** The starter set's two species between them use exactly the
-25 SAIs documented in the starter rulebook (pp. 10–11) — no more, no fewer. The validator holds
-that list and errors on anything outside it, which catches transcription typos.
+25 SAIs documented in the starter rulebook (pp. 10–11) — no more, no fewer. Each later species adds
+the SAIs its v4.01 species page lists (`SPECIES_SAIS` in `tools/species.py`; Coral Elves add six).
+The validator holds the union and errors on anything outside it, which catches transcription typos.
 
 **The count on an SAI face is not always a result count.** For result-generating SAIs it is
 (`4 SAI:Smite` = 4 smite results). For targeting SAIs it is the SAI's **X parameter** —
@@ -121,6 +122,11 @@ data/raw/dragons.faces.txt    --[ tools/import_dragons.py ]-->  data/starter/dra
                                                                         |
                                                       tools/validate_data.py -> pass/fail
 ```
+
+**Only species named in `tools/species.py` are imported.** A raw file for any other species sits
+in `data/raw/` untouched, transcribed ahead of the phase that needs it (v2 has eight). And an
+imported species is not yet a *playable* one: the engine hands out a species' dice only once every
+SAI on them has a handler and its species abilities are known (`src/engine/playable.ts`).
 
 The `data/raw/` files are the source of truth and are hand-transcribed. The files under
 `data/starter/` are **generated** and must never be hand-edited.

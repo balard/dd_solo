@@ -22,10 +22,11 @@
  * one. The named-force path must not call any of this -- not even for the same
  * number of draws -- or a named game lands on a different board than v0 gave it.
  */
-import { DRAGON_DICE, TERRAIN_DICE, UNIT_TYPES, unitType, unitsOfSpecies, SPECIES } from '../data/load'
+import { DRAGON_DICE, TERRAIN_DICE, UNIT_TYPES, unitType, unitsOfSpecies } from '../data/load'
 import type { UnitType } from '../data/types'
 import { PRESET_ARMY_NAMES, maxArmyHealth, type PresetArmyName } from '../data/presets'
 
+import { PLAYABLE_SPECIES, PLAYABLE_UNITS, speciesProblem, unitPlayable } from './playable'
 import { nextInt, type RngState } from './rng'
 import type { PlayerId } from './types'
 
@@ -136,7 +137,8 @@ export function readBuiltForces(
  * force rather than per pair):
  * - every army holds at least one unit;
  * - no army holds more than half the force's health, rounded down;
- * - every die it names exists in the data;
+ * - every die it names exists in the data, and belongs to a species the engine can play
+ *   (`playable.ts`: a species transcribed ahead of its rules is in the data but not here);
  * - named dragons number exactly one per 24 health, or part of it.
  *
  * **Not checked: that the two sides are the same size.** That is a property of a
@@ -151,6 +153,10 @@ export function builtForceProblem(force: BuiltForce): string | null {
     if (ids.length === 0) return `its ${name} army is empty; each army needs at least one unit`
     const unknown = ids.find((id) => !UNIT_IDS.has(id))
     if (unknown !== undefined) return `its ${name} army names ${unknown}, which is not a unit die`
+    const unplayable = ids.find((id) => !unitPlayable(id))
+    if (unplayable !== undefined) {
+      return `its ${name} army names ${unplayable}, and ${speciesProblem(unitType(unplayable).species)}`
+    }
   }
 
   const total = builtForceHealth(force)
@@ -237,10 +243,12 @@ export function drawForce(
 }
 
 /**
- * Every unit die in the data, sorted by id: the pool a mixed force draws from. Sorted
- * for the terrain list's reason -- reordering the raw files must not reseat a game.
+ * Every playable unit die, sorted by id: the pool a mixed force draws from. Sorted for
+ * the terrain list's reason -- reordering the raw files must not reseat a game. Playable
+ * because a species in the data may not be yet (`playable.ts`); the day one becomes so,
+ * every mixed draw moves, which is a fuzz reseeding and nothing a golden records.
  */
-const ALL_UNITS: readonly UnitType[] = [...UNIT_TYPES].sort((a, b) => a.id.localeCompare(b.id))
+const ALL_UNITS: readonly UnitType[] = [...PLAYABLE_UNITS].sort((a, b) => a.id.localeCompare(b.id))
 
 /** `drawForce` over any pool; `speciesId` names the pool in an error and nowhere else. */
 function drawFromPool(
@@ -341,7 +349,7 @@ export function splitForce(
   return [repairSplit(ids), state] as const
 }
 
-/** What `rollForce` draws from: one species' dice, or every die in the data. */
+/** What `rollForce` draws from: one playable species' dice, or every playable die. */
 export type ForcePool = { readonly kind: 'species'; readonly species: string } | { readonly kind: 'mixed' }
 
 /** Whole draws `rollForce` makes before it gives up on a budget. */
@@ -367,6 +375,10 @@ export function rollForce(
 ): readonly [BuiltForce, RngState] {
   if (!Number.isInteger(budget) || budget < 3) {
     throw new Error(`cannot roll a ${budget}-health force: three armies need at least three dice`)
+  }
+  if (pool.kind === 'species') {
+    const problem = speciesProblem(pool.species)
+    if (problem !== null) throw new Error(`cannot roll a force of ${pool.species}: ${problem}`)
   }
   const dice = pool.kind === 'mixed' ? ALL_UNITS : unitsOfSpecies(pool.species)
   const name = pool.kind === 'mixed' ? 'any species' : pool.species
@@ -419,15 +431,16 @@ export function generateForces(
   }
 
   // Two species is the whole of v1's scope, and one draw decides which side is
-  // which. A third species would need a different draw here, and this is the only
-  // place that would have to change.
-  if (SPECIES.length !== 2) {
+  // which. A third *playable* species would need a different draw here, and this is
+  // the only place that would have to change. One merely in the data does not count:
+  // v2 Phase 5a transcribed the Coral Elves ahead of their rules.
+  if (PLAYABLE_SPECIES.length !== 2) {
     throw new Error(
-      `force generation assumes exactly two species, found ${SPECIES.length}; ` +
+      `force generation assumes exactly two playable species, found ${PLAYABLE_SPECIES.length}; ` +
         `see PLAN-V1.md, scope`,
     )
   }
-  const speciesIds = SPECIES.map((s) => s.id).sort()
+  const speciesIds = PLAYABLE_SPECIES.map((s) => s.id).sort()
   const [first, afterRace] = nextInt(rng, speciesIds.length)
   const order: string[] = first === 0 ? speciesIds : [...speciesIds].reverse()
 

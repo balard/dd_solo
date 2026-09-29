@@ -710,6 +710,16 @@ export function resolvesSai(sai: string, ruleSet: RuleSet): boolean {
 /** The SAI names `sai: 'full'` adds on top of those. */
 export const TARGETING_SAIS: readonly string[] = Object.keys(FULL_HANDLERS)
 
+/**
+ * Whether any rung implements this SAI at all -- the question `sai: 'full'` refuses on.
+ * Ruleset-free on purpose: it is what decides whether a species can be offered
+ * (`playable.ts`), and "can the engine play this die" is a fact about the engine, not
+ * about the rules one game happens to use.
+ */
+export function saiBuilt(sai: string): boolean {
+  return HANDLERS[sai] !== undefined || FULL_HANDLERS[sai] !== undefined
+}
+
 /** The handler this ruleset uses for this name, if it has one at all. */
 function handlerFor(sai: string, ruleSet: RuleSet): SaiHandler | undefined {
   return HANDLERS[sai] ?? (ruleSet.sai === 'full' ? FULL_HANDLERS[sai] : undefined)
@@ -723,9 +733,10 @@ function handlerFor(sai: string, ruleSet: RuleSet): SaiHandler | undefined {
  * `'full'`; `'full'` refuses, which is what stops a half-built `'full'` quietly
  * playing a wrong game.
  *
- * As of Phase 4e **every SAI in the box is claimed**, so the throw below is no longer
- * reachable by anything in `data/` -- it is the guard against a *new* one arriving
- * with a new species and going quietly inert instead. Cantrip and Dispel Magic used
+ * As of Phase 4e **every SAI in the starter box is claimed**. A species whose dice carry
+ * an unbuilt SAI is in `data/` but not playable (`playable.ts`, v2 Phase 5a), so no game
+ * reaches the throw below: it is the guard against one of those faces going quietly
+ * inert if something ever does roll it. Cantrip and Dispel Magic used
  * to have a message of their own here; they do not need one, because neither is
  * unimplemented. See their handlers.
  */
@@ -737,7 +748,7 @@ export function saiEffects(face: SaiFace, context: RollContext, ruleSet: RuleSet
 
   if (ruleSet.sai === 'full') {
     throw new Error(
-      `targeting SAIs are not implemented (ruleSet.sai === 'full', face ${face.count} ${face.sai})`,
+      `SAI ${face.sai} is not implemented (ruleSet.sai === 'full', face ${face.count} ${face.sai})`,
     )
   }
 

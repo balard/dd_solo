@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 import { FULL_COLLECTION, collectionNamed, type Collection } from '../../data/collections'
 import { DRAGON_DICE, TERRAIN_DICE, UNIT_TYPES } from '../../data/load'
+import { PLAYABLE_UNITS } from '../../engine/playable'
 import { PRESET_ARMY_NAMES, preset } from '../../data/presets'
 import { builtForceProblem, rollForce, type BuiltForce } from '../../engine/force'
 import { nextInt, rngFrom, type RngState } from '../../engine/rng'
@@ -146,6 +147,17 @@ describe('forceProblems', () => {
     expect(texts).toContain('ivory_drake is not a dragon die')
   })
 
+  /** A species in the data ahead of its rules (v2 Phase 5a): owned, and still refused,
+   *  by the same sentence the engine gives -- this is not a die the builder can offer. */
+  it('refuses a die of a species that is not playable yet, as the engine does', () => {
+    const unready = UNIT_TYPES.find((u) => !PLAYABLE_UNITS.includes(u))
+    if (unready === undefined) return // every species in the data is playable
+    const force: BuiltForce = { ...starter, armies: { ...starter.armies, horde: [unready.id] } }
+    const texts = forceProblems(FULL_COLLECTION, Infinity, force).map((p) => p.text)
+    expect(texts.join(' ')).toMatch(/not playable yet/)
+    expect(builtForceProblem(force)).toMatch(/not playable yet/)
+  })
+
   /**
    * One statement of p. 8, written twice: here and `builtForceProblem`. Over the full
    * collection with no cap the two must agree on every force -- random drafts, most of
@@ -167,7 +179,9 @@ describe('forceProblems', () => {
       for (let i = 0; i < count; i++) {
         let unit: (typeof UNIT_TYPES)[number]
         let army: (typeof PRESET_ARMY_NAMES)[number]
-        ;[unit, rng] = pick(UNIT_TYPES, rng)
+        // Playable dice: a species not playable yet is refused whole by both (the
+        // test above), and a third of the draws landing there leaves too few legal.
+        ;[unit, rng] = pick(PLAYABLE_UNITS, rng)
         ;[army, rng] = pick(PRESET_ARMY_NAMES, rng)
         armies[army].push(unit.id)
       }

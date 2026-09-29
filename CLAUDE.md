@@ -178,6 +178,10 @@ the dice and the opponent.
 > Phase 4**: the start screen plays a kept force, against a preset, a kept force or a random force of
 > the same or a chosen size, and asks before it lets two sizes differ.
 
+> **v2 Phase 5 (Coral Elves) has begun: 5a landed the data.** Twenty dice are in `units.json`, and
+> `src/engine/playable.ts` keeps them out of every game until the engine can play them -- see the
+> engine note. Eight more species' faces sit in `data/raw/` unimported, for later phases.
+
 ## Read these first
 
 | File | What it is |
@@ -423,6 +427,13 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   p. 30's "a unit ... of the same species" is enforced in `exchangeWithDua`, the one door every
   promotion goes through, where it can see the pair.
 
+- **A species in the data is not a playable one** (v2 Phase 5a, `playable.ts`). It is playable when
+  every SAI on its dice has a handler (`saiBuilt`) and `SPECIES_ABILITIES` names it -- derived, so
+  the slice that builds the last piece flips it. Everything that hands dice out asks
+  (`PLAYABLE_SPECIES`, `PLAYABLE_UNITS`): rolled forces, the builder palette, the random
+  opponent's pools, the fuzz's SAI list, the monster-fixture test. `builtForceProblem` refuses an
+  unplayable die, so a force from anywhere else gets a sentence rather than a mid-game throw.
+  `SPECIES` and `UNIT_TYPES` stay everything in the data: naming a die, drawing it, validating it.
 - **`rollArmy` has no special case for ID icons or monsters, and must not grow one.** The count
   printed on the face is already the answer. `faceResults` is three lines; keep it that way.
 - **`setupGame` rolls the whole opening from the seed.** One RNG stream, in this order, and the

@@ -15,6 +15,13 @@
         "air",
         "fire"
       ]
+    },
+    "coral_elves": {
+      "name": "Coral Elves",
+      "elements": [
+        "air",
+        "water"
+      ]
     }
   },
   "units": [
@@ -736,6 +743,366 @@
         "4 SAVE",
         "4 MELEE",
         "4 SAI:Cantrip"
+      ]
+    },
+    {
+      "id": "coral_elves.fighter",
+      "name": "Fighter",
+      "species": "coral_elves",
+      "class": "heavy_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "1 MISSILE",
+        "1 MANEUVER",
+        "1 MELEE",
+        "2 MELEE"
+      ]
+    },
+    {
+      "id": "coral_elves.trooper",
+      "name": "Trooper",
+      "species": "coral_elves",
+      "class": "heavy_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 SAVE",
+        "3 MELEE",
+        "3 MELEE",
+        "2 MANEUVER",
+        "2 MISSILE"
+      ]
+    },
+    {
+      "id": "coral_elves.protector",
+      "name": "Protector",
+      "species": "coral_elves",
+      "class": "heavy_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "2 MISSILE",
+        "4 MELEE",
+        "3 MELEE",
+        "3 SAVE",
+        "4 SAI:Smite"
+      ]
+    },
+    {
+      "id": "coral_elves.coral_giant",
+      "name": "Coral Giant",
+      "species": "coral_elves",
+      "class": "heavy_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAVE",
+        "4 SAI:Smite",
+        "4 SAI:Trample",
+        "4 MELEE",
+        "4 SAI:Smite",
+        "4 SAVE",
+        "4 SAI:Counter",
+        "4 SAI:Trample",
+        "4 MANEUVER"
+      ]
+    },
+    {
+      "id": "coral_elves.guard",
+      "name": "Guard",
+      "species": "coral_elves",
+      "class": "light_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "1 MANEUVER",
+        "2 MANEUVER",
+        "1 MELEE",
+        "2 MISSILE"
+      ]
+    },
+    {
+      "id": "coral_elves.courier",
+      "name": "Courier",
+      "species": "coral_elves",
+      "class": "light_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MELEE",
+        "3 MANEUVER",
+        "3 MANEUVER",
+        "3 MELEE",
+        "3 MISSILE"
+      ]
+    },
+    {
+      "id": "coral_elves.herald",
+      "name": "Herald",
+      "species": "coral_elves",
+      "class": "light_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 MELEE",
+        "3 MANEUVER",
+        "3 MANEUVER",
+        "3 MELEE",
+        "4 SAI:Counter"
+      ]
+    },
+    {
+      "id": "coral_elves.gryphon",
+      "name": "Gryphon",
+      "species": "coral_elves",
+      "class": "light_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 MELEE",
+        "4 SAI:Rend",
+        "4 SAI:Fly",
+        "4 SAI:Ferry",
+        "4 SAI:Fly",
+        "4 MELEE",
+        "4 SAI:Ferry",
+        "4 SAI:Fly",
+        "4 MELEE"
+      ]
+    },
+    {
+      "id": "coral_elves.horseman",
+      "name": "Horseman",
+      "species": "coral_elves",
+      "class": "cavalry",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MISSILE",
+        "1 MELEE",
+        "1 MANEUVER",
+        "1 MISSILE",
+        "2 MISSILE"
+      ]
+    },
+    {
+      "id": "coral_elves.knight",
+      "name": "Knight",
+      "species": "coral_elves",
+      "class": "cavalry",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MELEE",
+        "3 MANEUVER",
+        "2 MANEUVER",
+        "2 MELEE",
+        "2 SAVE"
+      ]
+    },
+    {
+      "id": "coral_elves.eagle_knight",
+      "name": "Eagle Knight",
+      "species": "coral_elves",
+      "class": "cavalry",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 SAI:Fly",
+        "3 MELEE",
+        "3 SAI:Fly",
+        "4 MELEE",
+        "3 MISSILE"
+      ]
+    },
+    {
+      "id": "coral_elves.leviathan",
+      "name": "Leviathan",
+      "species": "coral_elves",
+      "class": "cavalry",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Swallow",
+        "4 MANEUVER",
+        "4 SAI:Tail",
+        "4 SAI:Fly",
+        "4 SAI:Wave",
+        "4 SAVE",
+        "4 SAI:Hypnotic Glare",
+        "4 SAI:Fly",
+        "4 SAI:Tail"
+      ]
+    },
+    {
+      "id": "coral_elves.bowman",
+      "name": "Bowman",
+      "species": "coral_elves",
+      "class": "missile",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MISSILE",
+        "1 MELEE",
+        "1 MANEUVER",
+        "1 MISSILE",
+        "2 MISSILE"
+      ]
+    },
+    {
+      "id": "coral_elves.archer",
+      "name": "Archer",
+      "species": "coral_elves",
+      "class": "missile",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MELEE",
+        "3 MISSILE",
+        "3 MISSILE",
+        "2 MANEUVER",
+        "2 MISSILE"
+      ]
+    },
+    {
+      "id": "coral_elves.sharpshooter",
+      "name": "Sharpshooter",
+      "species": "coral_elves",
+      "class": "missile",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 MANEUVER",
+        "4 MISSILE",
+        "3 MISSILE",
+        "2 MELEE",
+        "4 SAI:Bullseye"
+      ]
+    },
+    {
+      "id": "coral_elves.sprite_swarm",
+      "name": "Sprite Swarm",
+      "species": "coral_elves",
+      "class": "missile",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 MAGIC",
+        "4 SAI:Fly",
+        "4 MISSILE",
+        "4 MAGIC",
+        "4 SAI:Fly",
+        "4 MISSILE",
+        "4 MAGIC",
+        "4 MELEE",
+        "4 MISSILE"
+      ]
+    },
+    {
+      "id": "coral_elves.evoker",
+      "name": "Evoker",
+      "species": "coral_elves",
+      "class": "magic",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MAGIC",
+        "1 MELEE",
+        "1 MANEUVER",
+        "1 MAGIC",
+        "2 MAGIC"
+      ]
+    },
+    {
+      "id": "coral_elves.conjurer",
+      "name": "Conjurer",
+      "species": "coral_elves",
+      "class": "magic",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MELEE",
+        "3 MAGIC",
+        "3 MAGIC",
+        "2 MANEUVER",
+        "2 MAGIC"
+      ]
+    },
+    {
+      "id": "coral_elves.enchanter",
+      "name": "Enchanter",
+      "species": "coral_elves",
+      "class": "magic",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 SAVE",
+        "4 MAGIC",
+        "3 MAGIC",
+        "3 MELEE",
+        "4 SAI:Cantrip"
+      ]
+    },
+    {
+      "id": "coral_elves.tako",
+      "name": "Tako",
+      "species": "coral_elves",
+      "class": "magic",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Entangle",
+        "4 SAVE",
+        "4 MANEUVER",
+        "4 MELEE",
+        "4 SAVE",
+        "4 SAI:Entangle",
+        "4 MELEE",
+        "4 MANEUVER",
+        "4 MELEE"
       ]
     }
   ]

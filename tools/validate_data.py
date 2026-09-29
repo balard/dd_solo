@@ -96,7 +96,7 @@ def check_units():
                 name = icon[4:]
                 sais_used.add(name)
                 if name not in KNOWN_SAIS:
-                    err(f"{uid}: unknown SAI {name!r} -- not in the starter rulebook list")
+                    err(f"{uid}: unknown SAI {name!r} -- not in any rulebook list in tools/species.py")
 
         # Non-monster faces usually carry at most health+1 icons. Higher is legal but
         # rare enough to be worth a second look at the die.

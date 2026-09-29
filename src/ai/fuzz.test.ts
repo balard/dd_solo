@@ -36,7 +36,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { UNIT_TYPES } from '../data/load'
+import { PLAYABLE_UNITS } from '../engine/playable'
 import { SPELLS } from '../data/spells'
 import { resolvesSpell } from '../engine/spells'
 import {
@@ -337,8 +337,10 @@ describe('the live-rules fuzz', () => {
     for (const [kind, reach] of Object.entries(LOG)) expectReached(counts, `log:${kind}`, reach)
     for (const [key, reach] of Object.entries(RULES)) expectReached(counts, key, reach)
 
-    // From the data: every SAI any die carries, and every spell the rules resolve.
-    const sais = new Set(UNIT_TYPES.flatMap((u) => u.faces.flatMap((f) => (f.icon === 'SAI' ? [f.sai] : []))))
+    // From the data: every SAI any playable die carries, and every spell the rules
+    // resolve. Playable, because a species transcribed ahead of its rules is in the data
+    // and cannot be drawn -- it joins this list the slice it becomes playable.
+    const sais = new Set(PLAYABLE_UNITS.flatMap((u) => u.faces.flatMap((f) => (f.icon === 'SAI' ? [f.sai] : []))))
     for (const sai of sais) expectReached(counts, `rolled:${sai}`, 'every')
     const spells = SPELLS.filter((s) => resolvesSpell(s.id, V1_RULES))
     expect(spells.length).toBe(SPELLS.length)

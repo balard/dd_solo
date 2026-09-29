@@ -182,15 +182,15 @@ describe('the rungs of ruleSet.sai', () => {
   })
 
   /**
-   * Phase 4e built the last of the twenty-five, so this throw is no longer reachable
-   * by any name in the data -- and it is still the guard that matters: it is what a
-   * *new* SAI, transcribed for a new species, would hit instead of going quietly
-   * inert. The test says that in the only way it can, with a name nobody has written.
+   * Phase 4e built the last of the starter box's twenty-five. The Coral Elves' six
+   * (v2 Phase 5a) are in the data and refused too -- the partition test below -- but no
+   * game can roll them, since their species is not playable. A name nobody has written
+   * says the rule without depending on which species is half-built today.
    */
   it('refuses a name no rung claims under sai: full', () => {
     expect(() =>
       saiEffects(sai('Backflip'), { purpose: melee, isCounter: false }, FULL_RULES),
-    ).toThrow(/targeting SAIs are not implemented/)
+    ).toThrow(/is not implemented/)
   })
 
   /**
@@ -418,7 +418,9 @@ describe('the rungs of ruleSet.sai', () => {
     const needsSpells = new Set<string>()
     // Empty as of Phase 4e, and kept rather than deleted: it is the line a new SAI
     // would be added to, and the count below is what makes adding one a decision.
-    const deferred = new Set<string>()
+    // v2 Phase 5a: the Coral Elves' six, transcribed ahead of their handlers. A slice
+    // that builds one moves it out of here.
+    const deferred = new Set<string>(['Entangle', 'Ferry', 'Hypnotic Glare', 'Swallow', 'Tail', 'Wave'])
     const live = new Set(LIVE_SAIS)
     const targeting = new Set(TARGETING_SAIS)
 
@@ -427,13 +429,13 @@ describe('the rungs of ruleSet.sai', () => {
       for (const face of type.faces) if (face.icon === 'SAI') names.add(face.sai)
     }
 
-    expect(names.size).toBe(25)
+    expect(names.size).toBe(31)
     // The split is pinned because the prose in CLAUDE.md, RULES-V0.md and PLAN-V1.md
     // all quote it, and nothing else would notice it going stale. Each Phase 4 slice
     // moves names from `deferred` into `TARGETING_SAIS` and edits these two numbers.
     expect(live.size, 'SAIs live under sai: results').toBe(14)
     expect(targeting.size, 'targeting SAIs built so far').toBe(11)
-    expect(deferred.size, 'targeting SAIs still unbuilt').toBe(0)
+    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(6)
     expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(0)
 
     for (const name of names) {
@@ -455,7 +457,7 @@ describe('the rungs of ruleSet.sai', () => {
     for (const name of deferred) {
       expect(() =>
         saiEffects(sai(name), { purpose: melee, isCounter: false }, FULL_RULES),
-      ).toThrow(/targeting SAIs are not implemented/)
+      ).toThrow(/is not implemented/)
     }
     for (const name of [...live, ...targeting]) {
       expect(() =>

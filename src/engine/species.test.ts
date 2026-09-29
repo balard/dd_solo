@@ -8,6 +8,7 @@ import { passiveAi } from '../ai/passive'
 import { randomAi } from '../ai/random'
 import { runGame } from '../ai/run'
 import { SPECIES, UNIT_TYPES, unitType } from '../data/load'
+import { speciesPlayable, speciesProblem } from './playable'
 
 import { buryUnits, deathEntries, killAndBury, killedIds, killUnits } from './death'
 import { armyRoll } from './effects'
@@ -106,9 +107,11 @@ const die = (unitId: string, typeId: string, icon: string): RawDie => ({
 // --- the table -----------------------------------------------------------------
 
 describe('the species ability table', () => {
-  it('names every species in the data, so a new one fails here rather than playing with none', () => {
+  it('names every species in the data, or that species is not playable -- never playing with none', () => {
     for (const species of SPECIES) {
-      expect(SPECIES_ABILITIES[species.id], species.id).toBeDefined()
+      if (SPECIES_ABILITIES[species.id] !== undefined) continue
+      expect(speciesPlayable(species.id), species.id).toBe(false)
+      expect(speciesProblem(species.id), species.id).toMatch(/species abilities/)
     }
   })
 

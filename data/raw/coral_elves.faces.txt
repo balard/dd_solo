@@ -1,0 +1,213 @@
+# Coral Elves unit die faces.
+# Source: Dice Commander die info and face-art paths, transcribed 2026-09-29.
+# Format: a die header line (URL or "<class>-<size>"), then one "<count> <Icon>" line per face.
+# d6 units have 6 faces, monsters (d10) have 10. See data/ICONS.md.
+#
+# Face 1 is the ID face; the source lists the other faces only. A monster face's art is
+# '<icon>-m.svg' with no count in it, so every monster face is written as 4 -- which is
+# right for every normal icon (invariant 7). Of the six new SAIs only Entangle and Wave
+# read X; Tail's two melee, Swallow's one unit, Ferry's four health-worth and Hypnotic
+# Glare are fixed by their text, so the 4 on those faces is never read.
+#
+# Sharpshooter was listed with six faces; the owner of the dice corrected it to the five
+# below (2 Melee, not 2 Maneuver and 2 Missile).
+#
+# Art, for `npm run art` (v2 Phase 5g) -- the source's own notes on which image a die uses:
+#   maneuver variant 1 (maneuver-1-<n>.svg): heavy melee, light melee, missile, Evoker, monsters
+#   maneuver variant 2 (maneuver-2-<n>.svg): cavalry, Conjurer
+#   fly variant 1 (fly-1-<n>.svg / fly-1-m.svg): Eagle Knight, Gryphon, Sprite Swarm
+#   fly variant 2 (fly-2-m.svg): Leviathan
+#   the other faces: melee-<n>, missile-<n>, magic-<n>, save-<n>, sais/<name>-<n>, and '-m' on a monster
+
+# ---- Heavy Melee ----
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/heavy-small.svg
+1 ID
+1 Melee
+1 Missile
+1 Maneuver
+1 Melee
+2 Melee
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/heavy-medium.svg
+2 ID
+2 Save
+3 Melee
+3 Melee
+2 Maneuver
+2 Missile
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/heavy-large.svg
+3 ID
+2 Missile
+4 Melee
+3 Melee
+3 Save
+4 Smite
+
+# ---- Light Melee ----
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/light-small.svg
+1 ID
+1 Melee
+1 Maneuver
+2 Maneuver
+1 Melee
+2 Missile
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/light-medium.svg
+2 ID
+2 Melee
+3 Maneuver
+3 Maneuver
+3 Melee
+3 Missile
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/light-large.svg
+3 ID
+3 Melee
+3 Maneuver
+3 Maneuver
+3 Melee
+4 Counter
+
+# ---- Cavalry ----
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/cavalry-small.svg
+1 ID
+1 Missile
+1 Melee
+1 Maneuver
+1 Missile
+2 Missile
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/cavalry-medium.svg
+2 ID
+2 Melee
+3 Maneuver
+2 Maneuver
+2 Melee
+2 Save
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/cavalry-large.svg
+3 ID
+3 Fly
+3 Melee
+3 Fly
+4 Melee
+3 Missile
+
+# ---- Missile ----
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/missile-small.svg
+1 ID
+1 Missile
+1 Melee
+1 Maneuver
+1 Missile
+2 Missile
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/missile-medium.svg
+2 ID
+2 Melee
+3 Missile
+3 Missile
+2 Maneuver
+2 Missile
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/missile-large.svg
+3 ID
+3 Maneuver
+4 Missile
+3 Missile
+2 Melee
+4 Bullseye
+
+# ---- Magic ----
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/magic-small.svg
+1 ID
+1 Magic
+1 Melee
+1 Maneuver
+1 Magic
+2 Magic
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/magic-medium.svg
+2 ID
+2 Melee
+3 Magic
+3 Magic
+2 Maneuver
+2 Magic
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/magic-large.svg
+3 ID
+3 Save
+4 Magic
+3 Magic
+3 Melee
+4 Cantrip
+
+# ---- Monsters ----
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/monster-coral-giant.svg
+4 ID
+4 Save
+4 Smite
+4 Trample
+4 Melee
+4 Smite
+4 Save
+4 Counter
+4 Trample
+4 Maneuver
+
+# Listed as 'Griffon'; the art path and the v4.01 roster (p. 70) both say Gryphon.
+https://commander.dragondice.com/images/faces/coral-elves/ids/monster-gryphon.svg
+4 ID
+4 Melee
+4 Rend
+4 Fly
+4 Ferry
+4 Fly
+4 Melee
+4 Ferry
+4 Fly
+4 Melee
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/monster-leviathan.svg
+4 ID
+4 Swallow
+4 Maneuver
+4 Tail
+4 Fly
+4 Wave
+4 Save
+4 Hypnotic Glare
+4 Fly
+4 Tail
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/monster-sprite-swarm.svg
+4 ID
+4 Magic
+4 Fly
+4 Missile
+4 Magic
+4 Fly
+4 Missile
+4 Magic
+4 Melee
+4 Missile
+
+https://commander.dragondice.com/images/faces/coral-elves/ids/monster-tako.svg
+4 ID
+4 Entangle
+4 Save
+4 Maneuver
+4 Melee
+4 Save
+4 Entangle
+4 Melee
+4 Maneuver
+4 Melee

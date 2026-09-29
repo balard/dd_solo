@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { SPECIES, TERRAIN_DICE, UNIT_TYPES, homeTerrainType, terrainDie, terrainType, unitType } from '../data/load'
+import { SPECIES, TERRAIN_DICE, homeTerrainType, terrainDie, terrainType, unitType } from '../data/load'
+import { PLAYABLE_UNITS } from './playable'
 import { PRESETS, maxArmyHealth, preset } from '../data/presets'
 
 import { reduce } from './reduce'
@@ -80,8 +81,10 @@ describe('presets', () => {
    * the most a 24-health force may start with, and six is the smallest force whose
    * half is three whole monsters.
    */
-  it('gives every monster in the data a fixture of its own', () => {
-    const monsters = UNIT_TYPES.filter((t) => t.size === 'monster')
+  it('gives every playable monster a fixture of its own', () => {
+    // Playable, not every monster in the data: a species transcribed ahead of its rules
+    // (v2 Phase 5a) cannot start a game, so a fixture for it could only throw.
+    const monsters = PLAYABLE_UNITS.filter((t) => t.size === 'monster')
     expect(monsters.length).toBe(10)
 
     for (const monster of monsters) {

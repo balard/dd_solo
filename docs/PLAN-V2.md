@@ -1288,6 +1288,53 @@ spells fired at least once. A starter preset of the species plays a full game ag
 the browser. A mixed force containing it plays a full game. The V0 goldens are untouched, and the
 V1 goldens move only with a written reason (the riposte slice in Dwarves is the one expected).
 
+## Phase 5 — Coral Elves — in progress
+
+5a has landed: the data. 5b (the seams) is next.
+
+### What 5a found
+
+Both golden corpora replay byte-identical and unregenerated; nothing a recorded game can reach
+moved, and saving is off, so `SAVE_VERSION` has nothing to be about.
+
+**1. "Species entry; `npm run data` green" was not a slice on its own: it made the species
+playable everywhere at once.** The moment twenty Coral Elves dice are in `units.json`, every place
+that hands dice out reaches them: the mixed pool of `rollForce` and `generateForces`, the species
+race draw (whose `SPECIES.length !== 2` guard would have thrown on every rolled game), the army
+builder's palette, the random opponent's pools, the live fuzz's list of SAIs it must roll, and the
+monster-fixture test. Each of them rolls a Tail sooner or later, and `sai: 'full'` throws on it. So
+**`src/engine/playable.ts` decides which species the engine hands out**: a species is playable when
+every SAI on its dice has a handler and `SPECIES_ABILITIES` names it. It is derived, not flagged,
+the way `resolvesSpell` is: no switch to forget, and the slice that builds the last missing piece
+flips the species in the same edit. `builtForceProblem` refuses an unplayable die, and every force
+goes through it, so a `built:` file or a collection naming one gets a sentence, not a throw.
+
+**2. That flip has a cost, and the slice that pays it is whichever completes the set** -- by the
+table above, 5d (abilities come after the SAIs). The same edit must: widen the race draw in
+`generateForces` past two species (it throws on a third playable one, deliberately); add the five
+monster fixtures (`setup.test.ts` requires one per playable monster); and reach all six new SAIs in
+the live fuzz. So 5f's fixtures and fuzz counters move forward into 5d, or 5d is sliced so the
+ability table entry lands last with them.
+
+**3. The data had two slips, both caught before import.** Sharpshooter was listed with six faces;
+the owner of the dice corrected it (3 Maneuver, 4 Missile, 3 Missile, 2 Melee, 4 Bullseye). The
+list said "Griffon"; the art path and the v4.01 roster say Gryphon.
+
+**4. Of the six new SAIs, only Entangle and Wave read X.** Tail's two melee, Swallow's one unit,
+Ferry's four health-worth and Hypnotic Glare are fixed by their text. Monster faces carry no count
+in the art paths (`<icon>-m.svg`), so every one is written 4, and on those four SAIs it is never
+read. The raw file said "the count is X" for all six until the rule text was checked.
+
+**5. `KNOWN_SAIS` was the starter rulebook's 25 and nothing else**, so the validator would have
+called Tail a typo. It is the starter list plus a per-species list (`SPECIES_SAIS`), which only an
+imported species needs. And the `'full'` refusal said "targeting SAIs are not implemented", true of
+every name it could meet in v1 and not of Tail; it names the SAI now.
+
+**Deliberately not done.**
+- **No preset, fixture or art.** A fixture for an unplayable species could only throw; 5f and 5g.
+- **`validate_data.py` still holds spells to two species.** Blizzard and Deluge are 5e.
+- **The eight raw files for later species stay unimported**: no entry in `tools/species.py`.
+
 ---
 
 ## Risks
