@@ -57,10 +57,12 @@ const presetHealthOf = (p: (typeof PRESETS)[number]) =>
 describe('presets', () => {
   it('loads every hand-authored force', () => {
     expect(PRESETS.map((p) => p.id).sort()).toEqual([
+      'coral_elves_bestiary',
       'coral_elves_coral_giant',
       'coral_elves_gryphon',
       'coral_elves_leviathan',
       'coral_elves_sprite_swarm',
+      'coral_elves_starter',
       'coral_elves_tako',
       'firewalkers_bestiary',
       'firewalkers_fireshadow',

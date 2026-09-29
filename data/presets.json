@@ -1,5 +1,5 @@
 {
-  "_comment": "Hand-authored setup content. NOT generated -- the importers never touch this file. `presets` are named forces: a species and three army lists, kept because a test that wants a particular die on the board has to be able to say so, and because the golden corpus needs forces that never change. Terrain has no per-species profile any more (Phase 5b) -- both Home Terrains and the Frontier are drawn from the seed, from all 24 dice; see src/engine/setup.ts. The two `_starter` lists are the 30-health ones the alpha shipped with; the two `_bestiary` lists are 35 health and hold one of every monster and every large die of their species, which is the widest SAI coverage a legal force can reach. The ten monster fixtures are one per monster die in the data -- six copies of that one monster, split 3/2/1 across home, Frontier and the enemy home. They exist so a rule about a monster face can be watched happening: six of one die against six of another is a game made of nothing but the two faces under test, where a bestiary buries the interesting die among nineteen others that may never roll. Six is what the setup cap allows -- 24 health, so no army may exceed 12, which is exactly the three at home. All ten are 24 health, so any two of them pair, mirrors included; none of them pairs with a starter (30) or a bestiary (35). An ordinary game rolls its forces from the seed instead.",
+  "_comment": "Hand-authored setup content. NOT generated -- the importers never touch this file. `presets` are named forces: a species and three army lists, kept because a test that wants a particular die on the board has to be able to say so, and because the golden corpus needs forces that never change. Terrain has no per-species profile any more (Phase 5b) -- both Home Terrains and the Frontier are drawn from the seed, from all 24 dice; see src/engine/setup.ts. The Treefolk and Firewalkers `_starter` lists are the 30-health ones the alpha shipped with (the goldens are recorded against them -- do not edit them), and the Coral Elves' follows their pattern die for die by class and size (v2 Phase 5f); the `_bestiary` lists are 35 health and hold one of every monster and every large die of their species, which is the widest SAI coverage a legal force can reach. The monster fixtures are one per monster die in the data -- six copies of that one monster, split 3/2/1 across home, Frontier and the enemy home. They exist so a rule about a monster face can be watched happening: six of one die against six of another is a game made of nothing but the two faces under test, where a bestiary buries the interesting die among nineteen others that may never roll. Six is what the setup cap allows -- 24 health, so no army may exceed 12, which is exactly the three at home. All are 24 health, so any two of them pair, mirrors included; none of them pairs with a starter (30) or a bestiary (35). An ordinary game rolls its forces from the seed instead.",
   "presets": {
     "treefolk_starter": {
       "name": "Treefolk starter force",
@@ -53,6 +53,32 @@
         ]
       }
     },
+    "coral_elves_starter": {
+      "name": "Coral Elves starter force",
+      "species": "coral_elves",
+      "armies": {
+        "home": [
+          "coral_elves.protector",
+          "coral_elves.trooper",
+          "coral_elves.fighter",
+          "coral_elves.archer",
+          "coral_elves.conjurer"
+        ],
+        "campaign": [
+          "coral_elves.coral_giant",
+          "coral_elves.herald",
+          "coral_elves.knight",
+          "coral_elves.courier"
+        ],
+        "horde": [
+          "coral_elves.sharpshooter",
+          "coral_elves.eagle_knight",
+          "coral_elves.evoker",
+          "coral_elves.horseman",
+          "coral_elves.bowman"
+        ]
+      }
+    },
     "treefolk_bestiary": {
       "name": "Treefolk bestiary",
       "species": "treefolk",
@@ -94,6 +120,28 @@
         "horde": [
           "firewalkers.gorgon",
           "firewalkers.daybringer"
+        ]
+      }
+    },
+    "coral_elves_bestiary": {
+      "name": "Coral Elves bestiary",
+      "species": "coral_elves",
+      "armies": {
+        "home": [
+          "coral_elves.coral_giant",
+          "coral_elves.protector",
+          "coral_elves.tako",
+          "coral_elves.enchanter"
+        ],
+        "campaign": [
+          "coral_elves.gryphon",
+          "coral_elves.herald",
+          "coral_elves.sprite_swarm",
+          "coral_elves.sharpshooter"
+        ],
+        "horde": [
+          "coral_elves.leviathan",
+          "coral_elves.eagle_knight"
         ]
       }
     },

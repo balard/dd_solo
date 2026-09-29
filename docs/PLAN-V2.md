@@ -1292,7 +1292,8 @@ V1 goldens move only with a written reason (the riposte slice in Dwarves is the 
 
 5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c has landed: all six SAIs. 5d has
 landed: the race draw, Coastal Dodge (which made the Coral Elves playable), and Defensive Volley.
-5e has landed: Blizzard and Deluge. 5f (presets, AI) and 5g (art) are left.
+5e has landed: Blizzard and Deluge. 5f has landed: a starter and a bestiary preset, and the
+greedy checks. 5g (art) is left.
 
 ### What 5a found
 
@@ -1493,6 +1494,27 @@ marker. Both Coral spells are cumulative. Worth reusing for every later species'
 any third species outright, and the spell fuzz required every resolvable spell to be cast by a fuzz
 that only ever fields Treefolk and Firewalkers. The first now checks against the imported species;
 the second is scoped to the species it plays, and the live fuzz, which draws Coral Elves, casts both.
+
+### What 5f found
+
+**1. Most of 5f had already happened.** The fixtures, the fuzz counters and greedy's one-unit
+preference landed with the flip (5d), as 5a predicted they would have to. What was left is the two
+presets and the exit checks.
+
+**2. The presets follow the starter pattern die for die.** `coral_elves_starter` is the Treefolk and
+Firewalkers starters' class-and-size layout in Coral Elves dice (30 health: 10 / 11 / 9), and
+`coral_elves_bestiary` holds every monster and every large die (35: 14 / 14 / 7). Neither is a
+mirror, by `FORCE_SETS`' naming rule, so each appears on the start screen and pairs by health.
+
+**3. The exit criterion, checked.** Every Coral Elves mirror, and the starter and bestiary against
+each other species both ways, finish with greedy against passive and against itself. In the browser
+a Coral Elves starter force played a full game against a greedy Treefolk starter, twelve turns to a
+finish, with no error. A mixed force containing Coral Elves plays in one live-fuzz game in five.
+
+**4. Greedy needed no new scorer.** Every new SAI reaches it through `estimate.ts` (Wave, Swallow,
+Coastal Dodge were taught there in 5c and 5d), the free move and the one-unit target were already
+decisions it answered, and it counter-attacks whenever offered, a volley included. Whether it plays
+the Coral Elves *well* is a v3 question.
 
 ---
 
