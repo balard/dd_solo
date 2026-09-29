@@ -1663,18 +1663,19 @@ const CLASS_ORDER: readonly UnitClass[] = [
   'magic',
 ]
 
+/** The same order over die types rather than dice: the army builder's palette (v2
+ *  Phase 4) lists what can be fielded, which is types. */
+export function compareForDisplay(left: UnitType, right: UnitType): number {
+  // A monster sorts by being a monster, never by the class line it is filed under.
+  const rank = (t: UnitType) => (t.size === 'monster' ? -1 : CLASS_ORDER.indexOf(t.unitClass))
+  const byClass = rank(left) - rank(right)
+  if (byClass !== 0) return byClass
+  if (left.health !== right.health) return right.health - left.health
+  // A stable, readable tiebreak, so two dice of the same class and size always
+  // appear in the same order rather than shuffling between renders.
+  return left.name.localeCompare(right.name)
+}
+
 export function orderedForDisplay(units: readonly UnitInstance[]): readonly UnitInstance[] {
-  return [...units].sort((a, b) => {
-    const left = unitType(a.typeId)
-    const right = unitType(b.typeId)
-    // A monster sorts by being a monster, never by the class line it is filed under.
-    const rank = (t: UnitType) =>
-      t.size === 'monster' ? -1 : CLASS_ORDER.indexOf(t.unitClass)
-    const byClass = rank(left) - rank(right)
-    if (byClass !== 0) return byClass
-    if (left.health !== right.health) return right.health - left.health
-    // A stable, readable tiebreak, so two dice of the same class and size always
-    // appear in the same order rather than shuffling between renders.
-    return left.name.localeCompare(right.name)
-  })
+  return [...units].sort((a, b) => compareForDisplay(unitType(a.typeId), unitType(b.typeId)))
 }

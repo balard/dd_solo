@@ -173,7 +173,9 @@ the dice and the opponent.
 > every die at `Infinity`, and `data/collections/sorry-12.json` is the first limited one.
 > `forceProblems(collection, cap, force)` in `builder.ts` lists everything wrong with a draft, each
 > tagged with where it belongs, and `rollForce(budget, pool, rng)` in `force.ts` rolls the AI's
-> side at any size. 4b is the builder screen, 4c the start screen.
+> side at any size. **4b has landed too: the builder screen** (`ArmyBuilder.tsx`, from the start
+> screen's "Army builder"): full or limited, three armies, terrains and dragons, each problem beside
+> its section, and forces kept per viewer (`forceStore.ts`). 4c starts a game with one.
 
 ## Read these first
 
@@ -1037,6 +1039,11 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - **Device emulation in the browser pane fires no `resize`, and `ResizeObserver` waits for a
     painted frame**, so a resized frame can show the old layout until something renders. That is
     the harness; dispatch a `resize` or take a screenshot before believing it.
+- **The army builder draws with the board's own components** (v2 Phase 4b): `UnitTileBody`,
+  `DragonTileBody`, `InspectorPanel`, and `TerrainDetail` / `DragonDetail` taking a die id, so a die
+  on no board and a die in play cannot look different. It edits a `BuiltForce` directly -- no
+  second draft shape -- and every rule it shows is `builder.ts`'s. Kept forces are a convenience
+  store (`forceStore.ts`), not a save: no version, and legality asked fresh each time one is shown.
 - **A Reinforce Step sends dice to any and all terrains**, so its destination buttons *stage* into
   the `reinforcePlan` draft rather than dispatching. One action still reaches the engine -- the
   draft is `App` state, cleared with the selection, not wizard state in a component. `GameAction`

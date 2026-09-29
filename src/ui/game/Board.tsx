@@ -116,7 +116,13 @@ const TERRAIN_FACES: readonly TerrainFaceNumber[] = [1, 2, 3, 4, 5, 6, 7]
  * Face 8 is shown alongside but set apart: it comes from the die's eighth-face icon
  * rather than its type, and in v0 it only captures.
  */
-export function TerrainDetail({ terrain }: { terrain: TerrainInPlay }) {
+export function TerrainDetail({
+  terrain,
+}: {
+  /** A die, and the face it shows when it is in play. The army builder (v2 Phase 4)
+   *  shows a die that is on no board yet, so it has no face to mark. */
+  terrain: Pick<TerrainInPlay, 'dieId'> & { readonly face?: TerrainInPlay['face'] }
+}) {
   const art = useFaceArt()
   const ruleSet = useRuleSet()
   const die = terrainDie(terrain.dieId)
@@ -230,16 +236,7 @@ export function DragonRow({
             aria-label={label}
             aria-expanded={isOpen}
           >
-            <span className="dragon-form">{die.form === 'wyrm' ? 'WY' : 'DR'}</span>
-            {/* Its Jaws face stands for the die, the way an ID face stands for a unit.
-                Falls back to our glyph with no art fetched. */}
-            <DragonFaceArt
-              dieId={dragon.dieId}
-              face={jawsFace(dragon.dieId)}
-              icon="JAWS"
-              size={30}
-            />
-            <span className="dragon-band" aria-hidden="true" />
+            <DragonTileBody dieId={dragon.dieId} />
           </button>
         )
       })}
@@ -247,16 +244,38 @@ export function DragonRow({
   )
 }
 
+/** What is drawn inside a dragon tile: the form, its Jaws face, the element band. The
+ *  button around it is the caller's -- a board inspects, the army builder picks. */
+export function DragonTileBody({ dieId }: { dieId: string }) {
+  const die = dragonDie(dieId)
+  return (
+    <>
+      <span className="dragon-form">{die.form === 'wyrm' ? 'WY' : 'DR'}</span>
+      {/* Its Jaws face stands for the die, the way an ID face stands for a unit.
+          Falls back to our glyph with no art fetched. */}
+      <DragonFaceArt dieId={dieId} face={jawsFace(dieId)} icon="JAWS" size={30} />
+      <span className="dragon-band" aria-hidden="true" />
+    </>
+  )
+}
+
 /** Every face of a dragon die and what kills it, for the floating inspector (9e). */
-export function DragonDetail({ dragon, human }: { dragon: DragonInPlay; human: PlayerId }) {
-  const dieId = dragon.dieId
+export function DragonDetail({
+  dieId,
+  whose,
+}: {
+  dieId: string
+  /** "yours" or "the enemy's" in play; null in the army builder, where it is nobody's yet. */
+  whose: string | null
+}) {
   const die = dragonDie(dieId)
   return (
     <>
       <p className="detail-head">
         <b>{dragonName(dieId)}</b>
         <span className="muted">
-          {dragon.owner === human ? 'yours' : "the enemy's"} · {DRAGON_HEALTH} health ·{' '}
+          {whose !== null && `${whose} · `}
+          {DRAGON_HEALTH} health ·{' '}
           {DRAGON_AUTOMATIC_SAVES} automatic saves · d12
         </span>
         <ElementDots elements={[die.element]} />

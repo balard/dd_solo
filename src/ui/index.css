@@ -1384,3 +1384,144 @@ body {
 }
 .game-over-side dd { margin: 0; font-variant-numeric: tabular-nums; }
 .game-over-side dd b { font-size: var(--fs-xl); }
+
+/* --- the army builder (v2 Phase 4b) ----------------------------------------- */
+
+/*
+ * A page like the start screen, but a long one: it scrolls inside `.app`, whose
+ * height is the window. Sections stack on a phone; the three armies sit side by side
+ * once there is room for a die row in each.
+ */
+.builder {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-block: 12px 32px;
+}
+.builder h1 { font-size: var(--fs-2xl); margin: 0; }
+.builder h2 { font-size: var(--fs-lg); margin: 0 0 8px; }
+.builder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.builder-head .choice { flex: none; }
+
+.builder select,
+.builder input {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 11px;
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font: inherit;
+}
+.builder select:focus-visible,
+.builder input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.builder-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0 12px;
+}
+.builder-settings .new-game-field { margin-bottom: 10px; }
+
+.builder-total { margin: 4px 0 8px; font-size: var(--fs-md); }
+.builder-total b { font-size: var(--fs-xl); font-variant-numeric: tabular-nums; }
+.builder-total.is-over b,
+.builder .is-over { color: var(--melee); font-weight: 700; }
+.builder-ready { color: var(--accent); font-weight: 600; }
+
+/* A problem sits beside the section it is about, never in one list at the foot. */
+.builder-problems {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: var(--fs-sm);
+  color: var(--melee);
+}
+
+.builder-armies {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+  margin: 10px 0 16px;
+}
+.builder-army {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  min-height: 116px;
+}
+/* The army the collection is filling: the one a tap below adds to. */
+.builder-army.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.builder-army-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 6px;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.builder-army-head span { font-variant-numeric: tabular-nums; }
+.builder-army-where { flex-basis: 100%; font-size: var(--fs-xs); }
+
+.builder-section {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.builder-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.builder-section-head h2 { margin: 0; }
+.builder-section-head .choice { flex: none; }
+.builder-species { margin-bottom: 10px; }
+.builder-species-name { margin: 0 0 6px; font-size: var(--fs-sm); font-weight: 600; }
+
+/* A palette tile carries its copies left on the corner, the way a stack does. */
+.builder-die { position: relative; display: grid; }
+.builder-die > .die:disabled,
+.builder-die > .dragon-tile:disabled { opacity: .4; cursor: not-allowed; }
+.builder-palette { padding-top: 6px; row-gap: 10px; }
+
+.builder-terrains {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.builder-terrain .terrain-detail { margin-top: 0; }
+
+.builder-kept { list-style: none; margin: 0; padding: 0; }
+.builder-kept li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.builder-kept li.is-editing .builder-kept-name b { color: var(--accent); }
+.builder-kept-name { flex: 1 1 200px; font-size: var(--fs-md); }
+.builder-kept .choice { flex: none; min-width: 0; }
+.builder-section .choices { margin-bottom: 16px; }

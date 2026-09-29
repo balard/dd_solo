@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { DEFAULT_OPPONENT, type OpponentName } from '../../ai/opponents'
 import type { SetupOptions } from '../../engine/setup'
 
+import { ArmyBuilder } from './ArmyBuilder'
 import { speciesInfo } from './Elements'
 import {
   choiceGroups,
@@ -81,6 +82,9 @@ export function NewGameScreen({
   const [p2, setP2] = useState(() => defaultFor('firewalkers'))
   const [opponent, setOpponent] = useState<OpponentName>(DEFAULT_OPPONENT)
   const [seedText, setSeedText] = useState('')
+  // The builder (v2 Phase 4b) is a page of its own, reached from here and returning
+  // here. Starting a game with a force it built is 4c's.
+  const [building, setBuilding] = useState(false)
   const opponentNote = OPPONENTS.find((o) => o.id === opponent)?.note
 
   // Recomputed on every keystroke rather than on submit, so the seed box says it is
@@ -92,6 +96,8 @@ export function NewGameScreen({
     const result = build(newSeed())
     if (result.kind === 'ok') onStart(result.setup, opponent)
   }
+
+  if (building) return <ArmyBuilder onClose={() => setBuilding(false)} />
 
   return (
     <div className="app">
@@ -149,6 +155,9 @@ export function NewGameScreen({
             onClick={() => begin((seed) => randomGameSetup(seedText, seed))}
           >
             Roll everything instead
+          </button>
+          <button type="button" className="choice secondary" onClick={() => setBuilding(true)}>
+            Army builder
           </button>
         </div>
       </div>

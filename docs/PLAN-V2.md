@@ -8,7 +8,7 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0, 1, 2 and 3 have landed** (Phase 3 as slices 3a to 3e), and Phase 4 is under way (4a), each with its findings below;
+of work*. **Phases 0, 1, 2 and 3 have landed** (Phase 3 as slices 3a to 3e), and Phase 4 is under way (4a, 4b), each with its findings below;
 the rest is still a draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
@@ -950,7 +950,7 @@ comes and goes would move New game under the thumb. It asks for confirmation. Th
 
 ---
 
-## Phase 4 — The army builder — **in progress** (4a landed)
+## Phase 4 — The army builder — **in progress** (4a, 4b landed)
 
 **Deliverable.** A screen that builds a `BuiltForce`, in two modes over one component:
 - **Full**: every die in the data, any quantity.
@@ -1009,7 +1009,7 @@ them. The engine does not change beyond one pure generator.
 | Slice | Scope |
 |---|---|
 | **4a** (landed) | **The model, no screen.** `Collection` and its loader (`src/data/collections.ts`), the full collection, the "sorry 12" fixture in `data/collections/`, `forceProblems(collection, cap, force)` in `src/ui/game/builder.ts`, and `rollForce(budget, pool, rng)` in `force.ts`: one legal force of any size, single-species or mixed, for the AI's side |
-| **4b** | **The builder screen.** Full and limited modes over one component, the three armies with a running total and the half-force line, the Home Terrain and Frontier proposal with their faces, the dragons; built forces kept per viewer |
+| **4b** (landed) | **The builder screen.** Full and limited modes over one component, the three armies with a running total and the half-force line, the Home Terrain and Frontier proposal with their faces, the dragons; built forces kept per viewer |
 | **4c** | **The start screen.** Your side from a preset or a built force; the AI's from a preset or a random force of the same or a chosen size; "unequal on purpose" said out loud; the exit criterion played in the browser |
 
 **Decided before 4a:**
@@ -1061,6 +1061,50 @@ more than one, and a registry needs a key.
   `presets.json`, and is checked at load by `readCollection`, which throws on a die the data does
   not have. The Python validator knows nothing of presets either.
 - **Nothing reads `forceProblems` or `rollForce` yet.** 4b and 4c are their callers.
+
+### What 4b found
+
+UI only, plus one shape reader split in two in `force.ts`. Both golden corpora replay
+byte-identical and unregenerated. The builder is `ArmyBuilder.tsx`, reached from the start screen's
+"Army builder" button; its rules are the draft edits and palettes added to `builder.ts`, and kept
+forces are `forceStore.ts`.
+
+**1. Every component that draws a die wanted it in play.** `TerrainDetail` took a `TerrainInPlay`,
+`DragonDetail` a `DragonInPlay` and its owner, `Inspector` a whole `GameState`, and the unit tile
+lived inside `DiceGrid`'s loop over `UnitInstance`s. A builder has dice on no board, so each gave up
+one seam: `UnitTileBody` and `DragonTileBody` are the inside of a tile with the button left to the
+caller, `InspectorPanel` is the floating shell with no opinion about what is in it, and the two
+details take a die id. The builder draws with the board's own components, so the two cannot draw
+one die two ways. Checked in the game afterwards: the terrain inspector still marks its current
+face.
+
+**2. The first draft sorted terrain problems by matching words in their text.** "Home Terrain" in
+the sentence meant the Home field. `ProblemPlace` gained `homeTerrain` and `frontierProposal`, and
+`'terrains'` is left for the one problem that is about both: a die used twice.
+
+**3. A field's own die counts as free for that field** (`terrainChoices`). Otherwise the Home
+select would call its current die "0 left" and refuse to let you pick it again, because it is in
+use by the Home field itself.
+
+**4. The cap follows the collection.** Switching to sorry-12 drops the cap to 12, the largest it
+can fill (it holds 14); the full collection opens on 24. Picked from 12, 24 and 36, v3's steps.
+
+**5. `readBuiltForce` split out of `readBuiltForces`.** `localStorage` is as untrusted as a file,
+so a kept force is shape-checked with the reader the terminal's `built:<file>` uses. An entry that
+is not a force is dropped alone; one naming a die the data lost is kept, and shows its problems.
+
+**6. Checked in the browser**: the mixed 12 from 4a's test built tap by tap from sorry-12 reads
+"12 / 12 health · 10 dice · ready to play", survives a reload as a kept force, loads back for
+editing, fits 375px with no sideways scroll, and "Look at dice" opens the inspector as a bottom sheet.
+
+**Deliberately not done.**
+- **No route from a kept force into a game.** That is 4c, with the AI's side.
+- **Keeping an unfinished force is allowed.** A draft is kept with its problems, and the list says
+  "ready" or "N to fix", asked fresh each time. Refusing would lose half-built work.
+- **On a phone the collection is below all three armies**, so filling the Horde means scrolling
+  between the two. Left as is until someone builds a 36 on a phone and minds.
+- **No warning about unsaved changes** on Back, and no DOM test, by the project's rule; the logic
+  is in `builder.ts` and `forceStore.ts`, tested in node.
 
 ---
 

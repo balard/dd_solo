@@ -70,6 +70,47 @@ const UNIT_IDS: ReadonlySet<string> = new Set(UNIT_TYPES.map((u) => u.id))
 const TERRAIN_IDS: ReadonlySet<string> = new Set(TERRAIN_DICE.map((d) => d.id))
 const DRAGON_IDS: ReadonlySet<string> = new Set(DRAGON_DICE.map((d) => d.id))
 
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+const isIds = (v: unknown): v is string[] => Array.isArray(v) && v.every((id) => typeof id === 'string')
+
+/**
+ * One built force from parsed JSON, shape only, with `label` naming it in a problem:
+ * `readBuiltForces` reads a file's two, and the army builder's store (v2 Phase 4) reads
+ * one per saved force from `localStorage`, which is as untrusted as a file.
+ */
+export function readBuiltForce(
+  raw: unknown,
+  label: string,
+): { readonly force: BuiltForce } | { readonly problem: string } {
+  if (!isRecord(raw)) return { problem: `${label}: missing, or not an object` }
+  if (!isRecord(raw['armies'])) return { problem: `${label}: missing its armies` }
+  const armies = {} as Record<PresetArmyName, readonly string[]>
+  for (const name of PRESET_ARMY_NAMES) {
+    const ids = raw['armies'][name]
+    if (!isIds(ids)) return { problem: `${label}: its ${name} army is not a list of unit ids` }
+    armies[name] = ids
+  }
+  const { homeTerrain, frontierProposal, dragons } = raw
+  if (homeTerrain !== undefined && typeof homeTerrain !== 'string') {
+    return { problem: `${label}: homeTerrain is not a terrain die id` }
+  }
+  if (frontierProposal !== undefined && typeof frontierProposal !== 'string') {
+    return { problem: `${label}: frontierProposal is not a terrain die id` }
+  }
+  if (dragons !== undefined && !isIds(dragons)) {
+    return { problem: `${label}: dragons is not a list of dragon die ids` }
+  }
+  return {
+    force: {
+      armies,
+      ...(homeTerrain !== undefined ? { homeTerrain } : {}),
+      ...(frontierProposal !== undefined ? { frontierProposal } : {}),
+      ...(dragons !== undefined ? { dragons } : {}),
+    },
+  }
+}
+
 /**
  * A pair of built forces from parsed JSON -- a file a person wrote, so its shape is
  * checked before it is trusted with a type: `{ p1: BuiltForce, p2: BuiltForce }`, and
@@ -79,38 +120,13 @@ const DRAGON_IDS: ReadonlySet<string> = new Set(DRAGON_DICE.map((d) => d.id))
 export function readBuiltForces(
   value: unknown,
 ): { readonly forces: Readonly<Record<PlayerId, BuiltForce>> } | { readonly problem: string } {
-  const isRecord = (v: unknown): v is Record<string, unknown> =>
-    typeof v === 'object' && v !== null && !Array.isArray(v)
-  const isIds = (v: unknown): v is string[] => Array.isArray(v) && v.every((id) => typeof id === 'string')
   if (!isRecord(value)) return { problem: 'expected an object with a p1 and a p2 force' }
 
   const forces = {} as Record<PlayerId, BuiltForce>
   for (const player of ['p1', 'p2'] as const) {
-    const raw = value[player]
-    if (!isRecord(raw)) return { problem: `${player}: missing, or not an object` }
-    if (!isRecord(raw['armies'])) return { problem: `${player}: missing its armies` }
-    const armies = {} as Record<PresetArmyName, readonly string[]>
-    for (const name of PRESET_ARMY_NAMES) {
-      const ids = raw['armies'][name]
-      if (!isIds(ids)) return { problem: `${player}: its ${name} army is not a list of unit ids` }
-      armies[name] = ids
-    }
-    const { homeTerrain, frontierProposal, dragons } = raw
-    if (homeTerrain !== undefined && typeof homeTerrain !== 'string') {
-      return { problem: `${player}: homeTerrain is not a terrain die id` }
-    }
-    if (frontierProposal !== undefined && typeof frontierProposal !== 'string') {
-      return { problem: `${player}: frontierProposal is not a terrain die id` }
-    }
-    if (dragons !== undefined && !isIds(dragons)) {
-      return { problem: `${player}: dragons is not a list of dragon die ids` }
-    }
-    forces[player] = {
-      armies,
-      ...(homeTerrain !== undefined ? { homeTerrain } : {}),
-      ...(frontierProposal !== undefined ? { frontierProposal } : {}),
-      ...(dragons !== undefined ? { dragons } : {}),
-    }
+    const read = readBuiltForce(value[player], player)
+    if ('problem' in read) return read
+    forces[player] = read.force
   }
   return { forces }
 }

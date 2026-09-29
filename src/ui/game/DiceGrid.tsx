@@ -68,7 +68,7 @@ function classOf(type: UnitType): UnitClass | null {
  * size in the data but reads as a kind of die at the table, and it is the whole of
  * what a monster is: no class follows it.
  */
-function describe(type: UnitType): string {
+export function describe(type: UnitType): string {
   const unitClass = classOf(type)
   if (unitClass === null) return `${type.name} — ${MONSTER_LABEL}`
   return `${type.name} — ${type.size} ${CLASS_LABEL[unitClass] ?? unitClass}`
@@ -152,8 +152,6 @@ export function DiceGrid({
   /** Dice under an effect aimed at them alone, which never share a tile. */
   singled?: ReadonlySet<UnitId>
 }) {
-  const art = useFaceArt()
-
   if (units.length === 0) return <p className="empty">no units here</p>
 
   const canSelect = (id: UnitId) =>
@@ -180,14 +178,7 @@ export function DiceGrid({
         // rest of the army is being selected from. A stack is open when any of its
         // dice is: they are the same die as far as the inspector can tell.
         const isOpen = !selectableHere && stack.some((one) => one.id === inspecting)
-        // The ID face is the die's portrait -- it is the one face that is a picture
-        // of the unit rather than of an action. It sits at index 0 on all 40 dice,
-        // but ask the data rather than trusting that.
-        const idIndex = type.faces.findIndex((face) => face.icon === 'ID')
-        const portrait = idIndex < 0 ? null : art.unitFace(unit.typeId, idIndex)
-        const portraitSide = portraitSize(unit.typeId, compact)
         const tileSide = tileSize(unit.typeId, compact)
-        const elements = speciesInfo(type.species)?.elements ?? []
         const what = count > 1 ? `${count} × ${describe(type)}` : describe(type)
         const label = isAsleep ? `${what} — asleep` : what
 
@@ -217,44 +208,7 @@ export function DiceGrid({
               title={label}
               aria-label={label}
             >
-              <span className="die-kind">{badgeFor(type)}</span>
-              {/*
-               * The ID face when we have its art; otherwise the class shape (v2 Phase
-               * 3b). The shape replaced a row-shaped tile with the name in it: every
-               * ID face would draw the same generic glyph, but class and size pick out
-               * one die of a species, and the band below says which species. The
-               * name is in the tooltip and the accessible label either way.
-               */}
-              {!art.ready ? (
-                <span
-                  className="die-portrait-slot"
-                  style={{ width: portraitSide, height: portraitSide }}
-                />
-              ) : portrait !== null ? (
-                <img
-                  className="die-portrait"
-                  src={portrait}
-                  width={portraitSide}
-                  height={portraitSide}
-                  alt={type.name}
-                  draggable={false}
-                />
-              ) : (
-                <ClassShape
-                  code={badgeFor(type)}
-                  size={portraitSide}
-                  {...(elements[0] === undefined ? {} : { fill: `var(--el-${elements[0]})` })}
-                  {...(classOf(type) === null ? { mark: type.name.slice(0, 2) } : {})}
-                />
-              )}
-              <span className="die-health">{type.health}</span>
-              {/* The species, as its two elements: the one fact about a die that its
-                  ID face does not carry, and in a mixed army the one that matters. */}
-              <span className="die-band" aria-hidden="true">
-                {elements.map((element) => (
-                  <i key={element} className={`el-${element}`} />
-                ))}
-              </span>
+              <UnitTileBody typeId={unit.typeId} compact={compact} />
             </button>
             {/* On the tile rather than beside it, so a stack costs barely more width
                 than one die and the grid keeps its rhythm (3a finding 3). */}
@@ -267,6 +221,63 @@ export function DiceGrid({
         )
       })}
     </div>
+  )
+}
+
+/**
+ * What is drawn inside a unit tile: the class badge, the portrait, the health and the
+ * species band. The button around it is the caller's -- a board selects or inspects, the
+ * army builder (v2 Phase 4) adds or removes -- and so is its size, `tileSize`.
+ */
+export function UnitTileBody({ typeId, compact = false }: { typeId: string; compact?: boolean }) {
+  const art = useFaceArt()
+  const type = unitType(typeId)
+  // The ID face is the die's portrait -- it is the one face that is a picture of the
+  // unit rather than of an action. It sits at index 0 on all 40 dice, but ask the data
+  // rather than trusting that.
+  const idIndex = type.faces.findIndex((face) => face.icon === 'ID')
+  const portrait = idIndex < 0 ? null : art.unitFace(typeId, idIndex)
+  const portraitSide = portraitSize(typeId, compact)
+  const elements = speciesInfo(type.species)?.elements ?? []
+
+  return (
+    <>
+      <span className="die-kind">{badgeFor(type)}</span>
+      {/*
+       * The ID face when we have its art; otherwise the class shape (v2 Phase 3b). The
+       * shape replaced a row-shaped tile with the name in it: every ID face would draw
+       * the same generic glyph, but class and size pick out one die of a species, and
+       * the band below says which species. The name is in the tooltip and the
+       * accessible label either way.
+       */}
+      {!art.ready ? (
+        <span className="die-portrait-slot" style={{ width: portraitSide, height: portraitSide }} />
+      ) : portrait !== null ? (
+        <img
+          className="die-portrait"
+          src={portrait}
+          width={portraitSide}
+          height={portraitSide}
+          alt={type.name}
+          draggable={false}
+        />
+      ) : (
+        <ClassShape
+          code={badgeFor(type)}
+          size={portraitSide}
+          {...(elements[0] === undefined ? {} : { fill: `var(--el-${elements[0]})` })}
+          {...(classOf(type) === null ? { mark: type.name.slice(0, 2) } : {})}
+        />
+      )}
+      <span className="die-health">{type.health}</span>
+      {/* The species, as its two elements: the one fact about a die that its ID face
+          does not carry, and in a mixed army the one that matters. */}
+      <span className="die-band" aria-hidden="true">
+        {elements.map((element) => (
+          <i key={element} className={`el-${element}`} />
+        ))}
+      </span>
+    </>
   )
 }
 
