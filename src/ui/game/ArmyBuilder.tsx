@@ -231,7 +231,12 @@ function terrainDieExists(id: string): boolean {
   }
 }
 
-export function ArmyBuilder({ onClose }: { onClose: () => void }) {
+export function ArmyBuilder({
+  onClose,
+}: {
+  /** Back to the start screen, with the id of a kept force to play, or null. */
+  onClose: (play: string | null) => void
+}) {
   const [saved, setSaved] = useState<readonly SavedForce[]>(() => readSavedForces())
   const [editing, setEditing] = useState<string | null>(null)
   const [collectionId, setCollectionId] = useState(FULL_COLLECTION.id)
@@ -257,11 +262,12 @@ export function ArmyBuilder({ onClose }: { onClose: () => void }) {
     writeSavedForces(next)
   }
 
-  const save = (asNew: boolean) => {
+  const save = (asNew: boolean): string => {
     const id = editing !== null && !asNew ? editing : newForceId(saved, Date.now())
     store(upsertForce(saved, { id, name: title, collection: collection.id, cap, force }))
     setEditing(id)
     setName(title)
+    return id
   }
 
   const load = (entry: SavedForce) => {
@@ -296,7 +302,7 @@ export function ArmyBuilder({ onClose }: { onClose: () => void }) {
         <div className="builder">
           <div className="builder-head">
             <h1>Army builder</h1>
-            <button type="button" className="choice secondary" onClick={onClose}>
+            <button type="button" className="choice secondary" onClick={() => onClose(null)}>
               Back
             </button>
           </div>
@@ -486,7 +492,18 @@ export function ArmyBuilder({ onClose }: { onClose: () => void }) {
 
           <section className="builder-section" aria-label="Kept forces">
             <div className="choices">
-              <button type="button" className="choice" onClick={() => save(false)}>
+              {/* Keeps the force as it stands, then hands it to the start screen as your
+                  side (4c). Only a ready force, since the start screen would refuse it. */}
+              <button
+                type="button"
+                className="choice"
+                disabled={problems.length > 0}
+                title={problems.length > 0 ? 'Fix what is listed first' : undefined}
+                onClick={() => onClose(save(false))}
+              >
+                Keep and play it
+              </button>
+              <button type="button" className="choice secondary" onClick={() => save(false)}>
                 {editing === null ? `Keep “${title}”` : `Save “${title}”`}
               </button>
               {editing !== null && (

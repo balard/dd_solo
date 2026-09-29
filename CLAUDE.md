@@ -168,21 +168,22 @@ the dice and the opponent.
 > summary (how it ended, the turn, the time, health left). `?forces=mixed-12` starts the 12-health
 > example. Both golden corpora are still byte-identical and unregenerated.
 >
-> **v2 Phase 4 (the army builder) is under way, in three slices; 4a has landed: the model, no
-> screen.** A `Collection` is what a player owns (`src/data/collections.ts`): the full one counts
+> **v2 Phase 4 (the army builder) landed in three slices. 4a: the model, no screen.** A `Collection` is what a player owns (`src/data/collections.ts`): the full one counts
 > every die at `Infinity`, and `data/collections/sorry-12.json` is the first limited one.
 > `forceProblems(collection, cap, force)` in `builder.ts` lists everything wrong with a draft, each
 > tagged with where it belongs, and `rollForce(budget, pool, rng)` in `force.ts` rolls the AI's
 > side at any size. **4b has landed too: the builder screen** (`ArmyBuilder.tsx`, from the start
 > screen's "Army builder"): full or limited, three armies, terrains and dragons, each problem beside
-> its section, and forces kept per viewer (`forceStore.ts`). 4c starts a game with one.
+> its section, and forces kept per viewer (`forceStore.ts`). **4c has landed, and with it all of
+> Phase 4**: the start screen plays a kept force, against a preset, a kept force or a random force of
+> the same or a chosen size, and asks before it lets two sizes differ.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0, 1 and 2 landed; the rest is a draft). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 4 landed; the four species, Phases 5-8, are a draft). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
@@ -993,10 +994,20 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     which forces may face each other, what an empty seed box means, what a setup is built from.
     The component's only job is to *show* the problem -- a disabled Start with no reason beside it
     is the same bug as a crash, slower.
-  - **Health parity is checked before the click, not after.** `setupGame` throws when the two sides
-    bring different totals, and a throw out of an `onClick` is a blank page. The pickers are
-    `<optgroup>`ed by health for the same reason: the legal pairings are visible before anything is
+  - **Health parity is checked before the click, not after, and unequal has to be meant** (v2
+    Phase 4c). `setupGame` stopped caring in v2 Phase 2, so `newGameSetup` refuses a mismatch until
+    the player ticks "the sizes differ on purpose", which the screen shows only while they do. The
+    presets are `<optgroup>`ed by health, so the legal pairings are visible before anything is
     clicked.
+  - **A side is a preset, a force kept in the army builder, or -- for the opponent -- a random
+    force** at your size or a chosen one, from every species or one (v2 Phase 4c). Two presets are
+    still a `named` spec, so a preset game's record reads as it always did; anything else is
+    `built`, both sides whole. A kept force with anything to fix is listed but not pickable.
+  - **The random opponent is rolled in `newGame.ts`, before setup, not inside it**, from the game's
+    seed XOR a salt: `rollForce` on its own stream, so the same seed and the same forces are still
+    the same game, and the roll-off never reads the numbers the force was drawn from. The record
+    carries the rolled force whole, so replay needs no generator and the engine gained no
+    `ForceSpec` kind, log entry or fuzz counter for a playtest convenience.
   - **An empty seed box means "roll one"** -- the same rule `parseGameRequest` applies to `?seed=`,
     because `Number('')` is 0, a perfectly legal seed and a silently different game. A seed that is
     *mistyped* is reported, never quietly randomised: that is the one outcome that loses the exact

@@ -8,7 +8,7 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0, 1, 2 and 3 have landed** (Phase 3 as slices 3a to 3e), and Phase 4 is under way (4a, 4b), each with its findings below;
+of work*. **Phases 0 to 4 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c), each with its findings below;
 the rest is still a draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
@@ -70,7 +70,7 @@ start.
 |                              |
 3  The schematic board [landed] 5  Coral Elves       (the race pipeline, first run)
 |                              |
-4  The army builder            6  Dwarves
+4  The army builder [landed]   6  Dwarves
                                |
                                7  Death magic, then Goblins
                                |
@@ -950,7 +950,7 @@ comes and goes would move New game under the thumb. It asks for confirmation. Th
 
 ---
 
-## Phase 4 — The army builder — **in progress** (4a, 4b landed)
+## Phase 4 — The army builder — **landed**
 
 **Deliverable.** A screen that builds a `BuiltForce`, in two modes over one component:
 - **Full**: every die in the data, any quantity.
@@ -1010,7 +1010,7 @@ them. The engine does not change beyond one pure generator.
 |---|---|
 | **4a** (landed) | **The model, no screen.** `Collection` and its loader (`src/data/collections.ts`), the full collection, the "sorry 12" fixture in `data/collections/`, `forceProblems(collection, cap, force)` in `src/ui/game/builder.ts`, and `rollForce(budget, pool, rng)` in `force.ts`: one legal force of any size, single-species or mixed, for the AI's side |
 | **4b** (landed) | **The builder screen.** Full and limited modes over one component, the three armies with a running total and the half-force line, the Home Terrain and Frontier proposal with their faces, the dragons; built forces kept per viewer |
-| **4c** | **The start screen.** Your side from a preset or a built force; the AI's from a preset or a random force of the same or a chosen size; "unequal on purpose" said out loud; the exit criterion played in the browser |
+| **4c** (landed) | **The start screen.** Your side from a preset or a built force; the AI's from a preset or a random force of the same or a chosen size; "unequal on purpose" said out loud; the exit criterion played in the browser |
 
 **Decided before 4a:**
 - **A problem list, not a first problem.** `builtForceProblem` returns the first thing wrong,
@@ -1105,6 +1105,54 @@ editing, fits 375px with no sideways scroll, and "Look at dice" opens the inspec
   between the two. Left as is until someone builds a 36 on a phone and minds.
 - **No warning about unsaved changes** on Back, and no DOM test, by the project's rule; the logic
   is in `builder.ts` and `forceStore.ts`, tested in node.
+
+### What 4c found
+
+UI only: `newGame.ts`, the start screen, and one button in the builder. Both golden corpora replay
+byte-identical and unregenerated, and `SAVE_VERSION` does not move -- saving is off, and a record of
+a game against a random force is an ordinary built-force record.
+
+**1. The question 4a left open: the random opponent is rolled before setup, not inside it.** Inside
+would have meant a `ForceSpec` kind for "one side built, one side rolled", a log entry for it (the
+`forces_drawn` entry has one health for both sides), and a fuzz counter and a log line for that
+entry -- engine surface for a playtest convenience. Before setup, it is `rollForce` in `newGame.ts`
+and a built force in the record, which replays without it.
+- **It draws from the game's seed XOR a salt**, not the seed itself. "The same seed and the same
+  forces replay the same game" stays true, a random opponent included, and setup's roll-off does not
+  read the very numbers the force was drawn from. A test checks both: same seed, same force; and not
+  the force the unsalted stream gives.
+
+**2. Two presets stay a `named` spec.** Converting every side to a built force would have been one
+path, and would have changed every preset game's record to spell its armies out. A preset beside a
+kept or rolled force goes in as its armies; two presets are named, as before.
+
+**3. "On purpose" is a checkbox that appears only while the sizes differ.** A problem carries both
+healths (`SetupChoice.health`), which is how the screen knows to ask. Ticking it is remembered while
+the player changes sides, so it does not vanish from under the pointer when the sizes happen to
+match for a moment.
+
+**4. The builder hands its force over: "Keep and play it".** Not in the plan, but without it a
+build ended at Back, then finding the force again in a list of names on the start screen. It keeps
+the force and returns with it picked as your side. Only a ready force, since Start would refuse it.
+
+**5. The exit criterion, checked two ways.** Headless in `newGame.test.ts`: the mixed 12 kept from
+sorry-12 and a 36 from the full collection, set up exactly as the screen sets them up against a
+random force of their size, both played to a win by greedy on both seats (about 125-150 decisions
+and 17-29 combats each). In the browser: the mixed 12 against a rolled mixed 12 opened on its pinned
+Swampland · City with its Feyland · Temple offered at the roll-off, and a 36 built tap by tap in the
+full collection, taken to the start screen by "Keep and play it", opened against a rolled 36 with two
+dragons a side drawn. The start screen fits 375px and scrolls.
+
+**Deliberately not done.**
+- **No human-played game to the end in the browser.** The browser runs were played a few decisions
+  in; playing either to the end is the live playtest this phase exists to make possible. The
+  headless run is what says they end.
+- **A random opponent cannot be seen before Start.** It is drawn from the seed Start rolls, so a
+  preview would be a different force whenever the box is empty. Type a seed to repeat one.
+- **The terminal has no random-opponent option.** `--forces built:<file>` plays any pair a file
+  names, and the terminal is the fuzz's and the watcher's client, not a playtester's.
+- **`?forces=` names no kept force.** A kept force lives in one browser; a link that names one is a
+  link that works nowhere else.
 
 ---
 

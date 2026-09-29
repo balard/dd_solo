@@ -1525,3 +1525,17 @@ body {
 .builder-kept-name { flex: 1 1 200px; font-size: var(--fs-md); }
 .builder-kept .choice { flex: none; min-width: 0; }
 .builder-section .choices { margin-bottom: 16px; }
+
+/* The random opponent's two settings side by side, and the "on purpose" question
+   (v2 Phase 4c). */
+.new-game-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.new-game-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  margin: -4px 0 14px;
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+.new-game-check input { width: 18px; height: 18px; min-height: 0; padding: 0; margin: 2px 0 0; flex: none; }
