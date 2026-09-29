@@ -1,0 +1,229 @@
+# Goblins unit die faces.
+# Source: Dice Commander die info, supplied as a plain list (values only, no face-art paths),
+# transcribed 2026-09-28.
+#
+# NOT IMPORTED YET. This species has no entry in tools/species.py, so import_faces.py never
+# reads this file and nothing in the game can see these dice. It is stored ahead of the
+# species phase that needs it (PLAN-V2.md, Risks: 'transcribe one species ahead').
+#
+# Face 1 is the ID face, added here: the source lists the other faces only. Its count is the
+# unit's health, 4 on a monster (invariant 7). The monster faces carry no count in the source
+# and are written as 4: right for every normal icon (invariant 7), but an SAI's count can be
+# its X instead -- Firewalkers' Gorgon prints '2 Flame' -- so a monster SAI's 4 is unconfirmed.
+# Other faces are in the source's order. Headers are '<class>-<size>' / 'monster-<name>',
+# with the class lines as the source names them; the v4.01 roster is p. 82.
+# Anything marked TODO disagrees with the shape of a die and needs checking against one.
+# Format: see treefolk.faces.txt and data/ICONS.md.
+
+# ---- Heavy Melee ----
+
+# Marauder -- large, 3 health
+heavy-large
+3 ID
+2 Maneuver
+4 Melee
+3 Melee
+3 Save
+4 Smite
+
+# Cutthroat -- medium, 2 health
+heavy-medium
+2 ID
+2 Save
+2 Melee
+2 Melee
+3 Maneuver
+2 Melee
+
+# Thug -- small, 1 health
+heavy-small
+1 ID
+1 Save
+1 Melee
+1 Melee
+1 Maneuver
+2 Melee
+
+# ---- Light Melee ----
+
+# Filcher -- large, 3 health
+light-large
+3 ID
+3 Maneuver
+3 Melee
+3 Melee
+3 Save
+4 Counter
+
+# Ambusher -- medium, 2 health
+light-medium
+2 ID
+3 Melee
+3 Maneuver
+2 Maneuver
+2 Save
+2 Missile
+
+# Mugger -- small, 1 health
+light-small
+1 ID
+1 Melee
+1 Maneuver
+1 Maneuver
+2 Melee
+1 Save
+
+# ---- Missile ----
+
+# Deadeye -- large, 3 health
+missile-large
+3 ID
+2 Melee
+4 Missile
+3 Missile
+3 Save
+4 Bullseye
+
+# Slingman -- medium, 2 health
+missile-medium
+2 ID
+2 Melee
+3 Missile
+3 Missile
+2 Maneuver
+2 Save
+
+# Pelter -- small, 1 health
+missile-small
+1 ID
+1 Save
+1 Missile
+2 Missile
+1 Save
+1 Maneuver
+
+# ---- Cavalry ----
+
+# Leopard Rider -- large, 3 health
+cavalry-large
+3 ID
+3 Missile
+3 Rend
+3 Rend
+3 Save
+4 Melee
+
+# Wolf Rider -- medium, 2 health
+cavalry-medium
+2 ID
+2 Melee
+3 Maneuver
+3 Maneuver
+2 Melee
+2 Save
+
+# Wardog Rider -- small, 1 health
+cavalry-small
+1 ID
+1 Melee
+2 Maneuver
+1 Maneuver
+1 Melee
+1 Save
+
+# ---- Magic ----
+
+# Death Mage -- large, 3 health
+magic-large
+3 ID
+2 Save
+4 Magic
+3 Magic
+3 Maneuver
+4 Cantrip
+
+# Hedge Wizard -- medium, 2 health
+magic-medium
+2 ID
+2 Save
+3 Magic
+3 Magic
+2 Maneuver
+2 Magic
+
+# Trickster -- small, 1 health
+magic-small
+1 ID
+1 Melee
+1 Magic
+1 Magic
+1 Maneuver
+2 Magic
+
+# ---- Monsters ----
+
+# Cannibal -- monster, 4 health
+monster-cannibal
+4 ID
+4 Swallow
+4 Save
+4 Stun
+4 Melee
+4 Save
+4 Maneuver
+4 Net
+4 Surprise
+4 Sleep
+
+# Death Naga -- monster, 4 health
+monster-death-naga
+4 ID
+4 Maneuver
+4 Magic
+4 Poison
+4 Melee
+4 Save
+4 Poison
+4 Magic
+4 Maneuver
+4 Melee
+
+# Harpy -- monster, 4 health
+# listed as 'Harpies'; 'Harpy' is the v4.01 roster's spelling
+monster-harpy
+4 ID
+4 Fly
+4 Save
+4 Melee
+4 Fly
+4 Melee
+4 Screech
+4 Melee
+4 Screech
+4 Fly
+
+# Shambler -- monster, 4 health
+monster-shambler
+4 ID
+4 Save
+4 Melee
+4 Save
+4 Smother
+4 Smother
+4 Melee
+4 Save
+4 Melee
+4 Smite
+
+# Troll -- monster, 4 health
+monster-troll
+4 ID
+4 Regenerate
+4 Melee
+4 Save
+4 Smite
+4 Save
+4 Melee
+4 Regenerate
+4 Maneuver
+4 Smite

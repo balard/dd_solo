@@ -1,0 +1,232 @@
+# Amazons unit die faces.
+# Source: Dice Commander die info, supplied as a plain list (values only, no face-art paths),
+# transcribed 2026-09-28.
+#
+# NOT IMPORTED YET. This species has no entry in tools/species.py, so import_faces.py never
+# reads this file and nothing in the game can see these dice. It is stored ahead of the
+# species phase that needs it (PLAN-V2.md, Risks: 'transcribe one species ahead').
+#
+# Face 1 is the ID face, added here: the source lists the other faces only. Its count is the
+# unit's health, 4 on a monster (invariant 7). The monster faces carry no count in the source
+# and are written as 4: right for every normal icon (invariant 7), but an SAI's count can be
+# its X instead -- Firewalkers' Gorgon prints '2 Flame' -- so a monster SAI's 4 is unconfirmed.
+# Other faces are in the source's order. Headers are '<class>-<size>' / 'monster-<name>',
+# with the class lines as the source names them; the v4.01 roster is p. 68.
+# Anything marked TODO disagrees with the shape of a die and needs checking against one.
+# Format: see treefolk.faces.txt and data/ICONS.md.
+
+# ---- Heavy Melee ----
+
+# War Chief -- large, 3 health
+# listed as 'Warlord'; 'War Chief' is the v4.01 roster's spelling
+heavy-large
+3 ID
+2 Maneuver
+4 Melee
+3 Melee
+3 Save
+4 Smite
+
+# Warrior -- medium, 2 health
+heavy-medium
+2 ID
+2 Save
+2 Melee
+2 Melee
+2 Maneuver
+3 Melee
+
+# Soldier -- small, 1 health
+# the source line ended in a stray 'Amazonian Heavy', dropped
+heavy-small
+1 ID
+1 Save
+1 Melee
+1 Melee
+1 Maneuver
+2 Melee
+
+# ---- Light Melee ----
+
+# Harbinger -- large, 3 health
+light-large
+3 ID
+3 Maneuver
+3 Melee
+3 Melee
+3 Save
+4 Counter
+
+# Envoy -- medium, 2 health
+light-medium
+2 ID
+3 Melee
+3 Maneuver
+2 Maneuver
+2 Missile
+2 Save
+
+# Runner -- small, 1 health
+light-small
+1 ID
+1 Melee
+2 Maneuver
+1 Maneuver
+1 Missile
+1 Save
+
+# ---- Missile ----
+
+# Spearer -- large, 3 health
+missile-large
+3 ID
+2 Melee
+4 Missile
+3 Missile
+3 Save
+4 Bullseye
+
+# Javelineer -- medium, 2 health
+missile-medium
+2 ID
+2 Save
+3 Missile
+3 Missile
+2 Maneuver
+2 Melee
+
+# Darter -- small, 1 health
+missile-small
+1 ID
+1 Save
+2 Missile
+1 Missile
+1 Maneuver
+1 Melee
+
+# ---- Cavalry ----
+
+# War Driver -- large, 3 health
+cavalry-large
+3 ID
+2 Missile
+3 Trample
+3 Trample
+3 Save
+4 Melee
+
+# Battle Rider -- medium, 2 health
+cavalry-medium
+2 ID
+2 Melee
+3 Maneuver
+3 Maneuver
+2 Melee
+2 Save
+
+# Charioteer -- small, 1 health
+cavalry-small
+1 ID
+2 Melee
+1 Maneuver
+1 Maneuver
+1 Save
+1 Maneuver
+
+# ---- Magic ----
+
+# Oracle -- large, 3 health
+magic-large
+3 ID
+2 Save
+5 Magic
+4 Magic
+2 Maneuver
+3 Cantrip
+
+# Visionary -- medium, 2 health
+magic-medium
+2 ID
+1 Save
+4 Magic
+3 Magic
+2 Maneuver
+2 Magic
+
+# Seer -- small, 1 health
+magic-small
+1 ID
+1 Save
+1 Magic
+1 Magic
+1 Maneuver
+2 Magic
+
+# ---- Monsters ----
+
+# Centaur -- monster, 4 health
+monster-centaur
+4 ID
+4 Maneuver
+4 Missile
+4 Kick
+4 Melee
+4 Melee
+4 Kick
+4 Missile
+4 Maneuver
+4 Trample
+
+# Chimera -- monster, 4 health
+# TODO: Flame written as 4; the Gorgon prints '2 Flame', so check this die
+monster-chimera
+4 ID
+4 Melee
+4 Smite
+4 Rend
+4 Melee
+4 Save
+4 Flame
+4 Save
+4 Fly
+4 Melee
+
+# Hydra -- monster, 4 health
+monster-hydra
+4 ID
+4 Melee
+4 Save
+4 Melee
+4 Save
+4 Double Strike
+4 Save
+4 Double Strike
+4 Save
+4 Melee
+
+# Medusa -- monster, 4 health
+monster-medusa
+4 ID
+4 Melee
+4 Stone
+4 Melee
+4 Save
+4 Melee
+4 Maneuver
+4 Melee
+4 Stone
+4 Maneuver
+
+# Nightmare -- monster, 4 health
+# TODO: the source lists 8 faces besides the ID, a d10 needs 9; the missing face is 'TODO'
+monster-nightmare
+4 ID
+4 Trample
+4 Trample
+4 Firewalking
+4 Melee
+4 Fly
+4 Maneuver
+4 Firebreath
+4 Save
+TODO
