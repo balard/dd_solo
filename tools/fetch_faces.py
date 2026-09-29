@@ -135,6 +135,30 @@ FACE_ART_VARIANTS = {
     ("treefolk.nymph", "MANEUVER"): 1,
     ("treefolk.naiad", "MANEUVER"): 1,
     ("treefolk.lady_nereid", "MANEUVER"): 1,
+    # Coral Elves (v2 Phase 5g), from the dice's owner's notes beside the transcription
+    # (data/raw/coral_elves.faces.txt): maneuver variant 1 for the heavy and light melee
+    # lines, the missile line, the Evoker and the monsters; variant 2 for the cavalry
+    # line and the Conjurer. Fly variant 1 on the Eagle Knight, Gryphon and Sprite Swarm;
+    # variant 2 on the Leviathan. Every other Coral Elves face has one image.
+    ("coral_elves.fighter", "MANEUVER"): 1,
+    ("coral_elves.trooper", "MANEUVER"): 1,
+    ("coral_elves.guard", "MANEUVER"): 1,
+    ("coral_elves.courier", "MANEUVER"): 1,
+    ("coral_elves.herald", "MANEUVER"): 1,
+    ("coral_elves.bowman", "MANEUVER"): 1,
+    ("coral_elves.archer", "MANEUVER"): 1,
+    ("coral_elves.sharpshooter", "MANEUVER"): 1,
+    ("coral_elves.evoker", "MANEUVER"): 1,
+    ("coral_elves.coral_giant", "MANEUVER"): 1,
+    ("coral_elves.leviathan", "MANEUVER"): 1,
+    ("coral_elves.tako", "MANEUVER"): 1,
+    ("coral_elves.horseman", "MANEUVER"): 2,
+    ("coral_elves.knight", "MANEUVER"): 2,
+    ("coral_elves.conjurer", "MANEUVER"): 2,
+    ("coral_elves.eagle_knight", "SAI:Fly"): 1,
+    ("coral_elves.gryphon", "SAI:Fly"): 1,
+    ("coral_elves.sprite_swarm", "SAI:Fly"): 1,
+    ("coral_elves.leviathan", "SAI:Fly"): 2,
 }
 
 # For a name the generator's rule cannot reach at all. Ashbringer is a *large* die,
@@ -147,9 +171,16 @@ FACE_ART_OVERRIDES = {
 }
 
 
+def remote_species(species_id):
+    """The remote's folder for a species: its id with hyphens. `coral_elves` is
+    `coral-elves/` there (v2 Phase 5g) -- the first species whose id has a separator, so
+    the first place the two names differ."""
+    return species_id.replace("_", "-")
+
+
 def unit_candidates(unit, face):
     """Remote paths to try for one unit face, best guess first."""
-    species = unit["species"]
+    species = remote_species(unit["species"])
     match = FACE_RE.match(face)
     if not match:
         return []

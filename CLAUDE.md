@@ -178,11 +178,13 @@ the dice and the opponent.
 > Phase 4**: the start screen plays a kept force, against a preset, a kept force or a random force of
 > the same or a chosen size, and asks before it lets two sizes differ.
 
-> **v2 Phase 5 (Coral Elves) is under way, and the Coral Elves are playable.** 5a landed the data,
-> behind `src/engine/playable.ts`; 5b Hypnotic Glare's anchored duration; 5c all six SAIs; 5d the
-> race draw for any number of species and Coastal Dodge, which flipped them playable. Defensive
-> Volley (5d's last part), the two spells, presets and art are left. Eight more species' faces sit
-> in `data/raw/` unimported, for later phases.
+> **v2 Phase 5 (Coral Elves) has landed: a third species, playable everywhere.** 5a the data, behind
+> `src/engine/playable.ts`; 5b Hypnotic Glare's anchored duration; 5c all six SAIs (Tail, Entangle,
+> Swallow, Ferry, Wave, Hypnotic Glare); 5d a race draw for any number of species, Coastal Dodge
+> (which flipped them playable) and Defensive Volley, the first non-melee counter-attack; 5e
+> Blizzard and Deluge; 5f a starter and a bestiary preset; 5g the art resolver. House rules are in
+> `RULES-V0.md` section 17, and each slice's findings under Phase 5 in `PLAN-V2.md`. Eight more
+> species' faces sit in `data/raw/` unimported, for later phases.
 
 ## Read these first
 

@@ -1288,12 +1288,13 @@ spells fired at least once. A starter preset of the species plays a full game ag
 the browser. A mixed force containing it plays a full game. The V0 goldens are untouched, and the
 V1 goldens move only with a written reason (the riposte slice in Dwarves is the one expected).
 
-## Phase 5 — Coral Elves — in progress
+## Phase 5 — Coral Elves — **landed**
 
-5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c has landed: all six SAIs. 5d has
+All seven slices have landed. The art resolver knows the Coral Elves; running `npm run art` to
+mirror their images is the owner's step. 5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c has landed: all six SAIs. 5d has
 landed: the race draw, Coastal Dodge (which made the Coral Elves playable), and Defensive Volley.
 5e has landed: Blizzard and Deluge. 5f has landed: a starter and a bestiary preset, and the
-greedy checks. 5g (art) is left.
+greedy checks. 5g has landed: the art resolver.
 
 ### What 5a found
 
@@ -1515,6 +1516,23 @@ finish, with no error. A mixed force containing Coral Elves plays in one live-fu
 Coastal Dodge were taught there in 5c and 5d), the free move and the one-unit target were already
 decisions it answered, and it counter-attacks whenever offered, a volley included. Whether it plays
 the Coral Elves *well* is a v3 question.
+
+### What 5g found
+
+**1. The species id and the remote's folder differ for the first time.** `coral_elves` is
+`coral-elves/` on Dice Commander; Treefolk and Firewalkers have no separator, so the resolver had
+never had to say which name it meant. `remote_species` says it, and a later species with a
+two-word name inherits the rule.
+
+**2. The owner's notes are the pins.** Coral Elves print maneuver and fly in two images each, split
+by what the creature is (the notes beside the transcription): maneuver 1 for the melee and missile
+lines, the Evoker and the monsters, 2 for the cavalry and the Conjurer; fly 1 for the Eagle Knight,
+Gryphon and Sprite Swarm, 2 for the Leviathan. Pinned in `FACE_ART_VARIANTS` before the first run,
+rather than waiting for the resolver to report them as ambiguous.
+
+**Deliberately not done: the download.** `npm run art` fetches SFR's images into gitignored
+folders, which is the owner's call to make; the candidates were checked offline against the paths in
+the notes. The app draws the class shapes until then (invariant 8).
 
 ---
 
