@@ -8,7 +8,7 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0, 1, 2 and 3 have landed** (Phase 3 as slices 3a to 3e), each with its findings below;
+of work*. **Phases 0, 1, 2 and 3 have landed** (Phase 3 as slices 3a to 3e), and Phase 4 is under way (4a), each with its findings below;
 the rest is still a draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
@@ -950,7 +950,7 @@ comes and goes would move New game under the thumb. It asks for confirmation. Th
 
 ---
 
-## Phase 4 — The army builder
+## Phase 4 — The army builder — **in progress** (4a landed)
 
 **Deliverable.** A screen that builds a `BuiltForce`, in two modes over one component:
 - **Full**: every die in the data, any quantity.
@@ -1000,6 +1000,67 @@ phase only needs *a* plausible one.
 **Exit criterion.** A mixed 12-health force built in the limited mode and a 36-health force built
 in the full mode both start and play to the end in the browser, against a random AI force of the
 same size.
+
+### Slices
+
+Three, in Phase 3's manner: the rules first where node can test them, then the screens that show
+them. The engine does not change beyond one pure generator.
+
+| Slice | Scope |
+|---|---|
+| **4a** (landed) | **The model, no screen.** `Collection` and its loader (`src/data/collections.ts`), the full collection, the "sorry 12" fixture in `data/collections/`, `forceProblems(collection, cap, force)` in `src/ui/game/builder.ts`, and `rollForce(budget, pool, rng)` in `force.ts`: one legal force of any size, single-species or mixed, for the AI's side |
+| **4b** | **The builder screen.** Full and limited modes over one component, the three armies with a running total and the half-force line, the Home Terrain and Frontier proposal with their faces, the dragons; built forces kept per viewer |
+| **4c** | **The start screen.** Your side from a preset or a built force; the AI's from a preset or a random force of the same or a chosen size; "unequal on purpose" said out loud; the exit criterion played in the browser |
+
+**Decided before 4a:**
+- **A problem list, not a first problem.** `builtForceProblem` returns the first thing wrong,
+  which is right for setup (it throws) and wrong for a builder, where the draft is incomplete for
+  most of its life. `forceProblems` returns every one, each tagged with where it belongs (the
+  force, an army, the terrains, the dragons), so the screen can put each beside its own section.
+  A test holds the two to one statement of p. 8: over the full collection with no cap, a force
+  has no problems exactly when `builtForceProblem` finds none.
+- **Absent is legal only where a draw cannot leave the collection.** Setup draws an unpinned
+  terrain or dragon from the whole data, so a force may leave one unpinned only when the
+  collection owns every die of that kind without limit -- which is the full collection, and no
+  limited one. Stated as that, not as "limited mode", so v3's collections need no mode flag.
+- **The full collection counts `Infinity`.** One type, one `owned(...)`, and arithmetic that
+  needs no case for it. It is built in code, never read from JSON, which cannot hold it.
+- **The AI's force is rolled by the engine's own generator**, which is why `rollForce` sits in
+  `force.ts` beside `drawForce` and `splitForce` rather than in the builder. Whether it is rolled
+  inside `setupGame` (a new `ForceSpec`) or before it (a `BuiltForce` in the record) is 4c's
+  question; either way the draw is the one function.
+
+### What 4a found
+
+No screen, and the engine gained one pure function that setup does not call, so both golden corpora
+replay byte-identical and unregenerated and `SAVE_VERSION` has nothing to be about.
+
+**1. `generateForces`' split is proven only at 24 and 36, and the AI's side can be any size.**
+`repairSplit`'s comment proves the heaviest army lands inside the cap "with a force of at least 24";
+at 13 health the cap is 6 and that proof says nothing, and at 3 or 4 health a draw can come up with
+too few dice to fill three armies. Reusing `generateForces` for the AI's side would have worked at
+every size anybody tried first (12, 24, 36) and thrown out of `setupGame` at the first odd one. So
+`rollForce` checks its own draw with `builtForceProblem` and redraws, bounded, and a test rolls
+every size from 3 to 40 at forty seeds from both pools.
+
+**2. The Home Terrain and the Frontier proposal are two dice, even when they are the same die.**
+The plan's "more copies than owned" was written about units. A force that proposes its own Home
+die as the Frontier needs two copies of it, which a collection of one each refuses and the full
+collection allows.
+
+**3. The plan's `forceProblem` became `forceProblems`, a list with a place per problem**, as
+decided above. It restates p. 8 rather than wrapping `builtForceProblem`, and 2000 random drafts
+(about half of them legal, the rest wrong in every way the generator can manage) hold the two to
+the same answer.
+
+**4. A collection has an `id` and a `name`** beyond the plan's three maps: the builder offers
+more than one, and a registry needs a key.
+
+**Deliberately not done.**
+- **`npm run data` does not check `data/collections/`.** A collection is hand-authored content, like
+  `presets.json`, and is checked at load by `readCollection`, which throws on a die the data does
+  not have. The Python validator knows nothing of presets either.
+- **Nothing reads `forceProblems` or `rollForce` yet.** 4b and 4c are their callers.
 
 ---
 

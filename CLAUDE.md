@@ -167,6 +167,13 @@ the dice and the opponent.
 > an engine action, a game has a client-side clock beside its turn count, and a finished game shows a
 > summary (how it ended, the turn, the time, health left). `?forces=mixed-12` starts the 12-health
 > example. Both golden corpora are still byte-identical and unregenerated.
+>
+> **v2 Phase 4 (the army builder) is under way, in three slices; 4a has landed: the model, no
+> screen.** A `Collection` is what a player owns (`src/data/collections.ts`): the full one counts
+> every die at `Infinity`, and `data/collections/sorry-12.json` is the first limited one.
+> `forceProblems(collection, cap, force)` in `builder.ts` lists everything wrong with a draft, each
+> tagged with where it belongs, and `rollForce(budget, pool, rng)` in `force.ts` rolls the AI's
+> side at any size. 4b is the builder screen, 4c the start screen.
 
 ## Read these first
 

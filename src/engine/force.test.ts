@@ -3,7 +3,17 @@ import { describe, expect, it } from 'vitest'
 import { SPECIES, terrainDie, terrainType, unitType, unitsOfSpecies } from '../data/load'
 import { PRESET_ARMY_NAMES, maxArmyHealth } from '../data/presets'
 
-import { FORCE_SIZES, drawForce, generateForces, repairSplit, splitForce, type BuiltForce } from './force'
+import {
+  FORCE_SIZES,
+  builtForceHealth,
+  builtForceProblem,
+  drawForce,
+  generateForces,
+  repairSplit,
+  rollForce,
+  splitForce,
+  type BuiltForce,
+} from './force'
 import { rngFrom } from './rng'
 import { setupGame, STARTER_FORCES } from './setup'
 import { TERRAIN_SLOTS, armyAt, forceSpecies, opponentOf, unitsOf, type PlayerId } from './types'
@@ -136,6 +146,58 @@ describe('generateForces', () => {
     }
     // Both sizes turn up, or the draw is not really drawing.
     expect([...sizes].sort((a, b) => a - b)).toEqual([...FORCE_SIZES])
+  })
+})
+
+/**
+ * The AI's side against a built force (v2 Phase 4): any size, not only 24 or 36, so the
+ * split has to be checked rather than proven -- see `rollForce`.
+ */
+describe('rollForce', () => {
+  const speciesIn = (force: BuiltForce) =>
+    new Set(PRESET_ARMY_NAMES.flatMap((name) => force.armies[name]).map((id) => unitType(id).species))
+
+  it('rolls a legal force of exactly the size asked for, at every size from 3 to 40', () => {
+    for (let budget = 3; budget <= 40; budget++) {
+      for (let seed = 1; seed <= 40; seed++) {
+        for (const pool of [{ kind: 'mixed' }, { kind: 'species', species: 'treefolk' }] as const) {
+          const [force] = rollForce(budget, pool, rngFrom(seed))
+          const where = `budget ${budget} seed ${seed} ${pool.kind}`
+          expect(builtForceHealth(force), where).toBe(budget)
+          expect(builtForceProblem(force), where).toBeNull()
+        }
+      }
+    }
+  })
+
+  it('draws from its pool: one species, or any', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      expect(speciesIn(rollForce(24, { kind: 'species', species: 'firewalkers' }, rngFrom(seed))[0])).toEqual(
+        new Set(['firewalkers']),
+      )
+    }
+    const mixed = Array.from({ length: 20 }, (_, seed) => speciesIn(rollForce(24, { kind: 'mixed' }, rngFrom(seed))[0]))
+    expect(mixed.some((s) => s.size === 2)).toBe(true)
+  })
+
+  it('is a pure function of the stream, and moves it on', () => {
+    const [a, afterA] = rollForce(17, { kind: 'mixed' }, rngFrom(3))
+    const [b, afterB] = rollForce(17, { kind: 'mixed' }, rngFrom(3))
+    expect(a).toEqual(b)
+    expect(afterA).toEqual(afterB)
+    expect(afterA).not.toEqual(rngFrom(3))
+  })
+
+  it('refuses a size three armies cannot be made of', () => {
+    expect(() => rollForce(2, { kind: 'mixed' }, rngFrom(1))).toThrow(/at least three dice/)
+    expect(() => rollForce(12.5, { kind: 'mixed' }, rngFrom(1))).toThrow()
+  })
+
+  it('starts a game against a force of another size', () => {
+    const [small] = rollForce(12, { kind: 'mixed' }, rngFrom(8))
+    const [large] = rollForce(24, { kind: 'species', species: 'treefolk' }, rngFrom(9))
+    const state = setupGame({ seed: 5, forces: { kind: 'built', forces: { p1: small, p2: large } } })
+    expect(validateState(state)).toEqual([])
   })
 })
 

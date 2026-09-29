@@ -325,6 +325,47 @@ export function splitForce(
   return [repairSplit(ids), state] as const
 }
 
+/** What `rollForce` draws from: one species' dice, or every die in the data. */
+export type ForcePool = { readonly kind: 'species'; readonly species: string } | { readonly kind: 'mixed' }
+
+/** Whole draws `rollForce` makes before it gives up on a budget. */
+const MAX_FORCE_ATTEMPTS = 50
+
+/**
+ * One force of exactly `budget` health, units then split, from either pool (v2 Phase 4):
+ * the AI's side against a force somebody built, which may be any size.
+ *
+ *     units -> split   (again, until the force is legal)
+ *
+ * `generateForces` only ever rolls 24 or 36, where `repairSplit` provably lands inside
+ * the cap. At an arbitrary size it need not: 13 health caps an army at 6, and a small
+ * budget can draw too few dice to fill three armies at all. So the whole draw is checked
+ * by `builtForceProblem` -- the one statement of a legal force -- and redrawn from where
+ * the last attempt left the stream, a bounded number of times. A budget no draw can
+ * satisfy throws, naming it, rather than handing setup a force it will refuse.
+ */
+export function rollForce(
+  budget: number,
+  pool: ForcePool,
+  rng: RngState,
+): readonly [BuiltForce, RngState] {
+  if (!Number.isInteger(budget) || budget < 3) {
+    throw new Error(`cannot roll a ${budget}-health force: three armies need at least three dice`)
+  }
+  const dice = pool.kind === 'mixed' ? ALL_UNITS : unitsOfSpecies(pool.species)
+  const name = pool.kind === 'mixed' ? 'any species' : pool.species
+
+  let state = rng
+  for (let attempt = 0; attempt < MAX_FORCE_ATTEMPTS; attempt++) {
+    const [ids, afterUnits] = drawFromPool(dice, name, budget, state)
+    const [armies, afterSplit] = splitForce(ids, afterUnits)
+    state = afterSplit
+    const force: BuiltForce = { armies }
+    if (builtForceProblem(force) === null) return [force, state] as const
+  }
+  throw new Error(`no legal ${budget}-health force of ${name} in ${MAX_FORCE_ATTEMPTS} draws`)
+}
+
 /**
  * The whole draw, in the order the RNG stream runs it:
  *

@@ -1,0 +1,25 @@
+{
+  "_comment": "A limited collection (v2 Phase 4): what a player owns, not what they field. 'Sorry 12' is the start of the v3 run in miniature -- 14 health of small and medium dice across both species, one dragon and three terrains -- and the smallest real test of the builder's limited mode. Two health over the 12-health cap on purpose, so building from it is a choice and not a transcription. Its contents are a v3 design question; this is only a plausible one. Hand-authored; no importer touches this directory. Counts are copies owned. Loaded and checked by src/data/collections.ts.",
+  "name": "Sorry 12",
+  "units": {
+    "treefolk.oakling": 2,
+    "treefolk.oak": 1,
+    "treefolk.willowling": 1,
+    "treefolk.nymph": 1,
+    "treefolk.pineling": 1,
+    "treefolk.hamadryad": 1,
+    "firewalkers.guardian": 1,
+    "firewalkers.explorer": 1,
+    "firewalkers.firestarter": 1,
+    "firewalkers.sunburst": 1,
+    "firewalkers.adventurer": 1
+  },
+  "dragons": {
+    "earth_drake": 1
+  },
+  "terrains": {
+    "swampland_city": 1,
+    "wasteland_tower": 1,
+    "feyland_temple": 1
+  }
+}
