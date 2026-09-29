@@ -28,6 +28,8 @@ import {
   saveEffects,
   saveRollDice,
   terrainAction,
+  waveIn,
+  waveModifier,
   type AttackOutcome,
   type AttackSpec,
 } from './combat'
@@ -725,6 +727,7 @@ function withSaves(combat: CombatState, saves: PendingSaves, next: Partial<Pendi
       dice: merged.dice,
       ...(merged.tasks !== undefined && merged.tasks.length > 0 ? { tasks: merged.tasks } : {}),
       ...(merged.bonus !== undefined && merged.bonus > 0 ? { bonus: merged.bonus } : {}),
+      ...(merged.wave !== undefined && merged.wave > 0 ? { wave: merged.wave } : {}),
     },
   }
 }
@@ -1144,7 +1147,7 @@ function rollSaves(state: GameState, isCounter: boolean): GameState {
     })
   }
 
-  const [saves, rng] = rollSaveFaces(state, spec, state.rng)
+  const [saves, rng] = rollSaveFaces(state, spec, state.rng, attack)
   // The queue waits for the Flashfire pause, for `beginExchange`'s reason: a save die
   // thrown again would leave it describing faces that are gone.
   return withTurn(
@@ -3768,7 +3771,7 @@ function applyContest(state: GameState, contest: boolean): GameState {
   const [marcherFaces, afterMarcher] = rollFaces(marcher.units, state.rng)
   const [marcherDice, afterMarcherSweep] = rerollSweep(
     marcherFaces,
-    maneuverSpec(marcher.modifiers),
+    maneuverSpec(marcher.modifiers, MARCHING_ROLL),
     state.ruleSet,
     afterMarcher,
   )
@@ -3799,10 +3802,10 @@ function applyContest(state: GameState, contest: boolean): GameState {
   return finishContest(rolled, marcherDice, defenderDice)
 }
 
-const maneuverSpec = (modifiers: readonly Modifier[]): RollSpec => ({
+const maneuverSpec = (modifiers: readonly Modifier[], context: RollContext = MANEUVER_ROLL): RollSpec => ({
   kinds: ['maneuver'],
   modifiers,
-  context: MANEUVER_ROLL,
+  context,
 })
 
 /**
@@ -3819,13 +3822,20 @@ function contestTotals(
   const slot = marchingSlot(state)
   const marcher = armyRoll(state, player, slot, 'maneuver')
   const contester = armyRoll(state, opponentOf(player), slot, 'maneuver')
+  const marcherRoll = asResult(
+    resolveFaces(marcherDice, maneuverSpec(marcher.modifiers, MARCHING_ROLL), state.ruleSet),
+    'maneuver',
+  )
+  // Wave, rolled by the marcher: X off the counter-maneuvering army's maneuver results
+  // (v2 Phase 5c). Read off the marcher's own faces, so Rapid Growth's pause and the
+  // decision after it subtract the same number.
+  const wave = waveIn(marcherRoll.effects)
+  const contesterModifiers =
+    wave > 0 ? [...contester.modifiers, waveModifier('maneuver', wave)] : contester.modifiers
   return {
-    marcher: asResult(
-      resolveFaces(marcherDice, maneuverSpec(marcher.modifiers), state.ruleSet),
-      'maneuver',
-    ),
+    marcher: marcherRoll,
     defender: asResult(
-      resolveFaces(defenderDice, maneuverSpec(contester.modifiers), state.ruleSet),
+      resolveFaces(defenderDice, maneuverSpec(contesterModifiers), state.ruleSet),
       'maneuver',
     ),
   }
@@ -3852,7 +3862,12 @@ function finishContest(
   // No SAI that applies to a maneuver roll produces an effect in Phase 1, and a
   // contest has nowhere to put one. Phase 4's Firewalking and Teleport will, so this
   // is what stops them being silently dropped here.
-  expectNoEffects(marcherRoll, 'the maneuver roll of the marching army')
+  // Wave is the one effect a marching maneuver may carry, and `contestTotals` has
+  // already spent it on the other roll.
+  expectNoEffects(
+    { ...marcherRoll, effects: marcherRoll.effects.filter((effect) => effect.kind !== 'wave') },
+    'the maneuver roll of the marching army',
+  )
   expectNoEffects(defenderRoll, 'the roll of the counter-maneuvering army')
 
   // "The highest total wins (the marching army wins a tie)."
@@ -4265,8 +4280,11 @@ function applyMissileTarget(state: GameState, slot: ArmyRef): GameState {
   })
 }
 
-/** Every contested maneuver and the order-of-play roll-off share this. */
+/** Every counter-maneuver and the order-of-play roll-off share this. */
 const MANEUVER_ROLL: RollContext = { purpose: { kind: 'maneuver' }, isCounter: false }
+
+/** The marching army's roll in a contested maneuver: the one Wave reads (v2 Phase 5c). */
+const MARCHING_ROLL: RollContext = { purpose: { kind: 'maneuver', marching: true }, isCounter: false }
 
 function applyCounterAttack(state: GameState, counter: boolean): GameState {
   const defender = opponentOf(state.turn.marching)

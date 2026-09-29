@@ -32,7 +32,7 @@ export function speciesProblem(speciesId: string): string | null {
   }
 
   const missing: string[] = []
-  if (unbuilt.size > 0) missing.push(`the SAIs ${[...unbuilt].sort().join(', ')}`)
+  if (unbuilt.size > 0) missing.push(`the SAI${unbuilt.size > 1 ? 's' : ''} ${[...unbuilt].sort().join(', ')}`)
   if (SPECIES_ABILITIES[speciesId] === undefined) missing.push('its species abilities')
   if (missing.length === 0) return null
   return `${species.name} are not playable yet: ${missing.join(' and ')} are not implemented`

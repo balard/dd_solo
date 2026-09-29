@@ -44,7 +44,13 @@ export type RollPurpose =
   | { readonly kind: 'attack'; readonly action: ActionKind }
   /** `against: null` is any save roll that is not against an attack. */
   | { readonly kind: 'save'; readonly against: ActionKind | null }
-  | { readonly kind: 'maneuver' }
+  /**
+   * `marching` (v2 Phase 5c) says this is the marching army's roll in a contested
+   * maneuver, not a counter-maneuver or the roll-off. Wave is the first SAI that cares:
+   * "during a maneuver roll while marching ... Wave does nothing if rolled during a
+   * countermaneuver". Omitted, never `false`.
+   */
+  | { readonly kind: 'maneuver'; readonly marching?: true }
   /**
    * An army answering a dragon attack (Phase 6). The combination roll this file has
    * been promising since Phase 0b: it counts melee, missile and save at once, so it
@@ -672,6 +678,22 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
    * Firewalking's free move with a bigger boat and no maneuver half: on a maneuver roll
    * Ferry does nothing at all.
    */
+  /**
+   * "During a melee attack, the defending army subtracts X save results. During a
+   * maneuver roll while marching, subtract X from each counter-maneuvering army's
+   * maneuver results. Wave does nothing if rolled during a countermaneuver." (v2 Phase
+   * 5c.)
+   *
+   * X off the *other* army's roll, and no results of its own. A melee attack's Wave
+   * applies to the save roll that answers it -- a counter-attack's too, since that is a
+   * melee attack -- and a marching maneuver's to the contest's other roll.
+   */
+  Wave: (x, ctx) => {
+    const marching = ctx.purpose.kind === 'maneuver' && ctx.purpose.marching === true
+    if (!isAttack(ctx, 'melee') && !marching) return NOTHING
+    return { results: {}, effects: [{ kind: 'wave', amount: x }], reroll: false }
+  },
+
   Ferry: (_x, ctx) => {
     if (ctx.purpose.kind === 'maneuver' || noSideDecision(ctx)) return NOTHING
     return { results: {}, effects: [{ kind: 'free_move', health: FERRY_HEALTH }], reroll: false }
@@ -759,6 +781,10 @@ export const SAI_TEXT: Readonly<Record<string, string>> = {
   Tail:
     'During a dragon or melee attack, Tail generates two melee results. Roll this unit ' +
     'again and apply the new result as well.',
+  Wave:
+    'During a melee attack, the defending army subtracts X save results. During a ' +
+    "maneuver roll while marching, subtract X from each counter-maneuvering army's " +
+    'maneuver results. Wave does nothing if rolled during a countermaneuver.',
 }
 
 /** The SAI names `sai: 'results'` resolves. Anything else on a face is inert. */

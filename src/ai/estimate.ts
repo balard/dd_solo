@@ -65,6 +65,9 @@ export interface ExpectedDie {
   readonly targeted: number
   /** Save results this die rolled, for Flaming Shields to turn into melee. */
   readonly rolledSaves: number
+  /** Wave (v2 Phase 5c): results taken off the *other* army's roll -- its saves when
+   *  this is a melee attack. */
+  readonly wave: number
 }
 
 export interface FaceWorth extends ExpectedDie {
@@ -82,6 +85,7 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
       riposte: 0,
       targeted: 0,
       rolledSaves: face.icon === 'SAVE' ? face.count : 0,
+      wave: 0,
       reroll: false,
     }
   }
@@ -91,6 +95,7 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
   let unsavable = 0
   let riposte = 0
   let targeted = 0
+  let wave = 0
   for (const effect of outcome.effects) {
     switch (effect.kind) {
       case 'unsavable':
@@ -100,7 +105,13 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
         riposte += effect.damage
         break
       case 'target_enemy':
-        targeted += effect.escape === 'none' ? effect.health : effect.health / 2
+        // Swallow's one die has no health budget; the die it takes rolls its ID one
+        // time in six or ten, so it is counted as a likely kill of a middling die.
+        if (effect.one === true) targeted += SWALLOW_WORTH
+        else targeted += effect.escape === 'none' ? effect.health : effect.health / 2
+        break
+      case 'wave':
+        wave += effect.amount
         break
       case 'choke':
         targeted += effect.health / 2
@@ -128,9 +139,13 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
     riposte,
     targeted,
     rolledSaves: outcome.results.save ?? 0,
+    wave,
     reroll: outcome.reroll,
   }
 }
+
+/** What a Swallow is expected to take: one die, which rarely shows its ID. */
+const SWALLOW_WORTH = 2
 
 /**
  * One die type's expected contribution to one roll: the mean over its faces.
@@ -154,6 +169,7 @@ export function expectedDie(
   let riposte = 0
   let targeted = 0
   let rolledSaves = 0
+  let wave = 0
 
   for (const face of faces) {
     const worth = expectedFace(face, resultType, context, ruleSet)
@@ -165,6 +181,7 @@ export function expectedDie(
     riposte += worth.riposte
     targeted += worth.targeted
     rolledSaves += worth.rolledSaves
+    wave += worth.wave
   }
 
   // A die whose every face rerolls would never stop; none in the data does, and a
@@ -178,6 +195,7 @@ export function expectedDie(
     riposte: riposte / divisor,
     targeted: targeted / divisor,
     rolledSaves: rolledSaves / divisor,
+    wave: wave / divisor,
   }
 }
 
@@ -191,6 +209,8 @@ export interface ExpectedRoll {
   readonly unsavable: number
   readonly riposte: number
   readonly targeted: number
+  /** Wave: what this roll takes off the other army's. */
+  readonly wave: number
 }
 
 export interface ExpectedArmyOptions {
@@ -228,6 +248,7 @@ export function expectedArmy(
   let riposte = 0
   let targeted = 0
   let rolledSaves = 0
+  let wave = 0
   // Whose saves Flaming Shields converts: only its own species' dice (v2 Phase 1).
   const shielded = new Set(
     resultType === 'melee' && !context.isCounter
@@ -242,6 +263,7 @@ export function expectedArmy(
     unsavable += die.unsavable
     riposte += die.riposte
     targeted += die.targeted
+    wave += die.wave
     if (shielded.has(unitType(unit.typeId).species)) rolledSaves += die.rolledSaves
   }
 
@@ -253,6 +275,7 @@ export function expectedArmy(
     unsavable,
     riposte,
     targeted,
+    wave,
   }
 }
 
@@ -337,7 +360,9 @@ export function expectedAttack(
   return {
     attack,
     save,
-    damage: Math.max(0, attack.total - save.total) + attack.unsavable + attack.targeted,
+    // A Wave comes off the saves, and never takes them below zero.
+    damage:
+      Math.max(0, attack.total - Math.max(0, save.total - attack.wave)) + attack.unsavable + attack.targeted,
     riposte: save.riposte,
   }
 }

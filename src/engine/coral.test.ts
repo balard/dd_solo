@@ -1,0 +1,126 @@
+/**
+ * The Coral Elves in play (v2 Phase 5): the SAIs and abilities that reach into an
+ * exchange or a contest, driven through the real step machine.
+ *
+ * Swallow, Entangle and Ferry are in `targeting.test.ts` beside the SAIs whose shapes
+ * they reuse; Tail's reroll is in `sai.test.ts` beside Rend's. What lives here is what
+ * is new in kind: Wave, which takes results off the *other* army's roll.
+ *
+ * Boards are hand-built, because the Coral Elves are not playable until the phase has
+ * built everything on their dice (`playable.ts`), and `setupGame` would refuse them.
+ */
+import { describe, expect, it } from 'vitest'
+
+import { unitType } from '../data/load'
+
+import { advance, reduce } from './reduce'
+import { rollDice, type RngState } from './rng'
+import {
+  V0_RULES,
+  type GameState,
+  type LogEntry,
+  type RuleSet,
+  type TerrainSlot,
+  type TurnState,
+  type UnitInstance,
+} from './types'
+import { validateState } from './validate'
+
+const RULES: RuleSet = { ...V0_RULES, sai: 'full', dua: 'active' }
+
+/** Leviathan: 5 Wave, 6 `4 SAVE`. Knight: 1 `2 MELEE`. Willow: 1 `3 SAVE`, 2 and 3
+ *  `2 MANEUVER`. */
+const LEVIATHAN = 'coral_elves.leviathan'
+const KNIGHT = 'coral_elves.knight'
+const WILLOW = 'treefolk.willow'
+const WAVE = 5
+const KNIGHT_MELEE = 1
+const WILLOW_SAVE = 1
+const WILLOW_MANEUVER = 2
+
+/** The RNG counter at which these dice, in this order, show these faces. */
+function rngShowing(typeIds: readonly string[], faces: readonly number[]): RngState {
+  const counts = typeIds.map((id) => unitType(id).faces.length)
+  for (let counter = 0; counter < 2_000_000; counter += 1) {
+    const [indices] = rollDice({ seed: 1, counter }, counts)
+    if (faces.every((face, i) => indices[i] === face)) return { seed: 1, counter }
+  }
+  throw new Error(`no counter shows ${typeIds.join(', ')} on faces ${faces.join(', ')}`)
+}
+
+/** p1's dice and p2's dice at the Frontier, with p1 marching and the turn as given. */
+function board(p1: readonly string[], p2: readonly string[], rng: RngState, turn: Partial<TurnState>): GameState {
+  const units: Record<string, UnitInstance> = {}
+  for (const [owner, typeIds] of [['p1', p1], ['p2', p2]] as const) {
+    typeIds.forEach((typeId, i) => {
+      const id = `${owner}:${i}`
+      units[id] = { id, typeId, owner, location: { kind: 'terrain', slot: 'frontier' } }
+    })
+  }
+  const terrain = (slot: TerrainSlot) => ({ slot, dieId: 'highland_tower', face: 6 as const, capturedBy: null })
+  return {
+    ruleSet: RULES,
+    rng,
+    units,
+    effects: [],
+    dragons: {},
+    terrains: { p1_home: terrain('p1_home'), frontier: terrain('frontier'), p2_home: terrain('p2_home') },
+    turn: {
+      marching: 'p1',
+      phase: 'march',
+      marchIndex: 0,
+      marchStep: 'resolve_attack',
+      marchingArmy: 'frontier',
+      armiesMarched: ['frontier'],
+      combat: null,
+      ...turn,
+    },
+    pending: null,
+    log: [],
+    winner: null,
+  }
+}
+
+/** Paused where p2 decides whether to contest p1's maneuver at the Frontier. */
+const contestable = (p1: readonly string[], p2: readonly string[], rng: RngState): GameState => ({
+  ...board(p1, p2, rng, { marchStep: 'contest_maneuver' }),
+  pending: { kind: 'contest_maneuver', player: 'p2', slot: 'frontier' },
+})
+
+const logged = <K extends LogEntry['kind']>(state: GameState, kind: K) =>
+  state.log.find((e): e is Extract<LogEntry, { kind: K }> => e.kind === kind)
+
+describe('Wave', () => {
+  it('takes X save results off the defending army in a melee attack', () => {
+    const state = advance(
+      board([LEVIATHAN, KNIGHT], [WILLOW], rngShowing([LEVIATHAN, KNIGHT, WILLOW], [WAVE, KNIGHT_MELEE, WILLOW_SAVE]), {
+        combat: { action: 'melee', targetSlot: 'frontier', damage: 0 },
+      }),
+    )
+    // Two melee against three saves would do nothing; the Wave takes four off the saves.
+    const exchange = logged(state, 'combat_resolved')
+    expect(exchange).toMatchObject({ attackTotal: 2, saveTotal: 0 })
+    expect(exchange?.saveMath?.steps).toContainEqual(expect.objectContaining({ source: 'Wave', delta: -3 }))
+    expect(state.pending).toMatchObject({ kind: 'assign_damage', player: 'p2' })
+    expect(validateState(state)).toEqual([])
+  })
+
+  it('takes X off the counter-maneuvering army when the marcher rolls it', () => {
+    const state = reduce(
+      contestable([LEVIATHAN], [WILLOW, WILLOW], rngShowing([LEVIATHAN, WILLOW, WILLOW], [WAVE, WILLOW_MANEUVER, WILLOW_MANEUVER])),
+      { kind: 'contest_maneuver', contest: true },
+    )
+    // Four maneuver against none would win the contest; less the Wave's four it ties,
+    // and the marcher wins a tie.
+    expect(logged(state, 'maneuver_contested')).toMatchObject({ marcher: 0, defender: 0, marcherWins: true })
+    expect(state.turn.marchStep).toBe('choose_direction')
+  })
+
+  it('does nothing when rolled on a counter-maneuver', () => {
+    const state = reduce(
+      contestable([WILLOW, WILLOW], [LEVIATHAN], rngShowing([WILLOW, WILLOW, LEVIATHAN], [WILLOW_MANEUVER, WILLOW_MANEUVER, WAVE])),
+      { kind: 'contest_maneuver', contest: true },
+    )
+    expect(logged(state, 'maneuver_contested')).toMatchObject({ marcher: 4, defender: 0, marcherWins: true })
+  })
+})

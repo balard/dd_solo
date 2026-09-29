@@ -283,6 +283,13 @@ export interface PendingSaves {
   /** Wild Growth's save share, chosen by the defender. Omitted when nobody chose
    *  any, which is every save roll but a Wild Growth one. */
   readonly bonus?: number
+  /**
+   * Wave (v2 Phase 5c): save results the attack roll takes off this one. Read off the
+   * attack's faces when the save dice are thrown and parked beside them, so the three
+   * readers of a save roll -- the pause, the display and the count -- cannot disagree.
+   * Omitted when no Wave was rolled.
+   */
+  readonly wave?: number
 }
 
 /**

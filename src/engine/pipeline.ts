@@ -250,6 +250,17 @@ export type RollEffectBody =
    * about monster faces.
    */
   | { readonly kind: 'free_move'; readonly health: number }
+  /**
+   * Wave (v2 Phase 5c): X off the *other* army's roll in the same exchange. "During a
+   * melee attack, the defending army subtracts X save results. During a maneuver roll
+   * while marching, subtract X from each counter-maneuvering army's maneuver results."
+   *
+   * The first SAI that modifies a roll it is not part of, with no duration: Galeforce
+   * reaches the other army too, but through `state.effects` and until a turn ends. This
+   * lives only as long as the exchange or the contest, so it rides the parked roll
+   * (`PendingSaves.wave`) or is read straight off the marcher's dice.
+   */
+  | { readonly kind: 'wave'; readonly amount: number }
 
 /** A `RollEffectBody` once `resolveRoll` has stamped it with the die that made it,
  *  so the log can say *which* Fireshadow smote you. */

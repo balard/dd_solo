@@ -387,6 +387,8 @@ export interface SaveRollState {
    * Omitted when nobody chose any, which is every roll but a Wild Growth one.
    */
   readonly bonus?: number
+  /** Wave: save results the attack takes off this roll (`PendingSaves.wave`). */
+  readonly wave?: number
 }
 
 /** What the attack roll was worth, before the defender has rolled anything. */
@@ -394,6 +396,8 @@ export interface AttackFacts {
   readonly attackRoll: RollResult
   readonly unsavable: number
   readonly counterSuppressed: boolean
+  /** Wave: save results this attack takes off the roll that answers it. */
+  readonly wave: number
   /**
    * Whether a save roll happens at all. False for magic, which allows none, and for a
    * zero-result attack, which earns none -- and in both cases no die is rolled, so no
@@ -434,6 +438,7 @@ export function attackFacts(state: GameState, spec: AttackSpec, attack: AttackRo
       'wild_growth',
       'free_move',
       'cantrip',
+      'wave',
     ],
     `a ${spec.action} attack`,
   )
@@ -442,10 +447,21 @@ export function attackFacts(state: GameState, spec: AttackSpec, attack: AttackRo
     attackRoll,
     unsavable: damageFrom(attackRoll.effects, 'unsavable'),
     counterSuppressed: attackRoll.effects.some((e) => e.kind === 'suppress_counter'),
+    wave: waveIn(attackRoll.effects),
     // A Smite-only attack rolls zero melee, earns the defender no save roll, and still
     // kills: the condition is the attack *total*, not the damage.
     savesNeeded: spec.action !== 'magic' && attackRoll.total > 0,
   }
+}
+
+/** Wave's total over a roll's effects: several Waves in one roll combine. */
+export function waveIn(effects: readonly RollEffect[]): number {
+  return effects.reduce((sum, effect) => sum + (effect.kind === 'wave' ? effect.amount : 0), 0)
+}
+
+/** Wave's subtraction as a step-6 modifier, named so the roll can say "− 4 Wave". */
+export function waveModifier(resultType: 'save' | 'maneuver', amount: number): Modifier {
+  return { kind: 'subtract', resultType, amount, source: 'Wave' }
 }
 
 /** The spec the defender's save roll is resolved under, built in one place because
@@ -454,11 +470,14 @@ function saveRollSpec(
   state: GameState,
   spec: AttackSpec,
   bonus: number | undefined,
+  wave = 0,
 ): RollSpec {
   const defenders = armyRoll(state, spec.defender, spec.defenderSlot, 'save')
   return {
     kinds: ['save'],
-    modifiers: defenders.modifiers,
+    // Wave last: it is the attack's, not the board's, so it is not one of the
+    // modifiers `armyRoll` gathers -- but it is a step-6 subtract like any of them.
+    modifiers: wave > 0 ? [...defenders.modifiers, waveModifier('save', wave)] : defenders.modifiers,
     // It is also where Counter and Volley hit back, which is why it needs to know what
     // it is saving against.
     context: { purpose: { kind: 'save', against: spec.action }, isCounter: spec.isCounter },
@@ -479,7 +498,7 @@ export function saveEffects(
   spec: AttackSpec,
   saves: SaveRollState,
 ): readonly RollEffect[] {
-  return resolveFaces(saves.dice, saveRollSpec(state, spec, undefined), state.ruleSet).effects
+  return resolveFaces(saves.dice, saveRollSpec(state, spec, undefined, saves.wave), state.ruleSet).effects
 }
 
 /**
@@ -532,7 +551,7 @@ export function parkedSaveRoll(
   saves: SaveRollState,
 ): RollResult {
   return asResult(
-    resolveFaces(saves.dice, saveRollSpec(state, spec, saves.bonus), state.ruleSet),
+    resolveFaces(saves.dice, saveRollSpec(state, spec, saves.bonus, saves.wave), state.ruleSet),
     'save',
   )
 }
@@ -549,10 +568,15 @@ export function rollSaveFaces(
   state: GameState,
   spec: AttackSpec,
   rng: RngState,
+  /** The attack being answered, for Wave. Every caller in the engine passes it. */
+  attack?: AttackRollState,
 ): readonly [SaveRollState, RngState] {
   const defenders = armyRoll(state, spec.defender, spec.defenderSlot, 'save')
   const [dice, next] = rollFaces(defenders.units, rng)
-  return [{ dice }, next] as const
+  // Wave rides with the dice from the moment they land, so every later reader of this
+  // roll subtracts it.
+  const wave = attack === undefined ? 0 : attackFacts(state, spec, attack).wave
+  return [{ dice, ...(wave > 0 ? { wave } : {}) }, next] as const
 }
 
 /**
@@ -593,7 +617,7 @@ export function finishSaves(
     }
   }
 
-  const rollSpec = saveRollSpec(state, spec, saves.bonus)
+  const rollSpec = saveRollSpec(state, spec, saves.bonus, saves.wave)
   const [swept, afterSweep] = rerollSweep(saves.dice, rollSpec, state.ruleSet, rng)
   const saveRoll = asResult(resolveFaces(swept, rollSpec, state.ruleSet), 'save')
 
@@ -631,6 +655,6 @@ export function resolveAttack(state: GameState, spec: AttackSpec): AttackOutcome
   if (!attackFacts(state, spec, attack).savesNeeded) {
     return finishSaves(state, spec, attack, null, afterAttack)
   }
-  const [saves, afterSaves] = rollSaveFaces(state, spec, afterAttack)
+  const [saves, afterSaves] = rollSaveFaces(state, spec, afterAttack, attack)
   return finishSaves(state, spec, attack, saves, afterSaves)
 }

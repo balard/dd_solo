@@ -350,9 +350,15 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
             case 'maneuver':
               return `${effect.health} health-worth must maneuver or die`
             case 'id':
-              return `${effect.health} health-worth seized — an ID goes to reserves`
+              // Swallow's one die stays and dies unless it shows its ID; Seize's
+              // health-worth goes home on one.
+              return effect.one === true
+                ? 'one die must roll its ID or be swallowed'
+                : `${effect.health} health-worth seized — an ID goes to reserves`
           }
         // eslint-disable-next-line no-fallthrough -- every arm above returns
+        case 'wave':
+          return `${effect.amount} off the other army's roll`
         case 'sleep':
           return 'one die asleep'
         case 'galeforce':

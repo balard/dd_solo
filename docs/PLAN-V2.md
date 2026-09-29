@@ -1291,7 +1291,7 @@ V1 goldens move only with a written reason (the riposte slice in Dwarves is the 
 ## Phase 5 — Coral Elves — in progress
 
 5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c is in progress: Tail, Entangle,
-Swallow and Ferry have landed; Wave and Hypnotic Glare are next.
+Swallow, Ferry and Wave have landed; Hypnotic Glare is next.
 
 ### What 5a found
 
@@ -1383,6 +1383,24 @@ roll; Ferry's reference names no such sentence, so it does nothing there. Its fo
 constant, and the free-move machinery already read the limit off the task.
 
 Both golden corpora byte-identical and unregenerated: no Coral Elf can reach a recorded game.
+
+### What 5c found (Wave)
+
+**1. Wave has no duration, so it cannot ride `state.effects`, and it has two targets in two places.**
+In an exchange it is the attack's and bites the save roll; in a contest it is the marcher's and bites
+the other roll. The save half is `PendingSaves.wave`, written when the save dice land and read by all
+three readers of a save roll (the pause, the display, the count), so none can disagree. The contest
+half is read straight off the marcher's resolved faces in `contestTotals`, which Rapid Growth's pause
+and the decision after it already share.
+
+**2. "While marching" was a question no roll could answer.** Every maneuver roll had one context,
+shared by the marcher, the counter-maneuver and the roll-off. `RollPurpose`'s maneuver member gained
+`marching`, set on the marcher's roll only.
+
+**3. The estimator would have scored a Swallow at nothing** (its `health` is unread) **and a Wave at
+nothing.** A Swallow is now a likely kill of a middling die, and a Wave comes off the expected saves.
+The browser's roll strip described every ID-escape as "seized -- an ID goes to reserves", which
+Swallow is not.
 
 ---
 

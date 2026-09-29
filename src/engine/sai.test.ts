@@ -422,8 +422,8 @@ describe('the rungs of ruleSet.sai', () => {
     // Empty as of Phase 4e, and kept rather than deleted: it is the line a new SAI
     // would be added to, and the count below is what makes adding one a decision.
     // v2 Phase 5a: the Coral Elves' six, transcribed ahead of their handlers. A slice
-    // that builds one moves it out of here: 5c built Tail, Entangle, Swallow and Ferry.
-    const deferred = new Set<string>(['Hypnotic Glare', 'Wave'])
+    // that builds one moves it out of here: 5c built Tail, Entangle, Swallow, Ferry and Wave.
+    const deferred = new Set<string>(['Hypnotic Glare'])
     const live = new Set(LIVE_SAIS)
     const targeting = new Set(TARGETING_SAIS)
 
@@ -437,8 +437,8 @@ describe('the rungs of ruleSet.sai', () => {
     // all quote it, and nothing else would notice it going stale. Each Phase 4 slice
     // moves names from `deferred` into `TARGETING_SAIS` and edits these two numbers.
     expect(live.size, 'SAIs live under sai: results').toBe(15)
-    expect(targeting.size, 'targeting SAIs built so far').toBe(14)
-    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(2)
+    expect(targeting.size, 'targeting SAIs built so far').toBe(15)
+    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(1)
     expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(0)
 
     for (const name of names) {

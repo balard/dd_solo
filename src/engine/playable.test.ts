@@ -17,7 +17,7 @@ describe('playable species', () => {
     expect(PLAYABLE_SPECIES.map((s) => s.id).sort()).toEqual(['firewalkers', 'treefolk'])
     expect(speciesProblem('treefolk')).toBeNull()
     expect(speciesProblem('coral_elves')).toBe(
-      'Coral Elves are not playable yet: the SAIs Hypnotic Glare, Wave ' +
+      'Coral Elves are not playable yet: the SAI Hypnotic Glare ' +
         'and its species abilities are not implemented',
     )
     expect(unitPlayable('coral_elves.tako')).toBe(false)
