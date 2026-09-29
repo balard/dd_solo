@@ -971,6 +971,14 @@ sub-roll rule of section 11, which makes a sleeping die the best target for one.
   and an SAI's maneuver results such as a Trample's -- and only a Coral Elf's, in a mixed army. No
   counter-attack clause, unlike Flaming Shields'. A roll says so in its arithmetic line: "3
   maneuver counted as saves (Coastal Dodge)".
+- **Defensive Volley** -- "When at a terrain that contains air, Coral Elves units may counter-attack
+  against a missile action ... using missile results instead of melee results." The first
+  counter-attack that is not melee: the ordinary counter's steps, with `action: 'missile'`. It is
+  offered only when the army shot at stands on a terrain containing air and holds a Coral Elf that
+  can roll; **only the Coral Elves throw it**, since the ability names units; and it lands on the
+  army that shot, *wherever it stands* -- usually another terrain, since a missile crosses the board.
+  The shooter saves against a missile, so a Volley SAI on its dice sends damage back. Never at a
+  Reserve Army (no terrain, no air), and a counter is never itself countered.
 
 ### House rules this species adds
 

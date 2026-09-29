@@ -939,7 +939,7 @@ export function CombatPart({
               or a counter coming back the other way. Melee and magic hit the army in
               front of them, so repeating one terrain twice would be noise. */}
           <div className="roll-head">
-            {entry.isCounter ? 'counter-attack' : entry.action}
+            {entry.isCounter ? (entry.action === 'missile' ? 'defensive volley' : 'counter-attack') : entry.action}
             {entry.attackerSlot === entry.defenderSlot ? (
               <> · {where(entry.defenderSlot)}</>
             ) : (

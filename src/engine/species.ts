@@ -32,6 +32,7 @@ export type AbilityName =
   | 'Air Flight'
   | 'Flaming Shields'
   | 'Coastal Dodge'
+  | 'Defensive Volley'
 
 /**
  * Which abilities each species has.
@@ -43,9 +44,7 @@ export type AbilityName =
 export const SPECIES_ABILITIES: Readonly<Record<string, readonly AbilityName[]>> = {
   treefolk: ['Rapid Growth', 'Replanting'],
   firewalkers: ['Air Flight', 'Flaming Shields'],
-  // v2 Phase 5d. Defensive Volley joins when the missile counter-attack does; until then
-  // the Coral Elves play without it -- a "may" left out, not a rule played wrong.
-  coral_elves: ['Coastal Dodge'],
+  coral_elves: ['Coastal Dodge', 'Defensive Volley'],
 }
 
 /** The rule as the full rules state it, for both clients. Beside the table for the
@@ -69,6 +68,10 @@ export const ABILITY_TEXT: Readonly<Record<AbilityName, string>> = {
   'Coastal Dodge':
     'When at a terrain that contains water, Coral Elves may count maneuver results as if ' +
     'they were save results.',
+  'Defensive Volley':
+    'When at a terrain that contains air, Coral Elves units may counter-attack against a ' +
+    'missile action. Follow the same process used for a regular melee counter-attack, ' +
+    'using missile results instead of melee results.',
 }
 
 /** Whether a species has `ability` -- the table alone, with no ruleset in it. */

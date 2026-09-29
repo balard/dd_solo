@@ -742,7 +742,11 @@ function choicesFor(state: GameState, pending: Pending): Choice[] {
 
     case 'choose_counter_attack':
       return [
-        { key: '1', label: 'counter-attack', action: { kind: 'choose_counter_attack', counter: true } },
+        {
+          key: '1',
+          label: pending.volley !== undefined ? 'volley back (Defensive Volley)' : 'counter-attack',
+          action: { kind: 'choose_counter_attack', counter: true },
+        },
         { key: '0', label: 'do not counter', action: { kind: 'choose_counter_attack', counter: false } },
       ]
 

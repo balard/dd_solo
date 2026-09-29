@@ -281,3 +281,119 @@ describe('Coastal Dodge', () => {
     expect(outcome.totals.save).toBe(3)
   })
 })
+
+describe('Defensive Volley', () => {
+  /** Pine: 5 is `3 SAVE`, no missile. Archer: 2 is `3 MISSILE`. */
+  const PINE = 'treefolk.pine'
+  const ARCHER = 'coral_elves.archer'
+  const PINE_SAVE = 5
+  const ARCHER_MISSILE = 2
+  const ABILITIES: RuleSet = { ...RULES, speciesAbilities: true }
+
+  /**
+   * p1's Pine shoots from its home at p2's army at the Frontier, and rolls nothing -- so
+   * no save roll, no damage, and the exchange walks straight on to the counter.
+   */
+  const shotAt = (defenders: readonly string[], rng: RngState, options: { ruleSet?: RuleSet; frontier?: string } = {}) => {
+    const base = board([PINE], defenders, rng, {}, {
+      ruleSet: options.ruleSet ?? ABILITIES,
+      frontier: options.frontier ?? 'coastland_tower',
+    })
+    const units = { ...base.units, 'p1:0': { ...base.units['p1:0']!, location: { kind: 'terrain', slot: 'p1_home' } as const } }
+    return advance({
+      ...base,
+      units,
+      turn: {
+        ...base.turn,
+        marchingArmy: 'p1_home',
+        armiesMarched: ['p1_home'],
+        marchStep: 'resolve_attack',
+        combat: { action: 'missile', targetSlot: 'frontier', damage: 0 },
+      },
+    })
+  }
+
+  it('offers the Coral Elves at an air terrain a missile counter-attack at the army that shot', () => {
+    const offered = shotAt([ARCHER], rngShowing([PINE, ARCHER, PINE], [PINE_SAVE, ARCHER_MISSILE, PINE_SAVE]))
+    expect(offered.pending).toEqual({
+      kind: 'choose_counter_attack',
+      player: 'p2',
+      slot: 'frontier',
+      volley: { target: 'p1_home' },
+    })
+
+    const volleyed = advance(reduce(offered, { kind: 'choose_counter_attack', counter: true }))
+    const counter = volleyed.log.filter((e) => e.kind === 'combat_resolved').at(-1)
+    expect(counter).toMatchObject({
+      action: 'missile',
+      isCounter: true,
+      attackerSlot: 'frontier',
+      defenderSlot: 'p1_home',
+      attackTotal: 3,
+      saveTotal: 3,
+    })
+    expect(validateState(volleyed)).toEqual([])
+  })
+
+  it('is thrown by the Coral Elves alone in a mixed army', () => {
+    const offered = shotAt([ARCHER, WILLOW], rngShowing([PINE, ARCHER, PINE], [PINE_SAVE, ARCHER_MISSILE, PINE_SAVE]))
+    const volleyed = advance(reduce(offered, { kind: 'choose_counter_attack', counter: true }))
+    const counter = volleyed.log.filter((e) => e.kind === 'combat_resolved').at(-1)
+    if (counter?.kind !== 'combat_resolved') throw new Error('no volley resolved')
+    expect(counter.attackDice.map((d) => d.unitId)).toEqual(['p2:0'])
+  })
+
+  it('offers nothing at a terrain without air, or with the abilities off', () => {
+    const rng = rngShowing([PINE], [PINE_SAVE])
+    for (const state of [shotAt([ARCHER], rng, { frontier: 'highland_tower' }), shotAt([ARCHER], rng, { ruleSet: RULES })]) {
+      expect(state.pending?.kind).not.toBe('choose_counter_attack')
+      expect(state.turn.combat).toBeNull()
+    }
+  })
+
+  it('offers nothing to an army with no Coral Elf in it', () => {
+    const state = shotAt([WILLOW], rngShowing([PINE], [PINE_SAVE]))
+    expect(state.pending?.kind).not.toBe('choose_counter_attack')
+  })
+
+  it('may be declined, and the march ends', () => {
+    const offered = shotAt([ARCHER], rngShowing([PINE], [PINE_SAVE]))
+    const declined = advance(reduce(offered, { kind: 'choose_counter_attack', counter: false }))
+    expect(declined.log.at(-1)?.kind === 'counter_declined' || declined.log.some((e) => e.kind === 'counter_declined')).toBe(true)
+    expect(declined.turn.combat).toBeNull()
+  })
+})
+
+describe('Ferry carrying another free mover', () => {
+  /** Gryphon face 4 is Ferry; Unicorn face 3 is Teleport. */
+  const GRYPHON = 'coral_elves.gryphon'
+  const UNICORN = 'treefolk.unicorn'
+
+  /**
+   * Found by the 1000-game fuzz once Ferry joined Teleport in mixed forces: the Ferry
+   * carried the Unicorn away, and the Unicorn's own free move was then offered every
+   * terrain but the one its army rolled at -- including the one it now stood on.
+   */
+  it('moves the carried die from where it stands now, with the army it stands in', () => {
+    const start = advance(
+      board([GRYPHON, UNICORN], [WILLOW], rngShowing([GRYPHON, UNICORN], [4, 3]), {
+        combat: { action: 'melee', targetSlot: 'frontier', damage: 0 },
+      }),
+    )
+    expect(start.pending).toMatchObject({ kind: 'sai_move', sai: 'Ferry', unitId: 'p1:0', slot: 'frontier' })
+
+    const ferried = advance(reduce(start, { kind: 'sai_move', slot: 'p1_home', unitIds: ['p1:1'] }))
+    expect(ferried.units['p1:1']?.location).toEqual({ kind: 'terrain', slot: 'p1_home' })
+    expect(ferried.pending).toMatchObject({ kind: 'sai_move', sai: 'Teleport', unitId: 'p1:1', slot: 'p1_home' })
+    const options = (ferried.pending as { options: readonly string[] }).options
+    expect(options).not.toContain('p1_home')
+    expect(options).toContain('frontier')
+
+    // Its passengers are the army it stands in now: the Gryphon it came with is in it
+    // (though at four health it does not fit Teleport's three), and nobody left behind is.
+    expect(() => reduce(ferried, { kind: 'sai_move', slot: 'frontier', unitIds: ['p1:0'] })).toThrow(/up to 3/)
+    const back = reduce(ferried, { kind: 'sai_move', slot: 'frontier', unitIds: [] })
+    expect(back.units['p1:1']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(validateState(back)).toEqual([])
+  })
+})

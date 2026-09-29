@@ -210,6 +210,7 @@ const RULES: Readonly<Record<string, Reach>> = {
   replant_missed: 'every',
   flaming_shields: 'every',
   coastal_dodge: 'every',
+  defensive_volley: 'every',
   growth_taken: 'every',
   growth_declined: 'every',
   // v2 Phase 2: a rolled force may mix species, and one in five here does.
@@ -306,6 +307,7 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
           if (entry.flamingShields !== undefined) bump('flaming_shields')
           if (entry.saveMath?.steps.some((step) => step.source === 'Wave')) bump('wave:saves')
           if (entry.saveMath?.notes.some((note) => note.includes('Coastal Dodge'))) bump('coastal_dodge')
+          if (entry.isCounter && entry.action === 'missile') bump('defensive_volley')
           break
         case 'maneuver_contested':
           if (entry.defenderMath?.steps.some((step) => step.source === 'Wave')) bump('wave:maneuver')

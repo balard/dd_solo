@@ -244,6 +244,17 @@ fresh(),
     expect(prompt.choices[1]?.detail).toBeUndefined()
   })
 
+  it('names a Defensive Volley, and forecasts it as the missile it is (v2 Phase 5d)', () => {
+    const prompt = promptFor(
+      { kind: 'choose_counter_attack', player: 'p2', slot: 'frontier', volley: { target: 'p1_home' } },
+      'p2',
+      fresh(),
+    )
+    expect(prompt.question).toBe('Counter-attack with Defensive Volley?')
+    expect(prompt.choices[0]?.label).toBe('Volley back')
+    expect(prompt.choices[0]?.detail).toMatch(/^expect ≈\d+, they save ≈\d+$/)
+  })
+
   it('says so plainly when there is nothing to do', () => {
     const prompt = promptFor(
 { kind: 'choose_action', player: 'p1', slot: 'frontier', legal: [] },

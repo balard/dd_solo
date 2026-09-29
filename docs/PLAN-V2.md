@@ -1290,9 +1290,9 @@ V1 goldens move only with a written reason (the riposte slice in Dwarves is the 
 
 ## Phase 5 — Coral Elves — in progress
 
-5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c has landed: all six SAIs. 5d is
-in progress: the race draw widened, and Coastal Dodge made the Coral Elves playable; Defensive
-Volley is next.
+5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c has landed: all six SAIs. 5d has
+landed: the race draw, Coastal Dodge (which made the Coral Elves playable), and Defensive Volley.
+5e (Blizzard and Deluge) is next.
 
 ### What 5a found
 
@@ -1453,8 +1453,31 @@ defined`: Vite had picked up the body of an edit to `greedy.ts` and missed its i
 seconds later. The file on disk was right and every test passed. Touch the file before believing a
 `ReferenceError` from a module that typechecks.
 
-**Deliberately not done.** Defensive Volley, which is 5d's last part and the missile counter-attack.
-Until it lands the Coral Elves play without it: a "may" left out, never a rule played wrong.
+### What 5d found (Defensive Volley)
+
+**1. The counter-attack half of an exchange needed no change at all.** It had always read its action
+off `CombatState` and swapped both ends in `exchangeSpec`, so a missile counter is the melee
+counter's eleven steps with a different word in them. What changed is the gate: `offer_counter` has
+work after a missile too, when `volleyers` finds a Coral Elf that can roll at an air terrain.
+
+**2. "Coral Elves units may counter-attack" names units, so the roll is filtered, not the offer.**
+In a mixed army only the Coral Elves throw the volley. The filter is in `attackerRoll`, the one door
+every half of an exchange reads, so the roll and each recompute of it agree on who rolled.
+
+**3. The counter lands on the army that shot, wherever it is**, which a melee counter never had to
+say: the prompt's forecast read "melee at the army in front of you". `Pending.choose_counter_attack`
+gained `volley: { target }`, omitted for a melee counter, so the four golden games that end on that
+pending did not move; the board, the terminal and the log each name the volley.
+
+**4. It fires within 200 random games** (Coral Elves at their own Coastland homes, which carry air),
+so its counter is `'every'`.
+
+**5. The 1000-game fuzz found a free-move bug a phase older than the Coral Elves.** A Ferry carried a
+Unicorn that had rolled Teleport in the same roll, and the Unicorn's own move was then offered
+every terrain but the one its *army* rolled at -- including the one the Ferry had just put it on --
+and drew its passengers from an army it had left. A free move now starts from where its die stands
+and carries from the army it stands in. Reachable since mixed forces (Phase 2) could put two free
+movers in one army; the 200-game run never drew it, and Ferry made it common enough to land.
 
 ---
 

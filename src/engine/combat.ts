@@ -8,6 +8,7 @@ import { terrainFaceAction } from '../data/load'
 import type { TerrainFaceNumber } from '../data/types'
 
 import { armyRoll, iconAt, type ArmyRollInput } from './effects'
+import { terrainHas, unitHasAbility } from './species'
 import type { Modifier, RollEffect } from './pipeline'
 import { unitType } from '../data/load'
 import { rollDie } from './rng'
@@ -35,6 +36,7 @@ import {
   type PlayerId,
   type RuleSet,
   type TerrainSlot,
+  type UnitInstance,
 } from './types'
 
 /** RULES-V0.md section 4: two magic symbols per point of damage. */
@@ -239,7 +241,28 @@ export interface AttackRollState {
  * simply does not apply.
  */
 function attackerRoll(state: GameState, spec: AttackSpec): ArmyRollInput {
-  return armyRoll(state, spec.attacker, spec.attackerSlot, spec.action, spec.defenderSlot)
+  const roll = armyRoll(state, spec.attacker, spec.attackerSlot, spec.action, spec.defenderSlot)
+  // Defensive Volley (v2 Phase 5d): "Coral Elves *units* may counter-attack against a
+  // missile action", so in a mixed army only they throw the counter's dice. Filtered
+  // here, in the one door every half of an exchange reads, so the roll and every
+  // recompute of it agree on who rolled.
+  if (spec.isCounter && spec.action === 'missile') {
+    return { ...roll, units: roll.units.filter((unit) => unitHasAbility(state.ruleSet, unit, 'Defensive Volley')) }
+  }
+  return roll
+}
+
+/**
+ * The dice that may answer a missile attack with Defensive Volley (v2 Phase 5d): the
+ * Coral Elves of the army that was shot at, when it stands on a terrain containing air,
+ * and only those that may roll. Empty means no volley is offered -- which it always is
+ * with species abilities off, at a Reserve Army, or at a terrain with no air.
+ */
+export function volleyers(state: GameState, defender: PlayerId, slot: ArmyRef): readonly UnitInstance[] {
+  if (!state.ruleSet.speciesAbilities || slot === 'reserve' || !terrainHas(state, slot, 'air')) return []
+  return armyRoll(state, defender, slot, 'missile').units.filter((unit) =>
+    unitHasAbility(state.ruleSet, unit, 'Defensive Volley'),
+  )
 }
 
 /** The spec the attack roll is resolved under. Built in one place because

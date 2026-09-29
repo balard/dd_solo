@@ -28,6 +28,7 @@ import {
   saveEffects,
   saveRollDice,
   terrainAction,
+  volleyers,
   waveIn,
   waveModifier,
   type AttackOutcome,
@@ -499,12 +500,23 @@ function stepMarch(state: GameState): GameState {
       // is left standing on `offer_counter`. Deciding it one step earlier would end
       // the march first and change the state every golden was recorded in.
       if (combat.counterSuppressed === true) return endMarch(state)
+      // A missile is countered only by Defensive Volley, and only by the dice that may
+      // throw it: a Tower's missile at a Reserve Army, or at a terrain with no air, or
+      // at an army whose Coral Elves died in the attack, offers nothing.
+      if (combat.action === 'missile') {
+        if (volleyers(state, defender, combat.targetSlot).length === 0) return endMarch(state)
+      }
       const targetSlot = requireTerrainTarget(combat.targetSlot)
       if (armyAt(state, defender, targetSlot).length === 0) return endMarch(state)
       if (armyAt(state, player, marchingSlot(state)).length === 0) return endMarch(state)
       return {
         ...state,
-        pending: { kind: 'choose_counter_attack', player: defender, slot: targetSlot },
+        pending: {
+          kind: 'choose_counter_attack',
+          player: defender,
+          slot: targetSlot,
+          ...(combat.action === 'missile' ? { volley: { target: marchingRef(state) } } : {}),
+        },
       }
     }
   }
@@ -618,10 +630,15 @@ function stepHasWork(state: GameState, step: CombatStep): boolean {
     return damageOptions(targetArmy, damageAt(state, step)).required > 0
   }
 
-  // Only melee is countered, and a counter is never itself countered. Whether the
-  // offer is actually made -- Surprise, and whether either army still exists -- is
-  // decided in `stepMarch`, not here; see the note there.
-  if (step === 'offer_counter') return requireCombat(state).action === 'melee'
+  // Melee is countered, and a missile by Defensive Volley (v2 Phase 5d), which only a
+  // board with Coral Elves standing where the missile landed can ever reach -- so no
+  // recorded game stops here for a missile. A counter is never itself countered.
+  // Whether the offer is actually made is decided in `stepMarch`; see the note there.
+  if (step === 'offer_counter') {
+    const combat = requireCombat(state)
+    if (combat.action === 'melee') return true
+    return combat.action === 'missile' && volleyers(state, opponentOf(state.turn.marching), combat.targetSlot).length > 0
+  }
 
   return false
 }
@@ -963,18 +980,25 @@ function taskPending(
       throw new Error('a Cantrip pool opens a casting window rather than a targeting pending')
     case 'glare':
       throw new Error('Hypnotic Glare picks nobody, so it never raises a pending')
-    case 'move':
+    case 'move': {
+      // Where the mover stands *now*, which is not always where its army rolled: an
+      // earlier free move in the same roll may have carried it -- a Ferry taking a
+      // Unicorn that rolled Teleport (v2 Phase 5d, found by the 1000-game fuzz). "Itself
+      // and units in its army" is then the army it is standing in.
+      const mover = state.units[task.unitId]
+      const from = mover?.location.kind === 'terrain' ? mover.location.slot : owner.slot
       return {
         kind: 'sai_move',
         ...common,
         unitId: task.unitId,
-        slot: owner.slot,
+        slot: from,
         health: task.health,
         // "To any terrain" -- but not the one it is already standing on, which is
         // never true when the mover is a Reserve Army, so a free move out of
         // Reserves offers every terrain.
-        options: TERRAIN_SLOTS.filter((slot) => slot !== owner.slot),
+        options: TERRAIN_SLOTS.filter((slot) => slot !== from),
       }
+    }
   }
 }
 
@@ -1810,7 +1834,8 @@ function applySaiMove(
     throw new IllegalActionError(`${task.sai} moves to another terrain, not the one it is on`)
   }
 
-  const army = taskArmy(state, owner)
+  // The army the mover is standing in now -- see `taskPending`'s note on a carried mover.
+  const army = armyRef(state, owner.player, mover.location.slot)
   const extras = unitIds.filter((id) => id !== task.unitId)
   for (const id of extras) {
     if (!army.some((unit) => unit.id === id)) {

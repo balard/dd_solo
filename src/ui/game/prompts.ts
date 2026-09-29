@@ -356,12 +356,17 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
       }
 
     case 'choose_counter_attack':
+      // Defensive Volley (v2 Phase 5d) is a missile roll back at the army that shot,
+      // wherever it stands; the ordinary counter is melee at the army in front of you.
       return {
-        question: 'Counter-attack?',
+        question: pending.volley !== undefined ? 'Counter-attack with Defensive Volley?' : 'Counter-attack?',
         choices: [
           {
-            label: 'Counter-attack',
-            detail: attackForecast(state, pending.player, pending.slot, 'melee', pending.slot, true),
+            label: pending.volley !== undefined ? 'Volley back' : 'Counter-attack',
+            detail:
+              pending.volley !== undefined
+                ? attackForecast(state, pending.player, pending.slot, 'missile', pending.volley.target, true)
+                : attackForecast(state, pending.player, pending.slot, 'melee', pending.slot, true),
             action: { kind: 'choose_counter_attack', counter: true },
           },
           { label: 'Decline', action: { kind: 'choose_counter_attack', counter: false }, passive: true },

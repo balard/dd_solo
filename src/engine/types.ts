@@ -652,7 +652,18 @@ export type Pending =
        *  is an `ArmyRef` rather than a `TerrainSlot`. */
       readonly options: readonly ArmyRef[]
     }
-  | { readonly kind: 'choose_counter_attack'; readonly player: PlayerId; readonly slot: TerrainSlot }
+  | {
+      readonly kind: 'choose_counter_attack'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      /**
+       * Defensive Volley (v2 Phase 5d): a counter-attack with missile results against a
+       * missile action -- at the army that shot, wherever it stands, and thrown only by
+       * the Coral Elves. Omitted for the ordinary melee counter, which hits the army in
+       * front of it, so a client knows which roll it is being offered.
+       */
+      readonly volley?: { readonly target: ArmyRef }
+    }
   | {
       readonly kind: 'assign_damage'
       readonly player: PlayerId
