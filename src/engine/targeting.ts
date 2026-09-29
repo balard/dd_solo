@@ -44,6 +44,8 @@ export type TargetTask =
        * step-3 task, so never combined with another. Omitted on every other task.
        */
       readonly rerollAfter?: string
+      /** Swallow: one unit, not health-worth -- `health` is unread. Never combined. */
+      readonly one?: true
     }
   /** Sleep: one unit in the army being attacked. */
   | { readonly kind: 'sleep'; readonly sai: string }
@@ -112,6 +114,13 @@ function build(effects: readonly RollEffect[]): readonly TargetTask[] {
       tasks.push({ kind: effect.kind, sai: effect.sai })
       continue
     }
+    // Swallow: one individual unit, so never combined either -- two Swallows are two
+    // units, each rolling for its own life.
+    if (effect.kind === 'target_enemy' && effect.one === true) {
+      const task = taskFor(effect)
+      if (task !== null) tasks.push(task)
+      continue
+    }
     if (effect.kind === 'free_move') {
       tasks.push({ kind: 'move', sai: effect.sai, unitId: effect.unitId, health: effect.health })
       continue
@@ -146,6 +155,7 @@ function taskFor(effect: RollEffect): TargetTask | null {
         // Omitted rather than defaulted: this object goes into `combat.attack.targets`,
         // which `digestState` renders through `stableJson(state.turn)`.
         ...(effect.escapeTo !== undefined ? { escapeTo: effect.escapeTo } : {}),
+        ...(effect.one === true ? { one: true as const } : {}),
       }
     case 'choke':
     case 'confuse':

@@ -121,6 +121,9 @@ const gives = (type: ResultType, x: number): SaiOutcome => ({
   reroll: false,
 })
 
+/** Ferry's "up to four health-worth" -- a constant for Firewalking's reason. */
+const FERRY_HEALTH = 4
+
 /**
  * Firewalking and Teleport, which are the same SAI on two dice.
  *
@@ -398,7 +401,24 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
    */
 
   'Rise from the Ashes': (x, ctx) => (ctx.purpose.kind === 'save' ? gives('save', x) : NOTHING),
+
+  /**
+   * "During a dragon or melee attack, Tail generates **two** melee results. Roll this
+   * unit again and apply the new result as well." (v2 Phase 5c, Coral Elves.)
+   *
+   * Two, flatly, and not X -- the Leviathan's face prints 4 because it is a monster face,
+   * Galeforce's case again. The reroll is Rend's: a step-3 reroll of this die, drained
+   * by the sweep, and it belongs to both attacks because the reference names them in
+   * one sentence.
+   */
+  Tail: (_x, ctx) =>
+    isAttack(ctx, 'melee') || ctx.purpose.kind === 'dragon_attack'
+      ? { results: { melee: TAIL_MELEE }, effects: [], reroll: true }
+      : NOTHING,
 }
+
+/** Tail's "two melee results", stated by the reference rather than printed on a face. */
+const TAIL_MELEE = 2
 
 /**
  * The SAIs that only `sai: 'full'` resolves: the ones that pick targets.
@@ -612,6 +632,50 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
     if (noSideDecision(ctx)) return gives('save', x)
     return { results: {}, effects: [{ kind: 'wild_growth', budget: x }], reroll: false }
   },
+
+  /**
+   * "During a melee attack, target up to X health-worth of units in the defending army.
+   * The targets are killed." (v2 Phase 5c.) Flame without the burial, so the same
+   * `target_enemy` with `fate: 'kill'` -- and combined by name like any budget.
+   */
+  Entangle: (x, ctx) =>
+    isAttack(ctx, 'melee')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: x, escape: 'none', fate: 'kill' }],
+          reroll: false,
+        }
+      : NOTHING,
+
+  /**
+   * "During a melee attack, target one unit in the defending army. Roll the target. If
+   * it does not roll its ID icon, it is killed and buried." (v2 Phase 5c.)
+   *
+   * Seize's test (a look at the face, not a total) on Sleep's count (one die), and
+   * Flame's fate. Survivors stay where they stood, which is why Seize's `escapeTo` is
+   * stated rather than inferred from `escape: 'id'` -- this is the SAI that comment
+   * was written for.
+   */
+  Swallow: (_x, ctx) =>
+    isAttack(ctx, 'melee')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: 0, one: true, escape: 'id', fate: 'bury' }],
+          reroll: false,
+        }
+      : NOTHING,
+
+  /**
+   * "During any non-maneuver roll, the Ferrying unit may move itself and up to four
+   * health-worth of units in its army to any terrain." (v2 Phase 5c.)
+   *
+   * Firewalking's free move with a bigger boat and no maneuver half: on a maneuver roll
+   * Ferry does nothing at all.
+   */
+  Ferry: (_x, ctx) => {
+    if (ctx.purpose.kind === 'maneuver' || noSideDecision(ctx)) return NOTHING
+    return { results: {}, effects: [{ kind: 'free_move', health: FERRY_HEALTH }], reroll: false }
+  },
 }
 
 /**
@@ -683,6 +747,18 @@ export const SAI_TEXT: Readonly<Record<string, string>> = {
     'During a maneuver roll, Teleport generates X maneuver results. During any ' +
     'non-maneuver roll, this unit may move itself and up to three health-worth of ' +
     'units in its army to any terrain.',
+  Entangle:
+    'During a melee attack, target up to X health-worth of units in the defending army. ' +
+    'The targets are killed.',
+  Swallow:
+    'During a melee attack, target one unit in the defending army. Roll the target. If it ' +
+    'does not roll its ID icon, it is killed and buried.',
+  Ferry:
+    'During any non-maneuver roll, the Ferrying unit may move itself and up to four ' +
+    'health-worth of units in its army to any terrain.',
+  Tail:
+    'During a dragon or melee attack, Tail generates two melee results. Roll this unit ' +
+    'again and apply the new result as well.',
 }
 
 /** The SAI names `sai: 'results'` resolves. Anything else on a face is inert. */

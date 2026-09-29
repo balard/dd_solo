@@ -947,6 +947,18 @@ glaring unit may be excluded from any roll until the effect expires."
 - **Hypnotized is half of Sleep.** The die takes no part in any roll, army or unit; unlike a
   sleeping die it may still retreat, be moved and be carried by a free move.
 
+### The SAIs (5c)
+
+| SAI | Applies | What it does here |
+|---|---|---|
+| **Tail** | Melee, dragon attack | Two melee results -- *two*, not X; the Leviathan's 4 is a monster face -- and the die rolls again (Rend's step-3 reroll). A results-rung SAI, live under `sai: 'results'`. |
+| **Entangle** | Melee | Up to X health-worth of the defenders are killed. Flame without the burial; combined by name. |
+| **Swallow** | Melee | **One** unit, whatever its health (Sleep's count), rolls; unless it shows its ID it is killed and buried. Survivors stay where they stood, unlike Seize's. Never combined (p. 32: individual-unit SAIs). |
+| **Ferry** | Non-maneuver | A free move of the unit and up to **four** health-worth of its army. Firewalking's move with no maneuver half: on a maneuver roll it does nothing. |
+
+A die that cannot be rolled (asleep, hypnotized) fails a Swallow's roll and is buried -- the
+sub-roll rule of section 11, which makes a sleeping die the best target for one.
+
 ### House rules this species adds
 
 - **The glaring unit sits out every army roll while its glare lasts**, automatically. "May be

@@ -183,6 +183,13 @@ export type RollEffectBody =
        * digest.
        */
       readonly escapeTo?: 'reserve'
+      /**
+       * Swallow (v2 Phase 5c): "target **one unit**" -- one die whatever its health, so
+       * `health` is not read and the task is never combined (p. 32: SAIs that target an
+       * individual unit "are always resolved one by one"). Sleep's rule, on a task that
+       * otherwise rolls and buries exactly like Seize and Flame. Omitted everywhere else.
+       */
+      readonly one?: true
     }
   /**
    * Sleep: one *unit* in an opposing army at this terrain, asleep until the roller's

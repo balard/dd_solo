@@ -1233,7 +1233,7 @@ async function askSaiTarget(state: GameState, pending: Pending): Promise<GameAct
   // and "absorbed 4 / must reach 4" would be a lie about what is being asked.
   if (pending.limit.kind === 'one') {
     for (;;) {
-      console.log(`\n${bold(`${pending.sai} — put one die to sleep`)}${more}`)
+      console.log(`\n${bold(`${pending.sai} — target one die`)}${more}`)
       saiHeader(state, pending.sai)
       army.forEach((unit, i) => {
         console.log(`    ${i + 1}) ${name(unit)} ${dim(`(${unitType(unit.typeId).health}h)`)}`)

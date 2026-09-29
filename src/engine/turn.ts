@@ -866,6 +866,7 @@ function taskHasWork(
 
   switch (task.kind) {
     case 'enemy':
+      if (task.one === true) return army.length > 0
       return damageOptions(army, task.health).required > 0
     case 'sleep':
       return army.length > 0
@@ -919,6 +920,7 @@ function taskPending(
 
   switch (task.kind) {
     case 'enemy':
+      if (task.one === true) return { kind: 'sai_target', ...common, ...aimed, limit: { kind: 'one' } }
       return { kind: 'sai_target', ...common, ...aimed, limit: { kind: 'health', budget: task.health } }
     case 'sleep':
       return { kind: 'sai_target', ...common, ...aimed, limit: { kind: 'one' } }
@@ -1507,9 +1509,16 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
       ? army.filter((unit) => chokeEligible(state, spec, saves).includes(unit.id))
       : army
 
-  const budget = task.kind === 'enemy' ? task.health : task.health
-  const problem = damageAssignmentProblem(pool, budget, unitIds)
-  if (problem !== null) throw new IllegalActionError(problem)
+  if (task.kind === 'enemy' && task.one === true) {
+    // Swallow: one die, Sleep's count rule -- and "select the maximum number of
+    // targets" means one whenever the army has any, which `taskHasWork` guarantees.
+    if (unitIds.length !== 1 || !army.some((unit) => unit.id === unitIds[0])) {
+      throw new IllegalActionError(`${task.sai} targets exactly one unit in the army it is aimed at`)
+    }
+  } else {
+    const problem = damageAssignmentProblem(pool, task.health, unitIds)
+    if (problem !== null) throw new IllegalActionError(problem)
+  }
 
   // Named before anything happens to the dice, so the log reads as cause then effect
   // rather than as dice dying from nowhere.

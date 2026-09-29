@@ -18,9 +18,12 @@ import {
   resolvesSai,
   saiEffects,
   saiMaxResults,
+  type RollContext,
   type RollPurpose,
   type SaiFace,
 } from './sai'
+import { targetTasks } from './targeting'
+import type { RollEffect } from './pipeline'
 import { stepGame } from './turn'
 import { validateState } from './validate'
 import {
@@ -419,8 +422,8 @@ describe('the rungs of ruleSet.sai', () => {
     // Empty as of Phase 4e, and kept rather than deleted: it is the line a new SAI
     // would be added to, and the count below is what makes adding one a decision.
     // v2 Phase 5a: the Coral Elves' six, transcribed ahead of their handlers. A slice
-    // that builds one moves it out of here.
-    const deferred = new Set<string>(['Entangle', 'Ferry', 'Hypnotic Glare', 'Swallow', 'Tail', 'Wave'])
+    // that builds one moves it out of here: 5c built Tail, Entangle, Swallow and Ferry.
+    const deferred = new Set<string>(['Hypnotic Glare', 'Wave'])
     const live = new Set(LIVE_SAIS)
     const targeting = new Set(TARGETING_SAIS)
 
@@ -433,9 +436,9 @@ describe('the rungs of ruleSet.sai', () => {
     // The split is pinned because the prose in CLAUDE.md, RULES-V0.md and PLAN-V1.md
     // all quote it, and nothing else would notice it going stale. Each Phase 4 slice
     // moves names from `deferred` into `TARGETING_SAIS` and edits these two numbers.
-    expect(live.size, 'SAIs live under sai: results').toBe(14)
-    expect(targeting.size, 'targeting SAIs built so far').toBe(11)
-    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(6)
+    expect(live.size, 'SAIs live under sai: results').toBe(15)
+    expect(targeting.size, 'targeting SAIs built so far').toBe(14)
+    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(2)
     expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(0)
 
     for (const name of names) {
@@ -743,6 +746,25 @@ describe('Rend', () => {
       ['t1', false],
       ['t0', true],
     ])
+  })
+})
+
+describe('Tail', () => {
+  const leviathan = 'coral_elves.leviathan'
+  /** Leviathan faces: 3 and 9 are Tail, 6 is `4 SAVE`, 0 is its ID. */
+  const TAIL = 3
+
+  it('counts two melee, rolls the die again, and a second Tail rolls it a third time', () => {
+    const rng = rngShowing([leviathan, leviathan, leviathan], [TAIL, 9, 6])
+    const [roll, after] = rollArmy(armyOf(leviathan), 'melee', rng, SAI_RULES)
+    expect(roll.dice.map((d: DieRoll) => [d.faceIndex, d.reroll === true])).toEqual([
+      [TAIL, false],
+      [9, true],
+      [6, true],
+    ])
+    // Two and two; the save face adds nothing to a melee roll.
+    expect(roll.total).toBe(4)
+    expect(after.counter - rng.counter).toBe(3)
   })
 })
 
@@ -1272,5 +1294,65 @@ describe('rolls with nowhere to put an effect', () => {
     const rng = rngShowing(['firewalkers.fireshadow'], [FIRESHADOW_MELEE])
     const [roll] = rollArmy(armyOf('firewalkers.fireshadow'), 'maneuver', rng, SAI_RULES)
     expect(roll.effects).toEqual([])
+  })
+})
+
+// --- the Coral Elves (v2 Phase 5c) ---------------------------------------------
+
+describe('the Coral Elves SAIs', () => {
+  const full = (name: string, purpose: RollPurpose, count = 4, extra: Partial<RollContext> = {}) =>
+    saiEffects(sai(name, count), { purpose, isCounter: false, ...extra }, FULL_RULES)
+
+  it('Tail generates two melee, not X, and rerolls, in a melee or a dragon attack', () => {
+    expect(fires('Tail', melee)).toEqual({ results: { melee: 2 }, effects: [], reroll: true })
+    expect(saiEffects(sai('Tail'), { purpose: { kind: 'dragon_attack' }, isCounter: false }, DRAGON_RULES))
+      .toEqual({ results: { melee: 2 }, effects: [], reroll: true })
+    // Applies: Dragon Attack, Melee -- nothing on a save, a missile or a maneuver.
+    for (const purpose of [saveVs('melee'), missile, maneuver]) {
+      expect(fires('Tail', purpose)).toEqual({ results: {}, effects: [], reroll: false })
+    }
+  })
+
+  it('Tail is a results-rung SAI, live under sai: results like Rend', () => {
+    expect(resolvesSai('Tail', SAI_RULES)).toBe(true)
+  })
+
+  it('Entangle kills up to X health-worth in a melee attack, and buries nothing', () => {
+    expect(full('Entangle', melee, 4).effects).toEqual([
+      { kind: 'target_enemy', health: 4, escape: 'none', fate: 'kill' },
+    ])
+    expect(full('Entangle', missile).effects).toEqual([])
+  })
+
+  it('Swallow targets one unit, looks for its ID, and buries it if not', () => {
+    expect(full('Swallow', melee).effects).toEqual([
+      { kind: 'target_enemy', health: 0, one: true, escape: 'id', fate: 'bury' },
+    ])
+    expect(full('Swallow', saveVs('melee')).effects).toEqual([])
+  })
+
+  it('Ferry is a free move of four health-worth on any non-maneuver roll, and nothing on a maneuver', () => {
+    for (const purpose of [melee, missile, magic, saveVs('melee'), saveVs(null)]) {
+      expect(full('Ferry', purpose).effects).toEqual([{ kind: 'free_move', health: 4 }])
+    }
+    expect(full('Ferry', maneuver)).toEqual({ results: {}, effects: [], reroll: false })
+    // A sub-roll has nowhere to ask the question.
+    expect(full('Ferry', saveVs('missile'), 4, { isSubRoll: true }).effects).toEqual([])
+  })
+
+  it('never combines two Swallows: each is one unit rolling for its life', () => {
+    const swallow = (unitId: string): RollEffect => ({
+      kind: 'target_enemy',
+      health: 0,
+      one: true,
+      escape: 'id',
+      fate: 'bury',
+      unitId,
+      sai: 'Swallow',
+    })
+    expect(targetTasks([swallow('a'), swallow('b')])).toEqual([
+      { kind: 'enemy', sai: 'Swallow', health: 0, escape: 'id', fate: 'bury', one: true },
+      { kind: 'enemy', sai: 'Swallow', health: 0, escape: 'id', fate: 'bury', one: true },
+    ])
   })
 })

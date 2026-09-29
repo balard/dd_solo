@@ -22,7 +22,7 @@ import { speciesElements, terrainDie, terrainFaceAction, terrainType, unitType }
 import type { ResultType, TerrainFaceNumber } from '../data/types'
 import { legalActions, missileTargets } from '../engine/combat'
 import { growthPartners } from '../engine/dua'
-import { isAsleep, thornsAt } from '../engine/effects'
+import { cannotRoll, isAsleep, thornsAt } from '../engine/effects'
 import type { RngState } from '../engine/rng'
 import { legalDirections, rollOnTheTable } from '../engine/turn'
 import {
@@ -471,8 +471,13 @@ function decide(state: GameState, pending: Pending): GameAction {
         (unit) => pending.eligible === undefined || pending.eligible.includes(unit.id),
       )
       if (pending.limit.kind === 'one') {
-        const awake = targets.filter((unit) => !isAsleep(state, unit.id))
-        const pick = best(awake.length > 0 ? awake : targets, (unit) => valueOf(state, unit))
+        // Sleep wants a die that can still roll -- sleeping one twice buys nothing.
+        // Swallow wants the opposite: a die that cannot roll cannot roll its ID, so it
+        // is a certain kill and burial.
+        const awake = targets.filter((unit) => !cannotRoll(state, unit.id))
+        const stuck = targets.filter((unit) => cannotRoll(state, unit.id))
+        const preferred = pending.sai === 'Sleep' ? awake : stuck
+        const pick = best(preferred.length > 0 ? preferred : targets, (unit) => valueOf(state, unit))
         return { kind: 'sai_target', unitIds: pick === undefined ? [] : [pick.id] }
       }
       return {

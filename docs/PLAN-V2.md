@@ -1290,7 +1290,8 @@ V1 goldens move only with a written reason (the riposte slice in Dwarves is the 
 
 ## Phase 5 — Coral Elves — in progress
 
-5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c (the SAIs) is next.
+5a has landed: the data. 5b has landed: Hypnotic Glare's duration. 5c is in progress: Tail, Entangle,
+Swallow and Ferry have landed; Wave and Hypnotic Glare are next.
 
 ### What 5a found
 
@@ -1361,6 +1362,27 @@ the retreat and free-move checks ask, and `sitsOutArmyRoll` adds the glaring die
 **4. The anchor is a terrain, not a location.** Glare is a melee SAI and melee happens at a terrain,
 so the glaring unit always stands on one. The later end conditions (Stun, Net, Web: "leaves its
 terrain") are the same shape with the affected unit as its own anchor.
+
+### What 5c found (Tail, Entangle, Swallow, Ferry)
+
+Four SAIs, each an existing shape, and the table above was right about all four. What it did not
+say:
+
+**1. Tail's "two" is a constant.** The face prints 4 because it is a monster face; the reference says
+"two melee results", flatly, which is Galeforce's case. A results-rung SAI, so it joins `HANDLERS`
+and `sai: 'results'` resolves it too.
+
+**2. Swallow is Seize's test on Sleep's count, and the count needed a flag.** `target_enemy` gained
+`one`: one die whatever its health, never combined. `Pending.sai_target` already had
+`limit: { kind: 'one' }` from Sleep, so neither board changed -- but the terminal said "put one die
+to sleep" for any one-unit pending, and greedy preferred a die that can still roll, which is right
+for Sleep and backwards for Swallow: a die that cannot roll cannot roll its ID.
+
+**3. Ferry has no maneuver half.** Firewalking and Teleport generate X maneuver results on a maneuver
+roll; Ferry's reference names no such sentence, so it does nothing there. Its four health-worth is a
+constant, and the free-move machinery already read the limit off the task.
+
+Both golden corpora byte-identical and unregenerated: no Coral Elf can reach a recorded game.
 
 ---
 

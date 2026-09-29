@@ -1367,3 +1367,106 @@ describe('the delayed effects', () => {
     expect(validateState(done)).toEqual([])
   })
 })
+
+// --- the Coral Elves (v2 Phase 5c) ---------------------------------------------
+
+describe('the Coral Elves SAIs in an exchange', () => {
+  /** Leviathan: 0 ID, 1 Swallow, 3 Tail, 6 Save. Tako: 1 Entangle. Gryphon: 4 Ferry.
+   *  Oak: 0 ID, 1 `2 MELEE`. */
+  const LEVIATHAN_SWALLOW = 1
+  const TAKO_ENTANGLE = 1
+  const GRYPHON_FERRY = 4
+  const OAK_ID = 0
+  const OAK_MELEE = 1
+
+  const idsOf = (state: GameState, typeId: string) =>
+    Object.values(state.units)
+      .filter((u) => u.typeId === typeId)
+      .map((u) => u.id)
+
+  const swallowBoard = (targetFace: number) =>
+    advance(
+      stage({
+        attackers: ['coral_elves.leviathan'],
+        defenders: ['treefolk.oak', 'treefolk.oakling'],
+        rng: rngShowing(['coral_elves.leviathan', 'treefolk.oak'], [LEVIATHAN_SWALLOW, targetFace]),
+      }),
+    )
+
+  it('asks Swallow for one unit, whatever its health', () => {
+    const start = swallowBoard(OAK_ID)
+    expect(start.pending).toMatchObject({ kind: 'sai_target', sai: 'Swallow', limit: { kind: 'one' } })
+    const [oak] = idsOf(start, 'treefolk.oak') as [UnitId]
+    const [oakling] = idsOf(start, 'treefolk.oakling') as [UnitId]
+    expect(() => applyAction(start, { kind: 'sai_target', unitIds: [oak, oakling] })).toThrow(IllegalActionError)
+    expect(() => applyAction(start, { kind: 'sai_target', unitIds: [] })).toThrow(IllegalActionError)
+  })
+
+  it('leaves a swallowed die that rolls its ID where it stood', () => {
+    const start = swallowBoard(OAK_ID)
+    const [oak] = idsOf(start, 'treefolk.oak') as [UnitId]
+    const done = applyAction(start, { kind: 'sai_target', unitIds: [oak] })
+    expect(done.units[oak]?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(done.log.find((e) => e.kind === 'sai_sub_roll')).toMatchObject({ test: 'id', escaped: [oak] })
+    // Seize's escapees go home; Swallow's stay put, and the log does not say otherwise.
+    expect(done.log.find((e) => e.kind === 'sai_sub_roll')).not.toHaveProperty('toReserve')
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('kills and buries a swallowed die that does not roll its ID', () => {
+    const start = swallowBoard(OAK_MELEE)
+    const [oak] = idsOf(start, 'treefolk.oak') as [UnitId]
+    const done = applyAction(start, { kind: 'sai_target', unitIds: [oak] })
+    expect(done.units[oak]?.location).toEqual({ kind: 'bua' })
+    expect(done.log.some((e) => e.kind === 'units_buried')).toBe(true)
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('Entangle kills its targets outright, into the DUA and not the BUA', () => {
+    const start = advance(
+      stage({
+        attackers: ['coral_elves.tako'],
+        defenders: ['treefolk.oak', 'treefolk.oakling', 'treefolk.oak_lord'],
+        rng: rngShowing(['coral_elves.tako'], [TAKO_ENTANGLE]),
+      }),
+    )
+    // Four health-worth, maximal: the Oak and the Oakling are three, the Oak Lord and
+    // the Oakling are four -- so those two, and no other pair will do.
+    expect(start.pending).toMatchObject({ kind: 'sai_target', sai: 'Entangle', limit: { kind: 'health', budget: 4 } })
+    const [oak] = idsOf(start, 'treefolk.oak') as [UnitId]
+    const [oakling] = idsOf(start, 'treefolk.oakling') as [UnitId]
+    const [lord] = idsOf(start, 'treefolk.oak_lord') as [UnitId]
+    expect(() => applyAction(start, { kind: 'sai_target', unitIds: [oak, oakling] })).toThrow(IllegalActionError)
+
+    const done = applyAction(start, { kind: 'sai_target', unitIds: [lord, oakling] })
+    expect(done.units[lord]?.location).toEqual({ kind: 'dua' })
+    expect(done.units[oakling]?.location).toEqual({ kind: 'dua' })
+    expect(done.units[oak]?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(done.log.some((e) => e.kind === 'units_buried')).toBe(false)
+  })
+
+  it('Ferry carries four health-worth where Firewalking carries three', () => {
+    const start = advance(
+      stage({
+        attackers: ['coral_elves.gryphon', 'treefolk.oak', 'treefolk.oak', 'treefolk.oakling'],
+        defenders: ['treefolk.oak'],
+        rng: rngShowing(
+          ['coral_elves.gryphon', 'treefolk.oak', 'treefolk.oak', 'treefolk.oakling'],
+          [GRYPHON_FERRY, OAK_MELEE, OAK_MELEE, OAK_ID],
+        ),
+      }),
+    )
+    const [gryphon] = idsOf(start, 'coral_elves.gryphon') as [UnitId]
+    const [first, second] = idsOf(start, 'treefolk.oak').filter((id) => id.startsWith('p1')) as [UnitId, UnitId]
+    const [oakling] = idsOf(start, 'treefolk.oakling') as [UnitId]
+    expect(start.pending).toMatchObject({ kind: 'sai_move', sai: 'Ferry', unitId: gryphon, health: 4 })
+
+    expect(() =>
+      applyAction(start, { kind: 'sai_move', slot: 'p1_home', unitIds: [first, second, oakling] }),
+    ).toThrow(IllegalActionError)
+    const moved = applyAction(start, { kind: 'sai_move', slot: 'p1_home', unitIds: [first, second] })
+    for (const id of [gryphon, first, second]) {
+      expect(moved.units[id]?.location).toEqual({ kind: 'terrain', slot: 'p1_home' })
+    }
+  })
+})
