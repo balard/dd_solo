@@ -31,7 +31,7 @@ import {
 } from '../../engine/setup'
 import { V1_RULES, type GameAction, type GameState, type PlayerId } from '../../engine/types'
 
-import { advanceCursor, rollSteps, type RollCursor, type RollStep } from './presentation'
+import { advanceCursor, pastEverything, rollStops, type RollCursor, type RollStep } from './presentation'
 import { clearSave } from './storage'
 
 /** How long to let the player read the opponent's move before the next one. */
@@ -271,12 +271,12 @@ export function useGame(): Game {
   }, [])
   const nextRoll = useCallback(() => {
     setSession((current) =>
-      current === null ? current : { ...current, rolls: advanceCursor(current.state.log, current.rolls, human) },
+      current === null ? current : { ...current, rolls: advanceCursor(current.state, current.rolls, human) },
     )
   }, [])
   const skipRolls = useCallback(() => {
     setSession((current) =>
-      current === null ? current : { ...current, rolls: { log: current.state.log.length, step: 0 } },
+      current === null ? current : { ...current, rolls: pastEverything(current.state) },
     )
   }, [])
 
@@ -292,7 +292,7 @@ export function useGame(): Game {
   const state = session?.state ?? null
   const pending = state?.pending ?? null
   const ai = OPPONENTS[session?.opponent ?? DEFAULT_OPPONENT]
-  const steps = session === null ? [] : rollSteps(session.state.log.slice(session.rolls.log), human)
+  const steps = session === null ? [] : rollStops(session.state, session.rolls, human)
   const waiting = session === null ? 0 : steps.length - session.rolls.step
   useEffect(() => {
     // A roll the player has not seen yet holds the game where it is.

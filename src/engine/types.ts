@@ -1529,7 +1529,8 @@ export type LogEntry =
       readonly player: PlayerId
       readonly sai: string
       readonly unitIds: readonly UnitId[]
-      readonly from: TerrainSlot
+      /** A Ferry rolled in Reserves moves out of them. */
+      readonly from: ArmyRef
       readonly to: TerrainSlot
     }
   /**

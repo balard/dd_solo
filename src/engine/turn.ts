@@ -117,6 +117,7 @@ import {
   TERRAIN_SLOTS,
   armyAt,
   army as armyRef,
+  armyRefOf,
   capturedCount,
   deadUnits,
   dragonsAt,
@@ -908,8 +909,12 @@ function taskHasWork(
       // results, and `stepTasks` applies that rather than asking about it.
       return army.some((unit) => growthPartners(state, unit.id, task.budget).length > 0)
     case 'move': {
-      const mover = state.units[task.unitId]
-      return mover !== undefined && mover.location.kind === 'terrain'
+      // Still in play, which is a terrain *or* Reserves: a Reserve Army's magic roll
+      // is a non-maneuver roll, and "to any terrain" names no starting point. Asking
+      // for a terrain here dropped every Ferry rolled in Reserves without a word,
+      // while `taskPending` below had offered every terrain from there since v1
+      // Phase 5d.
+      return armyRefOf(state, task.unitId) !== null
     }
     // Glare owes no decision at all: `stepTasks` applies it before asking this.
     case 'glare':
@@ -985,8 +990,7 @@ function taskPending(
       // earlier free move in the same roll may have carried it -- a Ferry taking a
       // Unicorn that rolled Teleport (v2 Phase 5d, found by the 1000-game fuzz). "Itself
       // and units in its army" is then the army it is standing in.
-      const mover = state.units[task.unitId]
-      const from = mover?.location.kind === 'terrain' ? mover.location.slot : owner.slot
+      const from = armyRefOf(state, task.unitId) ?? owner.slot
       return {
         kind: 'sai_move',
         ...common,
@@ -1826,16 +1830,17 @@ function applySaiMove(
 
   const spec = exchangeSpec(state, step === 'sai_target_counter' || step === 'sai_delayed_counter')
   const owner = taskOwner(task, spec, delayed)
-  const mover = state.units[task.unitId]
-  if (mover === undefined || mover.location.kind !== 'terrain') {
-    throw new IllegalActionError(`${task.sai}: ${task.unitId} is no longer at a terrain`)
+  // A terrain or the Reserve Army -- see `taskHasWork` on a Ferry rolled in Reserves.
+  const from = armyRefOf(state, task.unitId)
+  if (from === null) {
+    throw new IllegalActionError(`${task.sai}: ${task.unitId} is no longer in play`)
   }
-  if (slot === mover.location.slot) {
+  if (slot === from) {
     throw new IllegalActionError(`${task.sai} moves to another terrain, not the one it is on`)
   }
 
   // The army the mover is standing in now -- see `taskPending`'s note on a carried mover.
-  const army = armyRef(state, owner.player, mover.location.slot)
+  const army = armyRef(state, owner.player, from)
   const extras = unitIds.filter((id) => id !== task.unitId)
   for (const id of extras) {
     if (!army.some((unit) => unit.id === id)) {
@@ -1869,7 +1874,6 @@ function applySaiMove(
     units[id] = { ...unit, location: { kind: 'terrain', slot } }
   }
 
-  const from = mover.location.slot
   return dropHeadTask(
     withLog({ ...state, units }, {
       kind: 'units_moved',

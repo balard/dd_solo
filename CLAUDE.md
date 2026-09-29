@@ -1085,7 +1085,14 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     with the outcome. Magic is one, then spell picking.
   - **An SAI is a stop only when it resolves something** (targets, Sleep, Galeforce, Choke,
     Confuse, Wild Growth, a free move). Smite, Counter, Surprise and Cantrip ride on the roll's
-    card.
+    card. **Your own SAI gets no card**, since you just answered it in a sheet with the same
+    rule; what it rolled (a sub-roll, Confuse's reroll) is a roll stop of its own.
+  - **A roll parked mid-decision is a stop before the decision** (`live`, from
+    `rollsOnTheTable`). The engine logs an exchange only when it is over, so the log alone
+    put a Swallow's question ahead of the attack that rolled it. `rollStops(state, cursor,
+    human)` is the log's stops plus the parked ones; `RollCursor.shown` remembers which
+    parked rolls were shown, so the log's copy (the attack, a magic roll, the marching
+    maneuver) is skipped when the exchange is written. Dragon rolls stay in the sheet.
   - **The log writes some causes after their consequences**: an exchange's SAI resolution before
     `combat_resolved`, a spell's effects before its `spell_cast`. `rollSteps` carries the first onto
     the SAI's card and reorders the second so each spell is named first. `spell_cast` carries no

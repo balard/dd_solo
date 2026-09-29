@@ -397,3 +397,52 @@ describe('Ferry carrying another free mover', () => {
     expect(validateState(back)).toEqual([])
   })
 })
+
+describe('Ferry out of Reserves', () => {
+  /** Gryphon face 4 is Ferry. */
+  const GRYPHON = 'coral_elves.gryphon'
+  const SPELLS: RuleSet = { ...RULES, magic: 'spells' }
+
+  /** p1's Gryphon and Knight in Reserves, taking the Reserve Army's magic action. */
+  function reserveMagic(): GameState {
+    const state = board([GRYPHON, KNIGHT], [WILLOW], rngShowing([GRYPHON, KNIGHT], [4, KNIGHT_MELEE]), {
+      marchingArmy: 'reserve',
+      armiesMarched: ['reserve'],
+      combat: { action: 'magic', targetSlot: 'reserve', damage: 0 },
+    }, { ruleSet: SPELLS })
+    const units = { ...state.units }
+    for (const id of ['p1:0', 'p1:1']) units[id] = { ...units[id]!, location: { kind: 'reserve' } }
+    return { ...state, units }
+  }
+
+  /**
+   * Reported from a browser: a Reserve Army's magic roll came up Ferry, the roll card
+   * marked it, and then nothing -- `taskHasWork` asked for a mover at a terrain and
+   * dropped the task, though `taskPending` had offered every terrain from Reserves
+   * since v1 Phase 5d. "During any non-maneuver roll ... to any terrain" names no
+   * starting point, and a magic roll is a non-maneuver roll.
+   */
+  it('is offered, and carries the mover and its passengers to a terrain', () => {
+    const start = advance(reserveMagic())
+    expect(start.pending).toMatchObject({
+      kind: 'sai_move',
+      sai: 'Ferry',
+      unitId: 'p1:0',
+      slot: 'reserve',
+      options: ['p1_home', 'frontier', 'p2_home'],
+    })
+
+    const ferried = advance(reduce(start, { kind: 'sai_move', slot: 'frontier', unitIds: ['p1:1'] }))
+    expect(ferried.units['p1:0']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(ferried.units['p1:1']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(logged(ferried, 'units_moved')).toMatchObject({ from: 'reserve', to: 'frontier' })
+    expect(validateState(ferried)).toEqual([])
+  })
+
+  it('may still stay put', () => {
+    const start = advance(reserveMagic())
+    const stayed = advance(reduce(start, { kind: 'sai_move', slot: null, unitIds: [] }))
+    expect(stayed.units['p1:0']?.location).toEqual({ kind: 'reserve' })
+    expect(validateState(stayed)).toEqual([])
+  })
+})

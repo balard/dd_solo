@@ -13,6 +13,7 @@ import type { GameState, LogEntry, PlayerId } from '../../engine/types'
 import { RollStrip, effectSummary } from './DiceGrid'
 import { CombatPart, LogLine, ManeuverPart } from './LogPanel'
 import type { RollStep } from './presentation'
+import { tableRollHeading } from './prompts'
 import type { RollShown } from './useGame'
 
 export function RollCard({
@@ -81,6 +82,8 @@ function titleOf(step: RollStep, state: GameState, human: PlayerId): string {
     }
     case 'roll':
       return wholeRollTitle(step.entry, whose)
+    case 'live':
+      return tableRollHeading(step.roll, human)
   }
 }
 
@@ -94,6 +97,8 @@ function wholeRollTitle(entry: LogEntry, whose: (player: PlayerId) => string): s
       return `${whose(entry.player)} magic roll`
     case 'sai_sub_roll':
       return 'Rolling to survive'
+    case 'confused':
+      return 'Confused dice roll again'
     case 'spell_saves':
       return 'Saves against a spell'
     case 'thorns':
@@ -167,6 +172,21 @@ function StepBody({
             <LogLine key={i} entry={entry} state={state} human={human} />
           ))}
         </>
+      )
+    }
+    // A roll someone is deciding about, as it landed: the SAI faces are marked on the
+    // strip, and the decision that follows says what they do.
+    case 'live': {
+      const { roll } = step.roll
+      return (
+        <div className="log-roll">
+          <RollStrip
+            dice={roll.dice}
+            {...(roll.total === undefined ? {} : { total: roll.total })}
+            {...(roll.math === undefined ? {} : { math: roll.math })}
+            onInspect={onInspect}
+          />
+        </div>
       )
     }
     // Each spell and what it did -- and so where it went, since `spell_cast` itself
