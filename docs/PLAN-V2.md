@@ -1537,7 +1537,8 @@ the notes. The app draws the class shapes until then (invariant 8).
 
 ## Phase 6 — Dwarves — **in progress**
 
-6a has landed: the data. 6b has landed: the seams. 6c to 6h are still a plan.
+6a has landed: the data. 6b has landed: the seams. 6c has landed: three old rules corrected, in
+three commits. 6d to 6h are still a plan.
 
 Fire & Earth, so **Highland is their own terrain type** (`homeTerrainType` derives it; nothing is
 tabled) and both species abilities are live at home. The faces are in `data/raw/dwarves.faces.txt`
@@ -1697,7 +1698,7 @@ shares a name with a spell, since that is what the name-reading depends on.
 the dragon roll always used: same modifier order, and the eighth face's doubling over the other kinds.
 `combinationAnswerProblem` is the check `applyDragonAllocate` used to make inline.
 
-### 6c — Two old rules corrected
+### 6c — Old rules corrected — **landed**
 
 Rule fixes to species that already play, three now, each its own commit, since each may move a
 golden and must say why.
@@ -1733,6 +1734,15 @@ fear a Counter that a Stone Skin already answers.
 every die that actually rolled, the same as the SAI sub-roll. Tests cast Lightning Strike and Mirage
 at a glaring die and see both the glare and its victim's hypnosis end, and both fail without the fix.
 No golden moved: nothing in either corpus has a Leviathan.
+
+**3. Abilities reach unit rolls through the same table that gathers them for armies.** `armyRoll`'s
+two hand-written blocks became `COUNTS_AS_ABILITIES` (ability, element, gathered on melee rolls only
+or on any) and `abilityPermissions`. `unitRoll` calls it for the unit's own terrain, and
+`conversionsIn` then decides as it does for any roll. So 6f adds Mountain Mastery and Dwarven Might as
+two rows, and both reach army and unit rolls. Flaming Shields is gathered on unit rolls too and does
+nothing there, since no unit roll counts melee. Tests: a Coral Elf at water saves against a damage
+sub-roll and a Lightning Strike with its maneuver, and does not at Highland or in Reserves. Both
+positive tests fail without the fix. No golden moved: neither corpus has a Coral Elf.
 
 ### 6d — Roar, Stomp, Bash
 

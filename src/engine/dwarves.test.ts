@@ -434,3 +434,43 @@ describe("a spell's unit roll ends a glare", () => {
     expect(struck('mirage').effects).toEqual([])
   })
 })
+
+describe('species abilities in a unit roll', () => {
+  // "Species abilities are applied to both army rolls and when a unit is rolling
+  // individually" (p. 28). Knight: face 2 is `3 MANEUVER`; Coral Elves dodge at water.
+  const KNIGHT = 'coral_elves.knight'
+  const KNIGHT_MANEUVER = 2
+  const at = (frontier: string, where: UnitInstance['location'] = { kind: 'terrain', slot: 'frontier' }) => {
+    const base = board([], [KNIGHT], rngShowing([KNIGHT], [KNIGHT_MANEUVER]))
+    return {
+      ...base,
+      units: { 'p2:0': { ...base.units['p2:0']!, location: where } },
+      terrains: { ...base.terrains, frontier: { ...base.terrains.frontier, dieId: frontier } },
+    }
+  }
+
+  it("dodge a Coral Elf's save roll at water: its maneuver counts as saves", () => {
+    const out = damageSubRoll(at('coastland_tower'), 'p2:0', 3, 'Bash')
+    expect(out).toMatchObject({ saves: 3, killed: false })
+  })
+
+  it('and not at a terrain without water', () => {
+    expect(damageSubRoll(at('highland_tower'), 'p2:0', 3, 'Bash')).toMatchObject({ saves: 0, killed: true })
+  })
+
+  it('and not in Reserves, which is no terrain at all', () => {
+    const out = damageSubRoll(at('coastland_tower', { kind: 'reserve' }), 'p2:0', 3, 'Bash')
+    expect(out).toMatchObject({ saves: 0, killed: true })
+  })
+
+  it("reach Lightning Strike's roll too", () => {
+    const out = castSpell(at('coastland_tower'), spell('lightning_strike'), {
+      caster: 'p1',
+      army: 'frontier',
+      element: 'air',
+      count: 1,
+      target: { kind: 'units', unitIds: ['p2:0'] },
+    }).state
+    expect(out.units['p2:0']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+  })
+})

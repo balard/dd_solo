@@ -34,12 +34,13 @@
  * always empty in a `DUA_RULES` game, which is what the app plays.
  */
 import { doubleIdsModifier, maneuverAsSaves, savesAsMelee, type Modifier } from './pipeline'
-import { terrainHas, unitHasAbility } from './species'
+import { terrainHas, unitHasAbility, type AbilityName } from './species'
 import { terrainDie } from '../data/load'
 import { SPELLS } from '../data/spells'
-import type { EighthFaceIcon, ResultType } from '../data/types'
+import type { EighthFaceIcon, Element, ResultType } from '../data/types'
 import {
   army as armyOf,
+  armyRefOf,
   speciesIn,
   type ArmyRef,
   type GameState,
@@ -383,26 +384,59 @@ export function armyRoll(
     // than on a roll, and is read at the maneuver site by `thornsAt`.
   }
   if (doublesIds(state, player, ref)) modifiers.push(doubleIdsModifier(resultType))
-  // Flaming Shields (v1 Phase 8): a permission on every melee roll the army makes at a
-  // fire terrain -- the attack, Wall of Thorns' roll, the dragon combination roll. It
-  // rides the modifier list for the reason the Death breath does: that reaches every
-  // one of those without a call site learning about it. `resolveFaces` refuses it on a
-  // counter-attack, because only the roll knows what it is for. It names the species
-  // whose dice convert (v2 Phase 1), because a mixed army's other dice do not.
   const units = armyOf(state, player, ref).filter((unit) => !sitsOutArmyRoll(state, unit.id))
-  if (resultType === 'melee' && terrainHas(state, ref, 'fire')) {
-    const shielded = speciesIn(units.filter((unit) => unitHasAbility(state.ruleSet, unit, 'Flaming Shields')))
-    if (shielded.length > 0) modifiers.push(savesAsMelee(shielded))
-  }
-  // Coastal Dodge (v2 Phase 5d): gathered at a water terrain whatever the roll -- the
-  // dragon's combination roll is gathered as a melee roll and counts saves too -- and
-  // applied by `resolveFaces` only to a roll that counts saves and not maneuver.
-  if (terrainHas(state, ref, 'water')) {
-    const dodgers = speciesIn(units.filter((unit) => unitHasAbility(state.ruleSet, unit, 'Coastal Dodge')))
-    if (dodgers.length > 0) modifiers.push(maneuverAsSaves(dodgers))
-  }
+  modifiers.push(...abilityPermissions(state, units, ref, resultType))
 
   return { units, modifiers }
+}
+
+/**
+ * The species abilities that are a "counts as" (v2 Phase 6c): the element a terrain
+ * must contain for each, and the permission it grants.
+ *
+ * Each rides the modifier list for the reason the Death breath does: that reaches every
+ * roll the ability belongs in without a call site learning about it, and `conversionsIn`
+ * decides per roll whether it applies -- on a counter-attack, in a roll that counts the
+ * type, as a trade. Each names the species whose dice convert (v2 Phase 1), because a
+ * mixed army's other dice do not.
+ *
+ * - **Flaming Shields** (v1 Phase 8): every melee roll the army makes at a fire terrain
+ *   -- the attack, Wall of Thorns' roll, the dragon combination roll. Gathered on a
+ *   melee roll only, which is where it has always been gathered.
+ * - **Coastal Dodge** (v2 Phase 5d): gathered at a water terrain whatever the roll --
+ *   the dragon's combination roll is gathered as a melee roll and counts saves too.
+ */
+const COUNTS_AS_ABILITIES: readonly {
+  readonly ability: AbilityName
+  readonly element: Element
+  readonly meleeRollsOnly: boolean
+  readonly permission: (species: readonly string[]) => Modifier
+}[] = [
+  { ability: 'Flaming Shields', element: 'fire', meleeRollsOnly: true, permission: savesAsMelee },
+  { ability: 'Coastal Dodge', element: 'water', meleeRollsOnly: false, permission: maneuverAsSaves },
+]
+
+/**
+ * The "counts as" permissions these dice carry, standing at `ref`.
+ *
+ * `'unit'` is a unit roll: "species abilities are applied to both army rolls and when a
+ * unit is rolling individually" (p. 28). Every row is gathered there and the roll's
+ * own kinds decide -- a Coral Elf at water rolling saves against a Bullseye dodges.
+ */
+function abilityPermissions(
+  state: GameState,
+  units: readonly UnitInstance[],
+  ref: ArmyRef,
+  roll: ResultType | 'unit',
+): readonly Modifier[] {
+  const out: Modifier[] = []
+  for (const row of COUNTS_AS_ABILITIES) {
+    if (row.meleeRollsOnly && roll !== 'melee' && roll !== 'unit') continue
+    if (!terrainHas(state, ref, row.element)) continue
+    const species = speciesIn(units.filter((unit) => unitHasAbility(state.ruleSet, unit, row.ability)))
+    if (species.length > 0) out.push(row.permission(species))
+  }
+  return out
 }
 
 /** What a *unit* roll needs: the die, whether it may be rolled at all, and everything
@@ -426,12 +460,15 @@ export interface UnitRollInput {
  * comment: "modifiers that affect an army do not affect the roll of an individual unit
  * from that army", which is why the army door is named `armyRoll` and this one is not
  * a call into it. A Galeforced army's minus four must not reach a Smother's maneuver
- * roll, and the only way to be sure of that is for the two gatherers to share nothing.
+ * roll, and the only way to be sure of that is for the two gatherers to share nothing
+ * but the species abilities, which are not modifiers on an army: "species abilities
+ * are applied to both army rolls and when a unit is rolling individually" (p. 28), and
+ * the unit's own abilities at its own terrain are gathered here too (v2 Phase 6c).
  *
  * No effect in the game carries a unit modifier yet -- Sleep is a status, not
- * arithmetic -- so `modifiers` comes back empty today. The loop is written anyway,
- * because a literal `[]` becomes a lie the first time a spell modifies one die, and
- * silently.
+ * arithmetic -- so the effect loop finds nothing today, and `modifiers` holds only the
+ * unit's ability permissions. The loop is written anyway, because leaving it out
+ * becomes a lie the first time a spell modifies one die, and silently.
  *
  * **No `resultType` parameter**, unlike `armyRoll`, which needs one only to build the
  * eighth face's `doubleIdsModifier`. A unit roll never gathers that, so the argument
@@ -446,6 +483,12 @@ export function unitRoll(state: GameState, unitId: UnitId): UnitRollInput {
   for (const effect of state.effects) {
     if (targetsUnit(effect, unitId)) modifiers.push(...sourced(effect))
   }
+  // Its own species' abilities, at the terrain *it* stands on (v2 Phase 6c): none in
+  // Reserves, and none in the DUA, where Fire breath's burial check rolls its dead.
+  // An ability is not an army modifier, so p. 28's wall between the two does not stop
+  // it -- the rules apply abilities "when a unit is rolling individually" by name.
+  const where = armyRefOf(state, unitId)
+  if (where !== null) modifiers.push(...abilityPermissions(state, [unit], where, 'unit'))
 
   return { unit, rollable: !cannotRoll(state, unitId), modifiers }
 }
@@ -565,8 +608,9 @@ function anchorHolds(state: GameState, anchor: NonNullable<Effect['anchor']>): b
  * Ends every effect anchored to one of these dice "until rolled", because they just were.
  *
  * Hypnotic Glare's third end condition. Only a unit roll can reach it -- a glaring die
- * sits out every army roll -- so the one caller is the sub-roll. Same-object rule as
- * `pruneEffects`: nothing anchored there, nothing changes.
+ * sits out every army roll -- so every unit roll calls it: the SAI sub-roll, the
+ * spells' save roll (v2 Phase 6c; it missed this until then) and the damage sub-roll.
+ * Same-object rule as `pruneEffects`: nothing anchored there, nothing changes.
  */
 export function endGlaresOf(state: GameState, rolled: readonly UnitId[]): GameState {
   const kept = state.effects.filter(

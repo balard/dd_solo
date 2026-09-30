@@ -841,7 +841,12 @@ earth whatever its eighth face is. **The Reserve Area contains nothing**: it hol
 no ability keyed on an element works there. That is the rule, not a house rule.
 
 "Species abilities are applied to both army rolls and when a unit is rolling individually." In this
-box no unit roll counts melee and none is a counter-maneuver, so that sentence adds nothing.
+box no unit roll counts melee and none is a counter-maneuver, so for these four abilities that
+sentence adds nothing. **It stopped adding nothing with Coastal Dodge** (v2 Phase 5d), whose save
+rolls a unit does make -- and the engine applied no ability to a unit roll until v2 Phase 6c, so a
+Coral Elf at water rolling for its life against a Bullseye or a Lightning Strike did not dodge. A
+unit roll now gathers its own species' abilities at the terrain it stands on: none in Reserves,
+none in the DUA.
 
 **Every ability belongs to the dice of its species, not to the player** (v2 Phase 1). Each names
 units -- "Treefolk units", "Firewalker units", "Firewalkers may count save results" -- so in a mixed

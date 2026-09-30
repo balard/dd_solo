@@ -191,7 +191,9 @@ the dice and the opponent.
 > 6f builds their abilities -- their four new SAIs (Roar, Stomp, Bash, Charge) are unbuilt. 6b has
 > landed too: the seams, no rule moved -- `counts_as` as a table (`conversionsIn`), a damage
 > sub-roll (`subroll.ts`), spell saves (`spellSaves`, from `Modifier.fromSpell`), and the
-> combination roll apart from the dragon (`combination.ts`).
+> combination roll apart from the dragon (`combination.ts`). 6c has landed: a riposte is reduced
+> by the attacker's spell saves (the one v1 golden re-recording of the phase), a spell's unit roll
+> ends a Hypnotic Glare, and species abilities reach unit rolls.
 
 ## Read these first
 
@@ -799,7 +801,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - **An army modifier must never reach a unit roll**, nor the reverse (full rules p. 28). That is
     why the entry point is named `armyRoll`, and why **`unitRoll` is its sibling rather than a call
     into it**: it gathers unit-targeted effects only -- no army effect, no eighth-face ID doubling
-    -- and returns `rollable: false` for a sleeping die. The two share no gatherer on purpose.
+    -- and returns `rollable: false` for a sleeping die. The two share no gatherer on purpose,
+    except the species abilities' "counts as" permissions (`abilityPermissions`, v2 Phase 6c):
+    p. 28 applies abilities "when a unit is rolling individually", at the terrain the unit
+    stands on, so a Coral Elf at water dodges a Bullseye's save roll.
     `rollUnits` in `roll.ts` then rolls each input once, skipping the unrollable, which **draws
     nothing** for them. `unitRoll` takes no `resultType`: the only thing `armyRoll` needs one for is
     `doubleIdsModifier`, which a unit roll never gathers.
