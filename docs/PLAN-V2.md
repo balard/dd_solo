@@ -8,8 +8,9 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0 to 4 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c), each with its findings below;
-the rest is still a draft, with predictions where V1 has findings.
+of work*. **Phases 0 to 5 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c, Phase 5
+as 5a to 5g), each with its findings below. **Phase 6 (Dwarves) is planned in slices**; Phases 7
+and 8 are still a draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
 collection, win dice, dragons and terrains, and raise the force cap to 24 and then 36 at set
@@ -68,9 +69,9 @@ start.
 |
 +------------------------------+
 |                              |
-3  The schematic board [landed] 5  Coral Elves       (the race pipeline, first run)
+3  The schematic board [landed] 5  Coral Elves [landed]   (the race pipeline, first run)
 |                              |
-4  The army builder [landed]   6  Dwarves
+4  The army builder [landed]   6  Dwarves [planned]
                                |
                                7  Death magic, then Goblins
                                |
@@ -1533,6 +1534,227 @@ rather than waiting for the resolver to report them as ambiguous.
 **Deliberately not done: the download.** `npm run art` fetches SFR's images into gitignored
 folders, which is the owner's call to make; the candidates were checked offline against the paths in
 the notes. The app draws the class shapes until then (invariant 8).
+
+## Phase 6 — Dwarves — **planned**
+
+Fire & Earth, so **Highland is their own terrain type** (`homeTerrainType` derives it; nothing is
+tabled) and both species abilities are live at home. The faces are in `data/raw/dwarves.faces.txt`
+(20 dice, 140 faces), unimported, and the art resolver already has their pins (commit a1adb4b: all
+140 faces resolve to one image each).
+
+**What the faces actually carry.** The rulebook-derived tables above were a checklist; this is the
+check. Fourteen SAI names appear on Dwarves dice, and **only four are new**:
+
+| SAI | Dice | Applies | Seam |
+|---|---|---|---|
+| **Roar** | Androsphinx ×2, Behemoth | Melee | Targeting before saves (4b). Up to X health-worth of defenders go to their Reserve Area, no roll. Seize's destination without Seize's roll |
+| **Stomp** | Behemoth | Melee, dragon attack | Sub-roll (4d), twice. Maneuver roll or be killed (Smother), then the dead roll saves or are buried (Fire breath's check). Dragon attack: X melee |
+| **Bash** | Behemoth | Save\*, dragon attack | **New.** The defender aims at one die in the *attacker's* roll, which takes damage equal to its own melee results and saves against it; Bash gives the defender that many saves. Any other save roll: X saves. Dragon attack: a dragon takes its own damage back |
+| **Charge** | Behemoth | Melee\* | **New.** The attacker counts maneuver as melee; the defender makes one combination save-and-melee roll *instead of* a save roll or a counter-attack; its melee hits the attacker, reducible only by spell saves |
+
+Reused: Smite, Counter, Bullseye, Trample, Cantrip, Rend, Fly, Dispel Magic, Seize, Confuse.
+**Four of the five new SAIs sit on one die**, the Behemoth, so its mirror fixture is the whole
+laboratory for the hard half of this phase, and Charge and Bash meet each other there: a Behemoth
+that Charges into a Behemoth that Bashes.
+
+**Abilities**: Mountain Mastery (at earth, melee counts as maneuver) and Dwarven Might (at fire, save
+counts as melee *on a counter-attack*). **Spells**: Firebolt (fire, 3) and Higher Ground (earth, 5),
+both Dwarves-only, neither `R` nor `C`, **both cumulative** -- checked with the 5e method: PyMuPDF
+reports Firebolt's "one" and Higher Ground's "five" in red (`0xd12229`), as Ash Storm's "one" and
+Dancing Lights' "six".
+
+### Where the draft tables above are wrong for Dwarves
+
+- **Firebolt is not `spellSaveRoll`.** That is Hailstorm's *army* save roll. Firebolt aims at a
+  unit, so its save is a unit roll, and since it is cumulative its castings add up to N damage on
+  one die. That is a new sub-roll shape -- **take N damage, roll saves, die if what is left reaches
+  your health** -- and Bash's target makes exactly the same roll. Build it once (6b), not twice.
+- **"Mountain Mastery: counts as on a maneuver roll" undersells it.** "Species abilities are applied
+  to both army rolls and when a unit is rolling individually" (p. 28), and `RULES-V0.md` §16 records
+  that sentence as adding nothing *because no unit roll counted melee or was a counter-maneuver*.
+  That stopped being true in 5d: a Coral Elf at water rolling for its life against a Bullseye or a
+  Lightning Strike should dodge, and `unitRoll` gathers no species ability at all. Mountain Mastery
+  makes the same gap bite again (a Dwarf at earth Smothered or Stomped). So **6c fixes Coastal
+  Dodge's sub-roll gap first**, as its own rule fix with its own test, and Mountain Mastery then
+  arrives in a door that already works.
+- **A `fromSpell` mark on `Effect` would move the goldens for nothing.** `state.effects` is in the
+  digest, so a new field on every spell effect rewrites every v1 game that had a Watery Double up
+  (21 mentions in `v1-games.json`) whether or not a riposte ever met it. Stamp it on the gathered
+  **`Modifier`** instead, derived from the effect's `source` being a spell's name: modifiers never
+  reach `GameState`, the same reason `counts_as.species` moved no golden.
+- **Bash cannot reuse `PendingSaves.bonus`.** That field is Wild Growth's save share, and the
+  roll's arithmetic line names it as Wild Growth (`saiResultsSource`). Bash needs its own field, or
+  the line reads "+4 Wild Growth" on a roll with no Wild Growth in it.
+
+### 6a — Data
+
+- `tools/species.py` gains `dwarves` (roster p. 72: heavy Footman / Sergeant / Warlord /
+  Androsphinx, light Sentry / Patroller / Skirmisher / Behemoth, cavalry Pony / Lizard / Mammoth
+  Rider / Gargoyle, missile Crossbowman / Marksman / Crack-Shot / Roc, magic Theurgist /
+  Thaumaturgist / Wizard / Umber Hulk). `SPECIES_SAIS` gains Roar, Stomp, Bash, Charge.
+- **The Dwarves are unplayable after this slice**, by `playable.ts`'s rule, which is what 5a built
+  it for. `sai.test.ts`'s four-way partition gains four unbuilt names.
+- **The monster SAI counts are confirmed: all 4.** Every monster face in the raw file said 4 with
+  no count in the source, and the Gorgon's `2 Flame` is the proof that a monster's X is not always
+  its health. Nine of the SAIs here *read* X -- Roar and Stomp as health-worth, Smite, Rend, Seize,
+  Fly, Confuse, Trample, and Bash's "other save rolls" -- so the owner checked them against the
+  dice before import (2026-09-30): every one is 4. The raw file's header note that they are
+  unconfirmed goes in this slice. Charge and Dispel Magic take no X, and Bash's main sentence takes
+  the target's melee instead.
+
+### 6b — Seams, and no rule moves
+
+Four pieces of machinery, each with no new caller or with callers that give identical answers.
+Both golden corpora byte-identical.
+
+1. **`counts_as` becomes a table, not a union of two pairs.** Today it is Flaming Shields' save →
+   melee and Coastal Dodge's maneuver → save, each with a hand-written "when" (`convertsSaves`,
+   `dodgesManeuver`). This phase adds three: maneuver → melee (Charge, every die in the army),
+   melee → maneuver (Mountain Mastery), and save → melee *only on* a counter-attack (Dwarven Might,
+   the mirror image of Flaming Shields' "not on" one). A small `{ from, to, applies }` table
+   with one resolver, landed with the two existing rows and nothing else.
+2. **A damage sub-roll**: `damageSubRoll(state, unitId, damage)` -- `unitRoll`, a save roll, killed
+   through `killUnits` when damage minus saves reaches the unit's health. Logged as a
+   `sai_sub_roll` with the damage on it. No caller until 6d.
+3. **Spell saves, gathered**: `spellSaves(state, player, ref)`, the sum of the positive save `add`s
+   from spell effects on that army (Stone Skin, Watery Double), read off modifiers stamped at
+   gather time (above). No caller until 6c.
+4. **A combination allocation that is not the dragon's.** `dragon_allocate` is the only
+   combination roll there is: `ids` and `flexible` spent over `DRAGON_ROLL_KINDS`, plus Flaming
+   Shields' trade. Charge's roll is the same question over `[save, melee]`. Pull the allocation
+   check and the spec builder (`dragonRollSpec`'s `alsoDoubled` included -- the eighth face doubles
+   every counted type, which is the bug that shipped once) into one place parameterised by kinds.
+
+### 6c — Two old rules corrected
+
+Rule fixes to species that already play, each its own commit, since each may move a golden and
+must say why.
+
+- **The riposte stops being wholly unsavable.** Counter and Volley both say "only save results
+  generated by spells that would add to a save roll may reduce this damage", and `RULES-V0.md` §8
+  applies it flat. `finishSaves` subtracts `spellSaves` of the army the riposte lands on. The v1
+  corpus has **four ripostes**; replay says whether any landed on a Watery Double or a Stone Skin.
+  If one did, regenerate `v1` with that as the written reason; if none did, say that instead. V0
+  cannot move (no spells).
+- **Species abilities reach unit rolls.** `unitRoll` gathers the counts-as rows for the unit's own
+  species at the terrain *it* stands on -- none in Reserves or the DUA, so a Stomped die's burial
+  roll gets nothing. Coastal Dodge then applies to every save sub-roll at water: Bullseye, Double
+  Strike, Lightning Strike, and next Bash and Firebolt. No v1 golden has a Coral Elf, so nothing
+  moves; a test drives a Bullseye into a Coral Elf at water.
+
+### 6d — Roar, Stomp, Bash
+
+- **Roar** is `target_enemy` with a Reserve destination and no roll. It is not a kill: no death
+  trigger, no Replanting. A sleeping die is a legal target (Roar moves it; it does not ask it to
+  move), and a Roar that empties the defending army leaves nobody to save, which must end the
+  exchange as an empty army does, not throw.
+- **Stomp** chains two existing sub-rolls, and the second must wait. Its kills can raise an
+  Accelerated Growth offer, and an exchanged die was never killed, so it rolls no burial check. So
+  the burial check is **parked and made at the next machine step**, exactly the way
+  `rerollDue` / `rollHeldAgain` wait for a Bullseye's reroll, and it rolls only the dice actually in
+  the DUA by then (`resolveBreathBury`'s `inDua` filter, reused rather than rederived: Phase 8's
+  missed crash was a kill-and-bury that forgot what Replanting took out). A Phoenix still gets its
+  Rise roll on the way to the BUA.
+- **Bash is the first enemy-aimed task the defender owns.** It is chosen at the delayed pause
+  (the save dice have to be on the table) but aimed at the *attacker's* army, a combination
+  `taskOwner` has never returned. `Pending.sai_target` with `limit: one` and `eligible`: the
+  attacking units whose dice produced melee, read by `perDieResults` over the unit's whole reroll
+  chain. The target takes that much damage through 6b's sub-roll; its results still count toward
+  the attack (p. 27, "its results still stand"); the defender's roll gains the same number of saves
+  in Bash's own field. Individual-unit, so never combined. **In the UI the victim is picked from the
+  attack strip**, which the delayed pause already shows beside the save strip.
+- **Bash in a dragon attack needs a house rule.** "Choose an attacking dragon that has inflicted
+  damage" is a decision inside the dragon combination roll, which `noSideDecision` refuses. Proposed:
+  automatic, the dragon that did the most damage (tie by board order), because that choice
+  maximises both halves -- the saves and the damage sent back. It slays the dragon when that damage
+  alone reaches the dragon's threshold (10, or 5 past a Belly); it is neither melee nor missile, so
+  it never combines with either pool.
+- `expectOnly`'s whitelist in `finishSaves` gains Bash's effect kind **in the same edit**. That is
+  the one thing every Phase 4 slice forgot.
+
+### 6e — Charge
+
+The third shape of exchange, and the phase's one real unknown. In its own slice so the seams it
+finds are not tangled with anything else.
+
+- **The attacker's half is a counts-as triggered by a face**, not by `armyRoll`: if any attacking
+  die shows Charge on a melee attack that is not a counter, every die's *rolled* maneuver counts as
+  melee (`rolledManeuver`, Coastal Dodge's helper). **Fly is the trap**: `choiceOf` keeps only the
+  type the roll counts, so in a melee roll Fly's "X maneuver or X save" becomes nothing, and under a
+  Charge it should become X melee. Trample's maneuver half survives into `saiResults`; Fly's does not.
+  A test with a Gargoyle Flying beside a Charging Behemoth.
+- **The defender's half replaces the save roll at the same step.** `PendingSaves.charge` is written
+  when the save dice are thrown, as `wave` is, so the pause, the display and the count all see it.
+  The roll counts save and melee. **The zero-total early return must not skip it**: Charge replaces
+  the counter-attack as well as the save roll, so the defender rolls even against a zero attack.
+  `attackFacts.savesNeeded` is the early return Phase 4a already had to move once.
+- **Then an allocation pause** (`charge_allocate`, 6b's shared allocation): IDs split between save
+  and melee, and Flaming Shields' trade when the defenders are Firewalkers at fire. Skipped when there
+  is nothing to allocate. A new `MarchStep` between `sai_delayed_attack` and
+  `resolve_attack_damage`, on the attack half only.
+- **Damage**: attack minus saves goes to the defender as usual; the combination roll's melee, plus
+  any Counter riposte, goes back at `assign_attack_riposte`, less the attacker's spell saves. No
+  counter-attack is offered. The log gains optional fields only (`charged`, the melee sent back), so
+  no digest moves.
+- **House rules to settle and write in `RULES-V0.md`** (proposals):
+  - The combination roll **is the save roll against a melee attack** for every SAI and delayed
+    effect: Counter, Bash, Wave, Galeforce, Choke, Confuse and Hypnotic Glare all apply to it. An SAI
+    whose only melee sentence is "during a melee attack" (Smite, Roar, Stomp, Rend, Tail) adds no
+    melee, since the defender is not attacking; an "any roll" SAI (Trample) does.
+  - **Counter counts as its save sentence, automatically.** p. 28's combination rule lets the
+    roller pick one sentence, and X saves plus X damage back dominates X melee, which only sends the
+    same X back.
+  - A modifier that could fall on either type is applied **the way the dragon roll already applies
+    it**, through the shared spec builder, and the rule is written once for both.
+  - Coastal Dodge converts automatically (the roll counts saves and not maneuver); Dwarven Might
+    does not apply (it is not a counter-attack); Flaming Shields is a trade and is asked.
+  - One Charge or several: the effect is the same, so they combine trivially.
+- **Greedy and passive**: allocate IDs to saves until the attack is covered, the rest to melee.
+  `estimate.ts` learns both halves -- the maneuver the Charge adds, and the melee the defender will
+  send back -- or greedy will march a Behemoth into a Charge it prices at zero.
+
+### 6f — Mountain Mastery, Dwarven Might, and the flip
+
+- **Mountain Mastery** is the melee → maneuver row: automatic, since no maneuver roll counts melee.
+  It reaches the marching maneuver, the counter-maneuver and (after 6c) a Dwarf's own Smother,
+  Firecloud or Stomp roll. **Dwarven Might** is the counter-only save → melee row, automatic for the
+  same reason. Both write a note on the arithmetic line, as Coastal Dodge does. `flamingShields` on
+  the log stays Flaming Shields' alone, because the digest records it.
+- **The flip**: `SPECIES_ABILITIES` names the Dwarves, and with that edit (5a's lesson, paid in 5d)
+  come the five monster fixtures, the race draw over four species (already general, so only its
+  tests' counts move), every test that counts species, and the live fuzz's counters for the four
+  SAIs and two abilities.
+- **Predicted fuzz reach**: Roar and Stomp fire in 200 random games; Mountain Mastery and Dwarven
+  Might certainly do, since Highland is home. **Charge and Bash are one face each on one monster**,
+  and Bash also needs a save roll against melee, so expect `'full'` for both, with a named test in
+  the Behemoth mirror standing behind each counter.
+
+### 6g — Firebolt and Higher Ground
+
+- **Higher Ground** is an `effect` block, Dancing Lights' shape at five: `opposing_army`, subtract 5
+  melee, cumulative. No code.
+- **Firebolt** is a handler over 6b's damage sub-roll: N castings, N damage, one save roll.
+  `countScales` true (two castings kill a two-health die that saves nothing), and one line in
+  greedy's `HANDLER_VALUE`. The validator already accepts an imported species' spells (5e).
+
+### 6h — Presets, exit checks, art
+
+- `dwarves_starter` (the starters' class-and-size layout, 30 health) and `dwarves_bestiary` (every
+  monster and every large die, 35), as 5f did.
+- **Re-run greedy against passive** with a Dwarves force on both sides: Charge and Higher Ground
+  are the two new values most likely to outbid walking a terrain home.
+- Exit criterion as for every species (above). The V1 goldens move only if 6c's riposte fix moved
+  them, and the commit that regenerated them says so.
+- **Art**: the pins are already in. After import the resolver should report no ambiguity; running
+  `npm run art` to download is the owner's step, as in 5g.
+
+### Deliberately out of this phase
+
+- **Death magic.** Dwarves bring none; it is Phase 7's first slice.
+- **Cursed Bullets.** It uses 6b's spell-save gather, but it is Lava Elves' (Phase 8).
+- **A player's choice over "may".** Every ability here is automatic because converting can only
+  help in the rolls it reaches; if a later species brings a combination roll counting maneuver, the
+  question comes back.
 
 ---
 
