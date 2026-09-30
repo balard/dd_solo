@@ -29,8 +29,8 @@ import { unitType } from '../data/load'
 import type { Face, ResultType } from '../data/types'
 import { healthsOf, maxAbsorbable } from '../engine/damage'
 import { armyRoll } from '../engine/effects'
-import { applyModifiers, type Share } from '../engine/pipeline'
-import { defaultContextFor, faceResults } from '../engine/roll'
+import { applyModifiers, type ConvertibleType, type Share } from '../engine/pipeline'
+import { conversionsIn, defaultContextFor, faceResults } from '../engine/roll'
 import { saiEffects, type RollContext } from '../engine/sai'
 import {
   opponentOf,
@@ -63,10 +63,12 @@ export interface ExpectedDie {
    * since the chance depends on a die the roller does not own.
    */
   readonly targeted: number
-  /** Save results this die rolled, for Flaming Shields to turn into melee. */
-  readonly rolledSaves: number
-  /** Maneuver results this die rolled, for Coastal Dodge to turn into saves (v2 Phase 5d). */
-  readonly rolledManeuver: number
+  /**
+   * The results of each convertible type this die rolled, for a "counts as" to move --
+   * Flaming Shields' saves, Coastal Dodge's maneuver (v2 Phase 6b: one record for
+   * every row of the table, rather than a field per ability).
+   */
+  readonly rolled: Rolled
   /** Wave (v2 Phase 5c): results taken off the *other* army's roll -- its saves when
    *  this is a melee attack. */
   readonly wave: number
@@ -86,8 +88,11 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
       unsavable: 0,
       riposte: 0,
       targeted: 0,
-      rolledSaves: face.icon === 'SAVE' ? face.count : 0,
-      rolledManeuver: face.icon === 'MANEUVER' ? face.count : 0,
+      rolled: {
+        melee: face.icon === 'MELEE' ? face.count : 0,
+        save: face.icon === 'SAVE' ? face.count : 0,
+        maneuver: face.icon === 'MANEUVER' ? face.count : 0,
+      },
       wave: 0,
       reroll: false,
     }
@@ -144,12 +149,20 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
     unsavable,
     riposte,
     targeted,
-    rolledSaves: outcome.results.save ?? 0,
-    rolledManeuver: outcome.results.maneuver ?? 0,
+    rolled: {
+      melee: outcome.results.melee ?? 0,
+      save: outcome.results.save ?? 0,
+      maneuver: outcome.results.maneuver ?? 0,
+    },
     wave,
     reroll: outcome.reroll,
   }
 }
+
+/** Results of each type a "counts as" may move. */
+export type Rolled = Readonly<Record<ConvertibleType, number>>
+
+const CONVERTIBLE: readonly ConvertibleType[] = ['melee', 'save', 'maneuver']
 
 /** What a Swallow is expected to take: one die, which rarely shows its ID. */
 const SWALLOW_WORTH = 2
@@ -175,8 +188,7 @@ export function expectedDie(
   let unsavable = 0
   let riposte = 0
   let targeted = 0
-  let rolledSaves = 0
-  let rolledManeuver = 0
+  const rolled = { melee: 0, save: 0, maneuver: 0 }
   let wave = 0
 
   for (const face of faces) {
@@ -188,8 +200,7 @@ export function expectedDie(
     unsavable += worth.unsavable
     riposte += worth.riposte
     targeted += worth.targeted
-    rolledSaves += worth.rolledSaves
-    rolledManeuver += worth.rolledManeuver
+    for (const type of CONVERTIBLE) rolled[type] += worth.rolled[type]
     wave += worth.wave
   }
 
@@ -203,8 +214,11 @@ export function expectedDie(
     unsavable: unsavable / divisor,
     riposte: riposte / divisor,
     targeted: targeted / divisor,
-    rolledSaves: rolledSaves / divisor,
-    rolledManeuver: rolledManeuver / divisor,
+    rolled: {
+      melee: rolled.melee / divisor,
+      save: rolled.save / divisor,
+      maneuver: rolled.maneuver / divisor,
+    },
     wave: wave / divisor,
   }
 }
@@ -240,7 +254,8 @@ export interface ExpectedArmyOptions {
  * `applyModifiers` ignores because only the dice can say how many saves there were --
  * so it is added here from the expected rolled saves, at step 10 where the roll adds it,
  * and never on a counter-attack, where the roll refuses it. Coastal Dodge (v2 Phase 5d)
- * is the same shape the other way: expected rolled maneuver, added to a save roll.
+ * is the same shape the other way. Both are asked of `conversionsIn`, the roll's own
+ * resolver (v2 Phase 6b), so the estimate cannot apply one the roll would not.
  */
 export function expectedArmy(
   state: GameState,
@@ -258,21 +273,12 @@ export function expectedArmy(
   let unsavable = 0
   let riposte = 0
   let targeted = 0
-  let rolledSaves = 0
-  let dodged = 0
+  let converted = 0
   let wave = 0
-  // Whose maneuver Coastal Dodge converts: a roll that counts saves (v2 Phase 5d).
-  const dodging = new Set(
-    resultType === 'save'
-      ? modifiers.flatMap((m) => (m.kind === 'counts_as' && m.from === 'maneuver' ? m.species : []))
-      : [],
-  )
-  // Whose saves Flaming Shields converts: only its own species' dice (v2 Phase 1).
-  const shielded = new Set(
-    resultType === 'melee' && !context.isCounter
-      ? modifiers.flatMap((m) => (m.kind === 'counts_as' && m.from === 'save' ? m.species : []))
-      : [],
-  )
+  // Every "counts as" this roll makes on its own, through the roll's own resolver -- a
+  // trade is the owner's choice and only a combination roll has one, which this never
+  // estimates. `applyModifiers` ignores `counts_as`, so the results are added by hand.
+  const conversions = conversionsIn([resultType], context, modifiers).filter((c) => !c.chosen)
   for (const unit of units) {
     const die = expectedDie(unit.typeId, resultType, context, state.ruleSet)
     id += die.share.id
@@ -282,15 +288,17 @@ export function expectedArmy(
     riposte += die.riposte
     targeted += die.targeted
     wave += die.wave
-    if (shielded.has(unitType(unit.typeId).species)) rolledSaves += die.rolledSaves
-    if (dodging.has(unitType(unit.typeId).species)) dodged += die.rolledManeuver
+    const species = unitType(unit.typeId).species
+    for (const conversion of conversions) {
+      if (conversion.species.has(species)) converted += die.rolled[conversion.from]
+    }
   }
 
   const share: Share = { id: options.countIds === false ? 0 : id, normal, sai }
 
   return {
     share,
-    total: applyModifiers(share, resultType, modifiers) + rolledSaves + dodged,
+    total: applyModifiers(share, resultType, modifiers) + converted,
     unsavable,
     riposte,
     targeted,

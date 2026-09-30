@@ -1494,6 +1494,13 @@ export type LogEntry =
        * and a failed save buries them. Omitted means "or die".
        */
       readonly fate?: 'bury'
+      /**
+       * Damage the die was rolling saves against (v2 Phase 6b, `damageSubRoll`): it
+       * survives when its saves leave less than its health, not on any save at all.
+       * Omitted for every roll that only wants a result -- which is every one before
+       * Bash and Firebolt, and every one in a golden.
+       */
+      readonly damage?: number
     }
   /**
    * Wild Growth: what the budget was spent on.

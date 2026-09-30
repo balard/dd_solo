@@ -64,7 +64,6 @@ import {
   armyRoll,
   flashfireBudget,
   thornsAt,
-  doublesIds,
   expireEffects,
   iconAt,
   endGlaresOf,
@@ -91,7 +90,7 @@ import {
   type RawDie,
   type RollSpec,
 } from './roll'
-import { doubleIdsModifier, ignoreIdsModifiers, type Modifier } from './pipeline'
+import { ignoreIdsModifiers, type Modifier } from './pipeline'
 import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
 import { terrainHas, unitHasAbility } from './species'
 import { targetTasks, type TargetTask } from './targeting'
@@ -110,8 +109,9 @@ import {
   spellTargetProblem,
 } from './magic'
 import { castSpell, spellEffect } from './spells'
+import { combinationAnswerProblem, combinationSpec } from './combination'
 import { applyChooseFrontier, applyRollOffChoice, rollOffPending } from './setup'
-import type { DragonElement, ResultType } from '../data/types'
+import type { DragonElement } from '../data/types'
 import {
   IllegalActionError,
   TERRAIN_SLOTS,
@@ -3227,26 +3227,14 @@ function dragonRollSpec(
   attack: DragonAttackState,
   answer?: Extract<GameAction, { kind: 'dragon_allocate' }>,
 ): RollSpec {
-  const { modifiers } = armyRoll(state, attack.defender, attack.slot, 'melee')
-
-  // `armyRoll` takes one result type and doubles IDs in that one. The eighth face
-  // doubles them "when rolling anything there", so a combination roll needs the
-  // other two as well -- without this a held terrain would double the melee share
-  // and quietly not the missile or save ones.
-  const alsoDoubled = doublesIds(state, attack.defender, attack.slot)
-    ? DRAGON_ROLL_KINDS.filter((kind) => kind !== 'melee').map(doubleIdsModifier)
-    : []
-
-  return {
-    kinds: DRAGON_ROLL_KINDS,
-    modifiers: [...modifiers, ...alsoDoubled],
-    context: { purpose: { kind: 'dragon_attack' }, isCounter: false },
-    idAllocation: answer?.ids ?? { melee: 0, missile: 0, save: 0 },
-    ...(answer?.flexible !== undefined ? { saiResults: answer.flexible } : {}),
-    ...(answer?.savesAsMelee !== undefined && answer.savesAsMelee > 0
-      ? { savesAsMelee: answer.savesAsMelee }
-      : {}),
-  }
+  return combinationSpec(
+    state,
+    attack.defender,
+    attack.slot,
+    DRAGON_ROLL_KINDS,
+    { purpose: { kind: 'dragon_attack' }, isCounter: false },
+    answer,
+  )
 }
 
 function applyDragonAllocate(
@@ -3259,21 +3247,12 @@ function applyDragonAllocate(
     throw new IllegalActionError('no dragon roll is waiting to be allocated')
   }
 
-  const spent = (record: Readonly<Partial<Record<ResultType, number>>>) =>
-    DRAGON_ROLL_KINDS.reduce((sum, kind) => sum + (record[kind] ?? 0), 0)
-
-  if (spent(action.flexible) !== pending.flexible) {
-    throw new IllegalActionError(
-      `the split spends ${spent(action.flexible)} of ${pending.flexible} flexible results`,
-    )
-  }
-  // `allocateIds` enforces the ID pool being spent exactly, and says so better.
-  const converted = action.savesAsMelee ?? 0
-  if (!Number.isInteger(converted) || converted < 0 || converted > (pending.shields ?? 0)) {
-    throw new IllegalActionError(
-      `Flaming Shields can count ${pending.shields ?? 0} saves as melee here, not ${converted}`,
-    )
-  }
+  const problem = combinationAnswerProblem(
+    DRAGON_ROLL_KINDS,
+    { ids: pending.ids, flexible: pending.flexible, shields: pending.shields ?? 0 },
+    action,
+  )
+  if (problem !== null) throw new IllegalActionError(problem)
 
   return resolveArmyRoll(state, attack, action)
 }

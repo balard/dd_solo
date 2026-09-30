@@ -301,9 +301,10 @@ describe('where a spell effect reaches', () => {
       target: { kind: 'army', player: 'p1', army: 'p1_home' },
     })))
 
-    // Named for the roll's arithmetic (Phase 9c): "+ 1 Stone Skin", not a bare +1.
+    // Named for the roll's arithmetic (Phase 9c): "+ 1 Stone Skin", not a bare +1. And
+    // marked as a spell's (v2 Phase 6b), which is what lets it reduce a riposte.
     expect(armyRoll(state, 'p1', 'p1_home', 'save').modifiers).toEqual([
-      { kind: 'add', resultType: 'save', amount: 1, source: 'Stone Skin' },
+      { kind: 'add', resultType: 'save', amount: 1, source: 'Stone Skin', fromSpell: true },
     ])
     // Not the same army somewhere else, and not the other player's army here.
     expect(armyRoll(state, 'p1', 'frontier', 'save').modifiers).toEqual([])
@@ -321,6 +322,7 @@ describe('where a spell effect reaches', () => {
         resultType: 'melee',
         amount: 1,
         source: 'Ash Storm',
+        fromSpell: true,
       })
     }
     expect(armyRoll(state, 'p1', 'p1_home', 'melee').modifiers).toEqual([])
@@ -332,7 +334,7 @@ describe('where a spell effect reaches', () => {
     const state = withEffect(gameAt('p1'), spellEffect(spell('wall_of_fog'), ctx({
       target: { kind: 'terrain', slot: 'p2_home' },
     })))
-    const ward = { kind: 'subtract', resultType: 'missile', amount: 6, source: 'Wall of Fog' }
+    const ward = { kind: 'subtract', resultType: 'missile', amount: 6, source: 'Wall of Fog', fromSpell: true }
 
     // Shooting *into* the warded terrain from elsewhere: warded.
     expect(armyRoll(state, 'p1', 'frontier', 'missile', 'p2_home').modifiers).toContainEqual(ward)

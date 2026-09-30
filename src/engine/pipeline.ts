@@ -41,8 +41,14 @@ export type ModifierShare = 'all' | 'id'
  * `source` is **display only** (v1 Phase 9c): the spell, SAI, breath or rule that put it
  * there, stamped by `armyRoll` from `Effect.source`. Nothing in the arithmetic reads it.
  * It exists so a roll can say "− 4 Galeforce" instead of an unexplained `12 → 8`.
+ *
+ * `fromSpell` says the modifier came from a spell (v2 Phase 6b), which a rule reads:
+ * Counter's riposte and Charge's melee "may only be reduced by save results generated
+ * by spells". Stamped when the modifier is gathered, never stored on the `Effect` --
+ * `state.effects` is in the golden digest and a modifier never reaches `GameState`, so
+ * the mark moves no recorded game.
  */
-export type Modifier = ModifierBody & { readonly source?: string }
+export type Modifier = ModifierBody & { readonly source?: string; readonly fromSpell?: true }
 
 type ModifierBody =
   | { readonly kind: 'subtract'; readonly resultType: ResultType; readonly amount: number }
@@ -89,20 +95,33 @@ type ModifierBody =
   | {
       readonly kind: 'counts_as'
       /**
-       * Two directions, one per ability that has them (v2 Phase 5d): Flaming Shields'
-       * saves as melee, and Coastal Dodge's maneuver as saves. A union of the two pairs
-       * rather than any `ResultType` to any other, because each pair has its own rule
-       * about when it applies -- see `convertsSaves` and `dodgesManeuver` in `roll.ts`.
+       * A "counts as" is a pair of result types and a rule about when it applies
+       * (v2 Phase 6b): Flaming Shields' saves as melee, not on a counter-attack; Coastal
+       * Dodge's maneuver as saves, on any roll. `conversionsIn` in `roll.ts` is the one
+       * resolver, so a new ability is a new row -- a factory below -- and no new
+       * function beside `convertsSaves` and `dodgesManeuver`, which it replaced.
        */
-      readonly from: 'save' | 'maneuver'
-      readonly resultType: 'melee' | 'save'
+      readonly from: ConvertibleType
+      readonly resultType: ConvertibleType
+      /** Which rolls it applies to, by whether the roll is a counter-attack. */
+      readonly counter: 'never' | 'only' | 'either'
       readonly species: readonly string[]
     }
 
+/** The result types a "counts as" in scope moves between. */
+export type ConvertibleType = 'melee' | 'save' | 'maneuver'
+
 /** Flaming Shields' permission, as `armyRoll` gathers it: the dice of these species
- *  may count their rolled saves as melee. */
+ *  may count their rolled saves as melee, except when making a counter-attack. */
 export function savesAsMelee(species: readonly string[]): Modifier {
-  return { kind: 'counts_as', from: 'save', resultType: 'melee', species, source: 'Flaming Shields' }
+  return {
+    kind: 'counts_as',
+    from: 'save',
+    resultType: 'melee',
+    counter: 'never',
+    species,
+    source: 'Flaming Shields',
+  }
 }
 
 /**
@@ -112,7 +131,14 @@ export function savesAsMelee(species: readonly string[]): Modifier {
  * maneuver -- where converting can only help, so it is automatic.
  */
 export function maneuverAsSaves(species: readonly string[]): Modifier {
-  return { kind: 'counts_as', from: 'maneuver', resultType: 'save', species, source: 'Coastal Dodge' }
+  return {
+    kind: 'counts_as',
+    from: 'maneuver',
+    resultType: 'save',
+    counter: 'either',
+    species,
+    source: 'Coastal Dodge',
+  }
 }
 
 /** The eighth-face holder's doubled ID results, as the step-9 modifier it is. */

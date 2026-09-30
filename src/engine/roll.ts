@@ -17,6 +17,7 @@ import type { Face, NormalIcon, ResultType, UnitType } from '../data/types'
 import type { UnitRollInput } from './effects'
 import {
   allocateIds,
+  type ConvertibleType,
   applyModifiers,
   type IdAllocation,
   type Modifier,
@@ -411,62 +412,78 @@ function perDieResults(
 }
 
 /**
- * Whose dice this roll converts from saves to melee, or null for nobody: Flaming
- * Shields' permission is on it, the roll counts melee, and it is not a counter-attack
- * -- "Flaming Shields does not apply when making a counter-attack". Decided here rather
- * than in `armyRoll` because this is the one place that knows what the roll is for.
+ * A "counts as" that applies to this roll (v2 Phase 6b): whose dice, from what, to what.
  *
- * A set of species rather than a yes (v2 Phase 1): the permission is the Firewalkers',
- * so in a mixed army a Treefolk die's saves stay saves. `convertsDie` asks per die.
+ * `chosen` is a **trade**: the roll counts the `from` type as well, so converting takes
+ * results away from one total to give them to another, and the owner says how many --
+ * Flaming Shields in the dragon's combination roll, `RollSpec.savesAsMelee`. Everywhere
+ * else converting only adds, so every rolled result of those dice converts.
  */
-function convertsSaves(spec: RollSpec): ReadonlySet<string> | null {
-  if (spec.context.isCounter) return null
-  if (!spec.kinds.includes('melee')) return null
-  const species = spec.modifiers.flatMap((m) =>
-    m.kind === 'counts_as' && m.from === 'save' ? m.species : [],
-  )
-  return species.length > 0 ? new Set(species) : null
-}
-
-/** Whether this die's saves are among those a roll converts. */
-function convertsDie(converts: ReadonlySet<string> | null, die: RawDie): boolean {
-  return converts !== null && converts.has(unitType(die.typeId).species)
+export interface Conversion {
+  readonly from: ConvertibleType
+  readonly to: ConvertibleType
+  /** A set of species rather than a yes (v2 Phase 1): the permission is one species',
+   *  so in a mixed army another species' dice keep what they rolled. */
+  readonly species: ReadonlySet<string>
+  readonly source: string
+  readonly chosen: boolean
 }
 
 /**
- * Whose dice this roll counts maneuver results from as saves, or null: Coastal Dodge's
- * permission is on it, and the roll counts saves and not maneuver (v2 Phase 5d). Every
- * such roll -- a save roll, a spell's save roll, the dragon combination roll -- gains by
- * converting and loses nothing, so it is automatic: there is never a trade to ask about.
- * No counter-attack clause, unlike Flaming Shields': the ability states none.
+ * Every "counts as" this roll applies, from the permissions `armyRoll` gathered.
+ *
+ * **The one resolver**, which replaced one function per ability. A permission applies
+ * when the roll counts its `to` type and the counter-attack rule holds -- Flaming
+ * Shields "does not apply when making a counter-attack" -- and it is decided here
+ * rather than in `armyRoll` because this is the one place that knows what the roll is
+ * for. Coastal Dodge is gathered at every water terrain and lands only where it can.
+ *
+ * A trade is asked about only for saves as melee, the one the rules put in front of a
+ * player (the dragon roll's Flaming Shields). Any other pair in a roll that counts both
+ * of its types is left off: no roll in scope counts maneuver and saves together, and
+ * Coastal Dodge was "a roll that counts saves and not maneuver" before this table.
  */
-function dodgesManeuver(spec: RollSpec): ReadonlySet<string> | null {
-  if (!spec.kinds.includes('save') || spec.kinds.includes('maneuver')) return null
-  const species = spec.modifiers.flatMap((m) =>
-    m.kind === 'counts_as' && m.from === 'maneuver' ? m.species : [],
-  )
-  return species.length > 0 ? new Set(species) : null
+export function conversionsIn(
+  kinds: readonly ResultType[],
+  context: RollContext,
+  modifiers: readonly Modifier[],
+): readonly Conversion[] {
+  const out: Conversion[] = []
+  for (const m of modifiers) {
+    if (m.kind !== 'counts_as') continue
+    if (!kinds.includes(m.resultType)) continue
+    if (m.counter === 'never' && context.isCounter) continue
+    if (m.counter === 'only' && !context.isCounter) continue
+    const trade = kinds.includes(m.from)
+    if (trade && !(m.from === 'save' && m.resultType === 'melee')) continue
+    const source = m.source ?? `${m.from} as ${m.resultType}`
+    const same = out.findIndex((c) => c.from === m.from && c.to === m.resultType && c.source === source)
+    const species = new Set([...(same >= 0 ? out[same]!.species : []), ...m.species])
+    const conversion: Conversion = { from: m.from, to: m.resultType, species, source, chosen: trade }
+    if (same >= 0) out[same] = conversion
+    else out.push(conversion)
+  }
+  return out
 }
 
-/** The maneuver results one die *rolled* -- `rolledSaves`' twin, for Coastal Dodge.
- *  A Trample in a save roll generates maneuver too, and those are rolled results. */
-function rolledManeuver(face: Face, contribution: Contribution, ruleSet: RuleSet): number {
-  if (face.icon === 'ID') return 0
-  if (face.icon === 'SAI') return contribution.saiResults.maneuver ?? 0
-  return faceResults(face, 'maneuver', ruleSet)
+/** Whether this die's results are among those a conversion moves. */
+function convertsDie(conversion: Conversion, die: RawDie): boolean {
+  return conversion.species.has(unitType(die.typeId).species)
 }
 
 /**
- * The save results one die *rolled*: a save icon's count, or an SAI's save results.
+ * The results of one type a die *rolled*: a normal icon's count, or an SAI's results.
  *
- * Never an ID -- in a melee roll an ID is already melee, and in a combination roll the
- * owner allocates it directly -- and never a `flexible` result, for the same reason.
- * Nothing a spell or an effect adds is here either, because none of that is on a die.
+ * Never an ID -- in a roll counting the type an ID is already that type, and in a
+ * combination roll the owner allocates it directly -- and never a `flexible` result,
+ * for the same reason. Nothing a spell or an effect adds is here either, because none
+ * of that is on a die: "results generated by spells may never be counted as another
+ * type". A Trample in a save roll generates maneuver too, and those are rolled results.
  */
-function rolledSaves(face: Face, contribution: Contribution, ruleSet: RuleSet): number {
+function rolledResults(face: Face, contribution: Contribution, type: ConvertibleType, ruleSet: RuleSet): number {
   if (face.icon === 'ID') return 0
-  if (face.icon === 'SAI') return contribution.saiResults.save ?? 0
-  return faceResults(face, 'save', ruleSet)
+  if (face.icon === 'SAI') return contribution.saiResults[type] ?? 0
+  return faceResults(face, type, ruleSet)
 }
 
 /**
@@ -585,17 +602,19 @@ export function rollPools(
   let ids = 0
   let flexible = 0
   let shields = 0
-  const converts = convertsSaves(spec)
+  // Only a trade has anything to choose. In a roll that does not count saves, every
+  // rolled save converts and nobody is asked.
+  const traded = conversionsIn(spec.kinds, spec.context, spec.modifiers).filter((c) => c.chosen)
   for (const die of dice) {
     const face = faceOf(die)
     const contribution = classify(face, spec, ruleSet)
     ids += contribution.idPool
     flexible += contribution.flexible
-    if (convertsDie(converts, die)) shields += rolledSaves(face, contribution, ruleSet)
+    for (const conversion of traded) {
+      if (convertsDie(conversion, die)) shields += rolledResults(face, contribution, conversion.from, ruleSet)
+    }
   }
-  // Only a roll that also counts saves has anything to choose. In one that does not,
-  // every rolled save converts and nobody is asked.
-  return { ids, flexible, shields: spec.kinds.includes('save') ? shields : 0 }
+  return { ids, flexible, shields }
 }
 
 /**
@@ -619,21 +638,22 @@ export function resolveFaces(
   )
   const effects: RollEffect[] = []
   let idPool = 0
-  const converts = convertsSaves(spec)
-  // A roll that does not count saves converts every one it rolled; a roll that does
-  // (the dragon's) converts only what its owner chose.
-  const convertsAll = converts !== null && !spec.kinds.includes('save')
-  let convertible = 0
-  const dodges = dodgesManeuver(spec)
-  let dodged = 0
+  const conversions = conversionsIn(spec.kinds, spec.context, spec.modifiers)
+  // What each conversion found on the dice, in the order `conversionsIn` listed them.
+  const found = conversions.map(() => 0)
 
   for (const die of dice) {
     const face = faceOf(die)
     const contribution = classify(face, spec, ruleSet)
-    const saves = convertsDie(converts, die) ? rolledSaves(face, contribution, ruleSet) : 0
-    convertible += saves
-    const dodge = convertsDie(dodges, die) ? rolledManeuver(face, contribution, ruleSet) : 0
-    dodged += dodge
+    // A conversion the roll makes on its own is drawn on the die that rolled it; a
+    // trade is the owner's number, and is not any one die's.
+    let shownConverted = 0
+    conversions.forEach((conversion, i) => {
+      if (!convertsDie(conversion, die)) return
+      const amount = rolledResults(face, contribution, conversion.from, ruleSet)
+      found[i] = (found[i] ?? 0) + amount
+      if (!conversion.chosen) shownConverted += amount
+    })
 
     idPool += contribution.idPool
     for (const kind of spec.kinds) {
@@ -649,7 +669,7 @@ export function resolveFaces(
       typeId: die.typeId,
       faceIndex: die.faceIndex,
       face,
-      results: perDieResults(face, contribution, spec, (convertsAll ? saves : 0) + dodge),
+      results: perDieResults(face, contribution, spec, shownConverted),
       ...(die.reroll === true ? { reroll: true as const } : {}),
       ...(contribution.effects.length > 0 ? { effects: contribution.effects } : {}),
     })
@@ -661,45 +681,59 @@ export function resolveFaces(
   const allocation = spec.countIds === false ? new Map() : allocateIds(idPool, spec.kinds, spec.idAllocation)
   const totals: Partial<Record<ResultType, number>> = {}
 
-  // Flaming Shields: how many rolled saves become melee, which step 10 adds.
+  // A trade's number is the owner's (`savesAsMelee`); every other conversion moves all
+  // it found. Each becomes the step-10 `add` it is.
   const chosen = spec.savesAsMelee ?? 0
-  if (chosen > 0 && (converts === null || convertsAll)) {
+  const trade = conversions.findIndex((c) => c.chosen)
+  if (chosen > 0 && trade < 0) {
     throw new Error(
       `${chosen} saves counted as melee, but this roll ` +
-        (converts !== null ? 'converts every save it rolled' : 'has no Flaming Shields to convert with'),
+        (conversions.some((c) => c.from === 'save' && c.to === 'melee')
+          ? 'converts every save it rolled'
+          : 'has no Flaming Shields to convert with'),
     )
   }
-  if (!Number.isInteger(chosen) || chosen < 0 || chosen > convertible) {
-    throw new Error(`${chosen} saves counted as melee, from ${convertible} rolled`)
+  if (!Number.isInteger(chosen) || chosen < 0 || chosen > (trade < 0 ? 0 : (found[trade] ?? 0))) {
+    throw new Error(`${chosen} saves counted as melee, from ${trade < 0 ? 0 : (found[trade] ?? 0)} rolled`)
   }
-  const countedAs = convertsAll ? convertible : chosen
-  const converted: Modifier | null =
-    countedAs > 0
-      ? { kind: 'add', resultType: 'melee', amount: countedAs, source: 'Flaming Shields' }
-      : null
-  // Coastal Dodge: every maneuver result a Coral Elf rolled joins the saves at step 10.
-  const dodgedIn: Modifier | null =
-    dodged > 0 ? { kind: 'add', resultType: 'save', amount: dodged, source: 'Coastal Dodge' } : null
+  const moved = conversions.map((c, i) => (c.chosen ? chosen : (found[i] ?? 0)))
+  // Flaming Shields' number, which the log carries as `flamingShields` and the golden
+  // digest records -- so it stays that and nothing else: saves as melee, in a roll that
+  // is not a counter-attack (the only one Flaming Shields makes).
+  const countedAs = spec.context.isCounter
+    ? 0
+    : conversions.reduce((sum, c, i) => sum + (c.from === 'save' && c.to === 'melee' ? (moved[i] ?? 0) : 0), 0)
   const onDice: Modifier[] = []
-  if (converted !== null) onDice.push(converted)
-  if (dodgedIn !== null) onDice.push(dodgedIn)
+  conversions.forEach((c, i) => {
+    const amount = moved[i] ?? 0
+    if (amount > 0) onDice.push({ kind: 'add', resultType: c.to, amount, source: c.source })
+  })
   const modifiers: readonly Modifier[] = [...spec.modifiers, ...onDice]
   const math: Partial<Record<ResultType, RollMath>> = {}
 
   for (const kind of spec.kinds) {
     let normal = normals.get(kind) ?? 0
     let sai = saiResults.get(kind) ?? 0
-    // Converted results stop being saves: they leave the save share before step 6, so
-    // a Galeforce's minus four is not charged against results that are melee now.
-    if (kind === 'save' && !convertsAll && countedAs > 0) {
-      const fromNormal = Math.min(normal, countedAs)
+    // Traded results stop being their old type: they leave its share before step 6,
+    // so a Galeforce's minus four is not charged against results that are melee now.
+    const tradedAway = trade >= 0 && conversions[trade]?.from === kind ? chosen : 0
+    if (tradedAway > 0) {
+      const fromNormal = Math.min(normal, tradedAway)
       normal -= fromNormal
-      sai -= countedAs - fromNormal
+      sai -= tradedAway - fromNormal
     }
     const share = { id: allocation.get(kind) ?? 0, normal, sai }
     totals[kind] = applyModifiers(share, kind, modifiers)
 
-    const explained = explainRoll(share, kind, modifiers, onDice, spec)
+    // Every conversion but Flaming Shields' is a note on the type it lands in. Flaming
+    // Shields' is the log's own `flamingShields` field, which both clients already draw.
+    const noted = conversions.flatMap((c, i) => {
+      const amount = moved[i] ?? 0
+      if (c.to !== kind || amount === 0) return []
+      if (c.from === 'save' && c.to === 'melee' && !spec.context.isCounter) return []
+      return [`${amount} ${c.from} counted as ${PLURAL[c.to]} (${c.source})`]
+    })
+    const explained = explainRoll(share, kind, modifiers, onDice, spec, noted)
     if (explained !== null) math[kind] = explained
   }
 
@@ -710,6 +744,13 @@ export function resolveFaces(
     ...(countedAs > 0 ? { countedAs } : {}),
     ...(Object.keys(math).length > 0 ? { math } : {}),
   }
+}
+
+/** How a note names the type a conversion lands in: "3 maneuver counted as saves". */
+const PLURAL: Readonly<Record<ConvertibleType, string>> = {
+  melee: 'melee',
+  save: 'saves',
+  maneuver: 'maneuver',
 }
 
 /** Where each named modifier falls in steps 6 to 10, so the arithmetic reads in the
@@ -741,6 +782,8 @@ function explainRoll(
   /** The conversions the dice already show: Flaming Shields', Coastal Dodge's. */
   converted: readonly Modifier[],
   spec: RollSpec,
+  /** What those conversions say about this type, already worded by `resolveFaces`. */
+  conversionNotes: readonly string[],
 ): RollMath | null {
   const own = modifiers.filter((m) => m.resultType === kind)
   const onDice = own.filter(
@@ -759,12 +802,9 @@ function explainRoll(
     notes.push(`IDs doubled (${doubling.source ?? 'eighth face'})`)
   }
   if (spec.countIds === false) notes.push('Tower: ID results do not count')
-  // Coastal Dodge's maneuver is on the dice, like the eighth face's doubling -- so it
-  // is a note, and the dice strip already shows each die's share of it.
-  const dodge = onDice.find((m) => m.kind === 'add' && m.source === 'Coastal Dodge')
-  if (dodge !== undefined && dodge.kind === 'add') {
-    notes.push(`${dodge.amount} maneuver counted as saves (Coastal Dodge)`)
-  }
+  // A conversion is on the dice, like the eighth face's doubling -- so it is a note,
+  // and the dice strip already shows each die's share of it.
+  notes.push(...conversionNotes)
 
   if (named.length === 0 && offDice === 0 && notes.length === 0) return null
 
