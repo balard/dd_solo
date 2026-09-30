@@ -1002,5 +1002,6 @@ reaches both sides' armies at the terrain, the caster's included.
   attack, a spell's save roll -- and a question in all of those places is a pause the machine does
   not have. Keeping the glare is the answer a player wants almost every time, since rolling the die
   ends it.
-- **A unit roll still rolls it**, and so ends the glare. A die made to roll for its own life (a
+- **A unit roll still rolls it**, and so ends the glare -- every unit roll, a spell's included:
+  Lightning Strike and Mirage ended no glare until v2 Phase 6c. A die made to roll for its own life (a
   Bullseye, a Swallow) that sat out would simply fail and die; no player chooses that.

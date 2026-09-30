@@ -29,7 +29,7 @@ import type { Element, ResultType } from '../data/types'
 import { healthsOf, maxAbsorbable } from './damage'
 import { deathEntries, killUnits } from './death'
 import { returnFromDua } from './dua'
-import { armyRoll, unitRoll, type Effect, type EffectTarget } from './effects'
+import { armyRoll, endGlaresOf, unitRoll, type Effect, type EffectTarget } from './effects'
 import { expectNoEffects, rollArmy, rollUnits, type DieRoll } from './roll'
 import { ALL_RESULT_TYPES, type Modifier } from './pipeline'
 
@@ -361,6 +361,7 @@ function saveSubRoll(
 
   const failed: UnitId[] = []
   const dice: DieRoll[] = []
+  const rolled: UnitId[] = []
   for (const sub of rolls) {
     if (sub.roll === null) {
       failed.push(sub.unitId)
@@ -368,10 +369,14 @@ function saveSubRoll(
     }
     expectNoEffects(sub.roll, `${source}'s save roll`)
     dice.push(...sub.roll.dice)
+    rolled.push(sub.unitId)
     if (sub.roll.total === 0) failed.push(sub.unitId)
   }
 
-  return { state: { ...state, rng }, failed, dice }
+  // A glaring die that rolls ends its glare (v2 Phase 6c). 5b gave that one door, the
+  // SAI sub-roll, and these two spells roll their targets through this one instead --
+  // so a Leviathan struck by lightning went on glaring. Every unit roll ends it.
+  return { state: endGlaresOf({ ...state, rng }, rolled), failed, dice }
 }
 
 /** The units a spell named that are still where it named them. */

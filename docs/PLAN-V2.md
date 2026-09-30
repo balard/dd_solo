@@ -1729,6 +1729,11 @@ reads "4 straight back − 2 Watery Double = 2". Charge will reuse it in 6e. The
 riposte number itself changes. The estimator subtracts the same spell saves, so greedy does not
 fear a Counter that a Stone Skin already answers.
 
+**2. A spell's unit roll ends a glare now.** `spells.ts`'s `saveSubRoll` calls `endGlaresOf` for
+every die that actually rolled, the same as the SAI sub-roll. Tests cast Lightning Strike and Mirage
+at a glaring die and see both the glare and its victim's hypnosis end, and both fail without the fix.
+No golden moved: nothing in either corpus has a Leviathan.
+
 ### 6d — Roar, Stomp, Bash
 
 - **Roar** is `target_enemy` with a Reserve destination and no roll. It is not a kill: no death

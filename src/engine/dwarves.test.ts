@@ -21,7 +21,7 @@ import { advance } from './reduce'
 import { conversionsIn, resolveFaces, type RawDie, type RollSpec } from './roll'
 import { rollDice, type RngState } from './rng'
 import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
-import { spellEffect, type SpellContext } from './spells'
+import { castSpell, spellEffect, type SpellContext } from './spells'
 import { damageSubRoll } from './subroll'
 import {
   V0_RULES,
@@ -392,5 +392,45 @@ describe("a riposte, which only the attacker's spell saves reduce", () => {
     // Their Watery Double adds to their own save roll -- two more saves -- and the
     // riposte comes back whole.
     expect(exchange).toMatchObject({ saveTotal: 6, riposte: 4 })
+  })
+})
+
+describe("a spell's unit roll ends a glare", () => {
+  // p2:0 glares, and p1:0 is hypnotized by it: both effects end when p2:0 is rolled.
+  const glaring: readonly Effect[] = [
+    {
+      source: 'Hypnotic Glare',
+      target: { kind: 'unit', unitId: 'p2:0' },
+      modifiers: [],
+      glaring: true,
+      anchor: { unitId: 'p2:0', slot: 'frontier', untilRolled: true },
+      expiresAtStartOfTurnOf: 'p2',
+    },
+    {
+      source: 'Hypnotic Glare',
+      target: { kind: 'unit', unitId: 'p1:0' },
+      modifiers: [],
+      hypnotized: true,
+      anchor: { unitId: 'p2:0', slot: 'frontier', untilRolled: true },
+      expiresAtStartOfTurnOf: 'p2',
+    },
+  ]
+  const struck = (id: string) => {
+    const state = { ...board([OAK], [OAK], rngShowing([OAK], [OAK_SAVE])), effects: glaring }
+    return castSpell(state, spell(id), {
+      caster: 'p1',
+      army: 'frontier',
+      element: id === 'mirage' ? 'fire' : 'air',
+      count: 1,
+      target: { kind: 'units', unitIds: ['p2:0'] },
+    }).state
+  }
+
+  it('by Lightning Strike', () => {
+    expect(struck('lightning_strike').effects).toEqual([])
+  })
+
+  it('by Mirage', () => {
+    expect(struck('mirage').effects).toEqual([])
   })
 })
