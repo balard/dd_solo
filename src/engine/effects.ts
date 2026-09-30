@@ -316,11 +316,25 @@ const SPELL_NAMES: ReadonlySet<string> = new Set(SPELLS.map((s) => s.name))
  * nothing here, and neither does an SAI's Galeforce.
  */
 export function spellSaves(state: GameState, player: PlayerId, ref: ArmyRef): number {
-  let total = 0
+  return spellSaveSources(state, player, ref).reduce((sum, s) => sum + s.amount, 0)
+}
+
+/** `spellSaves` by spell, in the order `armyRoll` gathers them, so a reduction can be
+ *  named -- "− 2 Stone Skin" -- the way a roll's arithmetic is (Phase 9c). */
+export function spellSaveSources(
+  state: GameState,
+  player: PlayerId,
+  ref: ArmyRef,
+): readonly { readonly source: string; readonly amount: number }[] {
+  const out: { source: string; amount: number }[] = []
   for (const m of armyRoll(state, player, ref, 'save').modifiers) {
-    if (m.kind === 'add' && m.resultType === 'save' && m.fromSpell === true) total += m.amount
+    if (m.kind !== 'add' || m.resultType !== 'save' || m.fromSpell !== true) continue
+    const source = m.source ?? 'spells'
+    const same = out.find((s) => s.source === source)
+    if (same !== undefined) same.amount += m.amount
+    else out.push({ source, amount: m.amount })
   }
-  return total
+  return out
 }
 
 /** What `rollArmy` needs to roll one army: which of its dice may be rolled, and

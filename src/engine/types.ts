@@ -1419,8 +1419,15 @@ export type LogEntry =
        */
       readonly unsavable?: number
       /** Counter/Volley: damage this roll sent back the other way, assigned
-       *  separately. Omitted when zero. */
+       *  separately, after the attacking army's spell saves. Omitted when zero. */
       readonly riposte?: number
+      /**
+       * What spell saves took off the riposte (v2 Phase 6c): its base is what the dice
+       * sent, each step a spell. Display only -- `digestState` drops every `...Math`
+       * key -- and omitted when no spell took anything, so `riposte` may be absent
+       * beside it when the spells took all of it.
+       */
+      readonly riposteMath?: RollMath
       /**
        * Flaming Shields (Phase 8): melee inside `attackTotal` that the dice rolled as
        * saves. Omitted when zero, like the two above -- and for the same reason: a

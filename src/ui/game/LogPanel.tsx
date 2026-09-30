@@ -13,7 +13,7 @@ import { dragonDie, dragonName, unitType } from '../../data/load'
 import { spell } from '../../data/spells'
 import { poolSplit } from '../../engine/magic'
 import { BREATH_NAME, DRAGON_ICON_TEXT } from '../../engine/dragons'
-import { mathPhrase, saiPhrase, saisBehind, type RollMath } from '../../engine/roll'
+import { mathPhrase, saiPhrase, saisBehind, spellSavedPhrase, type RollMath } from '../../engine/roll'
 
 
 import {
@@ -993,18 +993,19 @@ export function CombatPart({
               {entry.flamingShields === 1 ? 'save' : 'saves'} as melee
             </div>
           )}
-          {entry.riposte !== undefined && (
+          {/* What the dice sent, then what spells took off it (v2 Phase 6c): the
+              attacking army rolls no saves, and only its spells' saves reduce this. */}
+          {(entry.riposte !== undefined || entry.riposteMath !== undefined) && (
             <div className="roll-sum">
               {namesIn(entry, 'riposte') === null ? (
-                <>
-                  and <b>{entry.riposte}</b> straight back, which no save can stop
-                </>
+                <>and </>
               ) : (
                 <>
                   <b>{namesIn(entry, 'riposte')}</b> {plural(entry, 'riposte') ? 'send' : 'sends'}{' '}
-                  <b>{entry.riposte}</b> straight back, which no save can stop
                 </>
               )}
+              <b>{entry.riposteMath?.base ?? entry.riposte}</b> straight back
+              {spellSavedPhrase(entry.riposteMath, entry.riposte ?? 0)}, with no save roll
             </div>
           )}
         </>

@@ -17,6 +17,7 @@ import { SPELLS, spell } from '../data/spells'
 import { combinationAnswerProblem, combinationSpec } from './combination'
 import { spellSaves, type Effect } from './effects'
 import { maneuverAsSaves, savesAsMelee, type Modifier } from './pipeline'
+import { advance } from './reduce'
 import { conversionsIn, resolveFaces, type RawDie, type RollSpec } from './roll'
 import { rollDice, type RngState } from './rng'
 import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
@@ -28,6 +29,7 @@ import {
   type LogEntry,
   type RuleSet,
   type TerrainSlot,
+  type TurnState,
   type UnitInstance,
 } from './types'
 import { validateState } from './validate'
@@ -63,8 +65,14 @@ function rngShowing(typeIds: readonly string[], faces: readonly number[]): RngSt
   throw new Error(`no counter shows ${typeIds.join(', ')} on faces ${faces.join(', ')}`)
 }
 
-/** p1's dice and p2's dice at the Frontier, p1 to march, nothing in progress. */
-function board(p1: readonly string[], p2: readonly string[], rng: RngState): GameState {
+/** p1's dice and p2's dice at the Frontier, p1 to march, nothing in progress unless
+ *  the turn says otherwise. */
+function board(
+  p1: readonly string[],
+  p2: readonly string[],
+  rng: RngState,
+  turn: Partial<TurnState> = {},
+): GameState {
   const units: Record<string, UnitInstance> = {}
   for (const [owner, typeIds] of [['p1', p1], ['p2', p2]] as const) {
     typeIds.forEach((typeId, i) => {
@@ -88,6 +96,7 @@ function board(p1: readonly string[], p2: readonly string[], rng: RngState): Gam
       marchingArmy: null,
       armiesMarched: [],
       combat: null,
+      ...turn,
     },
     pending: null,
     log: [],
@@ -323,5 +332,65 @@ describe('a combination roll over any kinds', () => {
     expect(
       combinationAnswerProblem(['save', 'melee'], pools, { ids: {}, flexible: { melee: 3 }, savesAsMelee: 2 }),
     ).toBe('Flaming Shields can count 1 saves as melee here, not 2')
+  })
+})
+
+// --- old rules corrected (6c) --------------------------------------------------
+
+/** Unicorn: face 6 is `4 SAI:Counter` -- four saves, and four straight back. */
+const UNICORN = 'treefolk.unicorn'
+const UNICORN_COUNTER = 6
+
+/** p1's two Oaks melee p2's Unicorn at the Frontier: 4 melee against a Counter. */
+const counterBoard = (effects: readonly Effect[]): GameState => ({
+  ...board([OAK, OAK], [UNICORN], rngShowing([OAK, OAK, UNICORN], [OAK_MELEE, OAK_MELEE, UNICORN_COUNTER]), {
+    marchStep: 'resolve_attack',
+    marchingArmy: 'frontier',
+    armiesMarched: ['frontier'],
+    combat: { action: 'melee', targetSlot: 'frontier', damage: 0 },
+  }),
+  effects,
+})
+
+describe("a riposte, which only the attacker's spell saves reduce", () => {
+  const wateryDouble = (count: number) =>
+    cast('watery_double', count, { kind: 'army', player: 'p1', army: 'frontier' })
+
+  it('comes back whole at an army with no spell on it', () => {
+    const state = advance(counterBoard([]))
+    const exchange = entries(state, 'combat_resolved')[0]
+    expect(exchange).toMatchObject({ attackTotal: 4, saveTotal: 4, damage: 0, riposte: 4 })
+    expect(exchange?.riposteMath).toBeUndefined()
+    expect(state.pending).toMatchObject({ kind: 'assign_damage', player: 'p1' })
+  })
+
+  it('is reduced by Watery Double, named, and the attacker assigns only what is left', () => {
+    const state = advance(counterBoard([wateryDouble(2)]))
+    const exchange = entries(state, 'combat_resolved')[0]
+    expect(exchange).toMatchObject({ riposte: 2 })
+    expect(exchange?.riposteMath).toEqual({
+      base: 4,
+      steps: [{ source: 'Watery Double', delta: -2 }],
+      notes: [],
+    })
+    // Two damage kills one Oak, not both.
+    expect(state.pending).toMatchObject({ kind: 'assign_damage', player: 'p1' })
+    expect(validateState(state)).toEqual([])
+  })
+
+  it('can be stopped entirely, and then there is nothing to assign', () => {
+    const state = advance(counterBoard([wateryDouble(4)]))
+    const exchange = entries(state, 'combat_resolved')[0]
+    expect(exchange?.riposte).toBeUndefined()
+    expect(exchange?.riposteMath).toEqual({ base: 4, steps: [{ source: 'Watery Double', delta: -4 }], notes: [] })
+    expect(state.pending?.kind).not.toBe('assign_damage')
+  })
+
+  it("is not reduced by the defender's spells, only the attacker's", () => {
+    const theirs = cast('watery_double', 2, { kind: 'army', player: 'p2', army: 'frontier' })
+    const exchange = entries(advance(counterBoard([theirs])), 'combat_resolved')[0]
+    // Their Watery Double adds to their own save roll -- two more saves -- and the
+    // riposte comes back whole.
+    expect(exchange).toMatchObject({ saveTotal: 6, riposte: 4 })
   })
 })

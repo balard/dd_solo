@@ -1716,6 +1716,19 @@ golden and must say why.
   Strike, Lightning Strike, and next Bash and Firebolt. No v1 golden has a Coral Elf, so nothing
   moves; a test drives a Bullseye into a Coral Elf at water.
 
+### What 6c found
+
+**1. The riposte fix moved exactly the one golden game replay said it would.** Of the four ripostes
+in the v1 corpus, one landed on a Watery Double: seed 2, action 73. A Counter sends 4 back at p1's
+army, which has two castings of Watery Double on it, so 2 come back. The recorded game had assigned
+4, and replay stopped there. `v1` was re-recorded for that reason, and only that game changed: it
+diverges at action 73, ends four decisions sooner, and p1 still wins. The other nineteen are
+byte-identical. `spellReduced` in `combat.ts` does the subtraction, spell by spell, so the log
+reads "4 straight back − 2 Watery Double = 2". Charge will reuse it in 6e. The arithmetic rides on
+`riposteMath`, which the digest drops like every `...Math` key, so a golden moves only where the
+riposte number itself changes. The estimator subtracts the same spell saves, so greedy does not
+fear a Counter that a Stone Skin already answers.
+
 ### 6d — Roar, Stomp, Bash
 
 - **Roar** is `target_enemy` with a Reserve destination and no roll. It is not a kill: no death

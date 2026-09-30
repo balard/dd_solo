@@ -31,7 +31,7 @@ import { growthPartners, promotionGain } from '../engine/dua'
 import { isAsleep, isGlaring, isHypnotized } from '../engine/effects'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
-import { mathPhrase, saiPhrase, type DieRoll, type RollMath } from '../engine/roll'
+import { mathPhrase, saiPhrase, spellSavedPhrase, type DieRoll, type RollMath } from '../engine/roll'
 import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../engine/sai'
 import { rollOnTheTable } from '../engine/turn'
 import { OWN_ARMY_NOTE, poolSplit, spellPlan, spellTargetLabel, stageCast, targetsFor } from '../engine/magic'
@@ -341,10 +341,12 @@ function describe(entry: LogEntry, state: GameState): string | null {
         entry.unsavable === undefined
           ? base
           : `${base} + ${entry.unsavable} unsavable${from('unsavable')}`
+      // What the dice sent, then what spells took off it (v2 Phase 6c).
       const back =
-        entry.riposte === undefined
+        entry.riposte === undefined && entry.riposteMath === undefined
           ? ''
-          : ` (${bold(String(entry.riposte))} straight back${from('riposte')}, no save)`
+          : ` (${bold(String(entry.riposteMath?.base ?? entry.riposte))} straight back${from('riposte')}` +
+            `${spellSavedPhrase(entry.riposteMath, entry.riposte ?? 0)}, no save roll)`
       return `  ${arrow}: ${sum} = ${bold(String(entry.damage))} damage${back}${shields(entry.flamingShields)}`
 
     }

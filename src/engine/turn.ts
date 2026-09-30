@@ -2437,6 +2437,7 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
       // entry verbatim, so an always-present field rewrites all twenty-five.
       ...(outcome.unsavable > 0 ? { unsavable: outcome.unsavable } : {}),
       ...(outcome.riposte > 0 ? { riposte: outcome.riposte } : {}),
+      ...(outcome.riposteMath !== undefined ? { riposteMath: outcome.riposteMath } : {}),
       ...(outcome.attackRoll.countedAs !== undefined
         ? { flamingShields: outcome.attackRoll.countedAs }
         : {}),

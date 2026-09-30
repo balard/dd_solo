@@ -1034,6 +1034,16 @@ export function mathPhrase(math: RollMath, total: number): string {
   return math.steps.length === 0 ? '' : `${math.base} on the dice${steps.join('')} = ${total}`
 }
 
+/**
+ * Damage that only spells' saves reduce, as a clause: " − 2 Stone Skin = 2", or "" when
+ * no spell took anything off (v2 Phase 6c). A riposte's and, from 6e, a Charge's. Both
+ * clients print this, so the browser and the terminal cannot word one number two ways.
+ */
+export function spellSavedPhrase(math: RollMath | undefined, net: number): string {
+  if (math === undefined || math.steps.length === 0) return ''
+  return `${math.steps.map((step) => ` − ${-step.delta} ${step.source}`).join('')} = ${net}`
+}
+
 /** The most one die can generate for a result type. Used by the property tests and,
  *  later, by AI evaluation. */
 export function maxResults(type: UnitType, resultType: ResultType, ruleSet: RuleSet): number {

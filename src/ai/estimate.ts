@@ -28,7 +28,7 @@
 import { unitType } from '../data/load'
 import type { Face, ResultType } from '../data/types'
 import { healthsOf, maxAbsorbable } from '../engine/damage'
-import { armyRoll } from '../engine/effects'
+import { armyRoll, spellSaves } from '../engine/effects'
 import { applyModifiers, type ConvertibleType, type Share } from '../engine/pipeline'
 import { conversionsIn, defaultContextFor, faceResults } from '../engine/roll'
 import { saiEffects, type RollContext } from '../engine/sai'
@@ -390,7 +390,9 @@ export function expectedAttack(
     // A Wave comes off the saves, and never takes them below zero.
     damage:
       Math.max(0, attack.total - Math.max(0, save.total - attack.wave)) + attack.unsavable + attack.targeted,
-    riposte: save.riposte,
+    // Only the attacker's spell saves reduce what comes back (v2 Phase 6c), exactly as
+    // `finishSaves` subtracts them.
+    riposte: Math.max(0, save.riposte - spellSaves(state, attacker, fromRef)),
   }
 }
 
