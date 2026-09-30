@@ -159,6 +159,26 @@ FACE_ART_VARIANTS = {
     ("coral_elves.gryphon", "SAI:Fly"): 1,
     ("coral_elves.sprite_swarm", "SAI:Fly"): 1,
     ("coral_elves.leviathan", "SAI:Fly"): 2,
+    # Dwarves, from the owner's list of remote paths: maneuver variant 1 for the heavy and
+    # light lines and the monsters, 2 for the Pony Rider, 3 for the Lizard Rider. Roar and
+    # Fly differ between two monsters that print the same icon: Roar 2 on the Androsphinx
+    # and 1 on the Behemoth, Fly 2 on the Gargoyle and 1 on the Roc. Every other Dwarves
+    # face has one image.
+    ("dwarves.footman", "MANEUVER"): 1,
+    ("dwarves.sergeant", "MANEUVER"): 1,
+    ("dwarves.warlord", "MANEUVER"): 1,
+    ("dwarves.sentry", "MANEUVER"): 1,
+    ("dwarves.patroller", "MANEUVER"): 1,
+    ("dwarves.skirmisher", "MANEUVER"): 1,
+    ("dwarves.pony_rider", "MANEUVER"): 2,
+    ("dwarves.lizard_rider", "MANEUVER"): 3,
+    ("dwarves.behemoth", "MANEUVER"): 1,
+    ("dwarves.gargoyle", "MANEUVER"): 1,
+    ("dwarves.umber_hulk", "MANEUVER"): 1,
+    ("dwarves.androsphinx", "SAI:Roar"): 2,
+    ("dwarves.behemoth", "SAI:Roar"): 1,
+    ("dwarves.gargoyle", "SAI:Fly"): 2,
+    ("dwarves.roc", "SAI:Fly"): 1,
 }
 
 # For a name the generator's rule cannot reach at all. Ashbringer is a *large* die,
