@@ -1327,13 +1327,14 @@ describe('Dispel Magic', () => {
     expect(dispelNegates(state, already, mine.id)).toBe(false)
   })
 
-  it('offers the roll to the Unicorn and to nothing else in the box', () => {
-    // It is two faces of one die, Treefolk only -- so `treefolk_unicorn` is the only
-    // board that can queue several, and Firewalkers can never dispel at all.
+  it('offers the roll to the Unicorn and the Gargoyle, and to nothing else in the data', () => {
+    // Two faces on each of two monster dice: Treefolk's Unicorn and (v2 Phase 6a) the
+    // Dwarves' Gargoyle. So a monster mirror of either is the board that can queue
+    // several, and Firewalkers and Coral Elves can never dispel at all.
     const carriers = UNIT_TYPES.filter((type) =>
       type.faces.some((f) => f.icon === 'SAI' && f.sai === 'Dispel Magic'),
     )
-    expect(carriers.map((t) => t.id)).toEqual(['treefolk.unicorn'])
+    expect(carriers.map((t) => t.id)).toEqual(['treefolk.unicorn', 'dwarves.gargoyle'])
 
     const unicorns = begin(
       setupGame({

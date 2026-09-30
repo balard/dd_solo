@@ -30,7 +30,8 @@ enforces it.
 
 **SAI names must match the rulebook.** The starter set's two species between them use exactly the
 25 SAIs documented in the starter rulebook (pp. 10–11) — no more, no fewer. Each later species adds
-the SAIs its v4.01 species page lists (`SPECIES_SAIS` in `tools/species.py`; Coral Elves add six).
+the SAIs its v4.01 species page lists (`SPECIES_SAIS` in `tools/species.py`; Coral Elves add six,
+Dwarves four).
 The validator holds the union and errors on anything outside it, which catches transcription typos.
 
 **The count on an SAI face is not always a result count.** For result-generating SAIs it is

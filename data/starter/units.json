@@ -22,6 +22,13 @@
         "air",
         "water"
       ]
+    },
+    "dwarves": {
+      "name": "Dwarves",
+      "elements": [
+        "fire",
+        "earth"
+      ]
     }
   },
   "units": [
@@ -1103,6 +1110,366 @@
         "4 MELEE",
         "4 MANEUVER",
         "4 MELEE"
+      ]
+    },
+    {
+      "id": "dwarves.footman",
+      "name": "Footman",
+      "species": "dwarves",
+      "class": "heavy_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 SAVE",
+        "1 MELEE",
+        "2 MELEE",
+        "1 SAVE",
+        "2 MELEE"
+      ]
+    },
+    {
+      "id": "dwarves.sergeant",
+      "name": "Sergeant",
+      "species": "dwarves",
+      "class": "heavy_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MANEUVER",
+        "2 MELEE",
+        "2 MELEE",
+        "3 SAVE",
+        "3 MELEE"
+      ]
+    },
+    {
+      "id": "dwarves.warlord",
+      "name": "Warlord",
+      "species": "dwarves",
+      "class": "heavy_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 SAVE",
+        "3 MELEE",
+        "3 MELEE",
+        "4 SAI:Smite",
+        "3 MELEE"
+      ]
+    },
+    {
+      "id": "dwarves.androsphinx",
+      "name": "Androsphinx",
+      "species": "dwarves",
+      "class": "heavy_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Roar",
+        "4 MAGIC",
+        "4 MELEE",
+        "4 SAVE",
+        "4 SAI:Rend",
+        "4 MELEE",
+        "4 MAGIC",
+        "4 SAI:Roar",
+        "4 SAVE"
+      ]
+    },
+    {
+      "id": "dwarves.sentry",
+      "name": "Sentry",
+      "species": "dwarves",
+      "class": "light_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "1 MANEUVER",
+        "1 MANEUVER",
+        "1 MELEE",
+        "1 MISSILE"
+      ]
+    },
+    {
+      "id": "dwarves.patroller",
+      "name": "Patroller",
+      "species": "dwarves",
+      "class": "light_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "3 MELEE",
+        "2 MANEUVER",
+        "3 MANEUVER",
+        "3 MELEE",
+        "2 SAVE"
+      ]
+    },
+    {
+      "id": "dwarves.skirmisher",
+      "name": "Skirmisher",
+      "species": "dwarves",
+      "class": "light_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "4 MELEE",
+        "3 MANEUVER",
+        "2 MANEUVER",
+        "3 MELEE",
+        "4 SAI:Counter"
+      ]
+    },
+    {
+      "id": "dwarves.behemoth",
+      "name": "Behemoth",
+      "species": "dwarves",
+      "class": "light_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Stomp",
+        "4 SAI:Bash",
+        "4 MANEUVER",
+        "4 SAVE",
+        "4 SAI:Roar",
+        "4 SAI:Trample",
+        "4 SAI:Charge",
+        "4 SAVE",
+        "4 MELEE"
+      ]
+    },
+    {
+      "id": "dwarves.pony_rider",
+      "name": "Pony Rider",
+      "species": "dwarves",
+      "class": "cavalry",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "1 MANEUVER",
+        "2 MANEUVER",
+        "1 MELEE",
+        "1 SAVE"
+      ]
+    },
+    {
+      "id": "dwarves.lizard_rider",
+      "name": "Lizard Rider",
+      "species": "dwarves",
+      "class": "cavalry",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "3 MELEE",
+        "3 MANEUVER",
+        "2 MANEUVER",
+        "2 MELEE",
+        "2 SAVE"
+      ]
+    },
+    {
+      "id": "dwarves.mammoth_rider",
+      "name": "Mammoth Rider",
+      "species": "dwarves",
+      "class": "cavalry",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "4 MELEE",
+        "3 SAI:Trample",
+        "3 SAI:Trample",
+        "3 MELEE",
+        "3 SAVE"
+      ]
+    },
+    {
+      "id": "dwarves.gargoyle",
+      "name": "Gargoyle",
+      "species": "dwarves",
+      "class": "cavalry",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 MELEE",
+        "4 SAI:Smite",
+        "4 SAI:Fly",
+        "4 MANEUVER",
+        "4 SAI:Dispel Magic",
+        "4 SAI:Dispel Magic",
+        "4 SAI:Fly",
+        "4 SAVE",
+        "4 MELEE"
+      ]
+    },
+    {
+      "id": "dwarves.crossbowman",
+      "name": "Crossbowman",
+      "species": "dwarves",
+      "class": "missile",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "1 MISSILE",
+        "1 MISSILE",
+        "1 SAVE",
+        "2 MISSILE"
+      ]
+    },
+    {
+      "id": "dwarves.marksman",
+      "name": "Marksman",
+      "species": "dwarves",
+      "class": "missile",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "3 MELEE",
+        "2 MISSILE",
+        "2 MISSILE",
+        "2 SAVE",
+        "3 MISSILE"
+      ]
+    },
+    {
+      "id": "dwarves.crack_shot",
+      "name": "Crack-Shot",
+      "species": "dwarves",
+      "class": "missile",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "4 MELEE",
+        "3 MISSILE",
+        "3 MISSILE",
+        "4 SAI:Bullseye",
+        "2 MISSILE"
+      ]
+    },
+    {
+      "id": "dwarves.roc",
+      "name": "Roc",
+      "species": "dwarves",
+      "class": "missile",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Fly",
+        "4 MELEE",
+        "4 SAI:Rend",
+        "4 SAI:Seize",
+        "4 SAVE",
+        "4 MELEE",
+        "4 MELEE",
+        "4 SAI:Fly",
+        "4 SAI:Seize"
+      ]
+    },
+    {
+      "id": "dwarves.theurgist",
+      "name": "Theurgist",
+      "species": "dwarves",
+      "class": "magic",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "1 MAGIC",
+        "1 MAGIC",
+        "1 SAVE",
+        "2 MAGIC"
+      ]
+    },
+    {
+      "id": "dwarves.thaumaturgist",
+      "name": "Thaumaturgist",
+      "species": "dwarves",
+      "class": "magic",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MELEE",
+        "3 MAGIC",
+        "3 MAGIC",
+        "2 SAVE",
+        "2 MAGIC"
+      ]
+    },
+    {
+      "id": "dwarves.wizard",
+      "name": "Wizard",
+      "species": "dwarves",
+      "class": "magic",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 SAVE",
+        "4 MAGIC",
+        "3 MAGIC",
+        "3 MELEE",
+        "4 SAI:Cantrip"
+      ]
+    },
+    {
+      "id": "dwarves.umber_hulk",
+      "name": "Umber Hulk",
+      "species": "dwarves",
+      "class": "magic",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAVE",
+        "4 SAI:Smite",
+        "4 MELEE",
+        "4 SAI:Confuse",
+        "4 MANEUVER",
+        "4 SAI:Confuse",
+        "4 MELEE",
+        "4 SAI:Smite",
+        "4 SAVE"
       ]
     }
   ]

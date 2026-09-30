@@ -1535,7 +1535,9 @@ rather than waiting for the resolver to report them as ambiguous.
 folders, which is the owner's call to make; the candidates were checked offline against the paths in
 the notes. The app draws the class shapes until then (invariant 8).
 
-## Phase 6 — Dwarves — **planned**
+## Phase 6 — Dwarves — **in progress**
+
+6a has landed: the data. 6b to 6h are still a plan.
 
 Fire & Earth, so **Highland is their own terrain type** (`homeTerrainType` derives it; nothing is
 tabled) and both species abilities are live at home. The faces are in `data/raw/dwarves.faces.txt`
@@ -1586,7 +1588,7 @@ Dancing Lights' "six".
   roll's arithmetic line names it as Wild Growth (`saiResultsSource`). Bash needs its own field, or
   the line reads "+4 Wild Growth" on a roll with no Wild Growth in it.
 
-### 6a — Data
+### 6a — Data — **landed**
 
 - `tools/species.py` gains `dwarves` (roster p. 72: heavy Footman / Sergeant / Warlord /
   Androsphinx, light Sentry / Patroller / Skirmisher / Behemoth, cavalry Pony / Lizard / Mammoth
@@ -1601,6 +1603,35 @@ Dancing Lights' "six".
   dice before import (2026-09-30): every one is 4. The raw file's header note that they are
   unconfirmed goes in this slice. Charge and Dispel Magic take no X, and Bash's main sentence takes
   the target's melee instead.
+
+### What 6a found
+
+Both golden corpora replay byte-identical and unregenerated. Saving is off, so `SAVE_VERSION` has
+nothing to be about.
+
+**1. What 5a built is what made this slice small.** In 5a, importing the data turned out to make
+the species playable everywhere at once, and `playable.ts` was built to stop that. This time the
+import touched only the species entry, `SPECIES_SAIS` and the raw file's header. `npm run data`
+passes with 35/35 SAIs in the data, and exactly four tests moved, all of them counts of what is in
+the data: the unit count, the SAI partition (four names now `deferred`), the playable species, and
+one Dispel Magic test.
+
+**2. The half-built gate can be seen again, so its tests came back.** Between species phases every
+species is playable, and 5d had moved the rule's tests onto made-up species. Now `playable.test.ts`
+checks the real refusal again, with the exact sentence ("the SAIs Bash, Charge, Roar, Stomp and its
+species abilities"), a rolled Dwarves force that throws, and a built force with a Dwarf that gets
+the sentence. Each of 6d and 6e shortens that sentence, and 6f turns the test back into "all
+playable". The builder test that refuses an unplayable die has a subject again as well.
+
+**3. The Gargoyle is the second Dispel Magic die.** A test in `magic.test.ts` said the Unicorn was
+the only Dispel Magic die "in the box". That was true with two species, and after 5a it was true by
+luck. It now names both dice. Firewalkers and Coral Elves still cannot dispel.
+
+**4. The monster counts were confirmed before import**, so no face reached `units.json` on a guess.
+The raw file's header says so, and it no longer says the counts are unconfirmed.
+
+**Deliberately not done.** No fixture, preset or art manifest: a fixture for an unplayable species
+could only throw (6f), and the art download is 6h and the owner's step.
 
 ### 6b — Seams, and no rule moves
 

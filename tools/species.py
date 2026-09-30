@@ -58,6 +58,19 @@ SPECIES = {
             "magic":   ["Evoker", "Conjurer", "Enchanter", "Tako"],
         },
     },
+    # v4.01 p. 72. Fire & earth makes Highland their own type, so both species
+    # abilities are live at home. 'Crack-Shot' is the roster's spelling.
+    "dwarves": {
+        "name": "Dwarves",
+        "elements": ["fire", "earth"],
+        "units": {
+            "heavy":   ["Footman", "Sergeant", "Warlord", "Androsphinx"],
+            "light":   ["Sentry", "Patroller", "Skirmisher", "Behemoth"],
+            "cavalry": ["Pony Rider", "Lizard Rider", "Mammoth Rider", "Gargoyle"],
+            "missile": ["Crossbowman", "Marksman", "Crack-Shot", "Roc"],
+            "magic":   ["Theurgist", "Thaumaturgist", "Wizard", "Umber Hulk"],
+        },
+    },
 }
 
 # Normal action icons. Anything else parsed off a face is treated as an SAI.
@@ -76,6 +89,7 @@ STARTER_SAIS = {
 # entry above belong here: the list is what tells a typo from a new SAI.
 SPECIES_SAIS = {
     "coral_elves": {"Entangle", "Ferry", "Hypnotic Glare", "Swallow", "Tail", "Wave"},  # p. 71
+    "dwarves": {"Bash", "Charge", "Roar", "Stomp"},  # p. 73
 }
 
 # Every SAI name a face may carry; anything else parsed off a face is a typo.

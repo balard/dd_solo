@@ -47,9 +47,9 @@ describe('parseFace', () => {
 })
 
 describe('unit data', () => {
-  it('loads all 60 unit dice: the starter set and the Coral Elves', () => {
-    expect(UNIT_TYPES).toHaveLength(60)
-    expect(SPECIES.map((s) => s.id).sort()).toEqual(['coral_elves', 'firewalkers', 'treefolk'])
+  it('loads all 80 unit dice: the starter set, the Coral Elves and the Dwarves', () => {
+    expect(UNIT_TYPES).toHaveLength(80)
+    expect(SPECIES.map((s) => s.id).sort()).toEqual(['coral_elves', 'dwarves', 'firewalkers', 'treefolk'])
   })
 
   it('gives each species 20 dice', () => {

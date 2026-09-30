@@ -183,8 +183,12 @@ the dice and the opponent.
 > Swallow, Ferry, Wave, Hypnotic Glare); 5d a race draw for any number of species, Coastal Dodge
 > (which flipped them playable) and Defensive Volley, the first non-melee counter-attack; 5e
 > Blizzard and Deluge; 5f a starter and a bestiary preset; 5g the art resolver. House rules are in
-> `RULES-V0.md` section 17, and each slice's findings under Phase 5 in `PLAN-V2.md`. Eight more
+> `RULES-V0.md` section 17, and each slice's findings under Phase 5 in `PLAN-V2.md`. Seven more
 > species' faces sit in `data/raw/` unimported, for later phases.
+
+> **v2 Phase 6 (Dwarves) is under way, planned in eight slices in `PLAN-V2.md`.** 6a has landed:
+> the twenty Dwarves dice are in `units.json`, and `playable.ts` keeps them out of every game until
+> 6f builds their abilities -- their four new SAIs (Roar, Stomp, Bash, Charge) are unbuilt.
 
 ## Read these first
 
@@ -400,7 +404,8 @@ python tools/fetch_faces.py       # optional: mirror reference art into public/f
 Never hand-edit `data/starter/units.json` — edit the raw file and re-import. Re-running the
 importer is always safe. Format and vocabulary: `data/ICONS.md`.
 
-**Status: complete.** 40 unit dice (280 faces) and 24 terrain dice (6 basic types × 4 eighth-face
+**Status: complete.** 80 unit dice (560 faces: Treefolk, Firewalkers, Coral Elves and Dwarves)
+and 24 terrain dice (6 basic types × 4 eighth-face
 variants -- Coastland, Feyland and Flatland joined Swampland, Highland and Wasteland in Phase 5a),
 all passing validation, plus **10 dragon dice** (5 elements × drake/wyrm, 12 faces each, Phase 6)
 and **18 spells** (`data/spells.json`, Phase 7 -- hand-authored like `presets.json`, no importer

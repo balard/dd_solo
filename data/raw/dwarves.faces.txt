@@ -2,14 +2,16 @@
 # Source: Dice Commander die info, supplied as a plain list (values only, no face-art paths),
 # transcribed 2026-09-28.
 #
-# NOT IMPORTED YET. This species has no entry in tools/species.py, so import_faces.py never
-# reads this file and nothing in the game can see these dice. It is stored ahead of the
-# species phase that needs it (PLAN-V2.md, Risks: 'transcribe one species ahead').
+# Imported in v2 Phase 6a (tools/species.py). The four SAIs the Dwarves add -- Bash,
+# Charge, Roar and Stomp -- have no handler until 6d/6e, so src/engine/playable.ts keeps
+# these dice out of every game until the Phase 6f flip.
 #
 # Face 1 is the ID face, added here: the source lists the other faces only. Its count is the
 # unit's health, 4 on a monster (invariant 7). The monster faces carry no count in the source
-# and are written as 4: right for every normal icon (invariant 7), but an SAI's count can be
-# its X instead -- Firewalkers' Gorgon prints '2 Flame' -- so a monster SAI's 4 is unconfirmed.
+# and are written as 4. That is right for every normal icon (invariant 7), and an SAI's count
+# can be its X instead -- Firewalkers' Gorgon prints '2 Flame' -- so the SAIs that read X were
+# checked against the dice by their owner (2026-09-30): Roar, Stomp, Smite, Rend, Seize, Fly,
+# Confuse, Trample and Bash all print 4. Charge and Dispel Magic take no X.
 # Other faces are in the source's order. Headers are '<class>-<size>' / 'monster-<name>',
 # with the class lines as the source names them; the v4.01 roster is p. 72.
 # Anything marked TODO disagrees with the shape of a die and needs checking against one.
