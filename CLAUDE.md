@@ -197,7 +197,10 @@ the dice and the opponent.
 > Bash (`RULES-V0.md` section 18). 6e has landed: Charge -- the attacker's maneuver counts as
 > melee (`charging` in `roll.ts`), and the defender answers with a combination save and melee
 > roll (`chargeRollSpec`, the `charge_allocate` pending) whose melee goes back at the attacker
-> through the riposte's channel. Every SAI on a Dwarves die is built; 6f's abilities flip them.
+> through the riposte's channel. 6f has landed: Mountain Mastery and Dwarven Might, two rows in
+> `COUNTS_AS_ABILITIES`, and with them **the Dwarves are playable** -- five monster fixtures
+> (`dwarves_*`), and every SAI and ability in the live fuzz. 6g (Firebolt, Higher Ground) and 6h
+> (presets, art, the greedy lone-die stall) are left.
 
 ## Read these first
 

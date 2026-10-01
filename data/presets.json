@@ -414,6 +414,96 @@
           "coral_elves.tako"
         ]
       }
+    },
+    "dwarves_androsphinx": {
+      "name": "Androsphinx x6",
+      "species": "dwarves",
+      "armies": {
+        "home": [
+          "dwarves.androsphinx",
+          "dwarves.androsphinx",
+          "dwarves.androsphinx"
+        ],
+        "campaign": [
+          "dwarves.androsphinx",
+          "dwarves.androsphinx"
+        ],
+        "horde": [
+          "dwarves.androsphinx"
+        ]
+      }
+    },
+    "dwarves_behemoth": {
+      "name": "Behemoth x6",
+      "species": "dwarves",
+      "armies": {
+        "home": [
+          "dwarves.behemoth",
+          "dwarves.behemoth",
+          "dwarves.behemoth"
+        ],
+        "campaign": [
+          "dwarves.behemoth",
+          "dwarves.behemoth"
+        ],
+        "horde": [
+          "dwarves.behemoth"
+        ]
+      }
+    },
+    "dwarves_gargoyle": {
+      "name": "Gargoyle x6",
+      "species": "dwarves",
+      "armies": {
+        "home": [
+          "dwarves.gargoyle",
+          "dwarves.gargoyle",
+          "dwarves.gargoyle"
+        ],
+        "campaign": [
+          "dwarves.gargoyle",
+          "dwarves.gargoyle"
+        ],
+        "horde": [
+          "dwarves.gargoyle"
+        ]
+      }
+    },
+    "dwarves_roc": {
+      "name": "Roc x6",
+      "species": "dwarves",
+      "armies": {
+        "home": [
+          "dwarves.roc",
+          "dwarves.roc",
+          "dwarves.roc"
+        ],
+        "campaign": [
+          "dwarves.roc",
+          "dwarves.roc"
+        ],
+        "horde": [
+          "dwarves.roc"
+        ]
+      }
+    },
+    "dwarves_umber_hulk": {
+      "name": "Umber Hulk x6",
+      "species": "dwarves",
+      "armies": {
+        "home": [
+          "dwarves.umber_hulk",
+          "dwarves.umber_hulk",
+          "dwarves.umber_hulk"
+        ],
+        "campaign": [
+          "dwarves.umber_hulk",
+          "dwarves.umber_hulk"
+        ],
+        "horde": [
+          "dwarves.umber_hulk"
+        ]
+      }
     }
   }
 }

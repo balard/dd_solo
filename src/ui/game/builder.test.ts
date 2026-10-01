@@ -282,7 +282,7 @@ describe('the palette', () => {
 
   it('lists every die in the full collection, endlessly, monsters first', () => {
     const groups = unitPalette(FULL_COLLECTION, EMPTY_FORCE)
-    expect(groups.flatMap((g) => g.dice)).toHaveLength(60)
+    expect(groups.flatMap((g) => g.dice)).toHaveLength(80)
     expect(groups.every((g) => g.dice.every((d) => d.left === Infinity))).toBe(true)
     expect(groups[0]?.dice.slice(0, 5).map((d) => d.id)).toEqual([
       'treefolk.darktree',

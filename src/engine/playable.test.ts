@@ -43,36 +43,21 @@ describe('the playable rule', () => {
 
 describe('the species in the data', () => {
   /**
-   * v2 Phase 6a: the Dwarves are in the data and not playable until 6f, which builds
-   * their abilities after 6d and 6e have built the four SAIs. Each of those slices
-   * shortens the sentence below, and 6f turns this back into "all playable".
+   * v2 Phase 6f: the Dwarves' abilities flipped them, so every species in the data is
+   * playable again -- the gate is visible only while a species is half-built, and the
+   * rule itself is tested above on made-up species.
    */
-  it('are the three the engine has rules for; the Dwarves are in the data but not yet', () => {
-    expect(PLAYABLE_SPECIES.map((s) => s.id).sort()).toEqual(['coral_elves', 'firewalkers', 'treefolk'])
-    for (const species of SPECIES) {
-      if (species.id === 'dwarves') continue
-      expect(speciesProblem(species.id), species.id).toBeNull()
-    }
-    expect(speciesProblem('dwarves')).toBe(
-      'Dwarves are not playable yet: its species abilities are not implemented',
-    )
-    expect(PLAYABLE_UNITS).toHaveLength(UNIT_TYPES.length - 20)
-    expect(unitPlayable('coral_elves.tako')).toBe(true)
-    expect(unitPlayable('dwarves.behemoth')).toBe(false)
+  it('are all playable once the Dwarves have their SAIs and abilities (v2 Phase 6f)', () => {
+    expect(PLAYABLE_SPECIES.map((s) => s.id).sort()).toEqual(['coral_elves', 'dwarves', 'firewalkers', 'treefolk'])
+    for (const species of SPECIES) expect(speciesProblem(species.id), species.id).toBeNull()
+    expect(PLAYABLE_UNITS).toHaveLength(UNIT_TYPES.length)
+    expect(unitPlayable('dwarves.behemoth')).toBe(true)
   })
 
-  it('refuse a half-built species everywhere a force comes from', () => {
-    expect(() => rollForce(24, { kind: 'species', species: 'dwarves' }, rngFrom(1))).toThrow(
-      /not playable yet/,
-    )
-    const force = {
-      armies: {
-        home: ['treefolk.oak', 'treefolk.oak'],
-        campaign: ['treefolk.oak', 'treefolk.oak'],
-        horde: ['dwarves.sergeant'],
-      },
-    }
-    expect(builtForceProblem(force)).toMatch(/horde army names dwarves\.sergeant, and Dwarves are not playable yet/)
+  it('accept a Dwarves force from anywhere a force comes from', () => {
+    const [force] = rollForce(24, { kind: 'species', species: 'dwarves' }, rngFrom(1))
+    expect(Object.values(force.armies).flat().every((id) => id.startsWith('dwarves.'))).toBe(true)
+    expect(builtForceProblem(force)).toBeNull()
   })
 
   it('all reach a rolled force: the race draw and the mixed pool', () => {
@@ -84,6 +69,6 @@ describe('the species in the data', () => {
         for (const id of Object.values(force.armies).flat()) seen.add(id.split('.')[0] ?? '')
       }
     }
-    expect([...seen].sort()).toEqual(['coral_elves', 'firewalkers', 'treefolk'])
+    expect([...seen].sort()).toEqual(['coral_elves', 'dwarves', 'firewalkers', 'treefolk'])
   })
 })

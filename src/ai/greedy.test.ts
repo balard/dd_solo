@@ -478,6 +478,32 @@ describe('GreedyAI: self-play', () => {
     }
   })
 
+  /** The same exit check for the Dwarves (v2 Phase 6f), the slice that made them playable. */
+  it('finishes every Dwarves mirror against passive and against itself', () => {
+    const dwarves = Object.entries(FORCE_SETS).filter(([name, spec]) => isMirror(spec) && name.startsWith('dwarves_'))
+    expect(dwarves.map(([name]) => name).sort()).toEqual([
+      'dwarves_androsphinx',
+      'dwarves_behemoth',
+      'dwarves_gargoyle',
+      'dwarves_roc',
+      'dwarves_umber_hulk',
+    ])
+    for (const [name, forces] of dwarves) {
+      for (let seed = 1; seed <= 4; seed++) {
+        for (const [label, p2] of [['passive', passiveAi], ['greedy', greedyAi]] as const) {
+          const result = runGame({
+            setup: { seed, forces, ruleSet: V1_RULES },
+            players: { p1: greedyAi, p2 },
+            aiSeed: seed,
+            maxDecisions: 20_000,
+            validate: true,
+          })
+          expect(result.stoppedBecause, `${name} against ${label}, seed ${seed}`).toBe('winner')
+        }
+      }
+    }
+  })
+
   it('finishes the Coral Elves starter and bestiary against each other species, both ways', () => {
     const pairings: readonly [string, string][] = [
       ['coral_elves_starter', 'treefolk_starter'],

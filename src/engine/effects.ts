@@ -33,7 +33,14 @@
  * 4a seam exists for. They are on the `sai: 'full'` rung, so `state.effects` is still
  * always empty in a `DUA_RULES` game, which is what the app plays.
  */
-import { doubleIdsModifier, maneuverAsSaves, savesAsMelee, type Modifier } from './pipeline'
+import {
+  doubleIdsModifier,
+  maneuverAsSaves,
+  meleeAsManeuver,
+  savesAsMelee,
+  savesAsMeleeOnCounter,
+  type Modifier,
+} from './pipeline'
 import { terrainHas, unitHasAbility, type AbilityName } from './species'
 import { terrainDie } from '../data/load'
 import { SPELLS } from '../data/spells'
@@ -405,6 +412,10 @@ export function armyRoll(
  *   melee roll only, which is where it has always been gathered.
  * - **Coastal Dodge** (v2 Phase 5d): gathered at a water terrain whatever the roll --
  *   the dragon's combination roll is gathered as a melee roll and counts saves too.
+ * - **Mountain Mastery** (v2 Phase 6f): at an earth terrain whatever the roll; only a
+ *   roll that counts maneuver and not melee applies it.
+ * - **Dwarven Might** (v2 Phase 6f): at a fire terrain, on a melee roll, and applied
+ *   only to a counter-attack -- Flaming Shields' row with the clause reversed.
  */
 const COUNTS_AS_ABILITIES: readonly {
   readonly ability: AbilityName
@@ -414,6 +425,8 @@ const COUNTS_AS_ABILITIES: readonly {
 }[] = [
   { ability: 'Flaming Shields', element: 'fire', meleeRollsOnly: true, permission: savesAsMelee },
   { ability: 'Coastal Dodge', element: 'water', meleeRollsOnly: false, permission: maneuverAsSaves },
+  { ability: 'Mountain Mastery', element: 'earth', meleeRollsOnly: false, permission: meleeAsManeuver },
+  { ability: 'Dwarven Might', element: 'fire', meleeRollsOnly: true, permission: savesAsMeleeOnCounter },
 ]
 
 /**

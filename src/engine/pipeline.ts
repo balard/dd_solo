@@ -141,6 +141,40 @@ export function maneuverAsSaves(species: readonly string[]): Modifier {
   }
 }
 
+/**
+ * Mountain Mastery's permission (v2 Phase 6f): "When at a terrain that contains earth,
+ * Dwarves may count melee results as if they were maneuver results." Gathered at every
+ * earth terrain, and applied by a roll that counts maneuver and not melee -- every
+ * maneuver roll there is, and a Dwarf's own maneuver sub-roll -- where it only adds.
+ */
+export function meleeAsManeuver(species: readonly string[]): Modifier {
+  return {
+    kind: 'counts_as',
+    from: 'melee',
+    resultType: 'maneuver',
+    counter: 'either',
+    species,
+    source: 'Mountain Mastery',
+  }
+}
+
+/**
+ * Dwarven Might's permission (v2 Phase 6f): "When at a terrain that contains fire, Dwarves
+ * may count save results as if they were melee results when rolling for a
+ * counter-attack." Flaming Shields' pair with the opposite clause: only on a
+ * counter-attack, which counts melee and not saves, so it only adds.
+ */
+export function savesAsMeleeOnCounter(species: readonly string[]): Modifier {
+  return {
+    kind: 'counts_as',
+    from: 'save',
+    resultType: 'melee',
+    counter: 'only',
+    species,
+    source: 'Dwarven Might',
+  }
+}
+
 /** The eighth-face holder's doubled ID results, as the step-9 modifier it is. */
 export function doubleIdsModifier(resultType: ResultType): Modifier {
   return { kind: 'multiply', resultType, by: 2, share: 'id', source: 'Eighth face' }

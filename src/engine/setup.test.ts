@@ -64,6 +64,11 @@ describe('presets', () => {
       'coral_elves_sprite_swarm',
       'coral_elves_starter',
       'coral_elves_tako',
+      'dwarves_androsphinx',
+      'dwarves_behemoth',
+      'dwarves_gargoyle',
+      'dwarves_roc',
+      'dwarves_umber_hulk',
       'firewalkers_bestiary',
       'firewalkers_fireshadow',
       'firewalkers_genie',
@@ -92,7 +97,7 @@ describe('presets', () => {
     // Playable, not every monster in the data: a species transcribed ahead of its rules
     // (v2 Phase 5a) cannot start a game, so a fixture for it could only throw.
     const monsters = PLAYABLE_UNITS.filter((t) => t.size === 'monster')
-    expect(monsters.length).toBe(15)
+    expect(monsters.length).toBe(20)
 
     for (const monster of monsters) {
       const id = `${monster.species}_${monster.id.split('.')[1]}`

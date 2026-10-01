@@ -33,6 +33,8 @@ export type AbilityName =
   | 'Flaming Shields'
   | 'Coastal Dodge'
   | 'Defensive Volley'
+  | 'Mountain Mastery'
+  | 'Dwarven Might'
 
 /**
  * Which abilities each species has.
@@ -45,6 +47,7 @@ export const SPECIES_ABILITIES: Readonly<Record<string, readonly AbilityName[]>>
   treefolk: ['Rapid Growth', 'Replanting'],
   firewalkers: ['Air Flight', 'Flaming Shields'],
   coral_elves: ['Coastal Dodge', 'Defensive Volley'],
+  dwarves: ['Mountain Mastery', 'Dwarven Might'],
 }
 
 /** The rule as the full rules state it, for both clients. Beside the table for the
@@ -72,6 +75,12 @@ export const ABILITY_TEXT: Readonly<Record<AbilityName, string>> = {
     'When at a terrain that contains air, Coral Elves units may counter-attack against a ' +
     'missile action. Follow the same process used for a regular melee counter-attack, ' +
     'using missile results instead of melee results.',
+  'Mountain Mastery':
+    'When at a terrain that contains earth, Dwarves may count melee results as if they were ' +
+    'maneuver results.',
+  'Dwarven Might':
+    'When at a terrain that contains fire, Dwarves may count save results as if they were ' +
+    'melee results when rolling for a counter-attack.',
 }
 
 /** Whether a species has `ability` -- the table alone, with no ruleset in it. */

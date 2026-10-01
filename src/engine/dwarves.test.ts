@@ -16,16 +16,18 @@ import { SPELLS, spell } from '../data/spells'
 import type { DragonFaceNumber } from '../data/types'
 
 import { combinationAnswerProblem, combinationSpec } from './combination'
-import { spellSaves, type Effect } from './effects'
-import { maneuverAsSaves, savesAsMelee, type Modifier } from './pipeline'
+import { armyRoll, spellSaves, unitRoll, type Effect } from './effects'
+import { maneuverAsSaves, meleeAsManeuver, savesAsMelee, savesAsMeleeOnCounter } from './pipeline'
 import { advance, reduce } from './reduce'
 import { conversionsIn, resolveFaces, type RawDie, type RollSpec } from './roll'
 import { rollDice, type RngState } from './rng'
 import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
 import { castSpell, spellEffect, type SpellContext } from './spells'
+import { setupGame } from './setup'
 import { damageSubRoll } from './subroll'
 import {
   V0_RULES,
+  V1_RULES,
   type DragonInPlay,
   type GameState,
   type LogEntry,
@@ -111,23 +113,8 @@ const entries = <K extends LogEntry['kind']>(state: GameState, kind: K) =>
 
 // --- the "counts as" table (6b) ------------------------------------------------
 
-/** The rows 6f will gather, written by hand so the table can be tested before them. */
-const meleeAsManeuver = (species: readonly string[]): Modifier => ({
-  kind: 'counts_as',
-  from: 'melee',
-  resultType: 'maneuver',
-  counter: 'either',
-  species,
-  source: 'Mountain Mastery',
-})
-const savesAsMeleeOnCounter = (species: readonly string[]): Modifier => ({
-  kind: 'counts_as',
-  from: 'save',
-  resultType: 'melee',
-  counter: 'only',
-  species,
-  source: 'Dwarven Might',
-})
+// The two rows 6f added. 6b tested the table with them written out by hand, before
+// the abilities existed; these are the factories `armyRoll` now gathers.
 
 const context = (isCounter: boolean): RollContext => ({
   purpose: { kind: 'attack', action: 'melee' },
@@ -163,7 +150,7 @@ describe('the counts-as table', () => {
   })
 
   it('turns a new row into results on the dice and a note, with no code of its own', () => {
-    // Mountain Mastery's row, before Mountain Mastery exists: melee counted as maneuver.
+    // Mountain Mastery's row: melee counted as maneuver.
     const spec: RollSpec = {
       kinds: ['maneuver'],
       modifiers: [meleeAsManeuver(['firewalkers'])],
@@ -896,5 +883,61 @@ describe("Charge, the defender's half", () => {
     })
     const done = reduce(asked, { kind: 'charge_allocate', ids: {}, flexible: {}, savesAsMelee: 2 })
     expect(entries(done, 'combat_resolved')[0]).toMatchObject({ saveTotal: 0, charge: { melee: 2 }, damage: 2 })
+  })
+})
+
+// --- Mountain Mastery and Dwarven Might (6f) -----------------------------------
+
+describe('Mountain Mastery and Dwarven Might', () => {
+  /** p1's Sergeant (and a Watcher beside it) at a Frontier of the given terrain die. */
+  const at = (frontier: string) => {
+    const base = board([SERGEANT, WATCHER], [OAK], { seed: 1, counter: 0 })
+    return { ...base, terrains: { ...base.terrains, frontier: { ...base.terrains.frontier, dieId: frontier } } }
+  }
+  const sergeant = (icon: string) => raw('p1:0', SERGEANT, icon)
+  const watcher = (icon: string) => raw('p1:1', WATCHER, icon)
+  const roll = (state: GameState, kinds: RollSpec['kinds'], context: RollContext, dice: readonly RawDie[]) =>
+    resolveFaces(dice, { kinds, modifiers: armyRoll(state, 'p1', 'frontier', kinds[0]!).modifiers, context }, RULES)
+
+  it("count a Dwarf's melee as maneuver in a maneuver roll at earth, and nobody else's", () => {
+    // Highland contains earth. The Watcher is a Firewalker: its melee stays melee.
+    const maneuver = { purpose: { kind: 'maneuver' }, isCounter: false } as const
+    const outcome = roll(at('highland_tower'), ['maneuver'], maneuver, [sergeant('MELEE'), watcher('MELEE')])
+    expect(outcome.totals.maneuver).toBe(2)
+    expect(outcome.math?.maneuver?.notes).toEqual(['2 melee counted as maneuver (Mountain Mastery)'])
+    // Coastland contains no earth.
+    expect(roll(at('coastland_tower'), ['maneuver'], maneuver, [sergeant('MELEE')]).totals.maneuver).toBe(0)
+  })
+
+  it("reach a Dwarf's own maneuver sub-roll, since abilities apply to a unit rolling alone", () => {
+    const state = at('highland_tower')
+    expect(unitRoll(state, 'p1:0').modifiers).toContainEqual(meleeAsManeuver(['dwarves']))
+    expect(unitRoll(at('coastland_tower'), 'p1:0').modifiers).toEqual([])
+  })
+
+  it("count a Dwarf's saves as melee on a counter-attack at fire, and never on an attack", () => {
+    const melee = (isCounter: boolean) => ({ purpose: { kind: 'attack', action: 'melee' }, isCounter }) as const
+    // Highland contains fire. The Sergeant's `3 SAVE`.
+    const counter = roll(at('highland_tower'), ['melee'], melee(true), [sergeant('SAVE')])
+    expect(counter.totals.melee).toBe(3)
+    expect(counter.math?.melee?.notes).toEqual(['3 save counted as melee (Dwarven Might)'])
+    // Not Flaming Shields' number: the log's `flamingShields` stays out of it.
+    expect(counter.countedAs).toBeUndefined()
+    expect(roll(at('highland_tower'), ['melee'], melee(false), [sergeant('SAVE')]).totals.melee).toBe(0)
+  })
+
+  it("leave a Firewalker's Flaming Shields to it, beside a Dwarf, on either kind of roll", () => {
+    const melee = (isCounter: boolean) => ({ purpose: { kind: 'attack', action: 'melee' }, isCounter }) as const
+    // The Watcher's `2 SAVE` converts on an attack and not on a counter; the Sergeant's
+    // the other way round.
+    const dice = [sergeant('SAVE'), watcher('SAVE')]
+    expect(roll(at('highland_tower'), ['melee'], melee(false), dice).totals.melee).toBe(2)
+    expect(roll(at('highland_tower'), ['melee'], melee(true), dice).totals.melee).toBe(3)
+  })
+
+  it('make the Dwarves playable, so a Dwarves force can start a game', () => {
+    const state = setupGame({ seed: 3, forces: { kind: 'named', forces: { p1: 'dwarves_behemoth', p2: 'dwarves_behemoth' } }, ruleSet: V1_RULES })
+    expect(Object.values(state.units).every((unit) => unit.typeId === BEHEMOTH)).toBe(true)
+    expect(validateState(state)).toEqual([])
   })
 })

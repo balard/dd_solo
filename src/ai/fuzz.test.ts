@@ -93,9 +93,8 @@ const DECISIONS: Readonly<Record<GameAction['kind'], Reach>> = {
   spell_summon: 'every',
   dragon_breath: 'every',
   dragon_allocate: 'every',
-  // Charge (v2 Phase 6e) is one face on the Behemoth, and the Dwarves are not playable
-  // until 6f; the decision is driven by name until then.
-  charge_allocate: { elsewhere: 'dwarves.test.ts' },
+  // Charge (v2 Phase 6e): a defender with IDs to split, against a Behemoth's Charge face.
+  charge_allocate: 'every',
   dragon_treasure: 'full',
   // Three dragon decisions need two dragons in one place, or dragons at two terrains
   // at once. Summon Dragon is the only way onto the board under the live rules, and a
@@ -200,6 +199,15 @@ const RULES: Readonly<Record<string, Reach>> = {
   'moved:Ferry': 'every',
   'wave:saves': 'every',
   'wave:maneuver': 'every',
+  // The Dwarves (v2 Phase 6): Roar, Stomp and Bash by the entry they leave, and the
+  // halves that leave one of their own.
+  'resolved:Roar': 'every',
+  'resolved:Stomp': 'every',
+  'resolved:Bash': 'every',
+  stomp_burial: 'every',
+  // A Behemoth's army attacked by a dragon, rolling its Bash face: not in 1000 games.
+  dragon_bash: { elsewhere: 'dwarves.test.ts' },
+  charge: 'every',
   // The eighth face: a missile at a Reserve Army is Tower's; City and Temple are
   // their own decisions above.
   tower_reserve: 'every',
@@ -214,6 +222,8 @@ const RULES: Readonly<Record<string, Reach>> = {
   flaming_shields: 'every',
   coastal_dodge: 'every',
   defensive_volley: 'every',
+  mountain_mastery: 'every',
+  dwarven_might: 'every',
   growth_taken: 'every',
   growth_declined: 'every',
   // v2 Phase 2: a rolled force may mix species, and one in five here does.
@@ -311,9 +321,26 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
           if (entry.saveMath?.steps.some((step) => step.source === 'Wave')) bump('wave:saves')
           if (entry.saveMath?.notes.some((note) => note.includes('Coastal Dodge'))) bump('coastal_dodge')
           if (entry.isCounter && entry.action === 'missile') bump('defensive_volley')
+          if (entry.charge !== undefined) bump('charge')
+          if (entry.isCounter && entry.attackMath?.notes.some((note) => note.includes('Dwarven Might'))) {
+            bump('dwarven_might')
+          }
           break
         case 'maneuver_contested':
           if (entry.defenderMath?.steps.some((step) => step.source === 'Wave')) bump('wave:maneuver')
+          if (
+            [entry.marcherMath, entry.defenderMath].some((math) =>
+              math?.notes.some((note) => note.includes('Mountain Mastery')),
+            )
+          ) {
+            bump('mountain_mastery')
+          }
+          break
+        case 'sai_sub_roll':
+          if (entry.source === 'Stomp' && entry.fate === 'bury') bump('stomp_burial')
+          break
+        case 'dragon_damage':
+          if (entry.bashed !== undefined) bump('dragon_bash')
           break
         case 'units_moved':
           bump(`moved:${entry.sai}`)

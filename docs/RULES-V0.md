@@ -1015,7 +1015,7 @@ reaches both sides' armies at the terrain, the caster's included.
 
 Fire & Earth, so Highland is their own terrain type, and a Dwarf at home stands on both of its
 abilities' elements. The dice are in the data from 6a; the species is playable from 6f, when its
-abilities exist.
+abilities came in.
 
 ### The SAIs (6d)
 
@@ -1049,6 +1049,25 @@ abilities exist.
 - **Stomp's burial check waits one machine step**, so an Accelerated Growth offer the kill raised
   is answered first. An exchanged die was never killed and does not roll; a Phoenix that rose is
   not in the DUA and does not either. It is the same roll as Fire breath's (`saveOrBury`).
+
+### The abilities (6f)
+
+- **Mountain Mastery** -- "When at a terrain that contains earth, Dwarves may count melee results
+  as if they were maneuver results." A "counts as", automatic for the reason Coastal Dodge is: no
+  maneuver roll counts melee, so converting only adds. It reaches the marching maneuver, the
+  counter-maneuver, and a Dwarf's own maneuver sub-roll (Smother, Firecloud, Stomp), since
+  abilities apply "when a unit is rolling individually". Only rolled melee converts -- a melee
+  face, or an SAI's melee such as a Trample's -- and only a Dwarf's, in a mixed army. The roll says
+  so: "4 melee counted as maneuver (Mountain Mastery)".
+- **Dwarven Might** -- "When at a terrain that contains fire, Dwarves may count save results as if
+  they were melee results when rolling for a counter-attack." Flaming Shields' "counts as" with the
+  opposite clause: only on a counter-attack, which counts melee and not saves, so it is
+  automatic. It never reaches a Charge's combination roll, which is not a counter-attack. A
+  Firewalker and a Dwarf side by side at a fire terrain convert on opposite rolls: the
+  Firewalker's saves on an attack, the Dwarf's on a counter. Logged as a note, not as
+  `flamingShields`, which the golden digest reads as Flaming Shields' alone.
+
+Highland, the Dwarves' own terrain, contains both earth and fire, so a Dwarf at home has both.
 
 ### House rules this species adds
 

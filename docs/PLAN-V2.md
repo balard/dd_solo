@@ -1538,8 +1538,8 @@ the notes. The app draws the class shapes until then (invariant 8).
 ## Phase 6 — Dwarves — **in progress**
 
 6a has landed: the data. 6b has landed: the seams. 6c has landed: three old rules corrected, in
-three commits. 6d has landed: Roar, Stomp and Bash. 6e has landed: Charge. 6f to 6h are still a
-plan.
+three commits. 6d has landed: Roar, Stomp and Bash. 6e has landed: Charge. 6f has landed: the two
+abilities, and the Dwarves are playable. 6g and 6h are still a plan.
 
 Fire & Earth, so **Highland is their own terrain type** (`homeTerrainType` derives it; nothing is
 tabled) and both species abilities are live at home. The faces are in `data/raw/dwarves.faces.txt`
@@ -1914,7 +1914,7 @@ monster mirror once the Dwarves are playable.
 random, greedy and greedy-against-passive on Behemoth, Gargoyle, Fireshadow, Unicorn and Strangle
 Vine boards. No throws and nothing stuck. 1228 charges, 2 of them reduced by a spell.
 
-### 6f — Mountain Mastery, Dwarven Might, and the flip
+### 6f — Mountain Mastery, Dwarven Might, and the flip — **landed**
 
 - **Mountain Mastery** is the melee → maneuver row: automatic, since no maneuver roll counts melee.
   It reaches the marching maneuver, the counter-maneuver and (after 6c) a Dwarf's own Smother,
@@ -1929,6 +1929,39 @@ Vine boards. No throws and nothing stuck. 1228 charges, 2 of them reduced by a s
   Might certainly do, since Highland is home. **Charge and Bash are one face each on one monster**,
   and Bash also needs a save roll against melee, so expect `'full'` for both, with a named test in
   the Behemoth mirror standing behind each counter.
+
+### What 6f found
+
+The Dwarves are playable. Both golden corpora replay byte-identical and unregenerated, and 1161
+tests pass.
+
+**1. The two abilities were two rows and nothing else.** Each is a `counts_as` factory in
+`pipeline.ts` and a row in `COUNTS_AS_ABILITIES`. 6b's table and 6c's unit-roll door did the rest:
+Mountain Mastery reaches a Dwarf's own maneuver sub-roll, and Dwarven Might stays out of
+`countedAs`, both of which 6b tested by hand before the abilities existed. Those hand-written rows
+in `dwarves.test.ts` are the real factories now.
+
+**2. The flip cost what 5a said it would, and nothing more.** Five monster fixtures (`dwarves_*`,
+six of one monster, 3/2/1). Tests that counted three species or fifteen monster fixtures: built,
+playable, setup, builder palette, the start screen's presets and opponent pools. The playable
+tests went back to "every species in the data is playable". The race draw needed nothing, because
+5d made it general.
+
+**3. The fuzz reaches more than the plan predicted.** The plan guessed Charge and Bash would need
+the 1000-game run. Both fire within 200 random games, as do Roar, Stomp, Stomp's burial check,
+Mountain Mastery and Dwarven Might, so all are `'every'`. Bash in a dragon attack never fired in
+1000 games (it needs a Behemoth's army attacked by a dragon, rolling that face), so it is
+`{ elsewhere: 'dwarves.test.ts' }`, where a named test drives it. The `charge_allocate` decision is
+`'every'` too.
+
+**4. Greedy finishes every Dwarves mirror**, seeds 1 to 4, against passive and against itself: the
+5d exit check, now in `greedy.test.ts` for the Dwarves. The lone-die stall from 6e does not show on
+those 40 games. It is about 1 game in 80 on a Behemoth board, and it stays on 6h's list.
+
+**5. In the browser**, a Behemoth mirror opens on Highland homes, and contesting a maneuver at a
+Highland Frontier showed "4 melee counted as maneuver (Mountain Mastery)", the Trample die drawn
+as 8. No console errors. Charge and Bash did not come up in the turns played, so they rest on the
+engine tests, the fuzz, and the log lines rendered in 6d and 6e.
 
 ### 6g — Firebolt and Higher Ground
 
