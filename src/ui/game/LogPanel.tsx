@@ -325,6 +325,8 @@ export function LogLine({
             })
             .join(', ')}{' '}
           at {slotLabel(entry.slot, human)}
+          {/* Roar (v2 Phase 6d): nothing follows this line, so it says where they went. */}
+          {entry.toReserve === true && <span className="muted"> — sent to their reserves</span>}
         </p>
       )
     /**
@@ -344,6 +346,27 @@ export function LogLine({
           .join(', ')
       const asked =
         entry.test === 'id' ? 'an ID icon' : entry.test === 'save' ? 'a save' : 'a maneuver'
+
+      // A damage sub-roll (v2 Phase 6d: Bash, and Firebolt in 6g): not "any save gets
+      // away" but saves against a number, so it says the number.
+      if (entry.damage !== undefined) {
+        return (
+          <div className="log-roll">
+            <div className="roll-head">
+              <strong>{entry.source}</strong> &middot; saves against {entry.damage} damage &middot;{' '}
+              {where(entry.slot)}
+            </div>
+            <RollStrip dice={entry.dice} />
+            <div className="roll-sum">
+              {entry.escaped.length > 0 ? (
+                <>{names(entry.escaped)} survives</>
+              ) : (
+                <span className="muted">not enough saves</span>
+              )}
+            </div>
+          </div>
+        )
+      }
 
       return (
         <div className="log-roll">
@@ -861,11 +884,18 @@ export function LogLine({
         <div className="log-roll">
           {entry.incoming !== undefined && (
             <div className="roll-sum">
-              Dragons deal <b>{entry.incoming.inflicted}</b> damage − {entry.incoming.saves} saves ={' '}
+              Dragons deal <b>{entry.incoming.inflicted}</b> damage − {entry.incoming.saves} saves
+              {entry.incoming.bash !== undefined && <> − {entry.incoming.bash} Bash</>} ={' '}
               <b>{entry.incoming.damage}</b> damage to {entry.player === human ? 'your' : "the enemy's"} army at{' '}
               {where(entry.slot)}
             </div>
           )}
+          {entry.bashed?.map((bash) => (
+            <div className="roll-sum" key={`bash-${bash.dragonId}`}>
+              <b>Bash</b> sends {bash.damage} back vs {bash.threshold} &rarr; {dragonLabel(state, bash.dragonId)}{' '}
+              {bash.slain ? <b>is slain</b> : 'survives'}
+            </div>
+          ))}
           {entry.answered?.map((answer) => (
             <div className="roll-sum" key={answer.dragonId}>
               {answerPhrase(answer)} &rarr; {dragonLabel(state, answer.dragonId)}{' '}

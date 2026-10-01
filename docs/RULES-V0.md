@@ -1010,3 +1010,45 @@ reaches both sides' armies at the terrain, the caster's included.
 - **A unit roll still rolls it**, and so ends the glare -- every unit roll, a spell's included:
   Lightning Strike and Mirage ended no glare until v2 Phase 6c. A die made to roll for its own life (a
   Bullseye, a Swallow) that sat out would simply fail and die; no player chooses that.
+
+## 18. Dwarves (v2 Phase 6)
+
+Fire & Earth, so Highland is their own terrain type, and a Dwarf at home stands on both of its
+abilities' elements. The dice are in the data from 6a; the species is playable from 6f, when its
+abilities exist. Charge is 6e and is not here yet.
+
+### The SAIs (6d)
+
+| SAI | Applies | What it does here |
+|---|---|---|
+| **Roar** | Melee | Up to X health-worth of the defenders go to their Reserve Area before the save roll. No roll and no death: no Replanting, no Rise from the Ashes. A counter-attack is a melee attack, so a Roar on one sends the marching army's dice home. Combined by name. |
+| **Stomp** | Melee, dragon attack | Up to X health-worth roll maneuver; those with none are killed, and then the dead roll saves, and those with none are buried. In a dragon attack, X melee. |
+| **Bash** | Save against melee, other saves, dragon attack | Against melee: the defender picks **one** die of the attacking army that put melee into the attack. That die takes damage equal to its own melee and makes a save roll against it, and the defender's save roll gains that many saves. In any other save roll (a sub-roll, a spell's save roll): X saves. In a dragon attack: see the house rules. |
+
+- **Bash's die is priced by the attack as it was counted**: its share of the attack total, summed
+  over a reroll chain (a Rend's second face is the same die's), doubled IDs at a held eighth face
+  included, since those are on the die. A die that gave no melee is not offered, and a Bash with no
+  such die gives nothing.
+- **Bash's target rolls a damage sub-roll** (`subroll.ts`): it dies when what its saves leave of
+  the damage reaches its health, not on "no save result". Its results still count toward the
+  attack either way (p. 27, "its results still stand").
+- **Stomp's burial check waits one machine step**, so an Accelerated Growth offer the kill raised
+  is answered first. An exchanged die was never killed and does not roll; a Phoenix that rose is
+  not in the DUA and does not either. It is the same roll as Fire breath's (`saveOrBury`).
+
+### House rules this species adds
+
+- **Bash in a dragon attack chooses for you**: the attacking dragon that did the most damage, ties
+  to the first. "Choose an attacking dragon that has inflicted damage" is a decision inside the
+  dragon combination roll, which has nowhere to ask one (`noSideDecision`), and the biggest is the
+  answer that maximises both halves -- the saves and the damage sent back. Two Bashes choose two
+  dragons. The damage is neither melee nor missile, so it never joins the army's pools; it slays
+  the dragon when it alone reaches the dragon's threshold (10, or 5 past a Belly), and a dragon a
+  Bash slays was slain by the army, so the army promotes.
+- **Bash's saves are a step-10 add**, named "Bash" on the roll's arithmetic, rather than step-8 SAI
+  results. Nothing in scope divides or multiplies a whole save total, so the two give the same
+  number, and the line can name it.
+- **A Bash that kills the attacking army's last die ends its army effects before the totals.** The
+  rules end an army's effects "if there are no units remaining in the army ... checked at the end
+  of each action", and the Bash is an action; the attack's totals are counted after it. So a Fiery
+  Weapon on an army a Bash just emptied adds nothing to that army's attack. The dice still count.

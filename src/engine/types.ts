@@ -267,6 +267,14 @@ export interface PendingAttack {
    * Growth offer. Omitted otherwise.
    */
   readonly rerollDue?: UnitId
+  /**
+   * Stomp's dead, owed their burial check (v2 Phase 6d): "those that do not generate a
+   * maneuver result are killed and must make a save roll. Those that do not generate a
+   * save result are buried." Rolled on the next machine step, for `rerollDue`'s reason
+   * -- an Accelerated Growth offer the kill raised is answered first, and an exchanged
+   * die was never killed, so `settleGrowth` takes it off this list. Omitted otherwise.
+   */
+  readonly burialDue?: { readonly sai: string; readonly unitIds: readonly UnitId[] }
 }
 
 /**
@@ -283,6 +291,12 @@ export interface PendingSaves {
   /** Wild Growth's save share, chosen by the defender. Omitted when nobody chose
    *  any, which is every save roll but a Wild Growth one. */
   readonly bonus?: number
+  /**
+   * Bash (v2 Phase 6d): save results equal to the melee of the dice the defender Bashed.
+   * Its own field, not `bonus`, because the roll's arithmetic names each -- "+ 4 Bash"
+   * and not "+ 4 Wild Growth". Omitted when nobody Bashed.
+   */
+  readonly bash?: number
   /**
    * Wave (v2 Phase 5c): save results the attack roll takes off this one. Read off the
    * attack's faces when the save dice are thrown and parked beside them, so the three
@@ -597,6 +611,12 @@ export interface DragonAttackState {
   readonly totals?: { readonly melee: number; readonly missile: number; readonly save: number }
   /** What the dragons did to the army, once the saves are subtracted. */
   readonly armyDamage?: number
+  /**
+   * Bash faces in the army's combination roll (v2 Phase 6d), each owed one attacking
+   * dragon at step 7: the one that did the most, under the house rule. Omitted when
+   * none, which is every dragon attack without a Behemoth in it.
+   */
+  readonly bashes?: number
 }
 
 export type Direction = 'up' | 'down'
@@ -714,6 +734,13 @@ export type Pending =
        * Omitted means the whole army is fair game, which is every other SAI.
        */
       readonly eligible?: readonly UnitId[]
+      /**
+       * Bash (v2 Phase 6d): what each eligible die would take -- its own melee in the
+       * attack roll, which is also the saves the Bash would give. On the pending so
+       * every chooser sees the price of each answer without resolving the roll itself.
+       * Omitted for every other SAI.
+       */
+      readonly bash?: Readonly<Record<UnitId, number>>
       /**
        * Tasks this roll still owes, counting this one.
        *
@@ -1263,8 +1290,19 @@ export type LogEntry =
       readonly incoming?: {
         readonly inflicted: number
         readonly saves: number
+        /** Bash (v2 Phase 6d): saves equal to the damage of the dragons it chose.
+         *  Omitted when no Bash was rolled. */
+        readonly bash?: number
         readonly damage: number
       }
+      /** The dragons a Bash sent their own damage back at (v2 Phase 6d). Omitted when
+       *  none. */
+      readonly bashed?: readonly {
+        readonly dragonId: DragonId
+        readonly damage: number
+        readonly threshold: number
+        readonly slain: boolean
+      }[]
       /** Every dragon the army's melee and missile went at. Omitted when none. */
       readonly answered?: readonly DragonAnswer[]
       /** Dragon against dragon. Omitted when none. */
@@ -1464,6 +1502,9 @@ export type LogEntry =
       readonly sai: string
       readonly slot: ArmyRef
       readonly unitIds: readonly UnitId[]
+      /** Roar (v2 Phase 6d): the targets went to their Reserve Area, and that is all
+       *  that happened to them -- no roll and no death follows. Omitted otherwise. */
+      readonly toReserve?: true
     }
   /**
    * A sub-roll: the targets of a Bullseye, Double Strike, Smother, Firecloud or Seize

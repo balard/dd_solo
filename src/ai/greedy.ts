@@ -470,6 +470,13 @@ function decide(state: GameState, pending: Pending): GameAction {
       const targets = army(state, pending.target, pending.slot).filter(
         (unit) => pending.eligible === undefined || pending.eligible.includes(unit.id),
       )
+      if (pending.limit.kind === 'one' && pending.bash !== undefined) {
+        // Bash (v2 Phase 6d): the die that put in the most melee gives the most saves
+        // and takes the most damage back, so both halves want it; ties to the dearest.
+        const melee = pending.bash
+        const pick = best(targets, (unit) => (melee[unit.id] ?? 0) * 100 + valueOf(state, unit))
+        return { kind: 'sai_target', unitIds: pick === undefined ? [] : [pick.id] }
+      }
       if (pending.limit.kind === 'one') {
         // Sleep wants a die that can still roll -- sleeping one twice buys nothing.
         // Swallow wants the opposite: a die that cannot roll cannot roll its ID, so it

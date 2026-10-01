@@ -141,6 +141,19 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
       // which of them come up ID -- too rough to price, and never counted as results.
       case 'glare':
         break
+      // Bash (v2 Phase 6d) against melee: saves equal to the melee of the attacking die
+      // it hits, which is not known until the attack has landed -- so a middling die's.
+      case 'bash':
+        if (resultType === 'save') sai += BASH_WORTH
+        break
+      // In a dragon attack: the damage of the dragon that did the most, which this
+      // estimate never prices -- greedy does not choose dragon attacks.
+      case 'bash_dragon':
+        break
+      // Exhaustive, so an effect kind a later species adds is a build error here
+      // rather than a face greedy silently prices at nothing (v2 Phase 6d).
+      default:
+        effect satisfies never
     }
   }
 
@@ -163,6 +176,9 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
 export type Rolled = Readonly<Record<ConvertibleType, number>>
 
 const CONVERTIBLE: readonly ConvertibleType[] = ['melee', 'save', 'maneuver']
+
+/** The saves a Bash is expected to give: the melee of a middling attacking die. */
+const BASH_WORTH = 3
 
 /** What a Swallow is expected to take: one die, which rarely shows its ID. */
 const SWALLOW_WORTH = 2

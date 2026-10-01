@@ -1538,7 +1538,7 @@ the notes. The app draws the class shapes until then (invariant 8).
 ## Phase 6 — Dwarves — **in progress**
 
 6a has landed: the data. 6b has landed: the seams. 6c has landed: three old rules corrected, in
-three commits. 6d to 6h are still a plan.
+three commits. 6d has landed: Roar, Stomp and Bash. 6e to 6h are still a plan.
 
 Fire & Earth, so **Highland is their own terrain type** (`homeTerrainType` derives it; nothing is
 tabled) and both species abilities are live at home. The faces are in `data/raw/dwarves.faces.txt`
@@ -1744,7 +1744,7 @@ nothing there, since no unit roll counts melee. Tests: a Coral Elf at water save
 sub-roll and a Lightning Strike with its maneuver, and does not at Highland or in Reserves. Both
 positive tests fail without the fix. No golden moved: neither corpus has a Coral Elf.
 
-### 6d — Roar, Stomp, Bash
+### 6d — Roar, Stomp, Bash — **landed**
 
 - **Roar** is `target_enemy` with a Reserve destination and no roll. It is not a kill: no death
   trigger, no Replanting. A sleeping die is a legal target (Roar moves it; it does not ask it to
@@ -1773,6 +1773,56 @@ positive tests fail without the fix. No golden moved: neither corpus has a Coral
   it never combines with either pool.
 - `expectOnly`'s whitelist in `finishSaves` gains Bash's effect kind **in the same edit**. That is
   the one thing every Phase 4 slice forgot.
+
+### What 6d found
+
+Both golden corpora replay byte-identical and unregenerated: no recorded game has a Dwarf. The rules
+are in `RULES-V0.md` section 18, and the tests in `dwarves.test.ts`.
+
+**1. Roar and Stomp were the existing shapes the table said, with one new fate each.**
+`target_enemy`'s `fate` gained `'reserve'` (Roar: moved, not killed, so no death trigger) and
+`'save_or_bury'` (Stomp). Roar's `sai_resolved` carries `toReserve`, because nothing follows that
+line, so it has to say where the dice went.
+
+**2. Stomp's burial roll was Fire breath's roll, and is now the same function.** `saveOrBury` came
+out of `resolveBreathBury`, and Stomp parks its dead on `combat.attack.burialDue` the way a Bullseye
+parks `rerollDue`. `settleGrowth` trims the list the way it already trimmed Fire breath's `burning`.
+A test drives the order: Stomp kills two Oaks, Accelerated Growth is asked, one Oak is exchanged,
+and only the other rolls the burial check.
+
+**3. Bash fits the delayed pause with one new answer from `taskOwner`.** It is owned by the
+defender and aimed at the attacker: `{ player: defender, army: attacker }`. The pending is the
+ordinary `sai_target` with `limit: one` and `eligible`, plus `bash`, the melee each eligible die
+would take. Every chooser sees the price without resolving the roll, and greedy picks the biggest.
+The victim is picked from the attack strip, which the delayed pause already shows, so neither
+board changed.
+
+**4. Bash's saves are a named step-10 add.** `bonus` is Wild Growth's and the arithmetic line names
+it so, as predicted. `saveRollSpec` adds `+ N Bash` instead, which needed no new `RollSpec` field.
+
+**5. The dragon roll's guard had to learn one effect.** `resolveArmyRoll` refused every effect
+(`expectNoEffects`). It now allows `bash_dragon` (`expectOnly`, now exported), counts the Bashes onto
+`DragonAttackState.bashes`, and `finishDragonDamage` spends them. That is the house rule: the
+dragon that did most, its damage back, and as many saves. A dragon slain this way counts as slain by
+the army, so the army promotes. `dragon_damage` names it ("− 12 Bash", "Bash sends 12 back vs
+10"). The dragon self-play's arithmetic check had to subtract it too, or the first Behemoth in a
+dragon game would have failed it.
+
+**6. The estimator's switch was not exhaustive.** A new effect kind compiled cleanly and was
+priced at nothing, which is how greedy stops casting or using something without anything failing.
+It ends in `effect satisfies never` now, and Bash is a middling die's melee in saves.
+
+**7. A Bash that kills the attacking army's last die ends that army's effects before the totals.**
+The rules end an army's effects when it has no units left, "checked at the end of each action", and
+the Bash is an action that comes before the totals. So a Fiery Weapon on that army adds nothing to
+its attack, while the dice's own results still stand. That is written in section 18 as what the
+rules say, with a test, rather than left as a surprise.
+
+**8. A temporary fuzz, since the species is not playable yet.** With Charge stubbed to nothing and
+an empty ability list, random and greedy self-play ran 1200 games: Behemoth and Androsphinx
+mirrors, and Behemoths against Satyrs and Genies. There were no throws, nothing stuck and nothing
+capped. They reached Roar 2426 times, Stomp 1210 (853 burial checks), Bash 374, and Bash in a dragon
+attack 29. The stubs were reverted. The live fuzz reaches all of this once 6f flips the species.
 
 ### 6e — Charge
 

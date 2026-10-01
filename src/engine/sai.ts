@@ -710,6 +710,69 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
     if (ctx.purpose.kind === 'maneuver' || noSideDecision(ctx)) return NOTHING
     return { results: {}, effects: [{ kind: 'free_move', health: FERRY_HEALTH }], reroll: false }
   },
+
+  /**
+   * "During a melee attack, target up to X health-worth of units in the defending army.
+   * The targets are immediately moved to their Reserve Area before the defending army
+   * rolls for saves." (v2 Phase 6d.)
+   *
+   * Seize's destination without Seize's roll: nobody escapes and nobody dies, so no
+   * death trigger fires. A counter-attack is a melee attack, so a Roar on one sends the
+   * marching army's dice home.
+   */
+  Roar: (x, ctx) =>
+    isAttack(ctx, 'melee')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: x, escape: 'none', fate: 'reserve' }],
+          reroll: false,
+        }
+      : NOTHING,
+
+  /**
+   * "During a melee attack, target up to X health-worth of units in the defending army.
+   * The targets make a maneuver roll. Those that do not generate a maneuver result are
+   * killed and must make a save roll. Those that do not generate a save result are
+   * buried. During a dragon attack, Stomp generates X melee results." (v2 Phase 6d.)
+   *
+   * Smother, and then Fire breath's burial check on the dead.
+   */
+  Stomp: (x, ctx) => {
+    if (isAttack(ctx, 'melee')) {
+      return {
+        results: {},
+        effects: [{ kind: 'target_enemy', health: x, escape: 'maneuver', fate: 'save_or_bury' }],
+        reroll: false,
+      }
+    }
+    if (ctx.purpose.kind === 'dragon_attack') return gives('melee', x)
+    return NOTHING
+  },
+
+  /**
+   * "During a save roll against a melee attack, target one unit from the attacking army.
+   * The targeted unit takes damage equal to the melee results it generated. The targeted
+   * unit must make a save roll against this damage. Bash also generates save results
+   * equal to the targeted unit's melee results. During other save rolls, Bash generates
+   * X save results. During a dragon attack choose an attacking dragon that has inflicted
+   * damage. That dragon takes damage equal to the amount of damage it inflicted. Bash
+   * also generates save results equal to the damage the chosen dragon did." (v2 Phase 6d.)
+   *
+   * Three sentences, three shapes. Against melee its number is the *target's* melee,
+   * chosen at the delayed pause; a sub-roll is a save roll against nothing, so it is an
+   * "other" save roll and gives X, as does a spell's save roll. The dragon sentence is
+   * resolved where the dragons' damage is known.
+   */
+  Bash: (x, ctx) => {
+    if (isSaveAgainst(ctx, 'melee') && !noSideDecision(ctx)) {
+      return { results: {}, effects: [{ kind: 'bash' }], reroll: false }
+    }
+    if (ctx.purpose.kind === 'save') return gives('save', x)
+    if (ctx.purpose.kind === 'dragon_attack') {
+      return { results: {}, effects: [{ kind: 'bash_dragon' }], reroll: false }
+    }
+    return NOTHING
+  },
 }
 
 /**
@@ -803,6 +866,21 @@ export const SAI_TEXT: Readonly<Record<string, string>> = {
     'During a melee attack, the defending army subtracts X save results. During a ' +
     "maneuver roll while marching, subtract X from each counter-maneuvering army's " +
     'maneuver results. Wave does nothing if rolled during a countermaneuver.',
+  Roar:
+    'During a melee attack, target up to X health-worth of units in the defending army. ' +
+    'The targets are immediately moved to their Reserve Area before the defending army ' +
+    'rolls for saves.',
+  Stomp:
+    'During a melee attack, target up to X health-worth of units in the defending army. ' +
+    'The targets make a maneuver roll. Those that do not generate a maneuver result are ' +
+    'killed and must make a save roll. Those that do not generate a save result are ' +
+    'buried. During a dragon attack, Stomp generates X melee results.',
+  Bash:
+    'During a save roll against a melee attack, target one unit from the attacking army. ' +
+    'The targeted unit takes damage equal to the melee results it generated. The ' +
+    'targeted unit must make a save roll against this damage. Bash also generates save ' +
+    "results equal to the targeted unit's melee results. During other save rolls, Bash " +
+    'generates X save results.',
 }
 
 /** The SAI names `sai: 'results'` resolves. Anything else on a face is inert. */

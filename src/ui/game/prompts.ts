@@ -383,6 +383,17 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
     // The one prompt that asks you to pick somebody else's dice, so it says whose and
     // where rather than leaving the sentence to imply it.
     case 'sai_target':
+      // Bash (v2 Phase 6d) is the one aimed back at the dice that attacked you, and its
+      // price is per die, so the question says both.
+      if (pending.bash !== undefined) {
+        return {
+          question:
+            `${pending.sai}: pick one attacking die at ${label(pending.slot)} — it takes its own ` +
+            'melee as damage, and you gain that many saves',
+          choices: [],
+          custom: 'sai_target',
+        }
+      }
       return {
         question:
           `${pending.sai}: target ` +

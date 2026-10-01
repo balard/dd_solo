@@ -423,8 +423,8 @@ describe('the rungs of ruleSet.sai', () => {
     // would be added to, and the count below is what makes adding one a decision.
     // v2 Phase 5a: the Coral Elves' six, transcribed ahead of their handlers. A slice
     // that builds one moves it out of here, and 5c built all six. v2 Phase 6a: the
-    // Dwarves' four, the same way -- 6d builds Roar, Stomp and Bash, 6e Charge.
-    const deferred = new Set<string>(['Bash', 'Charge', 'Roar', 'Stomp'])
+    // Dwarves' four, the same way -- 6d built Roar, Stomp and Bash, and 6e builds Charge.
+    const deferred = new Set<string>(['Charge'])
     const live = new Set(LIVE_SAIS)
     const targeting = new Set(TARGETING_SAIS)
 
@@ -438,8 +438,8 @@ describe('the rungs of ruleSet.sai', () => {
     // all quote it, and nothing else would notice it going stale. Each Phase 4 slice
     // moves names from `deferred` into `TARGETING_SAIS` and edits these two numbers.
     expect(live.size, 'SAIs live under sai: results').toBe(15)
-    expect(targeting.size, 'targeting SAIs built so far').toBe(16)
-    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(4)
+    expect(targeting.size, 'targeting SAIs built so far').toBe(19)
+    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(1)
     expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(0)
 
     for (const name of names) {

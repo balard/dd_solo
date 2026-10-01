@@ -357,11 +357,17 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
         case 'target_enemy':
           switch (effect.escape) {
             case 'none':
-              return `${effect.health} health-worth ${effect.fate === 'bury' ? 'killed and buried' : 'killed'}`
+              // Roar moves its targets home rather than killing them (v2 Phase 6d).
+              return effect.fate === 'reserve'
+                ? `${effect.health} health-worth sent to reserves`
+                : `${effect.health} health-worth ${effect.fate === 'bury' ? 'killed and buried' : 'killed'}`
             case 'save':
               return `${effect.health} health-worth must save or die`
             case 'maneuver':
-              return `${effect.health} health-worth must maneuver or die`
+              // Stomp's dead roll again, for burial (v2 Phase 6d).
+              return effect.fate === 'save_or_bury'
+                ? `${effect.health} health-worth must maneuver or die, then save or be buried`
+                : `${effect.health} health-worth must maneuver or die`
             case 'id':
               // Swallow's one die stays and dies unless it shows its ID; Seize's
               // health-worth goes home on one.
@@ -386,6 +392,10 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
           return `${effect.budget} to split between saves and promotions`
         case 'free_move':
           return `may move itself and ${effect.health} health-worth`
+        case 'bash':
+          return 'one attacking die takes its own melee, and you save as much'
+        case 'bash_dragon':
+          return 'the dragon that did the most takes it back, and you save as much'
       }
     })
     .join('; ')

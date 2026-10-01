@@ -377,7 +377,8 @@ function describe(entry: LogEntry, state: GameState): string | null {
       return yellow(
         `  ${bold(entry.sai)} targets ${entry.unitIds
           .map((id) => (state.units[id] ? name(state.units[id]!) : id))
-          .join(', ')} at ${SLOT_LABEL[entry.slot]}`,
+          .join(', ')} at ${SLOT_LABEL[entry.slot]}` +
+          (entry.toReserve === true ? ' — sent to their reserves' : ''),
       )
     // The sub-roll a Smother, a Seize or a Bullseye puts its targets through. No dice
     // strip here -- the terminal log prints totals, not faces -- so the line says what
@@ -400,6 +401,14 @@ function describe(entry: LogEntry, state: GameState): string | null {
               ? `${who} escape${one} to ${entry.player}'s reserves`
               : `${who} get${one} away`
       const stake = entry.fate === 'bury' ? 'be buried' : 'die'
+      // A damage sub-roll (v2 Phase 6d) is saves against a number, not any save at all.
+      if (entry.damage !== undefined) {
+        return yellow(
+          `  ${bold(entry.source)}: saves against ${entry.damage} damage — ` +
+            (entry.escaped.length > 0 ? `${who} survives` : 'not enough saves') +
+            (entry.dice.length > 0 ? dim(`\n    ${entry.dice.map(shown).join('  ')}`) : ''),
+        )
+      }
       return yellow(
         `  ${bold(entry.source)}: ${asked} or ${stake} — ${got}` +
           (entry.dice.length > 0 ? dim(`
@@ -631,8 +640,15 @@ function describe(entry: LogEntry, state: GameState): string | null {
       const lines: string[] = []
       if (entry.incoming !== undefined) {
         lines.push(
-          `  dragons deal ${entry.incoming.inflicted} − ${entry.incoming.saves} saves = ` +
+          `  dragons deal ${entry.incoming.inflicted} − ${entry.incoming.saves} saves` +
+            `${entry.incoming.bash !== undefined ? ` − ${entry.incoming.bash} Bash` : ''} = ` +
             `${bold(String(entry.incoming.damage))} damage to ${entry.player} at ${SLOT_LABEL[entry.slot]}`,
+        )
+      }
+      for (const b of entry.bashed ?? []) {
+        lines.push(
+          `  Bash sends ${b.damage} back vs ${b.threshold} -> ` +
+            `${dragonNameOf(state, b.dragonId)} ${b.slain ? bold('is slain') : 'survives'}`,
         )
       }
       for (const a of entry.answered ?? []) {

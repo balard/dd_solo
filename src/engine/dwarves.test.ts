@@ -11,13 +11,14 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { UNIT_TYPES, unitType } from '../data/load'
+import { UNIT_TYPES, dragonFaceIcon, unitType } from '../data/load'
 import { SPELLS, spell } from '../data/spells'
+import type { DragonFaceNumber } from '../data/types'
 
 import { combinationAnswerProblem, combinationSpec } from './combination'
 import { spellSaves, type Effect } from './effects'
 import { maneuverAsSaves, savesAsMelee, type Modifier } from './pipeline'
-import { advance } from './reduce'
+import { advance, reduce } from './reduce'
 import { conversionsIn, resolveFaces, type RawDie, type RollSpec } from './roll'
 import { rollDice, type RngState } from './rng'
 import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
@@ -25,6 +26,7 @@ import { castSpell, spellEffect, type SpellContext } from './spells'
 import { damageSubRoll } from './subroll'
 import {
   V0_RULES,
+  type DragonInPlay,
   type GameState,
   type LogEntry,
   type RuleSet,
@@ -472,5 +474,272 @@ describe('species abilities in a unit roll', () => {
       target: { kind: 'units', unitIds: ['p2:0'] },
     }).state
     expect(out.units['p2:0']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+  })
+})
+
+// --- Roar, Stomp, Bash (6d) ----------------------------------------------------
+
+const ANDROSPHINX = 'dwarves.androsphinx'
+const ANDROSPHINX_ROAR = 1
+const BEHEMOTH = 'dwarves.behemoth'
+const BEHEMOTH_STOMP = 1
+const BEHEMOTH_BASH = 2
+/** Sergeant: face 2 `2 MELEE`, face 4 `3 SAVE`. */
+const SERGEANT = 'dwarves.sergeant'
+const SERGEANT_MELEE = 2
+const SERGEANT_SAVE = 4
+const OAKLING = 'treefolk.oakling'
+
+/** p1 attacks p2 at the Frontier in melee, from a board where the attack is about to roll. */
+const melee = (p1: readonly string[], p2: readonly string[], rng: RngState): GameState =>
+  board(p1, p2, rng, {
+    marchStep: 'resolve_attack',
+    marchingArmy: 'frontier',
+    armiesMarched: ['frontier'],
+    combat: { action: 'melee', targetSlot: 'frontier', damage: 0 },
+  })
+
+/** Moves a unit somewhere else: a die at home keeps a player alive after a wipe. */
+const relocate = (state: GameState, id: string, location: UnitInstance['location']): GameState => ({
+  ...state,
+  units: { ...state.units, [id]: { ...state.units[id]!, location } },
+})
+
+describe('Roar', () => {
+  it('sends up to X health-worth of defenders to their Reserve Area before they save', () => {
+    const start = melee([ANDROSPHINX], [OAK, OAK, OAK], rngShowing([ANDROSPHINX], [ANDROSPHINX_ROAR]))
+    const asked = advance(start)
+    expect(asked.pending).toMatchObject({
+      kind: 'sai_target',
+      player: 'p1',
+      sai: 'Roar',
+      target: 'p2',
+      limit: { kind: 'health', budget: 4 },
+    })
+
+    const done = reduce(asked, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] })
+    expect(done.units['p2:0']?.location).toEqual({ kind: 'reserve' })
+    expect(done.units['p2:1']?.location).toEqual({ kind: 'reserve' })
+    expect(done.units['p2:2']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(entries(done, 'sai_resolved')).toMatchObject([{ sai: 'Roar', toReserve: true }])
+    // Not a kill: no death line, and no death trigger.
+    expect(entries(done, 'units_killed')).toEqual([])
+    expect(validateState(done)).toEqual([])
+  })
+})
+
+describe('Stomp', () => {
+  // The Behemoth stomps two Oaks; neither shows a maneuver, so both die. Then the dead
+  // roll saves: the first shows `4 SAVE` and stays in the DUA, the second is buried.
+  const stomped = (extra: Partial<GameState> = {}, faces = [OAK_MELEE, OAK_MELEE, OAK_SAVE, OAK_MELEE]) => {
+    const rng = rngShowing([BEHEMOTH, ...faces.map(() => OAK)], [BEHEMOTH_STOMP, ...faces])
+    const base = relocate(melee([BEHEMOTH], [OAK, OAK, OAKLING], rng), 'p2:2', { kind: 'terrain', slot: 'p2_home' })
+    return advance({ ...base, ...extra })
+  }
+
+  it('kills what fails its maneuver, then buries what fails its save', () => {
+    const asked = stomped()
+    expect(asked.pending).toMatchObject({ kind: 'sai_target', sai: 'Stomp', limit: { kind: 'health', budget: 4 } })
+
+    const done = reduce(asked, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] })
+    expect(done.units['p2:0']?.location).toEqual({ kind: 'dua' })
+    expect(done.units['p2:1']?.location).toEqual({ kind: 'bua' })
+    expect(entries(done, 'sai_sub_roll')).toMatchObject([
+      { source: 'Stomp', test: 'maneuver', escaped: [] },
+      { source: 'Stomp', test: 'save', fate: 'bury', escaped: ['p2:0'] },
+    ])
+    expect(entries(done, 'units_killed')).toMatchObject([{ unitIds: ['p2:0', 'p2:1'] }])
+    expect(entries(done, 'units_buried')).toMatchObject([{ unitIds: ['p2:1'] }])
+    // The burial check was spent: nothing is left parked on the attack.
+    expect(done.turn.combat?.attack?.burialDue).toBeUndefined()
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('asks about Accelerated Growth first, and an exchanged die rolls no burial check', () => {
+    const growth: Effect = {
+      source: 'Accelerated Growth',
+      target: { kind: 'player', player: 'p2' },
+      modifiers: [],
+      trigger: 'accelerated_growth',
+      expiresAtStartOfTurnOf: 'p2',
+    }
+    // The Oakling waits in p2's DUA as the exchange partner; the second Oak's burial
+    // roll is the only one made, and it shows a melee face.
+    const asked = stomped({ effects: [growth] }, [OAK_MELEE, OAK_MELEE, OAK_MELEE])
+    const inDua = relocate(asked, 'p2:2', { kind: 'dua' })
+    // Something of p2's still has to be alive once both Oaks are down, or the game ends
+    // before anybody is asked anything.
+    const home: UnitInstance = { id: 'p2:9', typeId: OAK, owner: 'p2', location: { kind: 'terrain', slot: 'p2_home' } }
+    const alive = { ...inDua, units: { ...inDua.units, [home.id]: home } }
+    const offered = reduce(alive, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] })
+    expect(offered.pending).toMatchObject({ kind: 'accelerated_growth', player: 'p2', partners: ['p2:2'] })
+    // Not rolled yet: the question comes before the check.
+    expect(entries(offered, 'sai_sub_roll').filter((e) => e.test === 'save')).toEqual([])
+
+    const done = reduce(offered, {
+      kind: 'accelerated_growth',
+      pairs: [{ unitId: 'p2:0', partnerId: 'p2:2' }],
+    })
+    const burial = entries(done, 'sai_sub_roll').filter((e) => e.test === 'save')
+    expect(burial).toHaveLength(1)
+    expect(burial[0]?.dice.map((d) => d.unitId)).toEqual(['p2:1'])
+    expect(done.units['p2:0']?.location).toEqual({ kind: 'dua' })
+    expect(done.units['p2:1']?.location).toEqual({ kind: 'bua' })
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('generates X melee in a dragon attack and targets nobody', () => {
+    const outcome = resolveFaces(
+      [{ unitId: 'a', typeId: BEHEMOTH, faceIndex: BEHEMOTH_STOMP }],
+      {
+        kinds: DRAGON_ROLL_KINDS,
+        modifiers: [],
+        context: { purpose: { kind: 'dragon_attack' }, isCounter: false },
+        idAllocation: { melee: 0, missile: 0, save: 0 },
+      },
+      RULES,
+    )
+    expect(unitType(BEHEMOTH).faces[BEHEMOTH_STOMP]).toMatchObject({ icon: 'SAI', sai: 'Stomp' })
+    expect(outcome.totals.melee).toBe(4)
+    expect(outcome.effects).toEqual([])
+  })
+})
+
+describe('Bash', () => {
+  // p1's Sergeant and Oak each put 2 melee into the attack; p2's Behemoth rolls Bash.
+  const bashed = (sergeantSave: number) =>
+    advance(
+      melee(
+        [SERGEANT, OAK],
+        [BEHEMOTH],
+        rngShowing([SERGEANT, OAK, BEHEMOTH, SERGEANT], [SERGEANT_MELEE, OAK_MELEE, BEHEMOTH_BASH, sergeantSave]),
+      ),
+    )
+
+  it('asks the defender to pick one attacking die, priced by its own melee', () => {
+    expect(bashed(SERGEANT_SAVE).pending).toMatchObject({
+      kind: 'sai_target',
+      player: 'p2',
+      sai: 'Bash',
+      target: 'p1',
+      slot: 'frontier',
+      limit: { kind: 'one' },
+      eligible: ['p1:0', 'p1:1'],
+      bash: { 'p1:0': 2, 'p1:1': 2 },
+    })
+  })
+
+  it('hits the die with its own melee, and the defender saves as much', () => {
+    const done = reduce(bashed(SERGEANT_SAVE), { kind: 'sai_target', unitIds: ['p1:0'] })
+    // The Sergeant's `3 SAVE` beats its own 2: it survives.
+    expect(entries(done, 'sai_sub_roll')).toMatchObject([{ source: 'Bash', damage: 2, escaped: ['p1:0'] }])
+    expect(done.units['p1:0']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    const exchange = entries(done, 'combat_resolved')[0]
+    expect(exchange).toMatchObject({ attackTotal: 4, saveTotal: 2 })
+    expect(exchange?.saveMath?.steps).toContainEqual({ source: 'Bash', delta: 2 })
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('kills a die that cannot save its own melee, and its results still count', () => {
+    const done = reduce(bashed(SERGEANT_MELEE), { kind: 'sai_target', unitIds: ['p1:0'] })
+    expect(done.units['p1:0']?.location).toEqual({ kind: 'dua' })
+    // "If a die's results are used and it then leaves the army, its results still stand."
+    expect(entries(done, 'combat_resolved')[0]).toMatchObject({ attackTotal: 4, saveTotal: 2 })
+  })
+
+  it('refuses a die that put no melee in, and more than one die', () => {
+    const asked = bashed(SERGEANT_SAVE)
+    expect(() => reduce(asked, { kind: 'sai_target', unitIds: ['p1:0', 'p1:1'] })).toThrow(/exactly one/)
+    expect(() => reduce(asked, { kind: 'sai_target', unitIds: ['p2:0'] })).toThrow(/exactly one/)
+  })
+
+  it('gives nothing and asks nothing when no attacking die gave melee', () => {
+    // The Oak shows its save face; a Fiery Weapon's +2 is all the melee there is.
+    const fiery = cast('fiery_weapon', 1, { kind: 'army', player: 'p1', army: 'frontier' })
+    const state = {
+      ...melee([OAK], [BEHEMOTH], rngShowing([OAK, BEHEMOTH], [OAK_SAVE, BEHEMOTH_BASH])),
+      effects: [fiery],
+    }
+    const done = advance(state)
+    expect(done.pending?.kind).not.toBe('sai_target')
+    expect(entries(done, 'combat_resolved')[0]).toMatchObject({ attackTotal: 2, saveTotal: 0 })
+  })
+
+  it('is X saves in any other save roll, a damage sub-roll among them', () => {
+    const state = board([], [BEHEMOTH], rngShowing([BEHEMOTH], [BEHEMOTH_BASH]))
+    expect(damageSubRoll(state, 'p2:0', 5, 'Firebolt')).toMatchObject({ saves: 4, killed: false })
+    expect(damageSubRoll(state, 'p2:0', 8, 'Firebolt')).toMatchObject({ saves: 4, killed: true })
+  })
+})
+
+describe('Bash in a dragon attack', () => {
+  /** The face of a dragon die showing an icon. */
+  const dragonFace = (dieId: string, icon: string): number => {
+    for (let n = 1; n <= 12; n++) if (dragonFaceIcon(dieId, n as DragonFaceNumber) === icon) return n - 1
+    throw new Error(`${dieId} has no ${icon} face`)
+  }
+  /** The RNG counter at which dice of these face counts show these faces, in order. */
+  const rngCounts = (counts: readonly number[], faces: readonly number[]): RngState => {
+    for (let counter = 0; counter < 200_000; counter += 1) {
+      const [indices] = rollDice({ seed: 1, counter }, counts)
+      if (faces.every((face, i) => indices[i] === face)) return { seed: 1, counter }
+    }
+    throw new Error('no counter shows those faces')
+  }
+
+  // A fire drake, p2's, at the Frontier with p1's lone Behemoth: it attacks the army.
+  const attacked = (behemothFace: number) => {
+    const rng = rngCounts([12, 10], [dragonFace('fire_drake', 'JAWS'), behemothFace])
+    const base = board([BEHEMOTH], [OAK], rng, { phase: 'dragon_attack' })
+    const dragon: DragonInPlay = {
+      id: 'd',
+      dieId: 'fire_drake',
+      owner: 'p2',
+      location: { kind: 'terrain', slot: 'frontier' },
+    }
+    return advance({
+      ...relocate(base, 'p2:0', { kind: 'terrain', slot: 'p2_home' }),
+      ruleSet: { ...RULES, dragons: true },
+      dragons: { d: dragon },
+    })
+  }
+
+  it('sends the dragon its own damage back and saves the army as much', () => {
+    const state = attacked(BEHEMOTH_BASH)
+    const damage = entries(state, 'dragon_damage')[0]
+    // Jaws is 12: Bash takes it all back, which slays a drake (10).
+    expect(damage?.incoming).toMatchObject({ inflicted: 12, saves: 0, bash: 12, damage: 0 })
+    expect(damage?.bashed).toEqual([{ dragonId: 'd', damage: 12, threshold: 10, slain: true }])
+    expect(state.dragons['d']?.location).toEqual({ kind: 'pool' })
+    expect(validateState(state)).toEqual([])
+  })
+
+  it('is nothing at all on any other face', () => {
+    const damage = entries(attacked(BEHEMOTH_STOMP), 'dragon_damage')[0]
+    expect(damage?.incoming).toMatchObject({ inflicted: 12, saves: 0, damage: 12 })
+    expect(damage?.incoming?.bash).toBeUndefined()
+    expect(damage?.bashed).toBeUndefined()
+  })
+})
+
+describe('a Bash that empties the attacking army', () => {
+  it("ends the army's effects before the totals; the dice still count", () => {
+    // p1's lone Sergeant attacks with a Fiery Weapon on its army; the Behemoth Bashes it
+    // and its save roll shows melee, so it dies -- and the army it was is gone.
+    const fiery = cast('fiery_weapon', 1, { kind: 'army', player: 'p1', army: 'frontier' })
+    const rng = rngShowing([SERGEANT, BEHEMOTH, SERGEANT], [SERGEANT_MELEE, BEHEMOTH_BASH, SERGEANT_MELEE])
+    const base = melee([SERGEANT, OAK], [BEHEMOTH], rng)
+    // The Oak waits at home, so p1 is still in the game when its Sergeant dies.
+    const start = { ...relocate(base, 'p1:1', { kind: 'terrain', slot: 'p1_home' }), effects: [fiery] }
+
+    const asked = advance(start)
+    expect(asked.pending).toMatchObject({ kind: 'sai_target', sai: 'Bash', bash: { 'p1:0': 2 } })
+    const done = reduce(asked, { kind: 'sai_target', unitIds: ['p1:0'] })
+
+    expect(done.units['p1:0']?.location).toEqual({ kind: 'dua' })
+    expect(done.effects).toEqual([])
+    // The Sergeant's 2 melee stand; the Fiery Weapon's +2 ended with the army.
+    expect(entries(done, 'combat_resolved')[0]).toMatchObject({ attackTotal: 2, saveTotal: 2 })
+    expect(validateState(done)).toEqual([])
   })
 })

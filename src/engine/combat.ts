@@ -237,7 +237,7 @@ function damageFrom(effects: readonly RollEffect[], kind: 'riposte' | 'unsavable
  * an SAI that computes correctly and is then dropped on the floor, with every test
  * green -- is the one this phase came closest to shipping.
  */
-function expectOnly(
+export function expectOnly(
   effects: readonly RollEffect[],
   allowed: readonly RollEffect['kind'][],
   what: string,
@@ -444,6 +444,8 @@ export interface SaveRollState {
   readonly bonus?: number
   /** Wave: save results the attack takes off this roll (`PendingSaves.wave`). */
   readonly wave?: number
+  /** Bash: save results equal to the melee of the die it hit (`PendingSaves.bash`). */
+  readonly bash?: number
 }
 
 /** What the attack roll was worth, before the defender has rolled anything. */
@@ -527,13 +529,22 @@ function saveRollSpec(
   spec: AttackSpec,
   bonus: number | undefined,
   wave = 0,
+  bash = 0,
 ): RollSpec {
   const defenders = armyRoll(state, spec.defender, spec.defenderSlot, 'save')
   return {
     kinds: ['save'],
     // Wave last: it is the attack's, not the board's, so it is not one of the
     // modifiers `armyRoll` gathers -- but it is a step-6 subtract like any of them.
-    modifiers: wave > 0 ? [...defenders.modifiers, waveModifier('save', wave)] : defenders.modifiers,
+    // Bash's saves (v2 Phase 6d) are the defender's own SAI, but their number is the
+    // target's melee rather than anything on the Bash face, so they join as a named
+    // step-10 add: "+ 4 Bash". Nothing in scope divides or multiplies a whole save
+    // total, so step 8 and step 10 give the same answer here.
+    modifiers: [
+      ...defenders.modifiers,
+      ...(wave > 0 ? [waveModifier('save', wave)] : []),
+      ...(bash > 0 ? [{ kind: 'add', resultType: 'save', amount: bash, source: 'Bash' } as const] : []),
+    ],
     // It is also where Counter and Volley hit back, which is why it needs to know what
     // it is saving against.
     context: { purpose: { kind: 'save', against: spec.action }, isCounter: spec.isCounter },
@@ -607,7 +618,7 @@ export function parkedSaveRoll(
   saves: SaveRollState,
 ): RollResult {
   return asResult(
-    resolveFaces(saves.dice, saveRollSpec(state, spec, saves.bonus, saves.wave), state.ruleSet),
+    resolveFaces(saves.dice, saveRollSpec(state, spec, saves.bonus, saves.wave, saves.bash), state.ruleSet),
     'save',
   )
 }
@@ -673,7 +684,7 @@ export function finishSaves(
     }
   }
 
-  const rollSpec = saveRollSpec(state, spec, saves.bonus, saves.wave)
+  const rollSpec = saveRollSpec(state, spec, saves.bonus, saves.wave, saves.bash)
   const [swept, afterSweep] = rerollSweep(saves.dice, rollSpec, state.ruleSet, rng)
   const saveRoll = asResult(resolveFaces(swept, rollSpec, state.ruleSet), 'save')
 
@@ -681,7 +692,7 @@ export function finishSaves(
   // same pause the attacker's Choke was. They stay on the list; they are not dropped.
   expectOnly(
     saveRoll.effects,
-    ['riposte', 'wild_growth', 'free_move', 'cantrip'],
+    ['riposte', 'wild_growth', 'free_move', 'cantrip', 'bash'],
     `a save roll against ${spec.action}`,
   )
 

@@ -193,7 +193,8 @@ the dice and the opponent.
 > sub-roll (`subroll.ts`), spell saves (`spellSaves`, from `Modifier.fromSpell`), and the
 > combination roll apart from the dragon (`combination.ts`). 6c has landed: a riposte is reduced
 > by the attacker's spell saves (the one v1 golden re-recording of the phase), a spell's unit roll
-> ends a Hypnotic Glare, and species abilities reach unit rolls.
+> ends a Hypnotic Glare, and species abilities reach unit rolls. 6d has landed: Roar, Stomp and
+> Bash (`RULES-V0.md` section 18) -- Charge, in 6e, is the one SAI still unbuilt.
 
 ## Read these first
 

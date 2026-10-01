@@ -35,7 +35,8 @@ export type TargetTask =
       /** Health-worth to pick from the army this roll is aimed at. */
       readonly health: number
       readonly escape: 'none' | 'save' | 'maneuver' | 'id'
-      readonly fate: 'kill' | 'bury'
+      /** Roar's `'reserve'` and Stomp's `'save_or_bury'` from v2 Phase 6d. */
+      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury'
       /** Seize: where an escapee goes. Omitted means it stays where it stood. */
       readonly escapeTo?: 'reserve'
       /**
@@ -78,6 +79,13 @@ export type TargetTask =
    * victim stays hypnotized while any of them still does. Combined by name, as a union.
    */
   | { readonly kind: 'glare'; readonly sai: string; readonly sources: readonly string[] }
+  /**
+   * Bash (v2 Phase 6d): one die of the *attacking* army takes its own melee as damage,
+   * and the defender's save roll gains as many saves. Owned by the defender, who rolled
+   * it, and aimed at the attacker -- the one task `taskOwner` answers that way. Never
+   * combined: it targets an individual unit (p. 32).
+   */
+  | { readonly kind: 'bash'; readonly sai: string }
 
 /** The effect kinds that wait for the save dice: step 2, "Delayed Effects". */
 const DELAYED: readonly RollEffect['kind'][] = ['choke', 'confuse', 'glare']
@@ -116,7 +124,7 @@ function build(effects: readonly RollEffect[]): readonly TargetTask[] {
     // named there outright, "SAIs that move units out of the army ... are always
     // resolved one by one". A free move also *is* a particular die, so there is
     // nothing to merge it into.
-    if (effect.kind === 'sleep' || effect.kind === 'galeforce') {
+    if (effect.kind === 'sleep' || effect.kind === 'galeforce' || effect.kind === 'bash') {
       tasks.push({ kind: effect.kind, sai: effect.sai })
       continue
     }

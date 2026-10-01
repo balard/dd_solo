@@ -213,7 +213,15 @@ export type RollEffectBody =
        * which is why Seize rolls its targets without resolving them.
        */
       readonly escape: 'none' | 'save' | 'maneuver' | 'id'
-      readonly fate: 'kill' | 'bury'
+      /**
+       * What happens to a target that did not escape.
+       *
+       * `'reserve'` is Roar (v2 Phase 6d): moved to the Reserve Area, and not killed --
+       * no death trigger. `'save_or_bury'` is Stomp's: killed, and then the dead roll
+       * saves, and those that generate none are buried -- Fire breath's check, rolled a
+       * machine step later so an Accelerated Growth exchange is settled first.
+       */
+      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury'
       /**
        * Where a target that escaped ends up. Omitted means "where it was standing",
        * which is every escape but Seize's.
@@ -310,6 +318,28 @@ export type RollEffectBody =
    * it owes no decision, and the delayed pause applies it on its own.
    */
   | { readonly kind: 'glare' }
+  /**
+   * Bash (v2 Phase 6d), in a save roll against a melee attack: "target one unit from the
+   * attacking army. The targeted unit takes damage equal to the melee results it
+   * generated. The targeted unit must make a save roll against this damage. Bash also
+   * generates save results equal to the targeted unit's melee results."
+   *
+   * The first decision the *defender* owes about the *attacker's* dice, and the first
+   * whose number is not on its own face: X is read only "during other save rolls".
+   * Chosen at the delayed pause, where the save dice are down and the attack's are still
+   * parked beside them.
+   */
+  | { readonly kind: 'bash' }
+  /**
+   * Bash in the dragon combination roll: "choose an attacking dragon that has inflicted
+   * damage. That dragon takes damage equal to the amount of damage it inflicted. Bash
+   * also generates save results equal to the damage the chosen dragon did."
+   *
+   * The dragon roll has no queue to ask on (`noSideDecision`), so the choice is a house
+   * rule: the dragon that did the most, which maximises both halves (`RULES-V0.md`
+   * section 18). Resolved by `finishDragonDamage`, which is where the damage is known.
+   */
+  | { readonly kind: 'bash_dragon' }
 
 /** A `RollEffectBody` once `resolveRoll` has stamped it with the die that made it,
  *  so the log can say *which* Fireshadow smote you. */

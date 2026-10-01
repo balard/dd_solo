@@ -323,7 +323,7 @@ describe('dragon self-play', () => {
           const { incoming, answered, duels } = entry
           if (incoming !== undefined) {
             counters['math_incoming'] = (counters['math_incoming'] ?? 0) + 1
-            if (incoming.damage !== Math.max(0, incoming.inflicted - incoming.saves)) {
+            if (incoming.damage !== Math.max(0, incoming.inflicted - incoming.saves - (incoming.bash ?? 0))) {
               badMath.push(`seed ${seed}: ${JSON.stringify(incoming)}`)
             }
           }

@@ -15,6 +15,7 @@
  */
 import {
   attackFacts,
+  expectOnly,
   attackRollDice,
   parkedAttackRoll,
   rerollHeld,
@@ -109,6 +110,7 @@ import {
   spellTargetProblem,
 } from './magic'
 import { castSpell, spellEffect } from './spells'
+import { damageSubRoll } from './subroll'
 import { combinationAnswerProblem, combinationSpec } from './combination'
 import { applyChooseFrontier, applyRollOffChoice, rollOffPending } from './setup'
 import type { DragonElement } from '../data/types'
@@ -732,6 +734,7 @@ function withTargets(
       ...(targets.length > 0 ? { targets } : {}),
       ...(attack.delayed !== undefined ? { delayed: attack.delayed } : {}),
       ...(rerollDue !== undefined ? { rerollDue } : {}),
+      ...(attack.burialDue !== undefined ? { burialDue: attack.burialDue } : {}),
     },
   }
 }
@@ -745,6 +748,7 @@ function withSaves(combat: CombatState, saves: PendingSaves, next: Partial<Pendi
       dice: merged.dice,
       ...(merged.tasks !== undefined && merged.tasks.length > 0 ? { tasks: merged.tasks } : {}),
       ...(merged.bonus !== undefined && merged.bonus > 0 ? { bonus: merged.bonus } : {}),
+      ...(merged.bash !== undefined && merged.bash > 0 ? { bash: merged.bash } : {}),
       ...(merged.wave !== undefined && merged.wave > 0 ? { wave: merged.wave } : {}),
     },
   }
@@ -845,6 +849,11 @@ function taskOwner(task: TargetTask, spec: AttackSpec, delayed: boolean): TaskOw
   if (delayed && friendly) {
     return { player: spec.defender, army: spec.defender, slot: spec.defenderSlot }
   }
+  // Bash (v2 Phase 6d): rolled on the defender's save roll, aimed back at the attacker.
+  // The one task asked of the defender about somebody else's dice.
+  if (task.kind === 'bash') {
+    return { player: spec.defender, army: spec.attacker, slot: spec.attackerSlot }
+  }
   if (friendly) {
     return { player: spec.attacker, army: spec.attacker, slot: spec.attackerSlot }
   }
@@ -868,6 +877,28 @@ function chokeEligible(state: GameState, spec: AttackSpec, saves: PendingSaves):
     if (!ids.includes(die.unitId)) ids.push(die.unitId)
   }
   return ids
+}
+
+/**
+ * Bash's targets, and what each would take: every attacking die's own melee in the
+ * parked attack roll, summed over its reroll chain (a Rend's second face is the same
+ * die's), for the units still standing in the attacking army.
+ *
+ * Read from the same resolution the attack total comes from (`attackFacts`), so the
+ * damage a die takes is exactly what it put into the total -- its doubled IDs at a held
+ * eighth face included, since those are on the die. A die that gave no melee is not on
+ * offer: it would take nothing and give nothing.
+ */
+function bashMelee(state: GameState, spec: AttackSpec): Readonly<Record<UnitId, number>> {
+  const attack = requireAttack(state, requireCombat(state))
+  const army = armyRef(state, spec.attacker, spec.attackerSlot)
+  const melee: Record<UnitId, number> = {}
+  for (const die of attackFacts(state, spec, attack).attackRoll.dice) {
+    if (!army.some((unit) => unit.id === die.unitId)) continue
+    melee[die.unitId] = (melee[die.unitId] ?? 0) + die.results
+  }
+  for (const [id, amount] of Object.entries(melee)) if (amount <= 0) delete melee[id]
+  return melee
 }
 
 /** The units a task may pick from, which is its owner's army for a friendly one. */
@@ -919,6 +950,10 @@ function taskHasWork(
     // Glare owes no decision at all: `stepTasks` applies it before asking this.
     case 'glare':
       return true
+    // Nothing in the attack gave melee -- a Bash against a roll of Smites -- so there
+    // is nobody to aim at, and the Bash gives nothing.
+    case 'bash':
+      return Object.keys(bashMelee(state, spec)).length > 0
     case 'cantrip':
       // A pool that can buy nothing is not a decision. Under `magic: 'simplified'`
       // the SAI never produces one at all, so this is about a pool too small or a
@@ -966,6 +1001,17 @@ function taskPending(
     }
     case 'galeforce':
       return { kind: 'sai_target_army', ...common, options: opposingArmies(state, spec.attacker) }
+    case 'bash': {
+      const melee = bashMelee(state, spec)
+      return {
+        kind: 'sai_target',
+        ...common,
+        ...aimed,
+        limit: { kind: 'one' },
+        eligible: Object.keys(melee),
+        bash: melee,
+      }
+    }
     case 'promote':
       return {
         kind: 'sai_promote',
@@ -1024,6 +1070,10 @@ function taskPending(
  */
 function stepTasks(state: GameState, isCounter: boolean, delayed: boolean): GameState {
   const spec = exchangeSpec(state, isCounter)
+  // Stomp's dead roll for burial a step after the kill, once anything it raised has
+  // been asked (v2 Phase 6d).
+  const burial = delayed ? undefined : state.turn.combat?.attack?.burialDue
+  if (burial !== undefined) return rollBurialDue(state, spec, burial)
   const owed = delayed ? undefined : state.turn.combat?.attack?.rerollDue
   if (owed !== undefined) return rollHeldAgain(state, spec, owed)
 
@@ -1049,6 +1099,63 @@ function stepTasks(state: GameState, isCounter: boolean, delayed: boolean): Game
   if (head.kind === 'cantrip') return openCantripWindow(state, spec, head, delayed)
 
   return { ...state, pending: taskPending(state, spec, head, queue.length, delayed) }
+}
+
+/**
+ * Stomp's second roll: the dead it killed roll saves, and those with none are buried.
+ *
+ * Made a machine step after the kill, so an Accelerated Growth offer is answered first
+ * -- `settleGrowth` takes an exchanged die off the list, since it was never killed --
+ * and it rolls only what is in the DUA by now: a Phoenix that rose is not there.
+ */
+function rollBurialDue(
+  state: GameState,
+  spec: AttackSpec,
+  due: NonNullable<PendingAttack['burialDue']>,
+): GameState {
+  const combat = requireCombat(state)
+  const { burialDue: _settled, ...attack } = requireAttack(state, combat)
+  const cleared = withTurn(state, { combat: { ...combat, attack } })
+  return saveOrBury(cleared, due.unitIds, spec.defender, spec.defenderSlot, due.sai)
+}
+
+/**
+ * The burial check: "roll the units ... Those that do not generate a save result are
+ * buried." Fire breath's and Stomp's, which ask it of dice already dead.
+ *
+ * A sub-roll, the seam Seize and Smother use -- each die a unit roll, in board order --
+ * and it rolls only those still in the DUA: Rise from the Ashes or an exchange may have
+ * taken some out. The roll is logged whole, saved dice and failed ones, since a die
+ * that saved and one that never rolled must not look the same.
+ */
+function saveOrBury(
+  state: GameState,
+  unitIds: readonly UnitId[],
+  player: PlayerId,
+  slot: ArmyRef,
+  source: string,
+  buried?: Extract<LogEntry, { kind: 'units_buried' }>['source'],
+): GameState {
+  const inDua = unitIds.filter((id) => state.units[id]?.location.kind === 'dua')
+  if (inDua.length === 0) return state
+  const inputs = inDua.map((id) => unitRoll(state, id))
+  const [rolls, rng] = rollUnits(inputs, 'save', SAVE_SUB_ROLL, state.rng, state.ruleSet)
+
+  const doomed = rolls.filter((sub) => (sub.roll?.total ?? 0) === 0).map((sub) => sub.unitId)
+  const burial = doomed.length > 0 ? buryUnits({ ...state, rng }, doomed) : null
+  const rolled = withLog(burial?.state ?? { ...state, rng }, {
+    kind: 'sai_sub_roll',
+    player,
+    source,
+    slot,
+    test: 'save',
+    dice: rolls.flatMap((sub) => sub.roll?.dice ?? []),
+    escaped: rolls.filter((sub) => (sub.roll?.total ?? 0) > 0).map((sub) => sub.unitId),
+    fate: 'bury',
+  })
+
+  // A Phoenix that fails the save still rolls Rise from the Ashes on its way to the BUA.
+  return burial === null ? rolled : withLog(rolled, ...buryEntries(burial, player, doomed, buried))
 }
 
 /**
@@ -1511,6 +1618,7 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
   }
 
   const spec = exchangeSpec(state, step === 'sai_target_counter' || step === 'sai_delayed_counter')
+  if (task.kind === 'bash') return applyBash(state, spec, task, unitIds)
   const army = armyRef(state, spec.defender, spec.defenderSlot)
 
   // Sleep takes one *die*, not health-worth, so it cannot go through the maximal
@@ -1563,16 +1671,23 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
 
   // Named before anything happens to the dice, so the log reads as cause then effect
   // rather than as dice dying from nowhere.
+  const roared = task.kind === 'enemy' && task.fate === 'reserve'
   const named = withLog(state, {
     kind: 'sai_resolved',
     player: spec.attacker,
     sai: task.sai,
     slot: spec.defenderSlot,
     unitIds,
+    ...(roared ? { toReserve: true as const } : {}),
   })
 
   if (task.kind === 'confuse') return applyConfuse(named, task, unitIds)
   if (task.kind === 'choke') return applyChoke(named, spec, task, unitIds)
+
+  // Roar: "immediately moved to their Reserve Area before the defending army rolls for
+  // saves". Not killed, so no death trigger fires -- a Treefolk at water is not
+  // replanted, it was never dying.
+  if (roared) return dropHeadTask(toReserves(named, unitIds))
 
   // Bullseye, Double Strike, Smother, Firecloud and Seize give their targets a roll;
   // Flame does not. What comes back is the state with the escapes logged and moved,
@@ -1591,15 +1706,77 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
     task.fate === 'bury' ? killAndBury(rolled, doomed) : killUnits(rolled, doomed)
   const buried = doomed.filter((id) => outcome.state.units[id]?.location.kind === 'bua')
 
-  return dropHeadTask(
-    withLog(
-      outcome.state,
-      ...deathEntries(outcome, spec.defender, spec.defenderSlot, doomed),
-      ...(buried.length > 0
-        ? [{ kind: 'units_buried', player: spec.defender, unitIds: buried } as const]
-        : []),
-    ),
+  const dead = withLog(
+    outcome.state,
+    ...deathEntries(outcome, spec.defender, spec.defenderSlot, doomed),
+    ...(buried.length > 0
+      ? [{ kind: 'units_buried', player: spec.defender, unitIds: buried } as const]
+      : []),
   )
+
+  // Stomp: the dead "must make a save roll. Those that do not generate a save result
+  // are buried." Not here -- an Accelerated Growth offer the kill raised is answered
+  // first, and an exchanged die was never killed -- so the check is owed to the next
+  // machine step, where `rollBurialDue` makes it.
+  if (task.fate === 'save_or_bury') {
+    const dropped = dropHeadTask(dead)
+    const combat = requireCombat(dropped)
+    const attack = requireAttack(dropped, combat)
+    return withTurn(dropped, {
+      combat: {
+        ...combat,
+        attack: { ...attack, burialDue: { sai: task.sai, unitIds: inBoardOrder(dropped, doomed) } },
+      },
+    })
+  }
+
+  return dropHeadTask(dead)
+}
+
+/** Roar's targets, sent home. Seize's `moveEscapees` for dice that rolled nothing. */
+function toReserves(state: GameState, unitIds: readonly UnitId[]): GameState {
+  const units = { ...state.units }
+  for (const id of unitIds) {
+    const unit = units[id]
+    if (unit === undefined) throw new Error(`cannot move unknown unit ${id} to reserves`)
+    units[id] = { ...unit, location: { kind: 'reserve' } }
+  }
+  return { ...state, units }
+}
+
+/**
+ * Bash, answered: the die the defender picked takes its own melee as damage and rolls
+ * saves against it (6b's damage sub-roll), and the defender's save roll gains that many
+ * saves.
+ *
+ * Its results still count toward the attack whatever happens to it -- "if a die's
+ * results are used and it then leaves the army, its results still stand" (p. 27) -- and
+ * they do, since the attack's dice stay parked as they were.
+ */
+function applyBash(
+  state: GameState,
+  spec: AttackSpec,
+  task: Extract<TargetTask, { kind: 'bash' }>,
+  unitIds: readonly UnitId[],
+): GameState {
+  const melee = bashMelee(state, spec)
+  const [unitId, ...extra] = unitIds
+  const amount = unitId === undefined ? undefined : melee[unitId]
+  if (unitId === undefined || extra.length > 0 || amount === undefined) {
+    throw new IllegalActionError(`${task.sai} targets exactly one attacking die that generated melee`)
+  }
+
+  const named = withLog(state, {
+    kind: 'sai_resolved',
+    player: spec.defender,
+    sai: task.sai,
+    slot: spec.attackerSlot,
+    unitIds,
+  })
+  const hit = damageSubRoll(named, unitId, amount, task.sai).state
+  const combat = requireCombat(hit)
+  const saves = requireSaves(hit, combat)
+  return dropHeadTask(withTurn(hit, { combat: withSaves(combat, saves, { bash: (saves.bash ?? 0) + amount }) }))
 }
 
 /**
@@ -3109,42 +3286,19 @@ function withBreathEffect(
  */
 function resolveBreathBury(state: GameState): GameState {
   const attack = dragonAttackOf(state)
-  const burning = attack.burning ?? []
-
-  // Rise from the Ashes may already have taken some of them out of the DUA.
-  const inDua = burning.filter((id) => state.units[id]?.location.kind === 'dua')
-  const inputs = inDua.map((id) => unitRoll(state, id))
-  const [rolls, rng] = rollUnits(inputs, 'save', SAVE_SUB_ROLL, state.rng, state.ruleSet)
-
-  const doomed = rolls.filter((sub) => (sub.roll?.total ?? 0) === 0).map((sub) => sub.unitId)
-  const burial = doomed.length > 0 ? buryUnits({ ...state, rng }, doomed) : null
-  const buried = burial?.state ?? { ...state, rng }
-
-  // The roll itself, saved dice and failed ones alike. It used to be logged only
-  // through its consequence: a failure wrote "buried" with no dice, and a success
+  // The roll itself is logged, saved dice and failed ones alike. It used to be logged
+  // only through its consequence: a failure wrote "buried" with no dice, and a success
   // wrote nothing -- so a Treefolk that saved looked like one that was never rolled,
-  // which is the Replanting silence of Phase 8 a second time.
-  const rolled = withLog(
-    buried,
-    ...(inDua.length > 0
-      ? [
-          {
-            kind: 'sai_sub_roll',
-            player: attack.defender,
-            source: BREATH_NAME.fire,
-            slot: attack.slot,
-            test: 'save',
-            dice: rolls.flatMap((sub) => sub.roll?.dice ?? []),
-            escaped: rolls.filter((sub) => (sub.roll?.total ?? 0) > 0).map((sub) => sub.unitId),
-            fate: 'bury',
-          } as const,
-        ]
-      : []),
+  // which is the Replanting silence of Phase 8 a second time. `saveOrBury` is that roll,
+  // shared with Stomp since v2 Phase 6d.
+  const logged = saveOrBury(
+    state,
+    attack.burning ?? [],
+    attack.defender,
+    attack.slot,
+    BREATH_NAME.fire,
+    'dragon_fire',
   )
-
-  // A Phoenix that fails the save still rolls Rise from the Ashes on its way to the BUA.
-  const logged =
-    burial === null ? rolled : withLog(rolled, ...buryEntries(burial, attack.defender, doomed, 'dragon_fire'))
 
   const withEffect = withBreathEffect(logged, attack, 'fire')
   const next = withDragonAttack(withEffect, { ...attack, step: 'breath', resolved: attack.resolved + 1 })
@@ -3270,9 +3424,10 @@ function resolveArmyRoll(
   const outcome = resolveFaces(dice, dragonRollSpec(state, attack, answer), state.ruleSet)
   // **This had no guard at all until Phase 7f**, so an effect here was dropped in
   // silence -- which is what a Wild Growth or a Firewalking on a dragon roll had been
-  // doing since Phase 6. Nothing generates one now (see `noSideDecision` in `sai.ts`),
-  // and if something ever does, this is what says so.
-  expectNoEffects(asResult(outcome, 'save'), "the army's dragon roll")
+  // doing since Phase 6. Bash is the one effect that belongs here (v2 Phase 6d), and
+  // `finishDragonDamage` spends it; anything else is refused rather than dropped.
+  expectOnly(outcome.effects, ['bash_dragon'], "the army's dragon roll")
+  const bashes = outcome.effects.filter((effect) => effect.kind === 'bash_dragon').length
 
   const totals = {
     melee: outcome.totals.melee ?? 0,
@@ -3290,7 +3445,12 @@ function resolveArmyRoll(
     ...(outcome.math !== undefined ? { math: outcome.math } : {}),
   })
 
-  return withDragonAttack(logged, { ...attack, step: 'damage', totals })
+  return withDragonAttack(logged, {
+    ...attack,
+    step: 'damage',
+    totals,
+    ...(bashes > 0 ? { bashes } : {}),
+  })
 }
 
 /** The dragons the army's results could be spent on, and what each needs to die. */
@@ -3419,7 +3579,22 @@ function finishDragonDamage(
     (sum, id) => sum + dragonTotals(state, rollsOf(attack, id), false).damage,
     0,
   )
-  const armyDamage = Math.max(0, inflicted - save)
+
+  // Bash (v2 Phase 6d): each one picks an attacking dragon that did damage -- the one
+  // that did the most, the house rule -- which takes that damage back and gives the
+  // army as many saves. The damage is neither melee nor missile, so it slays the dragon
+  // only on its own; it never joins the army's pools.
+  const bashed = [...attackers]
+    .map((dragonId) => {
+      const own = dragonTotals(state, rollsOf(attack, dragonId), false)
+      return { dragonId, damage: own.damage, threshold: killThreshold(own.bellyUp) }
+    })
+    .filter((d) => d.damage > 0)
+    .sort((a, b) => b.damage - a.damage)
+    .slice(0, attack.bashes ?? 0)
+    .map((d) => ({ ...d, slain: d.damage >= d.threshold }))
+  const bash = bashed.reduce((sum, d) => sum + d.damage, 0)
+  const armyDamage = Math.max(0, inflicted - save - bash)
 
   // Dragon against dragon: each one's damage against the other's threshold.
   const duels: DragonDuel[] = []
@@ -3442,13 +3617,18 @@ function finishDragonDamage(
           kind: 'dragon_damage',
           player: attack.defender,
           slot: attack.slot,
-          ...(attackers.length > 0 ? { incoming: { inflicted, saves: save, damage: armyDamage } } : {}),
+          ...(attackers.length > 0
+            ? { incoming: { inflicted, saves: save, ...(bash > 0 ? { bash } : {}), damage: armyDamage } }
+            : {}),
+          ...(bashed.length > 0 ? { bashed } : {}),
           ...(answered.length > 0 ? { answered } : {}),
           ...(duels.length > 0 ? { duels } : {}),
         })
       : state
 
-  const slain = [...new Set([...slainByArmy, ...slainByDragon])]
+  // A dragon a Bash slew was slain by the army, and earns its promotion.
+  const slainByBash = bashed.filter((d) => d.slain).map((d) => d.dragonId)
+  const slain = [...new Set([...slainByArmy, ...slainByBash, ...slainByDragon])]
   let next = shown
   for (const dragonId of slain) {
     next = sendDragonHome(next, dragonId, 'slain')
@@ -3456,7 +3636,7 @@ function finishDragonDamage(
 
   // Step 8: "if an army kills one or more dragons, it may promote as many units as
   // possible" -- a maximal matching, which is Phase 2's machinery and no decision.
-  if (slainByArmy.length > 0) {
+  if (slainByArmy.length > 0 || slainByBash.length > 0) {
     const survivors = armyAt(next, attack.defender, attack.slot).map((unit) => unit.id)
     const pairs = promotionMatching(next, attack.defender, survivors)
     if (pairs.length > 0) {
@@ -4152,6 +4332,18 @@ function settleGrowth(
     attack?.burning === undefined || exchanged.length === 0
       ? attack
       : { ...attack, burning: attack.burning.filter((id) => !exchanged.includes(id)) }
+  // Stomp's burial check likewise (v2 Phase 6d).
+  const due = turn.combat?.attack?.burialDue
+  const combat =
+    turn.combat === null || turn.combat.attack === undefined || due === undefined || exchanged.length === 0
+      ? turn.combat
+      : {
+          ...turn.combat,
+          attack: {
+            ...turn.combat.attack,
+            burialDue: { ...due, unitIds: due.unitIds.filter((id) => !exchanged.includes(id)) },
+          },
+        }
 
   const settled: GameState = withLog(
     {
@@ -4159,6 +4351,7 @@ function settleGrowth(
       units,
       turn: {
         ...turn,
+        combat,
         ...(dragonAttack === undefined ? {} : { dragonAttack }),
         ...(rest.length > 0 ? { growthOffers: rest } : {}),
       },
