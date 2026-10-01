@@ -165,6 +165,7 @@ export interface Prompt {
     | 'eighth_face_city'
     | 'dragon_breath'
     | 'dragon_allocate'
+    | 'charge_allocate'
     | 'dragon_damage_split'
     | 'announce_spells'
     | 'flashfire'
@@ -527,6 +528,26 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
             : ''),
         choices: [],
         custom: 'dragon_allocate',
+      }
+
+    // Charge (v2 Phase 6e): the same sheet as the dragon roll's, over save and melee.
+    // Saves stop the charge; melee goes straight back at the charger.
+    case 'charge_allocate':
+      return {
+        question:
+          `Charged! Your roll counts saves and melee at once — your melee hits the charging army. Split ` +
+          [
+            pending.ids > 0 ? `${pending.ids} ID` : '',
+            pending.flexible > 0 ? `${pending.flexible} Create Fireminions` : '',
+          ]
+            .filter(Boolean)
+            .join(' and ') +
+          ((pending.shields ?? 0) > 0
+            ? `${pending.ids > 0 || pending.flexible > 0 ? ', and ' : ''}choose how many of ` +
+              `${pending.shields} saves Flaming Shields counts as melee`
+            : ''),
+        choices: [],
+        custom: 'charge_allocate',
       }
 
     case 'dragon_damage_split':

@@ -93,6 +93,9 @@ const DECISIONS: Readonly<Record<GameAction['kind'], Reach>> = {
   spell_summon: 'every',
   dragon_breath: 'every',
   dragon_allocate: 'every',
+  // Charge (v2 Phase 6e) is one face on the Behemoth, and the Dwarves are not playable
+  // until 6f; the decision is driven by name until then.
+  charge_allocate: { elsewhere: 'dwarves.test.ts' },
   dragon_treasure: 'full',
   // Three dragon decisions need two dragons in one place, or dragons at two terrains
   // at once. Summon Dragon is the only way onto the board under the live rules, and a

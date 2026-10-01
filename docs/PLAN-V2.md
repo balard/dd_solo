@@ -1538,7 +1538,8 @@ the notes. The app draws the class shapes until then (invariant 8).
 ## Phase 6 — Dwarves — **in progress**
 
 6a has landed: the data. 6b has landed: the seams. 6c has landed: three old rules corrected, in
-three commits. 6d has landed: Roar, Stomp and Bash. 6e to 6h are still a plan.
+three commits. 6d has landed: Roar, Stomp and Bash. 6e has landed: Charge. 6f to 6h are still a
+plan.
 
 Fire & Earth, so **Highland is their own terrain type** (`homeTerrainType` derives it; nothing is
 tabled) and both species abilities are live at home. The faces are in `data/raw/dwarves.faces.txt`
@@ -1824,7 +1825,7 @@ mirrors, and Behemoths against Satyrs and Genies. There were no throws, nothing 
 capped. They reached Roar 2426 times, Stomp 1210 (853 burial checks), Bash 374, and Bash in a dragon
 attack 29. The stubs were reverted. The live fuzz reaches all of this once 6f flips the species.
 
-### 6e — Charge
+### 6e — Charge — **landed**
 
 The third shape of exchange, and the phase's one real unknown. In its own slice so the seams it
 finds are not tangled with anything else.
@@ -1865,6 +1866,54 @@ finds are not tangled with anything else.
   `estimate.ts` learns both halves -- the maneuver the Charge adds, and the melee the defender will
   send back -- or greedy will march a Behemoth into a Charge it prices at zero.
 
+### What 6e found
+
+Both golden corpora replay byte-identical and unregenerated. 1155 tests pass, and the Charge tests
+are in `dwarves.test.ts`.
+
+**1. The attacker's half lives in `resolveFaces`, because a Charge is a fact about the faces.**
+`charging()` looks for a Charge face and, if one is there, marks the purpose `charging` and adds a
+maneuver-to-melee "counts as" for every species in the roll. 6b's table then applies it and names
+it, with no code of its own. That puts it on the one door every reader of an attack roll uses: the
+parked roll on screen, the targeting queue and the totals all agree.
+
+**2. Fly was the trap the plan said it would be, and the purpose fixed it rather than a special
+case.** `countedTypes` of a charging attack is `[melee, maneuver]`, so Fly's choice offers
+maneuver, and the conversion turns it into melee. A test puts a Gargoyle's Fly and a Trample beside
+a Charge and counts 12.
+
+**3. The defender's half is the dragon roll's question again, and 6b's `combination.ts` was the
+whole of it.** `chargeRollSpec` is `combinationSpec` over `[save, melee]`, plus what an ordinary save
+roll carries: Wave, Bash's saves, and Wild Growth's unspent budget as a named add, because
+`saiResults` is already the flexible split. `charge_allocate` reuses the dragon sheet in the
+browser and the dragon prompt in the terminal, parameterised by the kinds. Every reader of the
+parked save dice goes through `defenderRollSpec`.
+
+**4. The zero-attack early return needed the change the plan predicted.** `savesNeeded` is
+`total > 0 || charged`. In the temporary self-play, 815 of 1228 charges came against an attack of
+nothing, so the plan's "a Charge with nothing else rolled" turned out to be the usual case: a Charge
+face gives no melee of its own. Without the change, most charges would have been silent.
+
+**5. The ID split is now checked before anything resolves.** `combinationAnswerProblem` used to
+leave the IDs to `allocateIds`, which threw a plain error from deep inside the roll. It checks
+every number now, for the dragon roll too, so a bad split is a refused action.
+
+**6. The melee back rides the riposte's channel**, through 6c's `spellReduced`. A Charge's melee
+and a Counter's riposte are one number assigned at `assign_attack_riposte`. The log keeps `charge:
+{ melee }` beside `riposte`, so the line can say "Charge: 1 melee straight back + 4 from Counter".
+`counterSuppressed` is set without Surprise's log line.
+
+**7. A greedy stall that Charge did not cause.** In 500 temporary greedy-against-passive games on
+Behemoth boards, 10 hit the cap. With Charge switched off, 6 still did, with 0 charges in them. Each
+is the same endgame: greedy's last die captures its home's eighth face, retreats "to hunt" because
+passive's last die hides in Reserves, reinforces back to the same terrain, and repeats. Greedy never
+goes for a second terrain. That is 6h's greedy-against-passive re-run, and it will be visible on any
+monster mirror once the Dwarves are playable.
+
+**8. The temporary fuzz again.** With an empty ability list (reverted afterwards), 1500 games ran
+random, greedy and greedy-against-passive on Behemoth, Gargoyle, Fireshadow, Unicorn and Strangle
+Vine boards. No throws and nothing stuck. 1228 charges, 2 of them reduced by a spell.
+
 ### 6f — Mountain Mastery, Dwarven Might, and the flip
 
 - **Mountain Mastery** is the melee → maneuver row: automatic, since no maneuver roll counts melee.
@@ -1895,6 +1944,9 @@ finds are not tangled with anything else.
   monster and every large die, 35), as 5f did.
 - **Re-run greedy against passive** with a Dwarves force on both sides: Charge and Higher Ground
   are the two new values most likely to outbid walking a terrain home.
+- **Fix greedy's lone-die stall** (found in 6e): its last die holds its home eighth face, retreats
+  to hunt a die hiding in Reserves, reinforces back to the same terrain, and repeats. It never goes
+  for a second terrain. Behemoth boards hit it in about 1 game in 80.
 - Exit criterion as for every species (above). The V1 goldens move only if 6c's riposte fix moved
   them, and the commit that regenerated them says so.
 - **Art**: the pins are already in. After import the resolver should report no ambiguity; running

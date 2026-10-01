@@ -618,6 +618,37 @@ export function rollPools(
 }
 
 /**
+ * Charge (v2 Phase 6e): when a Charge face is on a melee attack, "the attacking army
+ * counts all Maneuver results as if they were Melee results".
+ *
+ * A fact about the faces, not about the board, so it is decided here, where the faces
+ * are -- and so every reader of an attack roll agrees on it, the parked roll on screen,
+ * the targeting queue and the totals alike. Two things change: the purpose says
+ * `charging`, so an SAI offering maneuver among its choices (Fly) gives it; and a
+ * "counts as" maneuver-to-melee joins the modifiers for every die in the roll, whatever
+ * its species -- the attacking *army* counts them, not its Dwarves -- which 6b's
+ * conversion table then applies like any other, and names on the arithmetic line.
+ */
+function charging(dice: readonly RawDie[], spec: RollSpec, ruleSet: RuleSet): RollSpec {
+  const purpose = spec.context.purpose
+  if (purpose.kind !== 'attack' || purpose.charging === true) return spec
+  const charged = dice.some((die) => {
+    const face = faceOf(die)
+    return face.icon === 'SAI' && classify(face, spec, ruleSet).effects.some((effect) => effect.kind === 'charge')
+  })
+  if (!charged) return spec
+  const species = [...new Set(dice.map((die) => unitType(die.typeId).species))]
+  return {
+    ...spec,
+    context: { ...spec.context, purpose: { ...purpose, charging: true } },
+    modifiers: [
+      ...spec.modifiers,
+      { kind: 'counts_as', from: 'maneuver', resultType: 'melee', counter: 'never', species, source: 'Charge' },
+    ],
+  }
+}
+
+/**
  * Steps 4 to 10: what the rules make of faces already on the table.
  *
  * **Pure.** No RNG, no `GameState`, and no dependence on anything but the dice, the
@@ -627,9 +658,10 @@ export function rollPools(
  */
 export function resolveFaces(
   dice: readonly RawDie[],
-  spec: RollSpec,
+  given: RollSpec,
   ruleSet: RuleSet,
 ): RollOutcome {
+  const spec = charging(dice, given, ruleSet)
   const shown: DieRoll[] = []
   const normals = new Map<ResultType, number>(spec.kinds.map((kind) => [kind, 0]))
   // Seeded with the player's own step-8 results, which join exactly where a face's do.

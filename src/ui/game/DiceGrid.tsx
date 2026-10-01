@@ -396,6 +396,8 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
           return 'one attacking die takes its own melee, and you save as much'
         case 'bash_dragon':
           return 'the dragon that did the most takes it back, and you save as much'
+        case 'charge':
+          return 'a charge: maneuver counts as melee, and they answer with saves and melee'
       }
     })
     .join('; ')

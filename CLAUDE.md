@@ -194,7 +194,10 @@ the dice and the opponent.
 > combination roll apart from the dragon (`combination.ts`). 6c has landed: a riposte is reduced
 > by the attacker's spell saves (the one v1 golden re-recording of the phase), a spell's unit roll
 > ends a Hypnotic Glare, and species abilities reach unit rolls. 6d has landed: Roar, Stomp and
-> Bash (`RULES-V0.md` section 18) -- Charge, in 6e, is the one SAI still unbuilt.
+> Bash (`RULES-V0.md` section 18). 6e has landed: Charge -- the attacker's maneuver counts as
+> melee (`charging` in `roll.ts`), and the defender answers with a combination save and melee
+> roll (`chargeRollSpec`, the `charge_allocate` pending) whose melee goes back at the attacker
+> through the riposte's channel. Every SAI on a Dwarves die is built; 6f's abilities flip them.
 
 ## Read these first
 

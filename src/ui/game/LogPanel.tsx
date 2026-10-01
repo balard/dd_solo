@@ -985,7 +985,8 @@ export function CombatPart({
     case 'saves':
       return entry.saveDice === null ? null : (
         <>
-          <div className="roll-head">saves</div>
+          {/* A Charge's answer counts melee too (v2 Phase 6e). */}
+          <div className="roll-head">{entry.charge === undefined ? 'saves' : 'saves and melee — charged'}</div>
           <RollStrip
             dice={entry.saveDice}
             {...(entry.saveTotal === null ? {} : { total: entry.saveTotal })}
@@ -1025,7 +1026,23 @@ export function CombatPart({
           )}
           {/* What the dice sent, then what spells took off it (v2 Phase 6c): the
               attacking army rolls no saves, and only its spells' saves reduce this. */}
-          {(entry.riposte !== undefined || entry.riposteMath !== undefined) && (
+          {/* Charge (v2 Phase 6e): the combination roll's melee goes back, with any
+              Counter's riposte, and there is no counter-attack. */}
+          {entry.charge !== undefined && (
+            <div className="roll-sum">
+              <b>Charge</b>: {entry.charge.melee} melee straight back
+              {(entry.riposteMath?.base ?? entry.riposte ?? 0) > entry.charge.melee && (
+                <>
+                  {' + '}
+                  {(entry.riposteMath?.base ?? entry.riposte ?? 0) - entry.charge.melee}
+                  {namesIn(entry, 'riposte') === null ? '' : ` from ${namesIn(entry, 'riposte')}`}
+                </>
+              )}
+              {spellSavedPhrase(entry.riposteMath, entry.riposte ?? 0)}, with no save roll and no
+              counter-attack
+            </div>
+          )}
+          {entry.charge === undefined && (entry.riposte !== undefined || entry.riposteMath !== undefined) && (
             <div className="roll-sum">
               {namesIn(entry, 'riposte') === null ? (
                 <>and </>

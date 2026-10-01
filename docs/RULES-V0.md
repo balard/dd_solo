@@ -1015,7 +1015,7 @@ reaches both sides' armies at the terrain, the caster's included.
 
 Fire & Earth, so Highland is their own terrain type, and a Dwarf at home stands on both of its
 abilities' elements. The dice are in the data from 6a; the species is playable from 6f, when its
-abilities exist. Charge is 6e and is not here yet.
+abilities exist.
 
 ### The SAIs (6d)
 
@@ -1023,6 +1023,7 @@ abilities exist. Charge is 6e and is not here yet.
 |---|---|---|
 | **Roar** | Melee | Up to X health-worth of the defenders go to their Reserve Area before the save roll. No roll and no death: no Replanting, no Rise from the Ashes. A counter-attack is a melee attack, so a Roar on one sends the marching army's dice home. Combined by name. |
 | **Stomp** | Melee, dragon attack | Up to X health-worth roll maneuver; those with none are killed, and then the dead roll saves, and those with none are buried. In a dragon attack, X melee. |
+| **Charge** | Melee | See below: the attacker's maneuver counts as melee, and the defender answers with a combination save and melee roll and no counter-attack. |
 | **Bash** | Save against melee, other saves, dragon attack | Against melee: the defender picks **one** die of the attacking army that put melee into the attack. That die takes damage equal to its own melee and makes a save roll against it, and the defender's save roll gains that many saves. In any other save roll (a sub-roll, a spell's save roll): X saves. In a dragon attack: see the house rules. |
 
 - **Bash's die is priced by the attack as it was counted**: its share of the attack total, summed
@@ -1032,6 +1033,19 @@ abilities exist. Charge is 6e and is not here yet.
 - **Bash's target rolls a damage sub-roll** (`subroll.ts`): it dies when what its saves leave of
   the damage reaches its health, not on "no save result". Its results still count toward the
   attack either way (p. 27, "its results still stand").
+- **Charge** (6e), on a melee attack and never a counter-attack, reshapes the exchange:
+  - **The attacker** counts every die's rolled maneuver as melee -- every die in the army, whatever
+    its species, since "the attacking army counts" them. That includes an SAI's maneuver: Trample's
+    half, and Fly's, whose "X maneuver or X save" gives maneuver once the roll counts it. The roll's
+    arithmetic says so: "4 maneuver counted as melee (Charge)". Several Charges are one Charge.
+  - **The defender** makes one combination roll counting save and melee instead of a save roll,
+    and gets no counter-attack. It rolls even when the attack came to nothing, since the roll
+    replaces the counter-attack as well. After the delayed effects it splits its IDs (and any
+    Create Fireminions, and Flaming Shields' trade) between save and melee, the dragon roll's
+    question over two kinds.
+  - **The damage**: the attack less the saves to the defender, as usual; the combination roll's
+    melee, plus any Counter's riposte, back at the attacker, less only the attacker's spell saves
+    -- the riposte's rule (6c) and the riposte's step.
 - **Stomp's burial check waits one machine step**, so an Accelerated Growth offer the kill raised
   is answered first. An exchanged die was never killed and does not roll; a Phoenix that rose is
   not in the DUA and does not either. It is the same roll as Fire breath's (`saveOrBury`).
@@ -1048,6 +1062,21 @@ abilities exist. Charge is 6e and is not here yet.
 - **Bash's saves are a step-10 add**, named "Bash" on the roll's arithmetic, rather than step-8 SAI
   results. Nothing in scope divides or multiplies a whole save total, so the two give the same
   number, and the line can name it.
+- **Charge's combination roll is the save roll against a melee attack** for every SAI and delayed
+  effect: Counter, Bash, Wave, Galeforce, Choke, Confuse and Hypnotic Glare all apply to it. An SAI
+  whose only melee sentence is "during a melee attack" (Smite, Roar, Stomp, Rend, Tail) adds no
+  melee there, because the defender is not attacking; an "any roll" SAI (Trample) does, and Create
+  Fireminions may be split between save and melee.
+- **Counter in a Charge roll is its save sentence**, X saves and X straight back, with no choice
+  offered. The combination rule lets its roller pick one sentence, and the melee one would only
+  send the same X back without the saves.
+- **A modifier that could fall on either kind of a Charge roll falls as it does on the dragon
+  roll** -- the same `combinationSpec` -- so Ash Storm's "one result from all army rolls" takes one
+  from each. Wild Growth's unspent budget joins as saves, named on the arithmetic line.
+- **Flaming Shields is asked in a Charge roll; Coastal Dodge is not.** The roll counts saves and
+  melee, so turning a save into melee is a trade (saves stop the charge, melee hits the charger),
+  while maneuver counted as saves only adds. Dwarven Might, which is about counter-attacks, does
+  not apply: a Charge roll is not one.
 - **A Bash that kills the attacking army's last die ends its army effects before the totals.** The
   rules end an army's effects "if there are no units remaining in the army ... checked at the end
   of each action", and the Bash is an action; the attack's totals are counted after it. So a Fiery

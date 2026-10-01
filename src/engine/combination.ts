@@ -82,14 +82,23 @@ export function combinationSpec(
 /**
  * Why this answer does not fit the pools, or null.
  *
- * The flexible results and the Flaming Shields count are checked here; the ID pool is
- * checked by `allocateIds` when the roll resolves, which says so better.
+ * Every number is checked here, before anything resolves -- the ID split included (v2
+ * Phase 6e), which used to be left to `allocateIds` and so came back as a plain error
+ * from deep in the roll rather than a refused action.
  */
 export function combinationAnswerProblem(
   kinds: readonly ResultType[],
   pools: CombinationPools,
   answer: CombinationAnswer,
 ): string | null {
+  for (const record of [answer.ids, answer.flexible]) {
+    for (const [kind, n] of Object.entries(record)) {
+      if (!kinds.includes(kind as ResultType)) return `this roll does not count ${kind}`
+      if (n === undefined || !Number.isInteger(n) || n < 0) return `${n} ${kind} is not a count`
+    }
+  }
+  const ids = kinds.reduce((sum, kind) => sum + (answer.ids[kind] ?? 0), 0)
+  if (ids !== pools.ids) return `the split spends ${ids} of ${pools.ids} ID results`
   const spent = kinds.reduce((sum, kind) => sum + (answer.flexible[kind] ?? 0), 0)
   if (spent !== pools.flexible) {
     return `the split spends ${spent} of ${pools.flexible} flexible results`

@@ -340,6 +340,12 @@ export type RollEffectBody =
    * section 18). Resolved by `finishDragonDamage`, which is where the damage is known.
    */
   | { readonly kind: 'bash_dragon' }
+  /**
+   * Charge (v2 Phase 6e): this melee attack is a charge. No number -- several are one --
+   * and nothing to decide; `attackFacts` reads it, and `resolveFaces` has already turned
+   * the attacking army's maneuver into melee by the time it does.
+   */
+  | { readonly kind: 'charge' }
 
 /** A `RollEffectBody` once `resolveRoll` has stamped it with the die that made it,
  *  so the log can say *which* Fireshadow smote you. */

@@ -11,7 +11,7 @@ import { growthPartners } from '../engine/dua'
 import { isAsleep } from '../engine/effects'
 import { announcementProblem, elementsFor } from '../engine/magic'
 import { nextInt, type RngState } from '../engine/rng'
-import { DRAGON_ROLL_KINDS } from '../engine/sai'
+import { CHARGE_ROLL_KINDS, DRAGON_ROLL_KINDS } from '../engine/sai'
 import {
   TERRAIN_SLOTS,
   army as armyRef,
@@ -470,6 +470,24 @@ export const randomAi: AiPlayer = {
        * that both kills a dragon and saves the army -- which is exactly the state
        * worth finding bugs in. The same lesson as `reinforce`'s one destination.
        */
+      /*
+       * Charge (v2 Phase 6e): the dragon allocation's spread over save and melee. Every
+       * split is legal, and the interesting ones are uneven -- melee kills the charger,
+       * saves keep the defender alive.
+       */
+      case 'charge_allocate': {
+        const [ids, afterIds] = spread(rng, pending.ids, CHARGE_ROLL_KINDS)
+        const [flexible, afterFlexible] = spread(afterIds, pending.flexible, CHARGE_ROLL_KINDS)
+        const shields = pending.shields ?? 0
+        if (shields === 0) {
+          return [{ kind: 'charge_allocate', ids, flexible } as GameAction, afterFlexible] as const
+        }
+        const [savesAsMelee, next] = nextInt(afterFlexible, shields + 1)
+        return [
+          { kind: 'charge_allocate', ids, flexible, ...(savesAsMelee > 0 ? { savesAsMelee } : {}) } as GameAction,
+          next,
+        ] as const
+      }
       case 'dragon_allocate': {
         const [ids, afterIds] = spread(rng, pending.ids)
         const [flexible, afterFlexible] = spread(afterIds, pending.flexible)
@@ -523,11 +541,12 @@ export const randomAi: AiPlayer = {
 function spread(
   rng: RngState,
   total: number,
+  kinds: readonly ResultType[] = DRAGON_ROLL_KINDS,
 ): readonly [Readonly<Partial<Record<ResultType, number>>>, RngState] {
   const out: Partial<Record<ResultType, number>> = {}
   let state = rng
   for (let n = 0; n < total; n++) {
-    const [kind, next] = pick(state, DRAGON_ROLL_KINDS)
+    const [kind, next] = pick(state, kinds)
     state = next
     out[kind] = (out[kind] ?? 0) + 1
   }

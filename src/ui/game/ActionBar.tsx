@@ -13,7 +13,7 @@ import { spell } from '../../data/spells'
 
 import type { Element, ResultType, TerrainFaceNumber } from '../../data/types'
 
-import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../../engine/sai'
+import { CHARGE_ROLL_KINDS, DRAGON_ROLL_KINDS, SAI_TEXT } from '../../engine/sai'
 import { ABILITY_TEXT } from '../../engine/species'
 import {
   type GameAction,
@@ -398,19 +398,24 @@ function Sheet({
    * refuse anything else, and a disabled button with the tally beside it says why
    * before the click rather than after.
    */
-  if (prompt.custom === 'dragon_allocate' && pending.kind === 'dragon_allocate') {
+  if (
+    (prompt.custom === 'dragon_allocate' && pending.kind === 'dragon_allocate') ||
+    (prompt.custom === 'charge_allocate' && pending.kind === 'charge_allocate')
+  ) {
+    // Charge (v2 Phase 6e) asks the dragon roll's question over save and melee.
+    const KINDS = pending.kind === 'dragon_allocate' ? DRAGON_ROLL_KINDS : CHARGE_ROLL_KINDS
     const pools = [
       { key: 'ids', label: 'ID results', total: pending.ids },
       { key: 'flexible', label: 'Create Fireminions', total: pending.flexible },
     ].filter((pool) => pool.total > 0)
 
     const spent = (poolKey: string) =>
-      DRAGON_ROLL_KINDS.reduce((sum, kind) => sum + (counters[`${poolKey}.${kind}`] ?? 0), 0)
+      KINDS.reduce((sum, kind) => sum + (counters[`${poolKey}.${kind}`] ?? 0), 0)
     const ready = pools.every((pool) => spent(pool.key) === pool.total)
 
     const build = (poolKey: string) => {
       const out: Partial<Record<ResultType, number>> = {}
-      for (const kind of DRAGON_ROLL_KINDS) {
+      for (const kind of KINDS) {
         const n = counters[`${poolKey}.${kind}`] ?? 0
         if (n > 0) out[kind] = n
       }
@@ -434,7 +439,7 @@ function Sheet({
               {pool.label}: spent <b>{spent(pool.key)}</b> / <b>{pool.total}</b>
             </p>
             <div className="choices">
-              {DRAGON_ROLL_KINDS.map((kind) => (
+              {KINDS.map((kind) => (
                 <Fragment key={kind}>
                   <button
                     type="button"
@@ -495,7 +500,7 @@ function Sheet({
             disabled={!ready}
             onClick={() => {
               dispatch({
-                kind: 'dragon_allocate',
+                kind: pending.kind,
                 ids: build('ids'),
                 flexible: build('flexible'),
                 ...(converted > 0 ? { savesAsMelee: converted } : {}),

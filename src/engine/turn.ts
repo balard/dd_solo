@@ -15,6 +15,7 @@
  */
 import {
   attackFacts,
+  chargePools,
   expectOnly,
   attackRollDice,
   parkedAttackRoll,
@@ -92,7 +93,7 @@ import {
   type RollSpec,
 } from './roll'
 import { ignoreIdsModifiers, type Modifier } from './pipeline'
-import { DRAGON_ROLL_KINDS, type RollContext } from './sai'
+import { CHARGE_ROLL_KINDS, DRAGON_ROLL_KINDS, type RollContext } from './sai'
 import { terrainHas, unitHasAbility } from './species'
 import { targetTasks, type TargetTask } from './targeting'
 import { unitType } from '../data/load'
@@ -412,6 +413,8 @@ function stepMarch(state: GameState): GameState {
       return rollSaves(state, false)
     case 'sai_delayed_attack':
       return stepDelayed(state, false)
+    case 'charge_allocate':
+      return stepChargeAllocate(state)
     case 'resolve_attack_damage':
       return finishExchange(state, false)
     case 'resolve_counter':
@@ -565,6 +568,7 @@ export const MID_EXCHANGE_STEPS: readonly MarchStep[] = [
   'resolve_attack_saves',
   'flashfire_attack_saves',
   'sai_delayed_attack',
+  'charge_allocate',
   'resolve_attack_damage',
   'resolve_counter',
   'flashfire_counter',
@@ -749,6 +753,8 @@ function withSaves(combat: CombatState, saves: PendingSaves, next: Partial<Pendi
       ...(merged.tasks !== undefined && merged.tasks.length > 0 ? { tasks: merged.tasks } : {}),
       ...(merged.bonus !== undefined && merged.bonus > 0 ? { bonus: merged.bonus } : {}),
       ...(merged.bash !== undefined && merged.bash > 0 ? { bash: merged.bash } : {}),
+      ...(merged.charge === true ? { charge: true as const } : {}),
+      ...(merged.allocation !== undefined ? { allocation: merged.allocation } : {}),
       ...(merged.wave !== undefined && merged.wave > 0 ? { wave: merged.wave } : {}),
     },
   }
@@ -1081,8 +1087,11 @@ function stepTasks(state: GameState, isCounter: boolean, delayed: boolean): Game
   const head = queue[0]
 
   if (head === undefined) {
+    // A Charge's combination roll owes its split before anything is counted (v2 Phase
+    // 6e), and only on the attack half: a counter-attack is never a charge.
+    const charging = delayed && !isCounter && state.turn.combat?.saves?.charge === true
     return withTurn(state, {
-      marchStep: nextStepAfterTasks(isCounter, delayed),
+      marchStep: charging ? 'charge_allocate' : nextStepAfterTasks(isCounter, delayed),
     })
   }
 
@@ -1099,6 +1108,57 @@ function stepTasks(state: GameState, isCounter: boolean, delayed: boolean): Game
   if (head.kind === 'cantrip') return openCantripWindow(state, spec, head, delayed)
 
   return { ...state, pending: taskPending(state, spec, head, queue.length, delayed) }
+}
+
+/**
+ * Charge (v2 Phase 6e): ask the defender to split its combination save and melee roll,
+ * or move on when there is nothing to split -- no IDs, no Create Fireminions and no
+ * Flaming Shields trade, which is the same "nothing to ask" rule as damage too small to
+ * kill. The answer is parked on the save roll and the exchange carries on to its totals.
+ */
+function stepChargeAllocate(state: GameState): GameState {
+  const combat = requireCombat(state)
+  const saves = requireSaves(state, combat)
+  const spec = exchangeSpec(state, false)
+  const pools = chargePools(state, spec, saves)
+  if (saves.allocation !== undefined || (pools.ids === 0 && pools.flexible === 0 && pools.shields === 0)) {
+    return withTurn(state, { marchStep: 'resolve_attack_damage' })
+  }
+  return {
+    ...state,
+    pending: {
+      kind: 'charge_allocate',
+      player: spec.defender,
+      slot: requireTerrainTarget(spec.defenderSlot),
+      ids: pools.ids,
+      flexible: pools.flexible,
+      ...(pools.shields > 0 ? { shields: pools.shields } : {}),
+    },
+  }
+}
+
+function applyChargeAllocate(
+  state: GameState,
+  action: Extract<GameAction, { kind: 'charge_allocate' }>,
+): GameState {
+  if (state.turn.marchStep !== 'charge_allocate') {
+    throw new IllegalActionError('no Charge roll is waiting to be allocated')
+  }
+  const combat = requireCombat(state)
+  const saves = requireSaves(state, combat)
+  const pools = chargePools(state, exchangeSpec(state, false), saves)
+  const problem = combinationAnswerProblem(CHARGE_ROLL_KINDS, pools, action)
+  if (problem !== null) throw new IllegalActionError(problem)
+
+  const allocation = {
+    ids: action.ids,
+    flexible: action.flexible,
+    ...(action.savesAsMelee !== undefined && action.savesAsMelee > 0 ? { savesAsMelee: action.savesAsMelee } : {}),
+  }
+  return withTurn(state, {
+    marchStep: 'resolve_attack_damage',
+    combat: withSaves(combat, saves, { allocation }),
+  })
 }
 
 /**
@@ -2615,6 +2675,8 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
       ...(outcome.unsavable > 0 ? { unsavable: outcome.unsavable } : {}),
       ...(outcome.riposte > 0 ? { riposte: outcome.riposte } : {}),
       ...(outcome.riposteMath !== undefined ? { riposteMath: outcome.riposteMath } : {}),
+      ...(outcome.charge !== undefined ? { charge: { melee: outcome.charge.melee } } : {}),
+      ...(outcome.charge?.math !== undefined ? { chargeMath: outcome.charge.math } : {}),
       ...(outcome.attackRoll.countedAs !== undefined
         ? { flamingShields: outcome.attackRoll.countedAs }
         : {}),
@@ -2642,7 +2704,10 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
     // that takes less damage than its health simply ignores it (RULES-V0.md §6).
     damage: outcome.damage,
     ...(outcome.riposte > 0 ? { riposte: outcome.riposte } : {}),
-    ...(outcome.counterSuppressed ? { counterSuppressed: true as const } : {}),
+    // A Charge replaces the counter-attack as well as the save roll (v2 Phase 6e). It
+    // logs no `counter_suppressed` -- that line is Surprise's -- since the exchange's own
+    // `charge` field already says so.
+    ...(outcome.counterSuppressed || outcome.charge !== undefined ? { counterSuppressed: true as const } : {}),
   }
 
   return afterCombatStep(
@@ -2720,7 +2785,9 @@ export function rollOnTheTable(
     step === 'sai_delayed_attack' ||
     step === 'sai_delayed_counter' ||
     step === 'flashfire_attack_saves' ||
-    step === 'flashfire_counter_saves'
+    step === 'flashfire_counter_saves' ||
+    // The Charge split is about the defender's roll, so that is the roll on the table.
+    step === 'charge_allocate'
   const asking =
     delayed ||
     step === 'sai_target_attack' ||
@@ -4858,6 +4925,8 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applyDragonTreasure(cleared, action.pair)
     case 'dragon_allocate':
       return applyDragonAllocate(cleared, action)
+    case 'charge_allocate':
+      return applyChargeAllocate(cleared, action)
     case 'dragon_damage_split':
       return applyDragonDamageSplit(cleared, action)
     case 'announce_spells':

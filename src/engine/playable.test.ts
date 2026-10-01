@@ -54,7 +54,7 @@ describe('the species in the data', () => {
       expect(speciesProblem(species.id), species.id).toBeNull()
     }
     expect(speciesProblem('dwarves')).toBe(
-      'Dwarves are not playable yet: the SAI Charge and its species abilities are not implemented',
+      'Dwarves are not playable yet: its species abilities are not implemented',
     )
     expect(PLAYABLE_UNITS).toHaveLength(UNIT_TYPES.length - 20)
     expect(unitPlayable('coral_elves.tako')).toBe(true)

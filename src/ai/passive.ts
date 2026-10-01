@@ -231,6 +231,15 @@ export function decideAction(state: GameState, pending: Pending): GameAction {
         flexible: { save: pending.flexible },
       }
 
+    // Charge (v2 Phase 6e): the same answer for the same reason -- saves keep the army,
+    // and passive starts nothing, a charger's death included.
+    case 'charge_allocate':
+      return {
+        kind: 'charge_allocate',
+        ids: { save: pending.ids },
+        flexible: { save: pending.flexible },
+      }
+
     // It spends what it has where it can kill, which is free: melee and missile
     // results have no other use in a dragon attack, and holding them back would
     // leave a dragon alive for no gain.

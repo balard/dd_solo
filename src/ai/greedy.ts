@@ -24,7 +24,7 @@ import { legalActions, missileTargets } from '../engine/combat'
 import { growthPartners } from '../engine/dua'
 import { cannotRoll, isAsleep, thornsAt } from '../engine/effects'
 import type { RngState } from '../engine/rng'
-import { legalDirections, rollOnTheTable } from '../engine/turn'
+import { legalDirections, rollOnTheTable, rollsOnTheTable } from '../engine/turn'
 import {
   TERRAIN_SLOTS,
   army,
@@ -709,5 +709,40 @@ function decide(state: GameState, pending: Pending): GameAction {
     case 'dragon_allocate':
     case 'dragon_damage_split':
       return passiveAnswer(state, pending)
+
+    case 'charge_allocate':
+      return chargeAllocation(state, pending)
+  }
+}
+
+/**
+ * Charge (v2 Phase 6e): enough saves to cover the attack, and everything past that as
+ * melee, which goes straight back at the charger. Read off the two rolls on the table --
+ * the save roll as drawn has every ID on save, so what the dice give without them is
+ * that total less the pool. Saves past the attack buy nothing, so Flaming Shields
+ * converts exactly those.
+ */
+function chargeAllocation(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'charge_allocate' }>,
+): GameAction {
+  const rolls = rollsOnTheTable(state)
+  const attack = rolls.find((roll) => roll.kind === 'attack')?.roll.total ?? 0
+  const saves = rolls.find((roll) => roll.kind === 'save')?.roll.total ?? 0
+  const without = Math.max(0, saves - pending.ids - pending.flexible)
+
+  const idSaves = Math.min(pending.ids, Math.max(0, attack - without))
+  const flexSaves = Math.min(pending.flexible, Math.max(0, attack - without - idSaves))
+  const spare = Math.max(0, without + idSaves + flexSaves - attack)
+  const converted = Math.min(pending.shields ?? 0, spare)
+  const split = (total: number, toSave: number) => ({
+    ...(toSave > 0 ? { save: toSave } : {}),
+    ...(total - toSave > 0 ? { melee: total - toSave } : {}),
+  })
+  return {
+    kind: 'charge_allocate',
+    ids: split(pending.ids, idSaves),
+    flexible: split(pending.flexible, flexSaves),
+    ...(converted > 0 ? { savesAsMelee: converted } : {}),
   }
 }

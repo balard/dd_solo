@@ -188,6 +188,10 @@ export type MarchStep =
   | 'resolve_attack_saves'
   | 'flashfire_attack_saves'
   | 'sai_delayed_attack'
+  // Charge (v2 Phase 6e): the defender's combination save and melee roll is down and
+  // its delayed effects resolved; now it says where its IDs go. The attack half only --
+  // "Charge has no effect during a counter-attack".
+  | 'charge_allocate'
   | 'resolve_attack_damage'
   | 'assign_attack_damage'
   | 'assign_attack_riposte'
@@ -291,6 +295,20 @@ export interface PendingSaves {
   /** Wild Growth's save share, chosen by the defender. Omitted when nobody chose
    *  any, which is every save roll but a Wild Growth one. */
   readonly bonus?: number
+  /**
+   * Charge (v2 Phase 6e): this is the defender's combination save and melee roll rather
+   * than a save roll. Written when the dice land, as `wave` is, so every reader of the
+   * roll -- the pause, the display, the count -- resolves it the same way. Omitted
+   * otherwise.
+   */
+  readonly charge?: true
+  /** The defender's split of that roll, from `charge_allocate`. Omitted until answered,
+   *  and never written when there was nothing to split. */
+  readonly allocation?: {
+    readonly ids: Readonly<Partial<Record<ResultType, number>>>
+    readonly flexible: Readonly<Partial<Record<ResultType, number>>>
+    readonly savesAsMelee?: number
+  }
   /**
    * Bash (v2 Phase 6d): save results equal to the melee of the dice the defender Bashed.
    * Its own field, not `bonus`, because the roll's arithmetic names each -- "+ 4 Bash"
@@ -919,6 +937,20 @@ export type Pending =
       readonly shields?: number
     }
   /**
+   * Charge (v2 Phase 6e): the defender's combination save and melee roll, split.
+   * `dragon_allocate`'s question over two kinds instead of three: where the IDs go,
+   * how a Create Fireminions splits, and how many saves Flaming Shields trades for melee
+   * -- here the melee goes back at the charging army, so it is a real trade.
+   */
+  | {
+      readonly kind: 'charge_allocate'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly ids: number
+      readonly flexible: number
+      readonly shields?: number
+    }
+  /**
    * Which dragons the army's melee and missile go to (p. 18).
    *
    * Two separate pools, because "the damage to slay a dragon must come from either
@@ -1149,6 +1181,13 @@ export type GameAction =
       readonly ids: Readonly<Partial<Record<ResultType, number>>>
       readonly flexible: Readonly<Partial<Record<ResultType, number>>>
       /** Flaming Shields: how many of `Pending.shields` become melee. Omitted is none. */
+      readonly savesAsMelee?: number
+    }
+  /** Charge (v2 Phase 6e): `dragon_allocate`'s answer, over save and melee. */
+  | {
+      readonly kind: 'charge_allocate'
+      readonly ids: Readonly<Partial<Record<ResultType, number>>>
+      readonly flexible: Readonly<Partial<Record<ResultType, number>>>
       readonly savesAsMelee?: number
     }
   | {
@@ -1466,6 +1505,15 @@ export type LogEntry =
        * beside it when the spells took all of it.
        */
       readonly riposteMath?: RollMath
+      /**
+       * Charge (v2 Phase 6e): the defender made a combination save and melee roll, and
+       * these are its melee, sent back at the attacker inside `riposte` (less the
+       * attacker's spell saves, in `riposteMath`). Present on every charge, a zero
+       * included -- "the attack was a charge" is the fact -- and omitted otherwise.
+       */
+      readonly charge?: { readonly melee: number }
+      /** The melee half's arithmetic. Display only, dropped from the digest. */
+      readonly chargeMath?: RollMath
       /**
        * Flaming Shields (Phase 8): melee inside `attackTotal` that the dice rolled as
        * saves. Omitted when zero, like the two above -- and for the same reason: a

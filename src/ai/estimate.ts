@@ -72,6 +72,8 @@ export interface ExpectedDie {
   /** Wave (v2 Phase 5c): results taken off the *other* army's roll -- its saves when
    *  this is a melee attack. */
   readonly wave: number
+  /** Charge (v2 Phase 6e): the chance this die shows a Charge in this roll. */
+  readonly charge: number
 }
 
 export interface FaceWorth extends ExpectedDie {
@@ -94,6 +96,7 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
         maneuver: face.icon === 'MANEUVER' ? face.count : 0,
       },
       wave: 0,
+      charge: 0,
       reroll: false,
     }
   }
@@ -104,6 +107,7 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
   let riposte = 0
   let targeted = 0
   let wave = 0
+  let charge = 0
   for (const effect of outcome.effects) {
     switch (effect.kind) {
       case 'unsavable':
@@ -150,6 +154,11 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
       // estimate never prices -- greedy does not choose dragon attacks.
       case 'bash_dragon':
         break
+      // Charge reshapes the exchange rather than adding results; `expectedAttack`
+      // weighs it by this chance.
+      case 'charge':
+        charge = 1
+        break
       // Exhaustive, so an effect kind a later species adds is a build error here
       // rather than a face greedy silently prices at nothing (v2 Phase 6d).
       default:
@@ -168,6 +177,7 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
       maneuver: outcome.results.maneuver ?? 0,
     },
     wave,
+    charge,
     reroll: outcome.reroll,
   }
 }
@@ -206,6 +216,7 @@ export function expectedDie(
   let targeted = 0
   const rolled = { melee: 0, save: 0, maneuver: 0 }
   let wave = 0
+  let charge = 0
 
   for (const face of faces) {
     const worth = expectedFace(face, resultType, context, ruleSet)
@@ -217,6 +228,7 @@ export function expectedDie(
     riposte += worth.riposte
     targeted += worth.targeted
     for (const type of CONVERTIBLE) rolled[type] += worth.rolled[type]
+    charge += worth.charge
     wave += worth.wave
   }
 
@@ -236,6 +248,7 @@ export function expectedDie(
       maneuver: rolled.maneuver / divisor,
     },
     wave: wave / divisor,
+    charge: charge / divisor,
   }
 }
 
@@ -251,6 +264,8 @@ export interface ExpectedRoll {
   readonly targeted: number
   /** Wave: what this roll takes off the other army's. */
   readonly wave: number
+  /** Charge (v2 Phase 6e): the chance at least one die shows a Charge. */
+  readonly charge: number
 }
 
 export interface ExpectedArmyOptions {
@@ -291,6 +306,7 @@ export function expectedArmy(
   let targeted = 0
   let converted = 0
   let wave = 0
+  let noCharge = 1
   // Every "counts as" this roll makes on its own, through the roll's own resolver -- a
   // trade is the owner's choice and only a combination roll has one, which this never
   // estimates. `applyModifiers` ignores `counts_as`, so the results are added by hand.
@@ -304,6 +320,7 @@ export function expectedArmy(
     riposte += die.riposte
     targeted += die.targeted
     wave += die.wave
+    noCharge *= 1 - Math.min(1, die.charge)
     const species = unitType(unit.typeId).species
     for (const conversion of conversions) {
       if (conversion.species.has(species)) converted += die.rolled[conversion.from]
@@ -319,6 +336,7 @@ export function expectedArmy(
     riposte,
     targeted,
     wave,
+    charge: 1 - noCharge,
   }
 }
 
@@ -400,16 +418,38 @@ export function expectedAttack(
     context: { purpose: { kind: 'save', against: action }, isCounter },
   })
 
+  // Charge (v2 Phase 6e), weighed by its chance: the attacker's maneuver joins its melee,
+  // and the defender's melee comes back at it, less the attacker's spell saves.
+  const charge = action === 'melee' && !isCounter ? attack.charge : 0
+  const charged =
+    charge > 0
+      ? {
+          melee: charge * maneuverOnDice(state, attacker, fromRef),
+          back: charge * expectedArmy(state, defender, target, 'melee').total,
+        }
+      : { melee: 0, back: 0 }
+
   return {
     attack,
     save,
     // A Wave comes off the saves, and never takes them below zero.
     damage:
-      Math.max(0, attack.total - Math.max(0, save.total - attack.wave)) + attack.unsavable + attack.targeted,
+      Math.max(0, attack.total + charged.melee - Math.max(0, save.total - attack.wave)) +
+      attack.unsavable +
+      attack.targeted,
     // Only the attacker's spell saves reduce what comes back (v2 Phase 6c), exactly as
     // `finishSaves` subtracts them.
-    riposte: Math.max(0, save.riposte - spellSaves(state, attacker, fromRef)),
+    riposte: Math.max(0, save.riposte + charged.back - spellSaves(state, attacker, fromRef)),
   }
+}
+
+/** The maneuver an army's dice are expected to show -- what a Charge counts as melee. */
+function maneuverOnDice(state: GameState, player: PlayerId, ref: ArmyRef): number {
+  const context = defaultContextFor('maneuver')
+  return armyRoll(state, player, ref, 'maneuver').units.reduce(
+    (sum, unit) => sum + expectedDie(unit.typeId, 'maneuver', context, state.ruleSet).rolled.maneuver,
+    0,
+  )
 }
 
 /**

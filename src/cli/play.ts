@@ -32,7 +32,7 @@ import { isAsleep, isGlaring, isHypnotized } from '../engine/effects'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
 import { mathPhrase, saiPhrase, spellSavedPhrase, type DieRoll, type RollMath } from '../engine/roll'
-import { DRAGON_ROLL_KINDS, SAI_TEXT } from '../engine/sai'
+import { CHARGE_ROLL_KINDS, DRAGON_ROLL_KINDS, SAI_TEXT } from '../engine/sai'
 import { rollOnTheTable } from '../engine/turn'
 import { OWN_ARMY_NOTE, poolSplit, spellPlan, spellTargetLabel, stageCast, targetsFor } from '../engine/magic'
 
@@ -341,9 +341,13 @@ function describe(entry: LogEntry, state: GameState): string | null {
         entry.unsavable === undefined
           ? base
           : `${base} + ${entry.unsavable} unsavable${from('unsavable')}`
-      // What the dice sent, then what spells took off it (v2 Phase 6c).
+      // What the dice sent, then what spells took off it (v2 Phase 6c); a Charge's
+      // melee rides in the same channel (v2 Phase 6e).
       const back =
-        entry.riposte === undefined && entry.riposteMath === undefined
+        entry.charge !== undefined
+          ? ` (charge: ${bold(String(entry.riposteMath?.base ?? entry.riposte ?? 0))} straight back` +
+            `${spellSavedPhrase(entry.riposteMath, entry.riposte ?? 0)}, no save roll, no counter-attack)`
+          : entry.riposte === undefined && entry.riposteMath === undefined
           ? ''
           : ` (${bold(String(entry.riposteMath?.base ?? entry.riposte))} straight back${from('riposte')}` +
             `${spellSavedPhrase(entry.riposteMath, entry.riposte ?? 0)}, no save roll)`
@@ -848,6 +852,7 @@ function choicesFor(state: GameState, pending: Pending): Choice[] {
     case 'temple_bury':
     case 'dragon_breath':
     case 'dragon_allocate':
+    case 'charge_allocate':
     case 'dragon_damage_split':
       return [] // handled separately
   }
@@ -1150,16 +1155,20 @@ async function askDragonBreath(state: GameState, pending: Pending): Promise<Game
   return { kind: 'dragon_breath', unitIds: action.kind === 'assign_damage' ? action.unitIds : [] }
 }
 
-/** Splitting the combination roll: how many of each go to melee, missile and save. */
+/** Splitting a combination roll: the dragon's over melee, missile and save, and a
+ *  Charge's over save and melee (v2 Phase 6e). */
 async function askDragonAllocate(pending: Pending): Promise<GameAction> {
-  if (pending.kind !== 'dragon_allocate') throw new Error('not a dragon allocation')
+  if (pending.kind !== 'dragon_allocate' && pending.kind !== 'charge_allocate') {
+    throw new Error('not a combination roll to split')
+  }
+  const KINDS = pending.kind === 'dragon_allocate' ? DRAGON_ROLL_KINDS : CHARGE_ROLL_KINDS
 
   const split = async (total: number, what: string) => {
     const out: Partial<Record<ResultType, number>> = {}
     let left = total
-    for (const kind of DRAGON_ROLL_KINDS) {
+    for (const kind of KINDS) {
       if (left === 0) break
-      const last = DRAGON_ROLL_KINDS[DRAGON_ROLL_KINDS.length - 1]
+      const last = KINDS[KINDS.length - 1]
       if (kind === last) {
         out[kind] = left
         break
@@ -1173,16 +1182,22 @@ async function askDragonAllocate(pending: Pending): Promise<GameAction> {
   }
 
   console.log()
-  console.log(bold('  Your dragon roll counts melee, missile and save at once.'))
+  console.log(
+    bold(
+      pending.kind === 'dragon_allocate'
+        ? '  Your dragon roll counts melee, missile and save at once.'
+        : '  Charged! Your roll counts saves and melee at once; your melee hits the charging army.',
+    ),
+  )
   const ids = await split(pending.ids, 'ID results')
   const flexible = await split(pending.flexible, 'Create Fireminions results')
   const shields = pending.shields ?? 0
-  if (shields === 0) return { kind: 'dragon_allocate', ids, flexible }
+  if (shields === 0) return { kind: pending.kind, ids, flexible }
 
-  // Flaming Shields: a trade here, saves against the dragon for melee against its hide.
+  // Flaming Shields: a trade here, saves against the damage for melee against the enemy.
   console.log(dim(`  ${bold('Flaming Shields')}: count how many of ${shields} saves as melee?`))
   const savesAsMelee = Math.max(0, Math.min(shields, Number((await ask('> ')).trim()) || 0))
-  return { kind: 'dragon_allocate', ids, flexible, ...(savesAsMelee > 0 ? { savesAsMelee } : {}) }
+  return { kind: pending.kind, ids, flexible, ...(savesAsMelee > 0 ? { savesAsMelee } : {}) }
 }
 
 /** Which dragons the melee and missile go to. Ten kills one, or five past a belly. */
@@ -1555,7 +1570,7 @@ async function askReinforce(state: GameState, player: PlayerId): Promise<GameAct
 async function askHuman(state: GameState, pending: Pending): Promise<GameAction> {
   if (pending.kind === 'assign_damage') return askDamage(state, pending)
   if (pending.kind === 'dragon_breath') return askDragonBreath(state, pending)
-  if (pending.kind === 'dragon_allocate') return askDragonAllocate(pending)
+  if (pending.kind === 'dragon_allocate' || pending.kind === 'charge_allocate') return askDragonAllocate(pending)
   if (pending.kind === 'dragon_damage_split') return askDragonDamageSplit(state, pending)
   if (pending.kind === 'sai_target') return askSaiTarget(state, pending)
   if (pending.kind === 'sai_target_army') return askSaiTargetArmy(state, pending)

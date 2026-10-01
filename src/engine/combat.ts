@@ -7,7 +7,9 @@
 import { terrainFaceAction } from '../data/load'
 import type { TerrainFaceNumber } from '../data/types'
 
+import { combinationSpec, type CombinationAnswer, type CombinationPools } from './combination'
 import { armyRoll, iconAt, spellSaveSources, type ArmyRollInput } from './effects'
+import { CHARGE_ROLL_KINDS } from './sai'
 import { terrainHas, unitHasAbility } from './species'
 import type { Modifier, RollEffect } from './pipeline'
 import { unitType } from '../data/load'
@@ -19,6 +21,7 @@ import {
   resolveFaces,
   rerollSweep,
   rollFaces,
+  rollPools,
   type RawDie,
   type DieRoll,
   type RollMath,
@@ -170,6 +173,12 @@ export interface AttackOutcome {
   readonly riposteMath?: RollMath
   /** Surprise: this attack denies the defender their counter-attack. */
   readonly counterSuppressed: boolean
+  /**
+   * Charge (v2 Phase 6e): the defender answered with a combination save and melee roll,
+   * and these are its melee -- inside `riposte` now, sent back at the attacker -- with
+   * their arithmetic. Omitted when the attack was no charge.
+   */
+  readonly charge?: { readonly melee: number; readonly math?: RollMath }
   /** The dice themselves, so the UI can show what landed rather than only the sum. */
   readonly attackRoll: RollResult
   readonly saveRoll: RollResult | null
@@ -446,6 +455,10 @@ export interface SaveRollState {
   readonly wave?: number
   /** Bash: save results equal to the melee of the die it hit (`PendingSaves.bash`). */
   readonly bash?: number
+  /** Charge (v2 Phase 6e): this is the defender's combination save and melee roll. */
+  readonly charge?: true
+  /** And how its IDs and choosable results were split (`PendingSaves.allocation`). */
+  readonly allocation?: CombinationAnswer
 }
 
 /** What the attack roll was worth, before the defender has rolled anything. */
@@ -455,6 +468,9 @@ export interface AttackFacts {
   readonly counterSuppressed: boolean
   /** Wave: save results this attack takes off the roll that answers it. */
   readonly wave: number
+  /** Charge (v2 Phase 6e): a melee attack the defender answers with a combination
+   *  save and melee roll, and no counter-attack. */
+  readonly charged: boolean
   /**
    * Whether a save roll happens at all. False for magic, which allows none, and for a
    * zero-result attack, which earns none -- and in both cases no die is rolled, so no
@@ -497,18 +513,23 @@ export function attackFacts(state: GameState, spec: AttackSpec, attack: AttackRo
       'cantrip',
       'wave',
       'glare',
+      'charge',
     ],
     `a ${spec.action} attack`,
   )
+  const charged = spec.action === 'melee' && attackRoll.effects.some((e) => e.kind === 'charge')
 
   return {
     attackRoll,
     unsavable: damageFrom(attackRoll.effects, 'unsavable'),
     counterSuppressed: attackRoll.effects.some((e) => e.kind === 'suppress_counter'),
     wave: waveIn(attackRoll.effects),
+    charged,
     // A Smite-only attack rolls zero melee, earns the defender no save roll, and still
-    // kills: the condition is the attack *total*, not the damage.
-    savesNeeded: spec.action !== 'magic' && attackRoll.total > 0,
+    // kills: the condition is the attack *total*, not the damage. A Charge always earns
+    // the defender its roll (v2 Phase 6e): it replaces the counter-attack as well as the
+    // save roll, so the defender's melee goes back at the attacker even against nothing.
+    savesNeeded: spec.action !== 'magic' && (attackRoll.total > 0 || charged),
   }
 }
 
@@ -520,6 +541,68 @@ export function waveIn(effects: readonly RollEffect[]): number {
 /** Wave's subtraction as a step-6 modifier, named so the roll can say "− 4 Wave". */
 export function waveModifier(resultType: 'save' | 'maneuver', amount: number): Modifier {
   return { kind: 'subtract', resultType, amount, source: 'Wave' }
+}
+
+/**
+ * The defender's answer to a Charge (v2 Phase 6e): one combination roll counting save
+ * and melee, built where the dragon's is (`combinationSpec`), so an ID split, a
+ * Create Fireminions split and Flaming Shields' trade are asked the same way, and the
+ * eighth face doubles IDs in both kinds.
+ *
+ * The rest of an ordinary save roll rides on it as modifiers: Wave off the saves, Bash's
+ * saves, and Wild Growth's unspent budget -- the last as a named step-10 add rather than
+ * `RollSpec.saiResults`, which the combination roll already spends on its flexible split.
+ *
+ * Without an `answer`, IDs and flexible results all sit on save: enough to find the
+ * pools and to draw the dice before anybody has allocated them.
+ */
+export function chargeRollSpec(
+  state: GameState,
+  spec: AttackSpec,
+  saves: SaveRollState,
+  answer?: CombinationAnswer,
+): RollSpec {
+  const context = { purpose: { kind: 'save', against: 'melee', charge: true }, isCounter: spec.isCounter } as const
+  const shown = answer ?? displayAnswer(chargePoolsOf(state, spec, saves, context))
+  const base = combinationSpec(state, spec.defender, spec.defenderSlot, CHARGE_ROLL_KINDS, context, shown)
+  const extra: Modifier[] = []
+  if ((saves.wave ?? 0) > 0) extra.push(waveModifier('save', saves.wave ?? 0))
+  if ((saves.bash ?? 0) > 0) extra.push({ kind: 'add', resultType: 'save', amount: saves.bash ?? 0, source: 'Bash' })
+  if ((saves.bonus ?? 0) > 0) {
+    extra.push({ kind: 'add', resultType: 'save', amount: saves.bonus ?? 0, source: 'Wild Growth' })
+  }
+  return { ...base, modifiers: [...base.modifiers, ...extra] }
+}
+
+/** What the defender's Charge roll leaves to allocate: the pending's three numbers. */
+export function chargePools(state: GameState, spec: AttackSpec, saves: SaveRollState): CombinationPools {
+  return chargePoolsOf(state, spec, saves, {
+    purpose: { kind: 'save', against: 'melee', charge: true },
+    isCounter: spec.isCounter,
+  })
+}
+
+function chargePoolsOf(
+  state: GameState,
+  spec: AttackSpec,
+  saves: SaveRollState,
+  context: RollSpec['context'],
+): CombinationPools {
+  const base = combinationSpec(state, spec.defender, spec.defenderSlot, CHARGE_ROLL_KINDS, context)
+  return rollPools(saves.dice, base, state.ruleSet)
+}
+
+/** Everything on save: a legal split of any pools, for drawing the dice. */
+function displayAnswer(pools: CombinationPools): CombinationAnswer {
+  return { ids: { save: pools.ids }, flexible: { save: pools.flexible } }
+}
+
+/** The spec the defender's roll resolves under: a save roll, or a Charge's combination
+ *  roll. Every reader of the parked save dice goes through this. */
+function defenderRollSpec(state: GameState, spec: AttackSpec, saves: SaveRollState): RollSpec {
+  return saves.charge === true
+    ? chargeRollSpec(state, spec, saves, saves.allocation)
+    : saveRollSpec(state, spec, saves.bonus, saves.wave, saves.bash)
 }
 
 /** The spec the defender's save roll is resolved under, built in one place because
@@ -565,7 +648,8 @@ export function saveEffects(
   spec: AttackSpec,
   saves: SaveRollState,
 ): readonly RollEffect[] {
-  return resolveFaces(saves.dice, saveRollSpec(state, spec, undefined, saves.wave), state.ruleSet).effects
+  const effectsOnly: SaveRollState = { dice: saves.dice, ...(saves.wave !== undefined ? { wave: saves.wave } : {}), ...(saves.charge === true ? { charge: true as const } : {}) }
+  return resolveFaces(saves.dice, defenderRollSpec(state, spec, effectsOnly), state.ruleSet).effects
 }
 
 /**
@@ -617,10 +701,7 @@ export function parkedSaveRoll(
   spec: AttackSpec,
   saves: SaveRollState,
 ): RollResult {
-  return asResult(
-    resolveFaces(saves.dice, saveRollSpec(state, spec, saves.bonus, saves.wave, saves.bash), state.ruleSet),
-    'save',
-  )
+  return asResult(resolveFaces(saves.dice, defenderRollSpec(state, spec, saves), state.ruleSet), 'save')
 }
 
 /**
@@ -642,8 +723,11 @@ export function rollSaveFaces(
   const [dice, next] = rollFaces(defenders.units, rng)
   // Wave rides with the dice from the moment they land, so every later reader of this
   // roll subtracts it.
-  const wave = attack === undefined ? 0 : attackFacts(state, spec, attack).wave
-  return [{ dice, ...(wave > 0 ? { wave } : {}) }, next] as const
+  const facts = attack === undefined ? undefined : attackFacts(state, spec, attack)
+  const wave = facts?.wave ?? 0
+  // A Charge turns this into the combination roll from the moment it lands (v2 Phase 6e).
+  const charge = facts?.charged === true
+  return [{ dice, ...(wave > 0 ? { wave } : {}), ...(charge ? { charge: true as const } : {}) }, next] as const
 }
 
 /**
@@ -684,6 +768,8 @@ export function finishSaves(
     }
   }
 
+  if (saves.charge === true) return finishCharge(state, spec, facts, saves, rng)
+
   const rollSpec = saveRollSpec(state, spec, saves.bonus, saves.wave, saves.bash)
   const [swept, afterSweep] = rerollSweep(saves.dice, rollSpec, state.ruleSet, rng)
   const saveRoll = asResult(resolveFaces(swept, rollSpec, state.ruleSet), 'save')
@@ -707,6 +793,57 @@ export function finishSaves(
     riposte: back.damage,
     ...(back.math !== undefined ? { riposteMath: back.math } : {}),
     counterSuppressed,
+    attackRoll,
+    saveRoll,
+    rng: afterSweep,
+  }
+}
+
+/**
+ * A Charge's end (v2 Phase 6e): the attack less the combination roll's saves goes to the
+ * defender, and its melee -- with any Counter's riposte -- goes back at the attacker,
+ * less only the attacker's spell saves. No counter-attack follows.
+ *
+ * The allocation is the defender's answer at `charge_allocate`; a roll with nothing to
+ * allocate never asked, and spends its empty pools on save.
+ */
+function finishCharge(
+  state: GameState,
+  spec: AttackSpec,
+  facts: AttackFacts,
+  saves: SaveRollState,
+  rng: RngState,
+): AttackOutcome {
+  const { attackRoll, unsavable } = facts
+  const pools = chargePools(state, spec, saves)
+  const owed = pools.ids > 0 || pools.flexible > 0 || pools.shields > 0
+  if (owed && saves.allocation === undefined) {
+    throw new Error('the Charge roll has IDs to allocate and nobody allocated them')
+  }
+  const rollSpec = chargeRollSpec(state, spec, saves, saves.allocation ?? displayAnswer(pools))
+  const [swept, afterSweep] = rerollSweep(saves.dice, rollSpec, state.ruleSet, rng)
+  const outcome = resolveFaces(swept, rollSpec, state.ruleSet)
+  const saveRoll = asResult(outcome, 'save')
+  expectOnly(saveRoll.effects, ['riposte', 'wild_growth', 'free_move', 'cantrip', 'bash'], 'a Charge roll')
+
+  const melee = outcome.totals.melee ?? 0
+  const meleeMath = outcome.math?.melee
+  const back = spellReduced(
+    state,
+    spec.attacker,
+    spec.attackerSlot,
+    melee + damageFrom(saveRoll.effects, 'riposte'),
+  )
+
+  return {
+    attackTotal: attackRoll.total,
+    saveTotal: saveRoll.total,
+    damage: Math.max(0, attackRoll.total - saveRoll.total) + unsavable,
+    unsavable,
+    riposte: back.damage,
+    ...(back.math !== undefined ? { riposteMath: back.math } : {}),
+    counterSuppressed: facts.counterSuppressed,
+    charge: { melee, ...(meleeMath !== undefined ? { math: meleeMath } : {}) },
     attackRoll,
     saveRoll,
     rng: afterSweep,

@@ -325,15 +325,23 @@ describe('a combination roll over any kinds', () => {
     expect(doubled.map((m) => m.resultType).sort()).toEqual(['melee', 'save'])
   })
 
-  it('checks the flexible split and the Flaming Shields count against the pools', () => {
+  it('checks every number in the answer against the pools', () => {
     const pools = { ids: 2, flexible: 3, shields: 1 }
-    expect(combinationAnswerProblem(['save', 'melee'], pools, { ids: {}, flexible: { save: 1, melee: 2 } })).toBeNull()
-    expect(combinationAnswerProblem(['save', 'melee'], pools, { ids: {}, flexible: { save: 1 } })).toBe(
+    const ids = { save: 1, melee: 1 }
+    expect(combinationAnswerProblem(['save', 'melee'], pools, { ids, flexible: { save: 1, melee: 2 } })).toBeNull()
+    expect(combinationAnswerProblem(['save', 'melee'], pools, { ids, flexible: { save: 1 } })).toBe(
       'the split spends 1 of 3 flexible results',
     )
     expect(
-      combinationAnswerProblem(['save', 'melee'], pools, { ids: {}, flexible: { melee: 3 }, savesAsMelee: 2 }),
+      combinationAnswerProblem(['save', 'melee'], pools, { ids, flexible: { melee: 3 }, savesAsMelee: 2 }),
     ).toBe('Flaming Shields can count 1 saves as melee here, not 2')
+    // The ID split too (v2 Phase 6e), which used to be left to the roll to refuse.
+    expect(combinationAnswerProblem(['save', 'melee'], pools, { ids: { save: 1 }, flexible: { save: 3 } })).toBe(
+      'the split spends 1 of 2 ID results',
+    )
+    expect(combinationAnswerProblem(['save', 'melee'], pools, { ids: { missile: 2 }, flexible: { save: 3 } })).toBe(
+      'this roll does not count missile',
+    )
   })
 })
 
@@ -741,5 +749,152 @@ describe('a Bash that empties the attacking army', () => {
     // The Sergeant's 2 melee stand; the Fiery Weapon's +2 ended with the army.
     expect(entries(done, 'combat_resolved')[0]).toMatchObject({ attackTotal: 2, saveTotal: 2 })
     expect(validateState(done)).toEqual([])
+  })
+})
+
+// --- Charge (6e) ---------------------------------------------------------------
+
+const BEHEMOTH_CHARGE = 7
+const BEHEMOTH_TRAMPLE = 6
+/** Sergeant face 1 is `2 MANEUVER`. */
+const SERGEANT_MANEUVER = 1
+/** Gargoyle face 3 is `4 SAI:Fly`. */
+const GARGOYLE = 'dwarves.gargoyle'
+const GARGOYLE_FLY = 3
+/** Watcher face 2 is `2 SAVE`, face 1 `3 MELEE`. */
+const WATCHER_SAVE = 2
+
+describe("Charge, the attacker's half", () => {
+  const attackSpec = (isCounter: boolean): RollSpec => ({
+    kinds: ['melee'],
+    modifiers: [],
+    context: { purpose: { kind: 'attack', action: 'melee' }, isCounter },
+  })
+  const dice = (...faces: readonly [string, string, number][]): RawDie[] =>
+    faces.map(([unitId, typeId, faceIndex]) => ({ unitId, typeId, faceIndex }))
+
+  it("counts every die's maneuver as melee, whatever its species, and says so", () => {
+    const outcome = resolveFaces(
+      dice(['a', BEHEMOTH, BEHEMOTH_CHARGE], ['b', SERGEANT, SERGEANT_MANEUVER], ['c', WATCHER, 5]),
+      attackSpec(false),
+      RULES,
+    )
+    // The Sergeant's 2 and the Watcher's 2 -- a Firewalker in the army charges too.
+    expect(outcome.totals.melee).toBe(4)
+    expect(outcome.dice.map((d) => d.results)).toEqual([0, 2, 2])
+    expect(outcome.math?.melee?.notes).toEqual(['4 maneuver counted as melee (Charge)'])
+    expect(outcome.effects.map((e) => e.kind)).toEqual(['charge'])
+  })
+
+  it("turns Fly's maneuver and Trample's into melee too", () => {
+    const outcome = resolveFaces(
+      dice(['a', BEHEMOTH, BEHEMOTH_CHARGE], ['b', GARGOYLE, GARGOYLE_FLY], ['c', BEHEMOTH, BEHEMOTH_TRAMPLE]),
+      attackSpec(false),
+      RULES,
+    )
+    // Fly gives 4 maneuver, which counts; Trample gives 4 melee and 4 maneuver.
+    expect(outcome.totals.melee).toBe(12)
+  })
+
+  it('does nothing on a counter-attack', () => {
+    const outcome = resolveFaces(
+      dice(['a', BEHEMOTH, BEHEMOTH_CHARGE], ['b', SERGEANT, SERGEANT_MANEUVER]),
+      attackSpec(true),
+      RULES,
+    )
+    expect(outcome.totals.melee).toBe(0)
+    expect(outcome.effects).toEqual([])
+  })
+})
+
+describe("Charge, the defender's half", () => {
+  // p1's Behemoth charges with a Sergeant beside it showing 2 maneuver: 2 melee. p2's two
+  // Oaks answer, one with its ID (2) and one with 2 melee.
+  const charged = (p2: readonly string[] = [OAK, OAK], faces: readonly number[] = [OAK_ID, OAK_MELEE]) =>
+    advance(
+      melee(
+        [BEHEMOTH, SERGEANT],
+        p2,
+        rngShowing([BEHEMOTH, SERGEANT, ...p2], [BEHEMOTH_CHARGE, SERGEANT_MANEUVER, ...faces]),
+      ),
+    )
+
+  it('makes the defender split its combination roll before anything is counted', () => {
+    const asked = charged()
+    expect(asked.turn.marchStep).toBe('charge_allocate')
+    expect(asked.pending).toEqual({ kind: 'charge_allocate', player: 'p2', slot: 'frontier', ids: 2, flexible: 0 })
+    expect(validateState(asked)).toEqual([])
+  })
+
+  it('stops the attack with its saves and sends its melee back, with no counter-attack', () => {
+    const done = reduce(charged(), { kind: 'charge_allocate', ids: { save: 1, melee: 1 }, flexible: {} })
+    const exchange = entries(done, 'combat_resolved')[0]
+    // 2 melee against 1 save; 2 + 1 melee back at the Behemoth's army.
+    expect(exchange).toMatchObject({ attackTotal: 2, saveTotal: 1, damage: 1, riposte: 3, charge: { melee: 3 } })
+    expect(done.pending).toMatchObject({ kind: 'assign_damage', player: 'p1' })
+
+    const after = reduce(done, { kind: 'assign_damage', unitIds: ['p1:1'] })
+    expect(after.units['p1:1']?.location).toEqual({ kind: 'dua' })
+    expect(after.pending?.kind).not.toBe('choose_counter_attack')
+    expect(entries(after, 'counter_suppressed')).toEqual([])
+    expect(validateState(after)).toEqual([])
+  })
+
+  it('refuses a split that does not spend the IDs exactly', () => {
+    expect(() => reduce(charged(), { kind: 'charge_allocate', ids: { save: 1 }, flexible: {} })).toThrow(
+      /spends 1 of 2 ID/,
+    )
+  })
+
+  it('rolls even against an attack of nothing, and asks nothing when there is nothing to split', () => {
+    const state = advance(melee([BEHEMOTH], [OAK], rngShowing([BEHEMOTH, OAK], [BEHEMOTH_CHARGE, OAK_MELEE])))
+    expect(entries(state, 'combat_resolved')[0]).toMatchObject({
+      attackTotal: 0,
+      saveTotal: 0,
+      damage: 0,
+      riposte: 2,
+      charge: { melee: 2 },
+    })
+    // Two damage cannot kill a four-health Behemoth, so nobody is asked about it either.
+    expect(state.pending?.kind).not.toBe('assign_damage')
+  })
+
+  it("is reduced only by the attacker's spell saves", () => {
+    const stoneSkin = cast('stone_skin', 2, { kind: 'army', player: 'p1', army: 'frontier' })
+    const start = {
+      ...melee([BEHEMOTH], [OAK], rngShowing([BEHEMOTH, OAK], [BEHEMOTH_CHARGE, OAK_MELEE])),
+      effects: [stoneSkin],
+    }
+    const exchange = entries(advance(start), 'combat_resolved')[0]
+    expect(exchange?.charge).toEqual({ melee: 2 })
+    expect(exchange?.riposte).toBeUndefined()
+    expect(exchange?.riposteMath?.steps).toEqual([{ source: 'Stone Skin', delta: -2 }])
+  })
+
+  it("adds a Counter's riposte to the melee going back", () => {
+    const done = charged([UNICORN], [UNICORN_COUNTER])
+    // Counter in a charge is its save sentence: 4 saves, and 4 straight back.
+    expect(entries(done, 'combat_resolved')[0]).toMatchObject({
+      attackTotal: 2,
+      saveTotal: 4,
+      damage: 0,
+      riposte: 4,
+      charge: { melee: 0 },
+    })
+  })
+
+  it('asks a Firewalker at a fire terrain how many saves Flaming Shields trades', () => {
+    // Highland contains fire. The Watcher's 2 saves may stay saves or go back as melee.
+    const asked = charged([WATCHER], [WATCHER_SAVE])
+    expect(asked.pending).toEqual({
+      kind: 'charge_allocate',
+      player: 'p2',
+      slot: 'frontier',
+      ids: 0,
+      flexible: 0,
+      shields: 2,
+    })
+    const done = reduce(asked, { kind: 'charge_allocate', ids: {}, flexible: {}, savesAsMelee: 2 })
+    expect(entries(done, 'combat_resolved')[0]).toMatchObject({ saveTotal: 0, charge: { melee: 2 }, damage: 2 })
   })
 })
