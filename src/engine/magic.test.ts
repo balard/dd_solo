@@ -67,12 +67,12 @@ const pool = (over: Partial<MagicPool> = {}): MagicPool => ({
 
 describe('the spell data', () => {
   it('holds exactly the spells the species in the data can cast', () => {
-    expect(SPELLS).toHaveLength(20)
-    // Four per element plus the two Elemental (full rules pp. 46-51), and the Coral
-    // Elves' air and water spell (v2 Phase 5e). Another entry means a spell belonging to
-    // a species nobody has imported slipped in.
+    expect(SPELLS).toHaveLength(22)
+    // Four per element plus the two Elemental (full rules pp. 46-51), the Coral Elves'
+    // air and water spell (v2 Phase 5e), and the Dwarves' earth and fire (v2 Phase 6g).
+    // Another entry means a spell belonging to a species nobody has imported slipped in.
     const count = (element: string) => SPELLS.filter((s) => s.element === element).length
-    expect([count('air'), count('water'), count('earth'), count('fire'), count('elemental')]).toEqual([5, 5, 4, 4, 2])
+    expect([count('air'), count('water'), count('earth'), count('fire'), count('elemental')]).toEqual([5, 5, 5, 5, 2])
   })
 
   it('records the two non-cumulative spells, which no extraction could tell us', () => {
@@ -108,7 +108,7 @@ describe('the spell data', () => {
     for (const s of SPELLS) expect(s.text.trim().length).toBeGreaterThan(20)
   })
 
-  it('gives the six species spells to their three species', () => {
+  it('gives the eight species spells to their four species', () => {
     const byId = (id: string) => spell(id).species
     expect(byId('mirage')).toBe('firewalkers')
     expect(byId('flashfire')).toBe('firewalkers')
@@ -116,7 +116,9 @@ describe('the spell data', () => {
     expect(byId('wall_of_thorns')).toBe('treefolk')
     expect(byId('blizzard')).toBe('coral_elves')
     expect(byId('deluge')).toBe('coral_elves')
-    expect(SPELLS.filter((s) => s.species !== 'any')).toHaveLength(6)
+    expect(byId('firebolt')).toBe('dwarves')
+    expect(byId('higher_ground')).toBe('dwarves')
+    expect(SPELLS.filter((s) => s.species !== 'any')).toHaveLength(8)
   })
 
   it('lets an Elemental spell take any element and a single-element spell only its own', () => {

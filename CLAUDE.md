@@ -199,8 +199,9 @@ the dice and the opponent.
 > roll (`chargeRollSpec`, the `charge_allocate` pending) whose melee goes back at the attacker
 > through the riposte's channel. 6f has landed: Mountain Mastery and Dwarven Might, two rows in
 > `COUNTS_AS_ABILITIES`, and with them **the Dwarves are playable** -- five monster fixtures
-> (`dwarves_*`), and every SAI and ability in the live fuzz. 6g (Firebolt, Higher Ground) and 6h
-> (presets, art, the greedy lone-die stall) are left.
+> (`dwarves_*`), and every SAI and ability in the live fuzz. 6g has landed: Firebolt (a handler
+> over the damage sub-roll) and Higher Ground (an `effect` block). 6h (presets, art, the greedy
+> lone-die stall) is left.
 
 ## Read these first
 
@@ -420,7 +421,8 @@ importer is always safe. Format and vocabulary: `data/ICONS.md`.
 and 24 terrain dice (6 basic types × 4 eighth-face
 variants -- Coastland, Feyland and Flatland joined Swampland, Highland and Wasteland in Phase 5a),
 all passing validation, plus **10 dragon dice** (5 elements × drake/wyrm, 12 faces each, Phase 6)
-and **18 spells** (`data/spells.json`, Phase 7 -- hand-authored like `presets.json`, no importer
+and **22 spells** (`data/spells.json`: the starter's 18 from Phase 7, then two per species from v2 --
+hand-authored like `presets.json`, no importer
 touches it). Nothing is `TODO`: every die in scope is transcribed, and `npm run data` reports any
 spell that is in the data with no code behind it.
 

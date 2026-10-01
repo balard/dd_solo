@@ -1069,6 +1069,19 @@ abilities came in.
 
 Highland, the Dwarves' own terrain, contains both earth and fire, so a Dwarf at home has both.
 
+### The spells (6g)
+
+| Spell | Element, cost | Effect |
+|---|---|---|
+| **Firebolt** | Fire, 3 | Target any opposing unit: one point of damage per casting, and the unit makes a save roll against it. It dies when what its saves leave reaches its health -- the damage sub-roll Bash's target makes, not Lightning Strike's "any save escapes". |
+| **Higher Ground** | Earth, 5 | Target any opposing army: it subtracts five melee results from its rolls until the beginning of your next turn. |
+
+Both are Dwarves spells (only Dwarves magic pays for them), neither is marked `R` or `C`, and both
+are **cumulative** -- read off the rendered page, where Firebolt's "one" and Higher Ground's "five"
+are printed in red. Higher Ground is Dancing Lights' shape at five. Firebolt's castings add up on
+one unit, so two castings kill a 2-health die that saves nothing, and a single one never kills
+anything bigger than one health, though the target still rolls.
+
 ### House rules this species adds
 
 - **Bash in a dragon attack chooses for you**: the attacking dragon that did the most damage, ties

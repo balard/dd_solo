@@ -1539,7 +1539,8 @@ the notes. The app draws the class shapes until then (invariant 8).
 
 6a has landed: the data. 6b has landed: the seams. 6c has landed: three old rules corrected, in
 three commits. 6d has landed: Roar, Stomp and Bash. 6e has landed: Charge. 6f has landed: the two
-abilities, and the Dwarves are playable. 6g and 6h are still a plan.
+abilities, and the Dwarves are playable. 6g has landed: Firebolt and Higher Ground. 6h is
+still a plan.
 
 Fire & Earth, so **Highland is their own terrain type** (`homeTerrainType` derives it; nothing is
 tabled) and both species abilities are live at home. The faces are in `data/raw/dwarves.faces.txt`
@@ -1963,13 +1964,34 @@ Highland Frontier showed "4 melee counted as maneuver (Mountain Mastery)", the T
 as 8. No console errors. Charge and Bash did not come up in the turns played, so they rest on the
 engine tests, the fuzz, and the log lines rendered in 6d and 6e.
 
-### 6g — Firebolt and Higher Ground
+### 6g — Firebolt and Higher Ground — **landed**
 
 - **Higher Ground** is an `effect` block, Dancing Lights' shape at five: `opposing_army`, subtract 5
   melee, cumulative. No code.
 - **Firebolt** is a handler over 6b's damage sub-roll: N castings, N damage, one save roll.
   `countScales` true (two castings kill a two-health die that saves nothing), and one line in
   greedy's `HANDLER_VALUE`. The validator already accepts an imported species' spells (5e).
+
+### What 6g found
+
+Both golden corpora replay byte-identical and unregenerated; the 200-game and 1000-game fuzz runs
+pass, and so do 1166 tests.
+
+**1. The table's prediction held, with the correction 6b already made.** Higher Ground is an
+`effect` block with no code. Firebolt is a handler of five lines over `damageSubRoll`, the roll 6b
+built for Bash, and not `spellSaveRoll` as the draft had it. `npm run data` reports no spell without
+code behind it.
+
+**2. Greedy prices Firebolt by the same arithmetic.** `diesTo` in `src/ai/spells.ts` is the chance a
+die's own save roll leaves the damage at or above its health. It is zero below the health, which is
+why one casting is worth nothing against anything but a 1-health die.
+
+**3. Two counts were about "the species so far".** The validator and `magic.test.ts` both held the
+data to twenty spells, and the species test to six species spells; both are 22 and 8 now. That is
+the same edit 5e had to make, and the comment says the next species moves it again.
+
+**4. The fuzz casts both within 200 games.** The live fuzz requires every resolvable spell to be
+cast, and it is read from the data, so the two spells joined it on their own.
 
 ### 6h — Presets, exit checks, art
 

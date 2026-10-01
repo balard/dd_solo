@@ -81,6 +81,25 @@ function failsSave(state: GameState, typeId: string): number {
 }
 
 /**
+ * The chance a die dies to `damage` after its own save roll (Firebolt, v2 Phase 6g):
+ * the faces whose saves leave the damage at or above its health. Zero below its health,
+ * whatever it rolls.
+ */
+function diesTo(state: GameState, typeId: string, damage: number): number {
+  const health = unitType(typeId).health
+  if (damage < health) return 0
+  let dies = 0
+  let counted = 0
+  for (const face of unitType(typeId).faces) {
+    const worth = expectedFace(face, 'save', { purpose: { kind: 'save', against: null }, isCounter: false, isSubRoll: true }, state.ruleSet)
+    if (worth.reroll) continue
+    counted += 1
+    if (damage - (worth.share.id + worth.share.normal + worth.share.sai) >= health) dies += 1
+  }
+  return counted === 0 ? 0 : dies / counted
+}
+
+/**
  * How much one result of `type` is worth on this army, from `caster`'s side.
  *
  * The same modifier is worth very different amounts depending on whether anything is
@@ -188,6 +207,12 @@ const HANDLER_VALUE: Readonly<Record<string, HandlerScore>> = {
     const saves = expectedArmy(state, target.player, target.army, 'save').total
     return killValue(armyHere(state, target.player, target.army), count - saves)
   },
+
+  // N damage on one unit: it dies when its saves leave N reaching its health (v2 6g).
+  firebolt: (state, caster, _ref, target, count) =>
+    unitsOf(state, target)
+      .filter((unit) => unit.owner !== caster)
+      .reduce((total, unit) => total + unitValue(unit.typeId, state.ruleSet) * diesTo(state, unit.typeId, count), 0),
 
   // Kills the unit unless it rolls a save.
   lightning_strike: (state, caster, _ref, target) =>

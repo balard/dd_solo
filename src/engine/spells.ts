@@ -33,8 +33,10 @@ import { armyRoll, endGlaresOf, unitRoll, type Effect, type EffectTarget } from 
 import { expectNoEffects, rollArmy, rollUnits, type DieRoll } from './roll'
 import { ALL_RESULT_TYPES, type Modifier } from './pipeline'
 
+import { damageSubRoll } from './subroll'
 import {
   army as armyOf,
+  armyRefOf,
   opponentOf,
   TERRAIN_SLOTS,
   type ArmyRef,
@@ -470,6 +472,24 @@ const lightningStrike: SpellHandler = (state, ctx) => {
 }
 
 /**
+ * Firebolt (v2 Phase 6g): "target any opposing unit. Inflict one point of damage on the
+ * target." Cumulative -- the "one" is printed in red -- so N castings on one unit are N
+ * damage.
+ *
+ * Damage, so the unit "is permitted to make a save roll" (p. 29), and it is the roll
+ * Bash's target makes (`damageSubRoll`, v2 Phase 6b): it dies when its saves leave
+ * damage reaching its health. One point never kills a 2-health die, and still rolls --
+ * the rules give the save roll before anyone does the sum. Not Lightning Strike's roll,
+ * where any save at all escapes.
+ */
+const firebolt: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'units') throw new Error('Firebolt targets a unit')
+  const [target] = ctx.target.unitIds.filter((id) => armyRefOf(state, id) !== null)
+  if (target === undefined) return { state }
+  return { state: damageSubRoll(state, target, ctx.count, 'Firebolt').state }
+}
+
+/**
  * Flash Flood: "reduce that terrain one step unless an opposing army at that terrain
  * generates at least six maneuver results."
  *
@@ -664,6 +684,7 @@ const HANDLERS: Readonly<Record<string, SpellHandler>> = {
   summon_dragon: summonDragon,
   mirage,
   lightning_strike: lightningStrike,
+  firebolt,
   flash_flood: flashFlood,
   wall_of_thorns: wallOfThorns,
 }

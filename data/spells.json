@@ -125,6 +125,19 @@
       "handler": "flashfire"
     },
     {
+      "id": "firebolt",
+      "name": "Firebolt",
+      "element": "fire",
+      "cost": 3,
+      "species": "dwarves",
+      "target": "opposing_unit",
+      "cumulative": true,
+      "reserves": false,
+      "cantrip": false,
+      "text": "Target any opposing unit. Inflict one point of damage on the target.",
+      "handler": "firebolt"
+    },
+    {
       "id": "fiery_weapon",
       "name": "Fiery Weapon",
       "element": "fire",
@@ -193,6 +206,29 @@
             "kind": "add",
             "resultType": "save",
             "amount": 1
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
+    },
+    {
+      "id": "higher_ground",
+      "name": "Higher Ground",
+      "element": "earth",
+      "cost": 5,
+      "species": "dwarves",
+      "target": "opposing_army",
+      "cumulative": true,
+      "reserves": false,
+      "cantrip": false,
+      "text": "Target any opposing army. Subtract five melee results from the target's rolls until the beginning of your next turn.",
+      "effect": {
+        "scope": "army",
+        "modifiers": [
+          {
+            "kind": "subtract",
+            "resultType": "melee",
+            "amount": 5
           }
         ],
         "duration": "caster_next_turn"

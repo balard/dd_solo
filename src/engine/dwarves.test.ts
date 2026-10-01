@@ -941,3 +941,58 @@ describe('Mountain Mastery and Dwarven Might', () => {
     expect(validateState(state)).toEqual([])
   })
 })
+
+// --- Firebolt and Higher Ground (6g) -------------------------------------------
+
+describe('Higher Ground', () => {
+  it('takes five melee off the target army per casting, until the caster’s next turn', () => {
+    const one = cast('higher_ground', 1, { kind: 'army', player: 'p2', army: 'frontier' })
+    expect(one.modifiers).toEqual([{ kind: 'subtract', resultType: 'melee', amount: 5 }])
+    expect(one.expiresAtStartOfTurnOf).toBe('p1')
+    // Cumulative: the "five" is printed in red.
+    expect(cast('higher_ground', 2, { kind: 'army', player: 'p2', army: 'frontier' }).modifiers).toEqual([
+      { kind: 'subtract', resultType: 'melee', amount: 10 },
+    ])
+    expect(spell('higher_ground')).toMatchObject({ species: 'dwarves', element: 'earth', cost: 5, target: 'opposing_army' })
+  })
+})
+
+describe('Firebolt', () => {
+  const firebolt = (face: number, count: number) =>
+    castSpell(board([], [OAK, OAK], rngShowing([OAK], [face])), spell('firebolt'), {
+      caster: 'p1',
+      army: 'frontier',
+      element: 'fire',
+      count,
+      target: { kind: 'units', unitIds: ['p2:0'] },
+    }).state
+
+  it('is one damage per casting, and the target saves against it', () => {
+    const state = firebolt(OAK_MELEE, 2)
+    expect(entries(state, 'sai_sub_roll')).toMatchObject([{ source: 'Firebolt', damage: 2, escaped: [] }])
+    expect(state.units['p2:0']?.location).toEqual({ kind: 'dua' })
+    expect(entries(state, 'units_killed')).toMatchObject([{ unitIds: ['p2:0'] }])
+    expect(validateState(state)).toEqual([])
+  })
+
+  it('kills nothing a single point cannot, though the target still rolls', () => {
+    const state = firebolt(OAK_MELEE, 1)
+    expect(entries(state, 'sai_sub_roll')).toMatchObject([{ source: 'Firebolt', damage: 1, escaped: ['p2:0'] }])
+    expect(state.units['p2:0']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+  })
+
+  it('is survived by a save that covers it', () => {
+    expect(firebolt(OAK_SAVE, 5).units['p2:0']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+  })
+
+  it('scales with castings on one unit, and is the Dwarves’ fire spell', () => {
+    expect(spell('firebolt')).toMatchObject({
+      species: 'dwarves',
+      element: 'fire',
+      cost: 3,
+      target: 'opposing_unit',
+      cumulative: true,
+      countScales: true,
+    })
+  })
+})

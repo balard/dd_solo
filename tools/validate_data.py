@@ -274,10 +274,11 @@ def check_spells():
                     err(f"spell {sid}: unknown result type {m['resultType']}")
 
     # A species spell belongs to an imported species -- checked above against units.json,
-    # which is what tools/species.py puts there. Twenty spells: the starter set's eighteen
-    # and the Coral Elves' two (v2 Phase 5e); a later species' phase moves this number.
-    if len(doc["spells"]) != 20:
-        err(f"expected 20 spells in scope, found {len(doc['spells'])}")
+    # which is what tools/species.py puts there. Twenty-two spells: the starter set's
+    # eighteen, the Coral Elves' two (v2 Phase 5e) and the Dwarves' two (v2 Phase 6g); a
+    # later species' phase moves this number.
+    if len(doc["spells"]) != 22:
+        err(f"expected 22 spells in scope, found {len(doc['spells'])}")
 
 
 def main():
