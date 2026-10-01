@@ -183,10 +183,9 @@ the dice and the opponent.
 > Swallow, Ferry, Wave, Hypnotic Glare); 5d a race draw for any number of species, Coastal Dodge
 > (which flipped them playable) and Defensive Volley, the first non-melee counter-attack; 5e
 > Blizzard and Deluge; 5f a starter and a bestiary preset; 5g the art resolver. House rules are in
-> `RULES-V0.md` section 17, and each slice's findings under Phase 5 in `PLAN-V2.md`. Seven more
-> species' faces sit in `data/raw/` unimported, for later phases.
+> `RULES-V0.md` section 17, and each slice's findings under Phase 5 in `PLAN-V2.md`.
 
-> **v2 Phase 6 (Dwarves) is under way, planned in eight slices in `PLAN-V2.md`.** 6a has landed:
+> **v2 Phase 6 (Dwarves) has landed: a fourth species, playable everywhere.** 6a has landed:
 > the twenty Dwarves dice are in `units.json`, and `playable.ts` keeps them out of every game until
 > 6f builds their abilities -- their four new SAIs (Roar, Stomp, Bash, Charge) are unbuilt. 6b has
 > landed too: the seams, no rule moved -- `counts_as` as a table (`conversionsIn`), a damage
@@ -200,15 +199,17 @@ the dice and the opponent.
 > through the riposte's channel. 6f has landed: Mountain Mastery and Dwarven Might, two rows in
 > `COUNTS_AS_ABILITIES`, and with them **the Dwarves are playable** -- five monster fixtures
 > (`dwarves_*`), and every SAI and ability in the live fuzz. 6g has landed: Firebolt (a handler
-> over the damage sub-roll) and Higher Ground (an `effect` block). 6h (presets, art, the greedy
-> lone-die stall) is left.
+> over the damage sub-roll) and Higher Ground (an `effect` block). 6h has landed: a starter and a
+> bestiary preset, the exit checks, and the art manifest. House rules are in `RULES-V0.md`
+> section 18, and each slice's findings under Phase 6 in `PLAN-V2.md`. Seven more species' faces
+> sit in `data/raw/` unimported.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 4 landed; the four species, Phases 5-8, are a draft). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 6 landed; Goblins and Lava Elves, Phases 7-8, are a draft). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |

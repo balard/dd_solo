@@ -57,7 +57,7 @@ const keptMixed12: SavedForce = { id: 'mine', name: 'Mixed 12', collection: 'sor
 describe('presetChoices', () => {
   it('offers every hand-authored force, lightest first', () => {
     const choices = presetChoices()
-    expect(choices).toHaveLength(26)
+    expect(choices).toHaveLength(28)
 
     const healths = choices.map((c) => c.health)
     expect([...healths].sort((a, b) => a - b)).toEqual(healths)
@@ -78,7 +78,7 @@ describe('presetChoices', () => {
   it('groups by health, since that is what pairs', () => {
     const groups = choiceGroups()
     expect(groups.map((g) => g.health)).toEqual([24, 30, 35])
-    expect(groups.map((g) => g.choices.length)).toEqual([20, 3, 3])
+    expect(groups.map((g) => g.choices.length)).toEqual([20, 4, 4])
   })
 })
 

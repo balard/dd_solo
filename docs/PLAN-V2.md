@@ -8,9 +8,9 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0 to 5 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c, Phase 5
-as 5a to 5g), each with its findings below. **Phase 6 (Dwarves) is planned in slices**; Phases 7
-and 8 are still a draft, with predictions where V1 has findings.
+of work*. **Phases 0 to 6 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c, Phase 5
+as 5a to 5g, Phase 6 as 6a to 6h), each with its findings below. Phases 7 and 8 are still a draft,
+with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
 collection, win dice, dragons and terrains, and raise the force cap to 24 and then 36 at set
@@ -71,7 +71,7 @@ start.
 |                              |
 3  The schematic board [landed] 5  Coral Elves [landed]   (the race pipeline, first run)
 |                              |
-4  The army builder [landed]   6  Dwarves [planned]
+4  The army builder [landed]   6  Dwarves [landed]
                                |
                                7  Death magic, then Goblins
                                |
@@ -1535,12 +1535,12 @@ rather than waiting for the resolver to report them as ambiguous.
 folders, which is the owner's call to make; the candidates were checked offline against the paths in
 the notes. The app draws the class shapes until then (invariant 8).
 
-## Phase 6 — Dwarves — **in progress**
+## Phase 6 — Dwarves — **landed**
 
 6a has landed: the data. 6b has landed: the seams. 6c has landed: three old rules corrected, in
 three commits. 6d has landed: Roar, Stomp and Bash. 6e has landed: Charge. 6f has landed: the two
-abilities, and the Dwarves are playable. 6g has landed: Firebolt and Higher Ground. 6h is
-still a plan.
+abilities, and the Dwarves are playable. 6g has landed: Firebolt and Higher Ground. 6h has
+landed: the presets, the exit checks and the art manifest. **All of Phase 6 has landed.**
 
 Fire & Earth, so **Highland is their own terrain type** (`homeTerrainType` derives it; nothing is
 tabled) and both species abilities are live at home. The faces are in `data/raw/dwarves.faces.txt`
@@ -1904,7 +1904,9 @@ and a Counter's riposte are one number assigned at `assign_attack_riposte`. The 
 { melee }` beside `riposte`, so the line can say "Charge: 1 melee straight back + 4 from Counter".
 `counterSuppressed` is set without Surprise's log line.
 
-**7. A greedy stall that Charge did not cause.** In 500 temporary greedy-against-passive games on
+**7. A greedy stall that Charge did not cause** -- *corrected in 6h: a dead position, not a
+greedy bug. Passive's last dice sit in Reserves after a Roar and never come out, and one die
+cannot make two captures.* In 500 temporary greedy-against-passive games on
 Behemoth boards, 10 hit the cap. With Charge switched off, 6 still did, with 0 charges in them. Each
 is the same endgame: greedy's last die captures its home's eighth face, retreats "to hunt" because
 passive's last die hides in Reserves, reinforces back to the same terrain, and repeats. Greedy never
@@ -1993,7 +1995,7 @@ the same edit 5e had to make, and the comment says the next species moves it aga
 **4. The fuzz casts both within 200 games.** The live fuzz requires every resolvable spell to be
 cast, and it is read from the data, so the two spells joined it on their own.
 
-### 6h — Presets, exit checks, art
+### 6h — Presets, exit checks, art — **landed**
 
 - `dwarves_starter` (the starters' class-and-size layout, 30 health) and `dwarves_bestiary` (every
   monster and every large die, 35), as 5f did.
@@ -2001,11 +2003,57 @@ cast, and it is read from the data, so the two spells joined it on their own.
   are the two new values most likely to outbid walking a terrain home.
 - **Fix greedy's lone-die stall** (found in 6e): its last die holds its home eighth face, retreats
   to hunt a die hiding in Reserves, reinforces back to the same terrain, and repeats. It never goes
-  for a second terrain. Behemoth boards hit it in about 1 game in 80.
+  for a second terrain. Behemoth boards hit it in about 1 game in 80. *(6h: not a greedy bug -- a
+  dead position against an opponent that never reinforces; see "What 6h found".)*
 - Exit criterion as for every species (above). The V1 goldens move only if 6c's riposte fix moved
   them, and the commit that regenerated them says so.
 - **Art**: the pins are already in. After import the resolver should report no ambiguity; running
   `npm run art` to download is the owner's step, as in 5g.
+
+### What 6h found
+
+Both golden corpora replay byte-identical and unregenerated. 1167 tests pass, and the
+1000-game fuzz passes.
+
+**1. The presets are the pattern, die for die.** `dwarves_starter` is the starters' class-and-size
+layout in Dwarves dice (30 health: 10 / 11 / 9), and `dwarves_bestiary` holds every monster and every
+large die (35: 14 / 14 / 7). Both were generated from the Coral Elves' lists by class and size, so
+neither is a hand count. Neither is a mirror, so both appear on the start screen and pair by health.
+The preset-count tests moved again: 28 presets, and four of each of 30 and 35 health.
+
+**2. The 6e "greedy stall" was a dead position, not a greedy bug.** Re-run on the playable
+Dwarves, 7 of 700 greedy-against-passive monster games capped. Every one ended the same way: greedy
+had one die on the board, and every die passive had left was in Reserves, sent there by a Roar (or a
+Seize). PassiveAI never reinforces, so those dice never come back out. One die cannot hold two
+captures, and nothing on a Behemoth board can attack a Reserve Army: no missile at Reserves without
+a Tower, and no magic face to cast with. No move greedy makes wins that, so nothing in greedy was
+changed. The retreat-and-return loop 6e saw is greedy trying the only moves left. It is a fact
+about an opponent that never leaves Reserves, which a human does not do, and Roar is new in making
+it reachable. The section 6e write-up keeps its finding with this correction.
+
+**3. Greedy against passive and against itself, with Dwarves on both sides, finishes every game.**
+200 games over the starter and bestiary mirrors all ended in a win. Greedy cast Firebolt 35 times
+and Higher Ground 4, and charged 12 times, so neither spell nor Charge outbids walking a terrain
+home. `greedy.test.ts` holds 5f's check for the Dwarves: the starter and bestiary against each other
+species, both ways, seeds 1 to 3, against passive and against greedy.
+
+**4. Art: all 140 faces resolve, offline.** The images were already in the gitignored
+`assets/faces/dwarves`, which the owner had mirrored with the 6a pins. So `fetch_faces.py
+--offline` built the manifest from that local copy, with nothing downloaded: 560 unit faces mapped,
+140 of them Dwarves, none ambiguous or missing. In the browser every Dwarves tile draws its
+portrait. The tiles that looked blank in a first screenshot had not finished loading.
+
+**Phase 6's exit criterion, checked.**
+- Every Dwarves mirror finishes in self-play (6f).
+- Every SAI, ability and spell fires within the 200-game live fuzz, except Bash's dragon sentence,
+  which a named test drives (6f).
+- A mixed force with Dwarves in it plays in one live-fuzz game in five.
+- The V0 goldens never moved. The V1 goldens moved once, in 6c, for the riposte rule, and the
+  commit says so.
+- The one check not made is a full Dwarves starter game played by hand in the browser. The pieces
+  were each seen there -- Mountain Mastery on a live roll card, the art, the new log lines and the
+  Charge question rendered from real entries -- but no game was played to its end. It is the
+  first thing to playtest.
 
 ### Deliberately out of this phase
 
