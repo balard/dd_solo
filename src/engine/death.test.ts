@@ -130,6 +130,32 @@ describe('killUnits under dua: active', () => {
     expect(validateState(after)).toEqual([])
   })
 
+  it('still rolls for a sleeping or hypnotized Phoenix, which is already dead when it rolls', () => {
+    // v2 Phase 7a, `RULES-V0.md` section 16: Replanting refuses a die that cannot be
+    // rolled, because it rolls one still in play. Rise from the Ashes rolls one that is
+    // already dead, and Sleep and Hypnotic Glare are about a die in play.
+    for (const status of ['asleep', 'hypnotized'] as const) {
+      const rng = rises(PHOENIX)
+      const base = board(DUA_RULES, rng, { id: 'phoenix', typeId: PHOENIX, at: frontier })
+      const state: GameState = {
+        ...base,
+        effects: [
+          {
+            source: 'Sleep',
+            target: { kind: 'unit', unitId: 'phoenix' },
+            modifiers: [],
+            [status]: true,
+            expiresAtStartOfTurnOf: 'p1',
+          },
+        ],
+      }
+
+      const { risen } = killUnits(state, ['phoenix'])
+
+      expect(risen, status).toEqual(['phoenix'])
+    }
+  })
+
   it('leaves it dead on any other face -- the condition is a Rise face, not an ID', () => {
     // Face 0 of the Phoenix is its ID. Reading the trigger as "rolls an ID" would
     // pass a test that only ever checked the successful case.

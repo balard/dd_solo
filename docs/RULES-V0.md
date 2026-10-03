@@ -930,12 +930,15 @@ Firewalker unit."
   *asked* about the exchange with the roll in front of them. A hit is never offered, and a miss
   still is. That is every option either order could give, so there is nothing left to decide by
   house rule. Until 9b the exchange was automatic, and "Replanting first" was a house rule.
-- **A sleeping Treefolk could not come up until the Goblins.** Sleep was on Treefolk dice only and
-  targets an opponent's unit, so no Treefolk was ever asleep. v2 Phase 7a imported the Cannibal,
-  which sleeps and nets, so "does a sleeping die replant?" now has a case, and it is **open**:
-  `killUnits` rolls Replanting and Rise from the Ashes without asking `cannotRoll`. That was
-  already reachable for a sleeping Phoenix (v1) and a hypnotized Treefolk (5b). See `PLAN-V2.md`,
-  Phase 7, *What 7a found*; `species.test.ts` pins the one foreign die that sleeps.
+- **A die that cannot be rolled does not replant; a Phoenix in the same state still rises**
+  (v2 Phase 7a). Replanting rolls a Treefolk "before being moved to the DUA", while it still stands
+  on the terrain under its status, so a sleeping, netted or hypnotized one fails and draws nothing:
+  section 11's rule for a die rolling for its life. Rise from the Ashes rolls a die that is
+  already dead, and those statuses are about a die in play, so it still rolls. A glaring die
+  replants, as it rolls in any unit roll. **A house rule**, and a correction: this used to read
+  "a sleeping Treefolk cannot come up, because Sleep is Treefolk-only and aims at opponents",
+  which was false from the day the Treefolk monster mirrors existed -- a Satyr sleeps a Satyr.
+  The v1 corpus had one such death (game 13), re-recorded with this as the reason.
 
 ## 17. Coral Elves (v2 Phase 5)
 

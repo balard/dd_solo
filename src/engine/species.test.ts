@@ -451,6 +451,40 @@ describe('Replanting', () => {
     drawsNothing(board(SPECIES_RULES, 'swampland_tower', seedRolling(OAKLING, idFace(OAKLING)), oakAt(reserve), other))
   })
 
+  /**
+   * v2 Phase 7a: a die that cannot be rolled does not replant. It is still on the terrain
+   * under its status when Replanting rolls ("before being moved to the DUA"), so it fails
+   * and draws nothing, section 11's rule for a die rolling for its life. Each of these
+   * seeds an ID, so a roll that should not have happened would rescue the die.
+   */
+  const withStatus = (state: GameState, status: 'asleep' | 'hypnotized' | 'glaring'): GameState => ({
+    ...state,
+    effects: [
+      {
+        source: 'Sleep',
+        target: { kind: 'unit', unitId: 'o' },
+        modifiers: [],
+        [status]: true,
+        expiresAtStartOfTurnOf: 'p2',
+      },
+    ],
+  })
+  const replantable = () =>
+    board(SPECIES_RULES, 'swampland_tower', seedRolling(OAKLING, idFace(OAKLING)), oakAt(at('frontier')), other)
+
+  it('does not fire for a sleeping or netted Treefolk, and draws nothing for it', () => {
+    drawsNothing(withStatus(replantable(), 'asleep'))
+  })
+
+  it('does not fire for a hypnotized Treefolk either', () => {
+    drawsNothing(withStatus(replantable(), 'hypnotized'))
+  })
+
+  it('still fires for a glaring Treefolk, which sits out army rolls and no other', () => {
+    const outcome = killUnits(withStatus(replantable(), 'glaring'), ['o'])
+    expect(outcome.replanted).toEqual(['o'])
+  })
+
   it('does not fire with the flag off -- no draw, which is what keeps the goldens', () => {
     drawsNothing(board(SPELL_RULES, 'swampland_tower', seedRolling(OAKLING, idFace(OAKLING)), oakAt(at('frontier')), other))
     drawsNothing(board(V0_RULES, 'swampland_tower', seedRolling(OAKLING, idFace(OAKLING)), oakAt(at('frontier')), other))
@@ -534,13 +568,12 @@ describe('Replanting', () => {
   })
 
   /**
-   * "Does a sleeping Treefolk replant?" could not come up while Sleep was only on dice of
-   * the species that has Replanting, since it targets an *opponent's* unit. v2 Phase 7a
-   * ended that: the Goblins' Cannibal sleeps, and nets, a Treefolk. Pinned here so the
-   * question stays visible until it is answered (`PLAN-V2.md`, Phase 7, *What 7a found*);
-   * the answer is a rule, not a test edit.
+   * "Does a sleeping Treefolk replant?" was held to be unreachable, since Sleep was only on
+   * Treefolk dice and aims at an opponent. That was never true -- a Satyr mirror has one
+   * Treefolk sleep another -- and v2 Phase 7a answered it (the tests above: it does not).
+   * The Cannibal is the first die of another species that sleeps, and nets, a Treefolk.
    */
-  it('meets Sleep once the Goblins can sleep a Treefolk (open since v2 Phase 7a)', () => {
+  it('meets Sleep from a Treefolk mirror, and from the Cannibal of the Goblins', () => {
     const sleepers = UNIT_TYPES.filter((type) =>
       type.faces.some((face) => face.icon === 'SAI' && face.sai === 'Sleep'),
     )

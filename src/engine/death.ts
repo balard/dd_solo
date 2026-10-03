@@ -30,7 +30,7 @@ import { spell } from '../data/spells'
 
 import { applyDamage } from './damage'
 import { bury } from './dua'
-import { regrows } from './effects'
+import { cannotRoll, regrows } from './effects'
 import { faceOf, rollFaces, type DieRoll } from './roll'
 import { rollDie } from './rng'
 import { terrainHas, unitHasAbility } from './species'
@@ -156,6 +156,11 @@ const hasRiseFace = (unit: UnitInstance): boolean =>
  * order the player happened to type into `assign_damage`. Both replay identically,
  * since the action is recorded either way; the canonical one is chosen so that two
  * players naming the same units in different orders get the same game.
+ *
+ * **A sleeping or hypnotized Phoenix still rolls** (v2 Phase 7a, `RULES-V0.md` section
+ * 16), unlike a Treefolk at Replanting: "whenever a unit with this SAI is killed or
+ * buried, roll the unit" rolls a die that is already dead, and those statuses are about
+ * a die in play. So this asks no `cannotRoll`, deliberately.
  */
 function riseFromTheAshes(state: GameState, unitIds: readonly UnitId[]): DeathOutcome {
   const candidates = Object.values(state.units).filter(
@@ -238,6 +243,11 @@ export function buryEntries(
  *    `rollFaces` and a look at the icon, never a resolved roll.
  *  - **Where the unit is standing**: a unit killed in the Reserve Area -- a Tower's
  *    missile -- is at no terrain, which contains no water.
+ *  - **A die that cannot be rolled does not replant** (v2 Phase 7a): asleep, netted or
+ *    hypnotized, it is still on the terrain under its status when this roll is made, so
+ *    it fails and draws nothing -- section 11's sub-roll rule, `RULES-V0.md` section 16.
+ *    A glaring die still rolls, as it does in any unit roll. Rise from the Ashes is the
+ *    other way on purpose: it rolls a die that is already dead.
  *
  * Board order, like `riseFromTheAshes`, and a unit that does not qualify draws nothing.
  * Gated on `speciesAbilities` alone (via `unitHasAbility`), not on `dua`: it moves a unit
@@ -252,7 +262,8 @@ function replanting(state: GameState, unitIds: readonly UnitId[]): DeathOutcome 
       unitIds.includes(unit.id) &&
       unit.location.kind === 'terrain' &&
       unitHasAbility(state.ruleSet, unit, 'Replanting') &&
-      terrainHas(state, unit.location.slot, 'water'),
+      terrainHas(state, unit.location.slot, 'water') &&
+      !cannotRoll(state, unit.id),
   )
   if (candidates.length === 0) return none
 

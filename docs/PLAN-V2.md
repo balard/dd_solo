@@ -2195,20 +2195,27 @@ Goblins force that throws and a built force with a Cutthroat that gets the sente
 shorten it; 7d turns it back into "all playable". Nothing else counted species: the builder
 palette, the start screen and the fuzz all read `PLAYABLE_SPECIES`, which still lists four.
 
-**2. The fourth was a fact about the data that stopped being true, and behind it is an open
-rule.** `species.test.ts` checked that "does a sleeping Treefolk replant?" could not come up,
-because Sleep was only on Treefolk dice and aims at opponents. The Cannibal sleeps (and nets, which
-writes the same status) any die, Treefolk included. Reading `death.ts` for the answer found there
-is none: **neither Replanting nor Rise from the Ashes asks `cannotRoll`**, so a dying die that may
-not be rolled rolls anyway. That was already reachable before this slice -- a Treefolk Sleep on a
-Phoenix since v1, and a Coral Elf's Hypnotic Glare on a Treefolk at water since 5b -- and nothing
-says whether it is a reading or an omission. Section 11's sub-roll rule ("a die that cannot be
-rolled fails and draws nothing") would answer it one way; "the effect ends with the unit's death"
-the other. **Not decided here**: the test now pins the one foreign die that sleeps, and the answer
-is a rule fix of its own before 7c (6c's shape: its own commit), replayed against the v1 corpus --
-whose games name Sleep and the Phoenix -- to say whether a golden moves.
+**2. The fourth was a fact about the data that stopped being true, and behind it was an
+unanswered rule.** `species.test.ts` checked that "does a sleeping Treefolk replant?" could not
+come up, because Sleep was only on Treefolk dice and aims at opponents. The Cannibal sleeps (and
+nets, which writes the same status) any die, Treefolk included. Reading `death.ts` for the answer
+found there was none: **neither Replanting nor Rise from the Ashes asked `cannotRoll`**, so a dying
+die that may not be rolled rolled anyway -- reachable for a sleeping Phoenix since v1 and a
+hypnotized Treefolk at water since 5b, with nothing saying whether it was a reading or an omission.
 
-**3. The art resolver is not run in this slice.** With the Goblins in `units.json`, `npm run art`
+**3. Decided, in its own commit, and the claim was false all along.** The owner chose: a die that
+cannot be rolled **does not replant** (it rolls while still on the terrain under its status, so
+section 11's "fails and draws nothing" applies), and a Phoenix in the same state **still rises**
+(it rolls already dead, and the statuses are about a die in play). A glaring die replants. Replay
+showed the old claim had never held: **v1 game 13 is a Satyr mirror**, where p1's Satyr sleeps a
+p2 Satyr and p2's own Water Drake then kills it at a water home. The recorded game rolled its
+Replanting (a miss); the new rule draws nothing, the dice shift, and replay stops at action 131.
+`v1` was re-recorded for that reason and only that game changed: 184 decisions became 169, and p1
+still wins. The other nineteen are byte-identical. The Treefolk monster mirrors existed since v1
+Phase 1, so the test's premise was a fact about two *species*, checked by a test that never asked
+about one species against itself.
+
+**4. The art resolver is not run in this slice.** With the Goblins in `units.json`, `npm run art`
 would report the seventeen maneuver faces 7f's pins settle; the pins and the manifest are 7f's.
 
 **Deliberately not done.** No fixture, preset or art manifest: a fixture for an unplayable species

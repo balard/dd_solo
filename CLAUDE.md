@@ -857,6 +857,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   the 25 goldens byte-identical, and is a test rather than something the corpus is left to notice.
   Under `'active'` it is where Rise from the Ashes fires, and it is the seam Phase 8's Replanting
   and Phase 6's Fire breath plug into. `buryUnits` is its twin for burial.
+  - **A die that cannot be rolled does not replant, and a Phoenix in that state still rises**
+    (v2 Phase 7a). Replanting rolls a die still on the terrain under its Sleep, Net or Glare, so
+    it fails and draws nothing; Rise from the Ashes rolls one already dead. A Satyr mirror had
+    made the first reachable since v1, and one v1 golden was re-recorded for it.
   - **Replanting runs first, and a replanted unit was never killed** (Phase 8). `DeathOutcome`
     carries three ways out of a death -- `risen` (killed, then moved), `regrown` and `replanted`
     (neither killed at all) -- and `killedIds` / `deathEntries` are what keep the second two out of
