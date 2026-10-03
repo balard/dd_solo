@@ -179,6 +179,25 @@ FACE_ART_VARIANTS = {
     ("dwarves.behemoth", "SAI:Roar"): 1,
     ("dwarves.gargoyle", "SAI:Fly"): 2,
     ("dwarves.roc", "SAI:Fly"): 1,
+    # Goblins (v2 Phase 7f), from the owner's list of remote paths: maneuver variant 1 for
+    # the heavy, light, missile and magic lines and the monsters, 2 for the cavalry. Every
+    # other Goblins face has one image.
+    ("goblins.thug", "MANEUVER"): 1,
+    ("goblins.cutthroat", "MANEUVER"): 1,
+    ("goblins.marauder", "MANEUVER"): 1,
+    ("goblins.cannibal", "MANEUVER"): 1,
+    ("goblins.mugger", "MANEUVER"): 1,
+    ("goblins.ambusher", "MANEUVER"): 1,
+    ("goblins.filcher", "MANEUVER"): 1,
+    ("goblins.death_naga", "MANEUVER"): 1,
+    ("goblins.wardog_rider", "MANEUVER"): 2,
+    ("goblins.wolf_rider", "MANEUVER"): 2,
+    ("goblins.pelter", "MANEUVER"): 1,
+    ("goblins.slingman", "MANEUVER"): 1,
+    ("goblins.trickster", "MANEUVER"): 1,
+    ("goblins.hedge_wizard", "MANEUVER"): 1,
+    ("goblins.death_mage", "MANEUVER"): 1,
+    ("goblins.troll", "MANEUVER"): 1,
 }
 
 # For a name the generator's rule cannot reach at all. Ashbringer is a *large* die,

@@ -8,9 +8,9 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0 to 6 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c, Phase 5
-as 5a to 5g, Phase 6 as 6a to 6h), each with its findings below. Phase 7 (Goblins) is planned as
-slices 7a to 7f; Phase 8 is still a draft, with predictions where V1 has findings.
+of work*. **Phases 0 to 7 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c, Phase 5
+as 5a to 5g, Phase 6 as 6a to 6h, Phase 7 as 7a to 7f), each with its findings below. Phase 8 is
+still a draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
 collection, win dice, dragons and terrains, and raise the force cap to 24 and then 36 at set
@@ -73,7 +73,7 @@ start.
 |                              |
 4  The army builder [landed]   6  Dwarves [landed]
                                |
-                               7  Goblins (Death magic inside)   [planned]
+                               7  Goblins (Death magic inside)   [landed]
                                |
                                8  Lava Elves
 ```
@@ -2063,11 +2063,12 @@ portrait. The tiles that looked blank in a first screenshot had not finished loa
   help in the rolls it reaches; if a later species brings a combination roll counting maneuver, the
   question comes back.
 
-## Phase 7 — Goblins
+## Phase 7 — Goblins — **landed**
 
 7a has landed: the data, and a Replanting rule it uncovered. 7b has landed: the seams. 7c has
 landed: Screech, Poison, Net and Stun. 7d has landed: Regenerate and the two abilities, and the
-Goblins are playable. 7e has landed: the five spells and the Temple. 7f is planned.
+Goblins are playable. 7e has landed: the five spells and the Temple. 7f has landed: the presets,
+the exit checks and the art manifest. **All of Phase 7 has landed.**
 
 Death & Earth, the first species carrying Death. **No terrain type in scope carries Death**
 (Deadland, the one that does, is out), so the Goblins
@@ -2518,7 +2519,7 @@ magic face, which the monster mirrors rarely give; the spell picker is generic o
 and every new kind it meets is `'units'`, `'army'` or `'terrain'`. 7f's starter preset is the
 board for it.
 
-### 7f — Presets, exit checks, art
+### 7f — Presets, exit checks, art — **landed**
 
 - `goblins_starter` and `goblins_bestiary`, generated from the Dwarves' lists by class and size, as
   6h did.
@@ -2535,6 +2536,59 @@ board for it.
   no-ambiguity check over 700 unit faces.
 - Exit criterion as for every species, plus: a Goblins home is always an earth die (a test over
   seeds), a death spell is cast in the live fuzz, and the Death breath is reached live.
+
+### What 7f found
+
+Both golden corpora replay byte-identical and unregenerated. 1225 tests pass, and so does the
+1000-game fuzz.
+
+**1. The presets are the pattern, die for die.** `goblins_starter` (30 health: 10 / 11 / 9) and
+`goblins_bestiary` (35: 14 / 14 / 7) were generated from the Dwarves' lists by class and size, so
+neither is a hand count. The preset counts moved again: 35 on the start screen, five each of 30 and
+35 health.
+
+**2. Greedy finishes everything.** The starter and bestiary against every other species, both
+ways, seeds 1 to 3, against passive and against greedy: 48 games, all won, now in `greedy.test.ts`.
+A temporary sweep of 200 more with Goblins on both sides (starter and bestiary mirrors, against
+passive and against itself) also ended every game with a winner, the longest at 914 decisions --
+so none of the three values the plan worried about stalls a game. What greedy spends: Regenerate
+brought dice back 108 times and took the saves 30; it cast Scent of Fear 54 times, Finger of Death
+13, Decay 3, and Palsy 2,261 castings -- cheap, a Cantrip spell, cast every turn. It never cast
+Soiled Ground: its price is only above nothing where the enemy stands alone, which a 200-game sweep
+of mirrors did not offer. The sweep was deleted.
+
+**3. Art: all 140 faces resolve, offline.** With the pins (maneuver variant 1 for every line but
+the cavalry's), `fetch_faces.py --offline` mapped 700 unit faces with nothing ambiguous or missing,
+from the copy already in `assets/faces/goblins`. In the browser every Goblins tile draws its
+portrait, and the roll strip draws the Net face.
+
+**4. Two games in the browser, to the end.** Goblins starter against the Dwarves starter (greedy):
+a Swampland proposal for the Frontier (earth), a live Net on the counter-attack ("NET · A MANEUVER
+OR BE NETTED", one die escaped, one netted), Swamp Mastery on the arithmetic line, and Foul Stench
+benching the enemy's whole army twice -- then a loss, since the driver let every maneuver through.
+Goblins bestiary against the Treefolk bestiary: a Death Mage's Cantrip offered Palsy beside Stone
+Skin, cast twice at the army it was attacking, which showed its chip ("Palsy −2 melee, −2 missile,
+−2 magic, −2 save") and its line on the save roll ("4 on the dice ± 0 Palsy = 4" -- every save
+there came from a Counter face, and SAI results join at step 8, after step 6's subtractions). A
+full magic action offered Palsy and Decay with water from the Standing Stones; Decay's chip and log
+lines rendered. Poison and Regenerate fired too, and the game ended "You win" on turn 5. No script
+errors in the console; the only errors were the dev server's reconnect attempts from before it was
+running.
+
+**5. One exit check was missing a test, and has one now:** a Goblins home is always an earth die,
+over 60 seeds in both seats, and all three earth types turn up.
+
+**Phase 7's exit criterion, checked.**
+- Every Goblins mirror finishes in self-play (7d), and the starter and bestiary against every other
+  species (7f).
+- Every SAI, ability and spell fires in the live fuzz, within 200 games except Stun's status
+  (1000). Four things random play does not reach are driven by named tests instead: Soiled
+  Ground's burial check, the Death breath, Net's drop against a Tower's missile at Reserves, and
+  the Temple's three readers.
+- A mixed force with Goblins in it plays in one live-fuzz game in five.
+- A Goblins starter game and a bestiary game were played to their end in the browser.
+- The V0 goldens never moved. The V1 goldens moved once, in 7a, for the Replanting rule, and the
+  commit says so.
 
 ### Deliberately out of this phase
 

@@ -193,6 +193,54 @@
         ]
       }
     },
+    "goblins_starter": {
+      "name": "Goblins starter force",
+      "species": "goblins",
+      "armies": {
+        "home": [
+          "goblins.marauder",
+          "goblins.cutthroat",
+          "goblins.thug",
+          "goblins.slingman",
+          "goblins.hedge_wizard"
+        ],
+        "campaign": [
+          "goblins.cannibal",
+          "goblins.filcher",
+          "goblins.wolf_rider",
+          "goblins.ambusher"
+        ],
+        "horde": [
+          "goblins.deadeye",
+          "goblins.leopard_rider",
+          "goblins.trickster",
+          "goblins.wardog_rider",
+          "goblins.pelter"
+        ]
+      }
+    },
+    "goblins_bestiary": {
+      "name": "Goblins bestiary",
+      "species": "goblins",
+      "armies": {
+        "home": [
+          "goblins.cannibal",
+          "goblins.marauder",
+          "goblins.troll",
+          "goblins.death_mage"
+        ],
+        "campaign": [
+          "goblins.death_naga",
+          "goblins.filcher",
+          "goblins.shambler",
+          "goblins.deadeye"
+        ],
+        "horde": [
+          "goblins.harpy",
+          "goblins.leopard_rider"
+        ]
+      }
+    },
     "treefolk_darktree": {
       "name": "Darktree x6",
       "species": "treefolk",

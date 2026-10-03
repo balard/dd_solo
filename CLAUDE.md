@@ -201,10 +201,9 @@ the dice and the opponent.
 > (`dwarves_*`), and every SAI and ability in the live fuzz. 6g has landed: Firebolt (a handler
 > over the damage sub-roll) and Higher Ground (an `effect` block). 6h has landed: a starter and a
 > bestiary preset, the exit checks, and the art manifest. House rules are in `RULES-V0.md`
-> section 18, and each slice's findings under Phase 6 in `PLAN-V2.md`. Six more species' faces
-> sit in `data/raw/` unimported.
+> section 18, and each slice's findings under Phase 6 in `PLAN-V2.md`.
 
-> **v2 Phase 7 (Goblins) is under way, planned in six slices in `PLAN-V2.md`.** 7a has landed: the
+> **v2 Phase 7 (Goblins) has landed: a fifth species, playable everywhere.** 7a has landed: the
 > twenty Goblins dice are in `units.json` -- Death & earth, the first species with no own terrain
 > type -- and `playable.ts` keeps them out of every game until 7d; their five new SAIs (Net,
 > Poison, Regenerate, Screech, Stun) are unbuilt. A die that cannot be rolled no longer
@@ -216,14 +215,15 @@ the dice and the opponent.
 > ability, `duaCap`), and with them **the Goblins are playable** -- five monster fixtures
 > (`goblins_*`) and every SAI and ability in the live fuzz. 7e has landed: Palsy, Decay, Finger of
 > Death, Soiled Ground and Scent of Fear, and the Temple's immunity to an opponent's death magic,
-> dormant since v1 Phase 5e.
+> dormant since v1 Phase 5e. 7f has landed: a starter and a bestiary preset, the exit checks, and
+> the art manifest. Six more species' faces sit in `data/raw/` unimported.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 6 landed; Goblins, Phase 7, under way; Lava Elves, Phase 8, a draft). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 7 landed; Lava Elves, Phase 8, a draft). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |

@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { unitType } from '../data/load'
+import { terrainDie, terrainType, unitType } from '../data/load'
 import { spell, spellResultTypes } from '../data/spells'
 import { expectedArmy } from '../ai/estimate'
 
@@ -23,10 +23,12 @@ import { rollDice, type RngState } from './rng'
 import { meleeAsManeuver } from './pipeline'
 import { saiEffects, type RollContext } from './sai'
 import { targetTasks } from './targeting'
+import { setupGame } from './setup'
 import { capPer24, duaCap } from './species'
 import { castSpell, spellEffect, type SpellContext } from './spells'
 import {
   V0_RULES,
+  V1_RULES,
   type GameState,
   type LogEntry,
   type RuleSet,
@@ -791,5 +793,32 @@ describe('the Temple against death magic', () => {
     expect(killUnits(state, ['p2:0', 'p1:0']).state.turn.burialDue).toEqual([
       { source: 'Soiled Ground', player: 'p1', slot: 'frontier', unitIds: ['p1:0'] },
     ])
+  })
+})
+
+// --- setup (7f) ------------------------------------------------------------------------
+
+describe('a Goblins force at setup', () => {
+  /**
+   * No terrain type in scope carries death, so the Goblins have no own type: their home
+   * is drawn among the dice carrying earth, the element they do share (Phase 2's rule
+   * for a species with no own type). Either seat, over many seeds.
+   */
+  it('always draws an earth die for its home', () => {
+    const elements = (dieId: string) => terrainType(terrainDie(dieId).type).elements
+    const types = new Set<string>()
+    for (let seed = 1; seed <= 60; seed += 1) {
+      for (const [seat, forces] of [
+        ['p1_home', { p1: 'goblins_starter', p2: 'treefolk_starter' }],
+        ['p2_home', { p1: 'dwarves_starter', p2: 'goblins_bestiary' }],
+      ] as const) {
+        const state = setupGame({ seed, forces: { kind: 'named', forces }, ruleSet: V1_RULES })
+        const dieId = state.terrains[seat].dieId
+        expect(elements(dieId), `seed ${seed}, ${seat}: ${dieId}`).toContain('earth')
+        types.add(terrainDie(dieId).type)
+      }
+    }
+    // All three earth types turn up, so it is a draw among them and not one of them.
+    expect([...types].sort()).toEqual(['flatland', 'highland', 'swampland'])
   })
 })
