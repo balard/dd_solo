@@ -210,7 +210,9 @@ the dice and the opponent.
 > Poison, Regenerate, Screech, Stun) are unbuilt. A die that cannot be rolled no longer
 > replants (one v1 golden re-recorded for it). 7b has landed too: the seams, no rule moved --
 > `duaCap`, a turn-level `burialDue` (Stomp moved onto it), a stunned status,
-> `spellResultTypes` as the one wildcard expander, and the Temple's `deathMagicImmune`.
+> `spellResultTypes` as the one wildcard expander, and the Temple's `deathMagicImmune`. 7c has
+> landed: Screech, Poison, Net (Sleep's status under its own name) and Stun -- `RULES-V0.md`
+> section 19.
 
 ## Read these first
 

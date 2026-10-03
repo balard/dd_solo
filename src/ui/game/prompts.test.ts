@@ -42,7 +42,7 @@ import {
   selectModeFor,
   selectableAt,
   sleepingIds,
-  glareStatuses,
+  dieStatuses,
   slotLabel,
 } from './prompts'
 
@@ -1018,6 +1018,47 @@ describe('effectsOnArmy', () => {
   })
 })
 
+describe('Net and Stun on the board (v2 Phase 7c)', () => {
+  const held = () => {
+    const base = fresh()
+    const [netted, stunned] = armyAt(base, 'p2', 'frontier')
+    const state: GameState = {
+      ...base,
+      effects: [
+        { source: 'Net', target: { kind: 'unit', unitId: netted!.id }, modifiers: [], asleep: true, expiresAtStartOfTurnOf: 'p1' },
+        {
+          source: 'Stun',
+          target: { kind: 'unit', unitId: stunned!.id },
+          modifiers: [],
+          stunned: true,
+          anchor: { unitId: stunned!.id, slot: 'frontier' },
+          expiresAtStartOfTurnOf: 'p1',
+        },
+      ],
+    }
+    return { state, netted: netted!, stunned: stunned! }
+  }
+
+  it("calls a netted die netted, locked like a sleeping one; a stunned die may still move", () => {
+    const { state, netted, stunned } = held()
+    expect(dieStatuses(state).get(netted.id)).toBe('netted')
+    expect(dieStatuses(state).get(stunned.id)).toBe('stunned')
+    expect([...sleepingIds(state)]).toEqual([netted.id])
+  })
+
+  it('names both on the army, the stun with its end condition', () => {
+    const { state, netted, stunned } = held()
+    expect(effectsOnArmy(state, 'p2', 'frontier', 'p1')).toEqual([
+      { source: 'Net', what: `${unitType(netted.typeId).name} cannot be rolled or leave`, until: 'your next turn' },
+      {
+        source: 'Stun',
+        what: `${unitType(stunned.typeId).name} sits out its army's rolls`,
+        until: 'your next turn, or until it leaves the terrain',
+      },
+    ])
+  })
+})
+
 describe('Hypnotic Glare on the board', () => {
   /** A glare from a p1 die at the Frontier onto a p2 die there, hand-built (v2 Phase 5c). */
   const glared = () => {
@@ -1037,7 +1078,7 @@ describe('Hypnotic Glare on the board', () => {
 
   it('marks both dice, and neither as asleep -- both may still be moved', () => {
     const { state, victim, source } = glared()
-    expect([...glareStatuses(state)]).toEqual(
+    expect([...dieStatuses(state)]).toEqual(
       expect.arrayContaining([
         [victim.id, 'hypnotized'],
         [source.id, 'glaring'],

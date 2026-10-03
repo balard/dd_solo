@@ -20,7 +20,7 @@ import {
 } from '../../engine/magic'
 import { growthPartners, promotionGain } from '../../engine/dua'
 import { ALL_RESULT_TYPES, type Modifier } from '../../engine/pipeline'
-import { isAsleep, isGlaring, isHypnotized, type Effect } from '../../engine/effects'
+import { isAsleep, isGlaring, isHypnotized, isStunned, type Effect } from '../../engine/effects'
 import { legalDirections, rollsOnTheTable, type TableRoll } from '../../engine/turn'
 import {
   TERRAIN_SLOTS,
@@ -1213,10 +1213,24 @@ export function effectsOnArmy(
 
   // Hypnotic Glare's two statuses (v2 Phase 5c), for the same reason. A hypnotized die
   // carries one effect per die that glared at it; the chip is per die, not per effect.
-  const glare = glareStatuses(state)
+  const glare = dieStatuses(state)
   for (const unit of armyAt(state, player, slot)) {
     const status = glare.get(unit.id)
-    if (status === undefined) continue
+    // A netted die is asleep, and was counted with the sleepers above.
+    if (status === undefined || status === 'netted') continue
+    if (status === 'stunned') {
+      const stun = state.effects.find(
+        (e) => e.target.kind === 'unit' && e.target.unitId === unit.id && e.stunned === true,
+      )
+      out.push({
+        source: stun?.source ?? 'Stun',
+        what: `${unitType(unit.typeId).name} sits out its army's rolls`,
+        until:
+          (stun?.expiresAtStartOfTurnOf === human ? 'your next turn' : "the enemy's next turn") +
+          ', or until it leaves the terrain',
+      })
+      continue
+    }
     const effect = state.effects.find(
       (e) => e.target.kind === 'unit' && e.target.unitId === unit.id && e[status] === true,
     )
@@ -1686,20 +1700,33 @@ function describeTerrainEffect(effect: Effect): string {
  * reason for being unpickable.
  */
 /**
- * Hypnotic Glare's two statuses (v2 Phase 5c), for drawing: a hypnotized die cannot be
- * rolled, a glaring one sits out its army's rolls to keep its glare alive. Neither is
- * asleep -- both may still be picked to move -- so they are a label and a look, never a
- * reason a die cannot be selected. That is `sleepingIds`' job alone.
+ * A die's status, for drawing. Hypnotic Glare's two (v2 Phase 5c): a hypnotized die
+ * cannot be rolled, a glaring one sits out its army's rolls to keep its glare alive.
+ * Stun's (v2 Phase 7c): out of its army's rolls, free to move. None of those is asleep
+ * -- each may still be picked to move -- so they are a label and a look, never a reason
+ * a die cannot be selected. That is `sleepingIds`' job alone.
+ *
+ * `'netted'` is the one that *is* asleep: Net writes Sleep's status under its own name
+ * (`holdUnits`), so `sleepingIds` already locks the die and this only renames it.
  */
-export type GlareStatus = 'hypnotized' | 'glaring'
+export type DieStatus = 'hypnotized' | 'glaring' | 'stunned' | 'netted'
 
-export function glareStatuses(state: GameState): ReadonlyMap<UnitId, GlareStatus> {
-  const out = new Map<UnitId, GlareStatus>()
+export function dieStatuses(state: GameState): ReadonlyMap<UnitId, DieStatus> {
+  const out = new Map<UnitId, DieStatus>()
   for (const unit of Object.values(state.units)) {
-    if (isHypnotized(state, unit.id)) out.set(unit.id, 'hypnotized')
+    if (isAsleep(state, unit.id) && sleepSource(state, unit.id) === 'Net') out.set(unit.id, 'netted')
+    else if (isHypnotized(state, unit.id)) out.set(unit.id, 'hypnotized')
+    else if (isStunned(state, unit.id)) out.set(unit.id, 'stunned')
     else if (isGlaring(state, unit.id)) out.set(unit.id, 'glaring')
   }
   return out
+}
+
+/** Whose Sleep is on a die -- Sleep's or Net's -- for the words, never the rule. */
+function sleepSource(state: GameState, unitId: UnitId): string | undefined {
+  return state.effects.find(
+    (e) => e.target.kind === 'unit' && e.target.unitId === unitId && e.asleep === true,
+  )?.source
 }
 
 export function sleepingIds(state: GameState): ReadonlySet<UnitId> {

@@ -762,6 +762,74 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
    *
    * Smother, and then Fire breath's burial check on the dead.
    */
+  /**
+   * "During a melee attack, the defending army subtracts X save results." (v2 Phase 7c.)
+   * Wave's first sentence and nothing more: no maneuver half.
+   */
+  Screech: (x, ctx) =>
+    isAttack(ctx, 'melee') ? { results: {}, effects: [{ kind: 'screech', amount: x }], reroll: false } : NOTHING,
+
+  /**
+   * "During a melee attack, target X health-worth of units in the defending army. Each
+   * targeted unit makes a save roll. Those that do not generate a save result are killed
+   * and must make another save roll. Those that do not generate a save result on this
+   * second roll are buried." (v2 Phase 7c.)
+   *
+   * Stomp's chain with a save roll first: the same burial check, owed on the turn.
+   */
+  Poison: (x, ctx) =>
+    isAttack(ctx, 'melee')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: x, escape: 'save', fate: 'save_or_bury' }],
+          reroll: false,
+        }
+      : NOTHING,
+
+  /**
+   * "During a melee or missile attack, target up to X health-worth of units in the
+   * defending army. Each targeted unit makes a maneuver roll. Those that do not generate
+   * a maneuver result are netted and may not be rolled or leave the terrain they
+   * currently occupy until the beginning of your next turn. Net does nothing during a
+   * missile attack targeting an opponent's Reserve Army from a Tower on its eighth face.
+   * When saving against an individual targeting effect, Net generates X save results."
+   * (v2 Phase 7c.)
+   *
+   * The Tower exception is not decided here, which sees no board: the targeting queue
+   * drops a Net aimed at a Reserve Army. "Saving against an individual targeting effect"
+   * is every save sub-roll -- a house rule, `RULES-V0.md` section 19: a sub-roll is one
+   * unit rolling for itself, whoever aimed.
+   */
+  Net: (x, ctx) => {
+    if (isAttack(ctx, 'melee') || isAttack(ctx, 'missile')) {
+      return {
+        results: {},
+        effects: [{ kind: 'target_enemy', health: x, escape: 'maneuver', fate: 'net' }],
+        reroll: false,
+      }
+    }
+    if (ctx.isSubRoll === true && ctx.purpose.kind === 'save') return gives('save', x)
+    return NOTHING
+  },
+
+  /**
+   * "During a melee attack, target up to X health-worth of units in the defending army.
+   * The targets make a maneuver roll. Those that do not generate a maneuver result are
+   * stunned and cannot be rolled until the beginning of your turn, unless they are the
+   * target of an individual-targeting effect which forces them to. Stunned units that
+   * leave the terrain through any means are no longer stunned." (v2 Phase 7c.)
+   *
+   * "Your turn" is the caster's next one: the turn it is cast in has already begun.
+   */
+  Stun: (x, ctx) =>
+    isAttack(ctx, 'melee')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: x, escape: 'maneuver', fate: 'stun' }],
+          reroll: false,
+        }
+      : NOTHING,
+
   Stomp: (x, ctx) => {
     if (isAttack(ctx, 'melee')) {
       return {
@@ -930,6 +998,25 @@ export const SAI_TEXT: Readonly<Record<string, string>> = {
     'targeted unit must make a save roll against this damage. Bash also generates save ' +
     "results equal to the targeted unit's melee results. During other save rolls, Bash " +
     'generates X save results.',
+  Screech: 'During a melee attack, the defending army subtracts X save results.',
+  Poison:
+    'During a melee attack, target X health-worth of units in the defending army. Each ' +
+    'targeted unit makes a save roll. Those that do not generate a save result are killed ' +
+    'and must make another save roll. Those that do not generate a save result on this ' +
+    'second roll are buried.',
+  Net:
+    'During a melee or missile attack, target up to X health-worth of units in the ' +
+    'defending army. Each targeted unit makes a maneuver roll. Those that do not generate ' +
+    'a maneuver result are netted and may not be rolled or leave the terrain they ' +
+    'currently occupy until the beginning of your next turn. Net does nothing during a ' +
+    "missile attack targeting an opponent's Reserve Army from a Tower on its eighth face. " +
+    'When saving against an individual targeting effect, Net generates X save results.',
+  Stun:
+    'During a melee attack, target up to X health-worth of units in the defending army. ' +
+    'The targets make a maneuver roll. Those that do not generate a maneuver result are ' +
+    'stunned and cannot be rolled until the beginning of your turn, unless they are the ' +
+    'target of an individual-targeting effect which forces them to. Stunned units that ' +
+    'leave the terrain through any means are no longer stunned.',
 }
 
 /** The SAI names `sai: 'results'` resolves. Anything else on a face is inert. */
@@ -1046,11 +1133,16 @@ export function saiMaxResults(face: SaiFace, resultType: ResultType, ruleSet: Ru
   if (ruleSet.sai === 'inert') return 0
   if (handlerFor(face.sai, ruleSet) === undefined) return 0
 
+  // Sub-rolls too (v2 Phase 7c): Net's saves exist only in one, and Wild Growth's save
+  // share did on every rung without dragons -- both were under the ceiling before.
   let best = 0
   for (const purpose of purposesFor(ruleSet)) {
     for (const isCounter of [false, true]) {
-      const outcome = saiEffects(face, { purpose, isCounter }, ruleSet)
-      best = Math.max(best, outcome.results[resultType] ?? 0)
+      for (const isSubRoll of [false, true]) {
+        const context: RollContext = isSubRoll ? { purpose, isCounter, isSubRoll } : { purpose, isCounter }
+        const outcome = saiEffects(face, context, ruleSet)
+        best = Math.max(best, outcome.results[resultType] ?? 0)
+      }
     }
   }
   return best

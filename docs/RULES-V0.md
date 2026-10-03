@@ -1119,3 +1119,39 @@ anything bigger than one health, though the target still rolls.
   rules end an army's effects "if there are no units remaining in the army ... checked at the end
   of each action", and the Bash is an action; the attack's totals are counted after it. So a Fiery
   Weapon on an army a Bash just emptied adds nothing to that army's attack. The dice still count.
+
+## 19. Goblins (v2 Phase 7)
+
+Death & Earth. No terrain type in scope carries death, so the Goblins have no own type, and their
+home is drawn among the twelve dice carrying earth (Swampland, Highland, Flatland) -- Phase 2's rule
+for a species with no own type. The dice are in the data from 7a; the species is playable from 7d.
+
+### The SAIs (7c)
+
+| SAI | Applies | What it does here |
+|---|---|---|
+| **Screech** | Melee | The defending army subtracts X save results: Wave's melee half and nothing else. Its own line in the arithmetic ("− 4 Screech"), and it applies to a counter-attack's save roll and to a Charge's combination roll, as Wave does. |
+| **Poison** | Melee | X health-worth of the defenders roll saves; those with none are killed, and the dead roll saves again, and those with none are buried. Stomp's chain with a save first: the same burial check, owed on the turn. "Target X" is p. 32's forced maximum, which every enemy-targeting SAI is held to anyway. |
+| **Net** | Melee, missile, individual | Up to X health-worth roll maneuver; those with none are **netted** until the roller's next turn: they may not be rolled or leave the terrain. Does nothing in a missile attack on a Reserve Army. In a save sub-roll: X saves. |
+| **Stun** | Melee | Up to X health-worth roll maneuver; those with none are **stunned** until the roller's next turn: they sit out every army roll, and only that. A sub-roll still rolls them, they may retreat or be moved, and leaving the terrain ends the stun. |
+
+- **Netted is asleep, under Net's name.** The two sentences are the same ("may not be rolled or
+  leave the terrain ... until the beginning of your next turn"), so a netted die is held by every
+  rule that holds a sleeping one -- the Retreat Step, the free moves, Path -- and fails a sub-roll
+  without a die drawn. The board says "netted".
+- **"Until the beginning of your turn" is the roller's next turn** for Stun: the turn it is cast in
+  has already begun. On a counter-attack the roller is the defending player, as for Sleep.
+- **A stunned Treefolk does not replant** (section 16's rule): Stun lets through only a roll an
+  individual-targeting effect forces, and Replanting is not one.
+
+### House rules this species adds
+
+- **Net's "when saving against an individual targeting effect" is every save sub-roll** (owner's
+  decision): a Bullseye or Double Strike target's roll, Lightning Strike's, Firebolt's, a Bashed
+  die's, Poison's two rolls and any burial check. A sub-roll is by definition one unit rolling for
+  itself, and splitting them by who aimed would ask a second question of one roll. An army's save
+  roll is not one: a Net face on it gives nothing.
+- **Net in a missile attack on a Reserve Army is dropped from the queue, not asked about.** "Net
+  does nothing during a missile attack targeting an opponent's Reserve Army from a Tower" -- and a
+  missile at Reserves is only ever a Tower's, so the queue drops a Net task aimed at one, the way
+  it drops a task that can take nothing.

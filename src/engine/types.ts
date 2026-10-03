@@ -314,6 +314,9 @@ export interface PendingSaves {
    * Omitted when no Wave was rolled.
    */
   readonly wave?: number
+  /** Screech (v2 Phase 7c): Wave's melee half, in its own field so the arithmetic line
+   *  names it. Omitted when no Screech was rolled. */
+  readonly screech?: number
 }
 
 /**
@@ -1600,9 +1603,10 @@ export type LogEntry =
       readonly toReserve?: true
       /**
        * What failing costs, when it is not death: Dragon Fire's dice are already dead,
-       * and a failed save buries them. Omitted means "or die".
+       * and a failed save buries them. Net and Stun (v2 Phase 7c) hold a failure where it
+       * stands. Omitted means "or die".
        */
-      readonly fate?: 'bury'
+      readonly fate?: 'bury' | 'net' | 'stun'
       /**
        * Damage the die was rolling saves against (v2 Phase 6b, `damageSubRoll`): it
        * survives when its saves leave less than its health, not on any save at all.

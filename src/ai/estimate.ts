@@ -120,9 +120,15 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
         // Swallow's one die has no health budget; the die it takes rolls its ID one
         // time in six or ten, so it is counted as a likely kill of a middling die.
         if (effect.one === true) targeted += SWALLOW_WORTH
+        // Net and Stun (v2 Phase 7c) hold what they catch rather than killing it: out of
+        // the save roll that follows and the counter-attack, which is worth something, but
+        // the dice are back next turn. Half a kill of what fails the roll.
+        else if (effect.fate === 'net' || effect.fate === 'stun') targeted += effect.health / 4
         else targeted += effect.escape === 'none' ? effect.health : effect.health / 2
         break
+      // Screech (v2 Phase 7c) is Wave's melee half: saves off the roll that answers.
       case 'wave':
+      case 'screech':
         wave += effect.amount
         break
       case 'choke':

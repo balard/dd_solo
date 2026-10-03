@@ -254,8 +254,15 @@ export type RollEffectBody =
        * no death trigger. `'save_or_bury'` is Stomp's: killed, and then the dead roll
        * saves, and those that generate none are buried -- Fire breath's check, rolled a
        * machine step later so an Accelerated Growth exchange is settled first.
+       * `'save_or_bury'` is Poison's too (v2 Phase 7c), after a save roll where Stomp's
+       * is a maneuver roll.
+       *
+       * `'net'` and `'stun'` (v2 Phase 7c) are a status rather than a death. Net's is
+       * Sleep's word for word -- "may not be rolled or leave the terrain" -- so it writes
+       * `asleep` under Net's name; Stun's keeps the die out of army rolls only, and ends
+       * when it leaves the terrain (`Effect.stunned`, anchored on the die).
        */
-      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury'
+      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury' | 'net' | 'stun'
       /**
        * Where a target that escaped ends up. Omitted means "where it was standing",
        * which is every escape but Seize's.
@@ -345,6 +352,13 @@ export type RollEffectBody =
    * (`PendingSaves.wave`) or is read straight off the marcher's dice.
    */
   | { readonly kind: 'wave'; readonly amount: number }
+  /**
+   * Screech (v2 Phase 7c): "during a melee attack, the defending army subtracts X save
+   * results" -- Wave's melee half and nothing else. Its own kind, and its own field on
+   * the parked save roll (`PendingSaves.screech`), so the arithmetic line names the SAI
+   * that did it: a shared channel is a line that says "- 4 Wave" about a Harpy.
+   */
+  | { readonly kind: 'screech'; readonly amount: number }
   /**
    * Hypnotic Glare (v2 Phase 5c): every defender whose save die came up an ID is
    * hypnotized, and none of their results count. Delayed, like Choke -- the question is

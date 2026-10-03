@@ -424,9 +424,9 @@ describe('the rungs of ruleSet.sai', () => {
     // v2 Phase 5a: the Coral Elves' six, transcribed ahead of their handlers. A slice
     // that builds one moves it out of here, and 5c built all six. v2 Phase 6a: the
     // Dwarves' four, the same way -- 6d built Roar, Stomp and Bash, and 6e Charge.
-    // v2 Phase 7a: the Goblins' five. 7c builds Net, Poison, Screech and Stun, and 7d
-    // Regenerate.
-    const deferred = new Set<string>(['Net', 'Poison', 'Regenerate', 'Screech', 'Stun'])
+    // v2 Phase 7a: the Goblins' five. 7c built Net, Poison, Screech and Stun, and 7d
+    // builds Regenerate.
+    const deferred = new Set<string>(['Regenerate'])
     const live = new Set(LIVE_SAIS)
     const targeting = new Set(TARGETING_SAIS)
 
@@ -440,8 +440,8 @@ describe('the rungs of ruleSet.sai', () => {
     // all quote it, and nothing else would notice it going stale. Each Phase 4 slice
     // moves names from `deferred` into `TARGETING_SAIS` and edits these two numbers.
     expect(live.size, 'SAIs live under sai: results').toBe(15)
-    expect(targeting.size, 'targeting SAIs built so far').toBe(20)
-    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(5)
+    expect(targeting.size, 'targeting SAIs built so far').toBe(24)
+    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(1)
     expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(0)
 
     for (const name of names) {
@@ -508,10 +508,21 @@ describe('saiMaxResults', () => {
   /** An unclaimed name is asked about here before `saiEffects` gets to refuse it, so
    *  the bound has to answer rather than throw. */
   it('answers zero for an unimplemented SAI instead of throwing', () => {
-    for (const name of ['Flame', 'Cantrip', 'Wild Growth']) {
+    for (const name of ['Flame', 'Cantrip']) {
       expect(() => saiMaxResults(sai(name), 'save', FULL_RULES), name).not.toThrow()
       expect(saiMaxResults(sai(name), 'save', FULL_RULES), name).toBe(0)
     }
+  })
+
+  /**
+   * v2 Phase 7c: the bound asks about sub-rolls too. Net's saves exist only there, and
+   * Wild Growth's save share did on every rung without dragons -- this test used to pin
+   * Wild Growth at 0 under `FULL_RULES`, which was the under-bound, not the rule.
+   */
+  it('counts what a face generates only in a sub-roll: Wild Growth and Net', () => {
+    expect(saiMaxResults(sai('Wild Growth'), 'save', FULL_RULES)).toBe(4)
+    expect(saiMaxResults(sai('Net'), 'save', FULL_RULES)).toBe(4)
+    expect(saiMaxResults(sai('Net'), 'melee', FULL_RULES)).toBe(0)
   })
 })
 

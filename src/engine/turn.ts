@@ -756,6 +756,7 @@ function withSaves(combat: CombatState, saves: PendingSaves, next: Partial<Pendi
       ...(merged.charge === true ? { charge: true as const } : {}),
       ...(merged.allocation !== undefined ? { allocation: merged.allocation } : {}),
       ...(merged.wave !== undefined && merged.wave > 0 ? { wave: merged.wave } : {}),
+      ...(merged.screech !== undefined && merged.screech > 0 ? { screech: merged.screech } : {}),
     },
   }
 }
@@ -924,6 +925,10 @@ function taskHasWork(
 
   switch (task.kind) {
     case 'enemy':
+      // "Net does nothing during a missile attack targeting an opponent's Reserve Army
+      // from a Tower on its eighth face" (v2 Phase 7c): a Reserve Army stands on no
+      // terrain to be held on, and a missile at Reserves is only ever a Tower's.
+      if (task.fate === 'net' && spec.defenderSlot === 'reserve') return false
       if (task.one === true) return army.length > 0
       return damageOptions(army, task.health).required > 0
     case 'sleep':
@@ -1760,6 +1765,11 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
   const doomed = unitIds.filter((id) => !escaped.includes(id))
   if (doomed.length === 0) return dropHeadTask(rolled)
 
+  // Net and Stun (v2 Phase 7c): those that failed are held, not killed.
+  if (task.fate === 'net' || task.fate === 'stun') {
+    return dropHeadTask(holdUnits(rolled, spec, task.sai, task.fate, doomed))
+  }
+
   // "The targets are killed and buried" is two steps because the rules are two, and a
   // Phoenix rolls Rise from the Ashes at each of them.
   const outcome =
@@ -1789,6 +1799,44 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
   }
 
   return dropHeadTask(dead)
+}
+
+/**
+ * Net's and Stun's failures (v2 Phase 7c), one effect per die, in board order, until the
+ * roller's next turn -- "your" being whoever rolled the face, the defender on a
+ * counter-attack, as for Sleep.
+ *
+ * Net writes **Sleep's status** under Net's name: "may not be rolled or leave the
+ * terrain" is Sleep's sentence, and every check that keeps a sleeping die in place
+ * (the Retreat Step, the free moves, Path, `RandomAI`) then holds a netted one with no
+ * edit of its own. Stun writes `stunned`, anchored on the die, so leaving the terrain
+ * ends it. Both target dice at a terrain: a melee attack's, or a missile's the queue
+ * did not drop.
+ */
+function holdUnits(
+  state: GameState,
+  spec: AttackSpec,
+  sai: string,
+  fate: 'net' | 'stun',
+  unitIds: readonly UnitId[],
+): GameState {
+  const slot = requireTerrainTarget(spec.defenderSlot)
+  return inBoardOrder(state, unitIds).reduce<GameState>(
+    (next, unitId) =>
+      castEffect(
+        next,
+        spec.attacker,
+        {
+          source: sai,
+          target: { kind: 'unit', unitId },
+          modifiers: [],
+          ...(fate === 'net' ? { asleep: true as const } : { stunned: true as const, anchor: { unitId, slot } }),
+          expiresAtStartOfTurnOf: spec.attacker,
+        },
+        { target: spec.defender, slot, unitId },
+      ),
+    state,
+  )
 }
 
 /** Roar's targets, sent home. Seize's `moveEscapees` for dice that rolled nothing. */
@@ -2224,6 +2272,8 @@ function subRoll(
     ...(task.escapeTo === 'reserve' && spec.defenderSlot !== 'reserve'
       ? { toReserve: true as const }
       : {}),
+    // Net and Stun: failing holds the die rather than killing it (v2 Phase 7c).
+    ...(task.fate === 'net' || task.fate === 'stun' ? { fate: task.fate } : {}),
   }
 
   // A glaring die that was just rolled has ended its glare (Hypnotic Glare, v2 Phase 5b):

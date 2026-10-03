@@ -55,8 +55,7 @@ describe('the species in the data', () => {
       expect(speciesProblem(species.id), species.id).toBeNull()
     }
     expect(speciesProblem('goblins')).toBe(
-      'Goblins are not playable yet: the SAIs Net, Poison, Regenerate, Screech, Stun and its ' +
-        'species abilities are not implemented',
+      'Goblins are not playable yet: the SAI Regenerate and its species abilities are not implemented',
     )
     expect(PLAYABLE_UNITS).toHaveLength(UNIT_TYPES.length - 20)
     expect(unitPlayable('dwarves.behemoth')).toBe(true)

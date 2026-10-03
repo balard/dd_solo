@@ -453,6 +453,8 @@ export interface SaveRollState {
   readonly bonus?: number
   /** Wave: save results the attack takes off this roll (`PendingSaves.wave`). */
   readonly wave?: number
+  /** Screech (v2 Phase 7c): the same, under its own name (`PendingSaves.screech`). */
+  readonly screech?: number
   /** Bash: save results equal to the melee of the die it hit (`PendingSaves.bash`). */
   readonly bash?: number
   /** Charge (v2 Phase 6e): this is the defender's combination save and melee roll. */
@@ -468,6 +470,8 @@ export interface AttackFacts {
   readonly counterSuppressed: boolean
   /** Wave: save results this attack takes off the roll that answers it. */
   readonly wave: number
+  /** Screech (v2 Phase 7c): the same, named apart. */
+  readonly screech: number
   /** Charge (v2 Phase 6e): a melee attack the defender answers with a combination
    *  save and melee roll, and no counter-attack. */
   readonly charged: boolean
@@ -512,6 +516,7 @@ export function attackFacts(state: GameState, spec: AttackSpec, attack: AttackRo
       'free_move',
       'cantrip',
       'wave',
+      'screech',
       'glare',
       'charge',
     ],
@@ -524,6 +529,7 @@ export function attackFacts(state: GameState, spec: AttackSpec, attack: AttackRo
     unsavable: damageFrom(attackRoll.effects, 'unsavable'),
     counterSuppressed: attackRoll.effects.some((e) => e.kind === 'suppress_counter'),
     wave: waveIn(attackRoll.effects),
+    screech: screechIn(attackRoll.effects),
     charged,
     // A Smite-only attack rolls zero melee, earns the defender no save roll, and still
     // kills: the condition is the attack *total*, not the damage. A Charge always earns
@@ -538,9 +544,25 @@ export function waveIn(effects: readonly RollEffect[]): number {
   return effects.reduce((sum, effect) => sum + (effect.kind === 'wave' ? effect.amount : 0), 0)
 }
 
+/** Screech's total over a roll's effects: several Screeches combine. */
+export function screechIn(effects: readonly RollEffect[]): number {
+  return effects.reduce((sum, effect) => sum + (effect.kind === 'screech' ? effect.amount : 0), 0)
+}
+
 /** Wave's subtraction as a step-6 modifier, named so the roll can say "− 4 Wave". */
 export function waveModifier(resultType: 'save' | 'maneuver', amount: number): Modifier {
   return { kind: 'subtract', resultType, amount, source: 'Wave' }
+}
+
+/** Every save result the attack takes off the roll that answers it, each named:
+ *  Wave and Screech (v2 Phase 7c). Read by both save-roll specs. */
+function attackSaveCuts(saves: Pick<SaveRollState, 'wave' | 'screech'>): readonly Modifier[] {
+  return [
+    ...((saves.wave ?? 0) > 0 ? [waveModifier('save', saves.wave ?? 0)] : []),
+    ...((saves.screech ?? 0) > 0
+      ? [{ kind: 'subtract', resultType: 'save', amount: saves.screech ?? 0, source: 'Screech' } as const]
+      : []),
+  ]
 }
 
 /**
@@ -565,8 +587,7 @@ export function chargeRollSpec(
   const context = { purpose: { kind: 'save', against: 'melee', charge: true }, isCounter: spec.isCounter } as const
   const shown = answer ?? displayAnswer(chargePoolsOf(state, spec, saves, context))
   const base = combinationSpec(state, spec.defender, spec.defenderSlot, CHARGE_ROLL_KINDS, context, shown)
-  const extra: Modifier[] = []
-  if ((saves.wave ?? 0) > 0) extra.push(waveModifier('save', saves.wave ?? 0))
+  const extra: Modifier[] = [...attackSaveCuts(saves)]
   if ((saves.bash ?? 0) > 0) extra.push({ kind: 'add', resultType: 'save', amount: saves.bash ?? 0, source: 'Bash' })
   if ((saves.bonus ?? 0) > 0) {
     extra.push({ kind: 'add', resultType: 'save', amount: saves.bonus ?? 0, source: 'Wild Growth' })
@@ -602,7 +623,7 @@ function displayAnswer(pools: CombinationPools): CombinationAnswer {
 function defenderRollSpec(state: GameState, spec: AttackSpec, saves: SaveRollState): RollSpec {
   return saves.charge === true
     ? chargeRollSpec(state, spec, saves, saves.allocation)
-    : saveRollSpec(state, spec, saves.bonus, saves.wave, saves.bash)
+    : saveRollSpec(state, spec, saves)
 }
 
 /** The spec the defender's save roll is resolved under, built in one place because
@@ -610,10 +631,10 @@ function defenderRollSpec(state: GameState, spec: AttackSpec, saves: SaveRollSta
 function saveRollSpec(
   state: GameState,
   spec: AttackSpec,
-  bonus: number | undefined,
-  wave = 0,
-  bash = 0,
+  saves: Pick<SaveRollState, 'bonus' | 'wave' | 'screech' | 'bash'>,
 ): RollSpec {
+  const { bonus } = saves
+  const bash = saves.bash ?? 0
   const defenders = armyRoll(state, spec.defender, spec.defenderSlot, 'save')
   return {
     kinds: ['save'],
@@ -625,7 +646,7 @@ function saveRollSpec(
     // total, so step 8 and step 10 give the same answer here.
     modifiers: [
       ...defenders.modifiers,
-      ...(wave > 0 ? [waveModifier('save', wave)] : []),
+      ...attackSaveCuts(saves),
       ...(bash > 0 ? [{ kind: 'add', resultType: 'save', amount: bash, source: 'Bash' } as const] : []),
     ],
     // It is also where Counter and Volley hit back, which is why it needs to know what
@@ -648,7 +669,12 @@ export function saveEffects(
   spec: AttackSpec,
   saves: SaveRollState,
 ): readonly RollEffect[] {
-  const effectsOnly: SaveRollState = { dice: saves.dice, ...(saves.wave !== undefined ? { wave: saves.wave } : {}), ...(saves.charge === true ? { charge: true as const } : {}) }
+  const effectsOnly: SaveRollState = {
+    dice: saves.dice,
+    ...(saves.wave !== undefined ? { wave: saves.wave } : {}),
+    ...(saves.screech !== undefined ? { screech: saves.screech } : {}),
+    ...(saves.charge === true ? { charge: true as const } : {}),
+  }
   return resolveFaces(saves.dice, defenderRollSpec(state, spec, effectsOnly), state.ruleSet).effects
 }
 
@@ -725,9 +751,18 @@ export function rollSaveFaces(
   // roll subtracts it.
   const facts = attack === undefined ? undefined : attackFacts(state, spec, attack)
   const wave = facts?.wave ?? 0
+  const screech = facts?.screech ?? 0
   // A Charge turns this into the combination roll from the moment it lands (v2 Phase 6e).
   const charge = facts?.charged === true
-  return [{ dice, ...(wave > 0 ? { wave } : {}), ...(charge ? { charge: true as const } : {}) }, next] as const
+  return [
+    {
+      dice,
+      ...(wave > 0 ? { wave } : {}),
+      ...(screech > 0 ? { screech } : {}),
+      ...(charge ? { charge: true as const } : {}),
+    },
+    next,
+  ] as const
 }
 
 /**
@@ -770,7 +805,7 @@ export function finishSaves(
 
   if (saves.charge === true) return finishCharge(state, spec, facts, saves, rng)
 
-  const rollSpec = saveRollSpec(state, spec, saves.bonus, saves.wave, saves.bash)
+  const rollSpec = saveRollSpec(state, spec, saves)
   const [swept, afterSweep] = rerollSweep(saves.dice, rollSpec, state.ruleSet, rng)
   const saveRoll = asResult(resolveFaces(swept, rollSpec, state.ruleSet), 'save')
 

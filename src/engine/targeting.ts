@@ -35,8 +35,9 @@ export type TargetTask =
       /** Health-worth to pick from the army this roll is aimed at. */
       readonly health: number
       readonly escape: 'none' | 'save' | 'maneuver' | 'id'
-      /** Roar's `'reserve'` and Stomp's `'save_or_bury'` from v2 Phase 6d. */
-      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury'
+      /** Roar's `'reserve'` and Stomp's `'save_or_bury'` from v2 Phase 6d; Net's and
+       *  Stun's statuses from 7c. */
+      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury' | 'net' | 'stun'
       /** Seize: where an escapee goes. Omitted means it stays where it stood. */
       readonly escapeTo?: 'reserve'
       /**

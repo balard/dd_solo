@@ -28,7 +28,7 @@ import type { Element, ResultType, TerrainFaceNumber } from '../data/types'
 import { damageOptions } from '../engine/damage'
 import { BREATH_NAME } from '../engine/dragons'
 import { growthPartners, promotionGain } from '../engine/dua'
-import { isAsleep, isGlaring, isHypnotized } from '../engine/effects'
+import { isAsleep, isGlaring, isHypnotized, isStunned } from '../engine/effects'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
 import { mathPhrase, saiPhrase, spellSavedPhrase, type DieRoll, type RollMath } from '../engine/roll'
@@ -150,7 +150,12 @@ function effectsOn(state: GameState, player: PlayerId, slot: TerrainSlot): reado
   }
 
   for (const unit of armyAt(state, player, slot)) {
-    if (isAsleep(state, unit.id)) out.push(`${name(unit)} is asleep — cannot be rolled or leave`)
+    if (isAsleep(state, unit.id)) {
+      const net = state.effects.some(
+        (e) => e.target.kind === 'unit' && e.target.unitId === unit.id && e.asleep === true && e.source === 'Net',
+      )
+      out.push(`${name(unit)} is ${net ? 'netted' : 'asleep'} — cannot be rolled or leave`)
+    } else if (isStunned(state, unit.id)) out.push(`${name(unit)} is stunned — sits out its army's rolls`)
     else if (isHypnotized(state, unit.id)) out.push(`${name(unit)} is hypnotized — cannot be rolled`)
     else if (isGlaring(state, unit.id)) out.push(`${name(unit)} is glaring — sits out its army's rolls`)
   }
@@ -404,7 +409,8 @@ function describe(entry: LogEntry, state: GameState): string | null {
             : entry.toReserve === true
               ? `${who} escape${one} to ${entry.player}'s reserves`
               : `${who} get${one} away`
-      const stake = entry.fate === 'bury' ? 'be buried' : 'die'
+      const stake =
+        entry.fate === 'bury' ? 'be buried' : entry.fate === 'net' ? 'be netted' : entry.fate === 'stun' ? 'be stunned' : 'die'
       // A damage sub-roll (v2 Phase 6d) is saves against a number, not any save at all.
       if (entry.damage !== undefined) {
         return yellow(

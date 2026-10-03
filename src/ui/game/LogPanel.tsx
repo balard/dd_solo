@@ -54,6 +54,20 @@ const plural = (
   kind: 'riposte' | 'unsavable',
 ): boolean => saisBehind(allDice(entry), kind).length > 1
 
+/** What failing a sub-roll costs: death, unless the entry says otherwise. */
+const stakeOf = (fate: Extract<LogEntry, { kind: 'sai_sub_roll' }>['fate']): string => {
+  switch (fate) {
+    case 'bury':
+      return 'be buried'
+    case 'net':
+      return 'be netted'
+    case 'stun':
+      return 'be stunned'
+    case undefined:
+      return 'die'
+  }
+}
+
 
 /**
  * The return type is written out rather than inferred so that a new `LogEntry` kind
@@ -371,7 +385,7 @@ export function LogLine({
       return (
         <div className="log-roll">
           <div className="roll-head">
-            <strong>{entry.source}</strong> &middot; {asked} or {entry.fate === 'bury' ? 'be buried' : 'die'}{' '}
+            <strong>{entry.source}</strong> &middot; {asked} or {stakeOf(entry.fate)}{' '}
             &middot; {where(entry.slot)}
           </div>
           <RollStrip dice={entry.dice} />

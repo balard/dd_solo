@@ -2065,8 +2065,8 @@ portrait. The tiles that looked blank in a first screenshot had not finished loa
 
 ## Phase 7 — Goblins
 
-7a has landed: the data, and a Replanting rule it uncovered. 7b has landed: the seams. 7c to 7f
-are planned.
+7a has landed: the data, and a Replanting rule it uncovered. 7b has landed: the seams. 7c has
+landed: Screech, Poison, Net and Stun. 7d to 7f are planned.
 
 Death & Earth, the first species carrying Death. **No terrain type in scope carries Death**
 (Deadland, the one that does, is out), so the Goblins
@@ -2283,7 +2283,7 @@ by moving, and refused Replanting (7a's rule).
 -- the reading this plan settled for unequal sides. `capPer24` is its arithmetic, tested at 12, 24,
 25, 36, 48 and 49.
 
-### 7c — Screech, Poison, Net, Stun
+### 7c — Screech, Poison, Net, Stun — **landed**
 
 - **Screech**: `{ kind: 'screech', amount }`, read where `wave` is, its own `PendingSaves` field and
   its own name on the line. Applies to a counter-attack's save roll and to a Charge's combination
@@ -2306,6 +2306,51 @@ by moving, and refused Replanting (7a's rule).
   do, by 7b; a test pins that a stunned die is missing from `expectedArmy`.
 - `expectOnly`'s whitelist gains each new effect kind in the same edit, as every Phase 4 slice
   had to be told.
+
+### What 7c found
+
+Both golden corpora replay byte-identical and unregenerated. 1196 tests and the 1000-game fuzz
+pass. The rules are in `RULES-V0.md` section 19, the tests in `goblins.test.ts`; the Tower drop
+and Screech's line were each checked to fail with their change undone.
+
+**1. Net and Stun are two new fates on the existing targeting task, and nothing else.**
+`target_enemy` gained `'net'` and `'stun'`; after the maneuver sub-roll, `holdUnits` writes one
+effect per failed die instead of killing it. Net writes `asleep` under its own name, as planned, so
+every leave-the-terrain check holds a netted die with no edit; Stun writes 7b's `stunned` with its
+anchor. Poison needed no code beyond its handler: an escape of `'save'` and Stomp's
+`'save_or_bury'` fate were already independent axes.
+
+**2. The static results bound never asked about a sub-roll.** `saiMaxResults` enumerated every
+purpose but not `isSubRoll`, so Net's saves -- which exist only in a sub-roll -- would have sat
+above the ceiling, and **Wild Growth's save share already did** on every rung without dragons (its
+saves outside a sub-roll arrive only in the dragon roll). A test pinned Wild Growth's bound at 0
+under `FULL_RULES` as "an unimplemented SAI"; it was the under-bound, and it says 4 now.
+
+**3. Screech's own field ran through about a dozen sites, as predicted.** `screech` sits beside
+`wave` on `PendingSaves`, `SaveRollState` and `AttackFacts`, and `attackSaveCuts` is the one place
+both save-roll specs (the ordinary one and the Charge roll) turn the two into named subtractions.
+The save-roll spec now takes the parked roll whole rather than three loose numbers, which is how
+the next such field arrives without another signature change.
+
+**4. The first draft of two tests was hollow.** A lone Cannibal rolling Stun or Net makes no melee,
+so no save roll follows, and "the netted die is not in the save roll" passed on an empty list.
+Both now carry a Watcher's melee and assert exactly who saved.
+
+**5. The UI's status map is not Hypnotic Glare's any more.** `glareStatuses` is `dieStatuses`,
+with `'stunned'` (dimmed, still movable) and `'netted'` (a label only: `sleepingIds` already locks
+the die). The log's sub-roll line says "maneuver or be netted / stunned", from a `fate` the entry
+gained; the terminal says the same.
+
+**6. A temporary fuzz, since the species is not playable yet.** With the playable gate bypassed for
+the run and Trolls left out (Regenerate is 7d's), 576 games of random, greedy and greedy against
+passive on Cannibal, Death Naga, Harpy and Shambler boards, against each other and against
+Behemoths, Satyrs, Genies and Leviathans: no throws, nothing stuck, nothing capped, every state
+valid. Net resolved 365 times (257 dice netted), Stun 183 (135), Poison 331 (214 burial checks),
+and Screech cut 148 save rolls. The bypass was reverted. The live fuzz reaches all of this once 7d
+flips the species.
+
+**Not checked in the browser**: the Goblins are unplayable, so no game the app can start rolls
+these faces. The labels are tested in `prompts.test.ts`; seeing them on a board is 7d's.
 
 ### 7d — Regenerate, Swamp Mastery, Foul Stench, and the flip
 

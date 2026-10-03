@@ -22,7 +22,7 @@ import type { UnitId, UnitInstance } from '../../engine/types'
 import { ElementDots, speciesInfo } from './Elements'
 import { FaceArt } from './FaceArt'
 import { ClassShape, faceLabel, type ClassCode } from './Glyph'
-import { orderedForDisplay, type GlareStatus } from './prompts'
+import { orderedForDisplay, type DieStatus } from './prompts'
 import { portraitSize, stackIdentical, tileSize } from './stacks'
 import { useFaceArt } from './useFaceArt'
 import { useRuleSet } from './useRuleSet'
@@ -140,7 +140,7 @@ export function DiceGrid({
   asleep?: ReadonlySet<UnitId>
   /** Hypnotic Glare (v2 Phase 5c): a label and a look, and still pickable -- neither
    *  status stops a die being moved. */
-  glare?: ReadonlyMap<UnitId, GlareStatus>
+  glare?: ReadonlyMap<UnitId, DieStatus>
   selected?: ReadonlySet<UnitId>
   onToggle?: (id: UnitId) => void
   inspecting?: UnitId | null
@@ -186,8 +186,10 @@ export function DiceGrid({
         const what = count > 1 ? `${count} × ${describe(type)}` : describe(type)
         const status = glare?.get(unit.id)
         const label = isAsleep
-          ? `${what} — asleep`
-          : status === 'hypnotized'
+          ? `${what} — ${status === 'netted' ? 'netted' : 'asleep'}`
+          : status === 'stunned'
+            ? `${what} — stunned, sits out its army's rolls`
+            : status === 'hypnotized'
             ? `${what} — hypnotized, cannot be rolled`
             : status === 'glaring'
               ? `${what} — glaring, sits out its army's rolls`
@@ -205,7 +207,7 @@ export function DiceGrid({
                 (isSelected ? ' die-selected' : '') +
                 (selectableHere ? ' die-selectable' : '') +
                 (isAsleep ? ' die-asleep' : '') +
-                (status === 'hypnotized' ? ' die-hypnotized' : '') +
+                (status === 'hypnotized' || status === 'stunned' ? ' die-hypnotized' : '') +
                 (status === 'glaring' ? ' die-glaring' : '') +
                 (isOpen ? ' die-open' : '') +
                 ' die-squared'
@@ -362,12 +364,23 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
                 ? `${effect.health} health-worth sent to reserves`
                 : `${effect.health} health-worth ${effect.fate === 'bury' ? 'killed and buried' : 'killed'}`
             case 'save':
-              return `${effect.health} health-worth must save or die`
-            case 'maneuver':
-              // Stomp's dead roll again, for burial (v2 Phase 6d).
+              // Poison's dead roll again, for burial (v2 Phase 7c).
               return effect.fate === 'save_or_bury'
-                ? `${effect.health} health-worth must maneuver or die, then save or be buried`
-                : `${effect.health} health-worth must maneuver or die`
+                ? `${effect.health} health-worth must save or die, then save or be buried`
+                : `${effect.health} health-worth must save or die`
+            case 'maneuver':
+              // Stomp's dead roll again, for burial (v2 Phase 6d); Net and Stun hold
+              // their failures rather than killing them (7c).
+              switch (effect.fate) {
+                case 'save_or_bury':
+                  return `${effect.health} health-worth must maneuver or die, then save or be buried`
+                case 'net':
+                  return `${effect.health} health-worth must maneuver or be netted`
+                case 'stun':
+                  return `${effect.health} health-worth must maneuver or be stunned`
+                default:
+                  return `${effect.health} health-worth must maneuver or die`
+              }
             case 'id':
               // Swallow's one die stays and dies unless it shows its ID; Seize's
               // health-worth goes home on one.
@@ -380,6 +393,8 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
           return 'every die that rolls its ID is hypnotized'
         case 'wave':
           return `${effect.amount} off the other army's roll`
+        case 'screech':
+          return `${effect.amount} off the defenders' saves`
         case 'sleep':
           return 'one die asleep'
         case 'galeforce':
