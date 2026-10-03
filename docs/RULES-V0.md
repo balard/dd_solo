@@ -930,9 +930,12 @@ Firewalker unit."
   *asked* about the exchange with the roll in front of them. A hit is never offered, and a miss
   still is. That is every option either order could give, so there is nothing left to decide by
   house rule. Until 9b the exchange was automatic, and "Replanting first" was a house rule.
-- **A sleeping Treefolk cannot come up.** Sleep is on Treefolk dice only and targets an opponent's
-  unit, so no Treefolk is ever asleep, and "does a sleeping die replant?" has no case. `species.test.ts`
-  checks that against the data.
+- **A sleeping Treefolk could not come up until the Goblins.** Sleep was on Treefolk dice only and
+  targets an opponent's unit, so no Treefolk was ever asleep. v2 Phase 7a imported the Cannibal,
+  which sleeps and nets, so "does a sleeping die replant?" now has a case, and it is **open**:
+  `killUnits` rolls Replanting and Rise from the Ashes without asking `cannotRoll`. That was
+  already reachable for a sleeping Phoenix (v1) and a hypnotized Treefolk (5b). See `PLAN-V2.md`,
+  Phase 7, *What 7a found*; `species.test.ts` pins the one foreign die that sleeps.
 
 ## 17. Coral Elves (v2 Phase 5)
 

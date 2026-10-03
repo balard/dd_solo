@@ -71,6 +71,19 @@ SPECIES = {
             "magic":   ["Theurgist", "Thaumaturgist", "Wizard", "Umber Hulk"],
         },
     },
+    # v4.01 p. 82. Death & earth: no terrain type in scope carries death, so they have
+    # no own type and draw a home among the earth dice (setup.ts, drawHomeDie).
+    "goblins": {
+        "name": "Goblins",
+        "elements": ["death", "earth"],
+        "units": {
+            "heavy":   ["Thug", "Cutthroat", "Marauder", "Cannibal"],
+            "light":   ["Mugger", "Ambusher", "Filcher", "Death Naga"],
+            "cavalry": ["Wardog Rider", "Wolf Rider", "Leopard Rider", "Harpy"],
+            "missile": ["Pelter", "Slingman", "Deadeye", "Shambler"],
+            "magic":   ["Trickster", "Hedge Wizard", "Death Mage", "Troll"],
+        },
+    },
 }
 
 # Normal action icons. Anything else parsed off a face is treated as an SAI.
@@ -90,6 +103,7 @@ STARTER_SAIS = {
 SPECIES_SAIS = {
     "coral_elves": {"Entangle", "Ferry", "Hypnotic Glare", "Swallow", "Tail", "Wave"},  # p. 71
     "dwarves": {"Bash", "Charge", "Roar", "Stomp"},  # p. 73
+    "goblins": {"Net", "Poison", "Regenerate", "Screech", "Stun"},  # p. 83
 }
 
 # Every SAI name a face may carry; anything else parsed off a face is a typo.

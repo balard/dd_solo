@@ -2063,7 +2063,9 @@ portrait. The tiles that looked blank in a first screenshot had not finished loa
   help in the rolls it reaches; if a later species brings a combination roll counting maneuver, the
   question comes back.
 
-## Phase 7 — Goblins — **planned**
+## Phase 7 — Goblins
+
+7a has landed: the data. 7b to 7f are planned.
 
 Death & Earth, the first species carrying Death. **No terrain type in scope carries Death**
 (Deadland, the one that does, is out), so the Goblins
@@ -2164,7 +2166,7 @@ cumulative; the R and C columns read off word positions on p. 82):
   type. What is left is five spells, the Temple, and tests that prove the rest -- which is why
   Death magic is no longer this phase's *first* slice (7e, below).
 
-### 7a — Data
+### 7a — Data — **landed**
 
 - **Gate: the monster SAI counts.** Every monster face in the raw file says 4 with no count in
   the source. Nine of the monster SAIs here read X -- Swallow, Stun, Net, Poison, Fly, Screech,
@@ -2179,6 +2181,38 @@ cumulative; the R and C columns read off word positions on p. 82):
 - Expected to move: the unit count (100 dice), the SAI partition, the playable species, and any
   test that names "the only" die with an SAI the Goblins reuse (6a's Dispel Magic lesson; here
   Smother, Sleep, Surprise and Swallow each gain a die).
+
+### What 7a found
+
+Both golden corpora replay byte-identical and unregenerated, and 1168 tests pass. `npm run data`
+writes 100 dice and 700 faces with 40/40 SAIs in the data. Saving is off, so `SAVE_VERSION` has
+nothing to be about.
+
+**1. Four tests moved, as in 6a.** Three are counts of the data: 100 unit dice and five species,
+the SAI partition (five names `deferred`), and the playable species, which is the real refusal
+again ("the SAIs Net, Poison, Regenerate, Screech, Stun and its species abilities") with a rolled
+Goblins force that throws and a built force with a Cutthroat that gets the sentence. 7c and 7d
+shorten it; 7d turns it back into "all playable". Nothing else counted species: the builder
+palette, the start screen and the fuzz all read `PLAYABLE_SPECIES`, which still lists four.
+
+**2. The fourth was a fact about the data that stopped being true, and behind it is an open
+rule.** `species.test.ts` checked that "does a sleeping Treefolk replant?" could not come up,
+because Sleep was only on Treefolk dice and aims at opponents. The Cannibal sleeps (and nets, which
+writes the same status) any die, Treefolk included. Reading `death.ts` for the answer found there
+is none: **neither Replanting nor Rise from the Ashes asks `cannotRoll`**, so a dying die that may
+not be rolled rolls anyway. That was already reachable before this slice -- a Treefolk Sleep on a
+Phoenix since v1, and a Coral Elf's Hypnotic Glare on a Treefolk at water since 5b -- and nothing
+says whether it is a reading or an omission. Section 11's sub-roll rule ("a die that cannot be
+rolled fails and draws nothing") would answer it one way; "the effect ends with the unit's death"
+the other. **Not decided here**: the test now pins the one foreign die that sleeps, and the answer
+is a rule fix of its own before 7c (6c's shape: its own commit), replayed against the v1 corpus --
+whose games name Sleep and the Phoenix -- to say whether a golden moves.
+
+**3. The art resolver is not run in this slice.** With the Goblins in `units.json`, `npm run art`
+would report the seventeen maneuver faces 7f's pins settle; the pins and the manifest are 7f's.
+
+**Deliberately not done.** No fixture, preset or art manifest: a fixture for an unplayable species
+could only throw (7d).
 
 ### 7b — Seams, and no rule moves
 

@@ -534,19 +534,18 @@ describe('Replanting', () => {
   })
 
   /**
-   * "Does a sleeping Treefolk replant?" cannot come up, and this is why: Sleep is only
-   * on dice of the species that has Replanting, and it targets an *opponent's* unit.
-   * Checked against the data rather than trusted, the way Phase 7e checked that Rise
-   * from the Ashes and Accelerated Growth never meet.
+   * "Does a sleeping Treefolk replant?" could not come up while Sleep was only on dice of
+   * the species that has Replanting, since it targets an *opponent's* unit. v2 Phase 7a
+   * ended that: the Goblins' Cannibal sleeps, and nets, a Treefolk. Pinned here so the
+   * question stays visible until it is answered (`PLAN-V2.md`, Phase 7, *What 7a found*);
+   * the answer is a rule, not a test edit.
    */
-  it('never meets Sleep, because Sleep is only on Treefolk dice and aims at opponents', () => {
+  it('meets Sleep once the Goblins can sleep a Treefolk (open since v2 Phase 7a)', () => {
     const sleepers = UNIT_TYPES.filter((type) =>
       type.faces.some((face) => face.icon === 'SAI' && face.sai === 'Sleep'),
     )
-    expect(sleepers.length).toBeGreaterThan(0)
-    for (const type of sleepers) {
-      expect(SPECIES_ABILITIES[type.species], type.id).toContain('Replanting')
-    }
+    const foreign = sleepers.filter((type) => !SPECIES_ABILITIES[type.species]?.includes('Replanting'))
+    expect(foreign.map((type) => type.id)).toEqual(['goblins.cannibal'])
   })
 })
 

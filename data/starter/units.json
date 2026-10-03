@@ -29,6 +29,13 @@
         "fire",
         "earth"
       ]
+    },
+    "goblins": {
+      "name": "Goblins",
+      "elements": [
+        "death",
+        "earth"
+      ]
     }
   },
   "units": [
@@ -1470,6 +1477,366 @@
         "4 MELEE",
         "4 SAI:Smite",
         "4 SAVE"
+      ]
+    },
+    {
+      "id": "goblins.thug",
+      "name": "Thug",
+      "species": "goblins",
+      "class": "heavy_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 SAVE",
+        "1 MELEE",
+        "1 MELEE",
+        "1 MANEUVER",
+        "2 MELEE"
+      ]
+    },
+    {
+      "id": "goblins.cutthroat",
+      "name": "Cutthroat",
+      "species": "goblins",
+      "class": "heavy_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 SAVE",
+        "2 MELEE",
+        "2 MELEE",
+        "3 MANEUVER",
+        "2 MELEE"
+      ]
+    },
+    {
+      "id": "goblins.marauder",
+      "name": "Marauder",
+      "species": "goblins",
+      "class": "heavy_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "2 MANEUVER",
+        "4 MELEE",
+        "3 MELEE",
+        "3 SAVE",
+        "4 SAI:Smite"
+      ]
+    },
+    {
+      "id": "goblins.cannibal",
+      "name": "Cannibal",
+      "species": "goblins",
+      "class": "heavy_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Swallow",
+        "4 SAVE",
+        "4 SAI:Stun",
+        "4 MELEE",
+        "4 SAVE",
+        "4 MANEUVER",
+        "4 SAI:Net",
+        "4 SAI:Surprise",
+        "4 SAI:Sleep"
+      ]
+    },
+    {
+      "id": "goblins.mugger",
+      "name": "Mugger",
+      "species": "goblins",
+      "class": "light_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "1 MANEUVER",
+        "1 MANEUVER",
+        "2 MELEE",
+        "1 SAVE"
+      ]
+    },
+    {
+      "id": "goblins.ambusher",
+      "name": "Ambusher",
+      "species": "goblins",
+      "class": "light_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "3 MELEE",
+        "3 MANEUVER",
+        "2 MANEUVER",
+        "2 SAVE",
+        "2 MISSILE"
+      ]
+    },
+    {
+      "id": "goblins.filcher",
+      "name": "Filcher",
+      "species": "goblins",
+      "class": "light_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 MANEUVER",
+        "3 MELEE",
+        "3 MELEE",
+        "3 SAVE",
+        "4 SAI:Counter"
+      ]
+    },
+    {
+      "id": "goblins.death_naga",
+      "name": "Death Naga",
+      "species": "goblins",
+      "class": "light_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 MANEUVER",
+        "4 MAGIC",
+        "4 SAI:Poison",
+        "4 MELEE",
+        "4 SAVE",
+        "4 SAI:Poison",
+        "4 MAGIC",
+        "4 MANEUVER",
+        "4 MELEE"
+      ]
+    },
+    {
+      "id": "goblins.wardog_rider",
+      "name": "Wardog Rider",
+      "species": "goblins",
+      "class": "cavalry",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "2 MANEUVER",
+        "1 MANEUVER",
+        "1 MELEE",
+        "1 SAVE"
+      ]
+    },
+    {
+      "id": "goblins.wolf_rider",
+      "name": "Wolf Rider",
+      "species": "goblins",
+      "class": "cavalry",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MELEE",
+        "3 MANEUVER",
+        "3 MANEUVER",
+        "2 MELEE",
+        "2 SAVE"
+      ]
+    },
+    {
+      "id": "goblins.leopard_rider",
+      "name": "Leopard Rider",
+      "species": "goblins",
+      "class": "cavalry",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "3 MISSILE",
+        "3 SAI:Rend",
+        "3 SAI:Rend",
+        "3 SAVE",
+        "4 MELEE"
+      ]
+    },
+    {
+      "id": "goblins.harpy",
+      "name": "Harpy",
+      "species": "goblins",
+      "class": "cavalry",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Fly",
+        "4 SAVE",
+        "4 MELEE",
+        "4 SAI:Fly",
+        "4 MELEE",
+        "4 SAI:Screech",
+        "4 MELEE",
+        "4 SAI:Screech",
+        "4 SAI:Fly"
+      ]
+    },
+    {
+      "id": "goblins.pelter",
+      "name": "Pelter",
+      "species": "goblins",
+      "class": "missile",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 SAVE",
+        "1 MISSILE",
+        "2 MISSILE",
+        "1 SAVE",
+        "1 MANEUVER"
+      ]
+    },
+    {
+      "id": "goblins.slingman",
+      "name": "Slingman",
+      "species": "goblins",
+      "class": "missile",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MELEE",
+        "3 MISSILE",
+        "3 MISSILE",
+        "2 MANEUVER",
+        "2 SAVE"
+      ]
+    },
+    {
+      "id": "goblins.deadeye",
+      "name": "Deadeye",
+      "species": "goblins",
+      "class": "missile",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "2 MELEE",
+        "4 MISSILE",
+        "3 MISSILE",
+        "3 SAVE",
+        "4 SAI:Bullseye"
+      ]
+    },
+    {
+      "id": "goblins.shambler",
+      "name": "Shambler",
+      "species": "goblins",
+      "class": "missile",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAVE",
+        "4 MELEE",
+        "4 SAVE",
+        "4 SAI:Smother",
+        "4 SAI:Smother",
+        "4 MELEE",
+        "4 SAVE",
+        "4 MELEE",
+        "4 SAI:Smite"
+      ]
+    },
+    {
+      "id": "goblins.trickster",
+      "name": "Trickster",
+      "species": "goblins",
+      "class": "magic",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "1 MAGIC",
+        "1 MAGIC",
+        "1 MANEUVER",
+        "2 MAGIC"
+      ]
+    },
+    {
+      "id": "goblins.hedge_wizard",
+      "name": "Hedge Wizard",
+      "species": "goblins",
+      "class": "magic",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 SAVE",
+        "3 MAGIC",
+        "3 MAGIC",
+        "2 MANEUVER",
+        "2 MAGIC"
+      ]
+    },
+    {
+      "id": "goblins.death_mage",
+      "name": "Death Mage",
+      "species": "goblins",
+      "class": "magic",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "2 SAVE",
+        "4 MAGIC",
+        "3 MAGIC",
+        "3 MANEUVER",
+        "4 SAI:Cantrip"
+      ]
+    },
+    {
+      "id": "goblins.troll",
+      "name": "Troll",
+      "species": "goblins",
+      "class": "magic",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Regenerate",
+        "4 MELEE",
+        "4 SAVE",
+        "4 SAI:Smite",
+        "4 SAVE",
+        "4 MELEE",
+        "4 SAI:Regenerate",
+        "4 MANEUVER",
+        "4 SAI:Smite"
       ]
     }
   ]
