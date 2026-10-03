@@ -2232,7 +2232,10 @@ could only throw (7d).
    move. Fire breath's `burning` stays where it is: it is in dragon games, and nothing needs it to
    move.
 3. **A stunned status**: `Effect.stunned?: true` with an `anchor` on the stunned unit itself.
-   `sitsOutArmyRoll` asks it; `cannotRoll` does not, so a sub-roll still rolls the die. No producer.
+   `sitsOutArmyRoll` asks it; `cannotRoll` does not, so a sub-roll still rolls the die. **Replanting
+   asks it too** (7a's rule): Stun lets through only a roll an individual-targeting effect forces,
+   and Replanting is not one, so a stunned Treefolk does not replant -- the one reader of the
+   status that `cannotRoll` will not bring along. No producer.
 4. **`'non_maneuver'`** in the spell modifier spec, in all three expanders, with no spell using it.
 5. **`deathMagicImmune(state, player, ref)`**: the Temple predicate, through `iconAt`, so losing the
    capture ends it in the same step for free. Read at **gather time** -- an effect from a death
