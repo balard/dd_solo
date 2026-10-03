@@ -2065,7 +2065,8 @@ portrait. The tiles that looked blank in a first screenshot had not finished loa
 
 ## Phase 7 — Goblins
 
-7a has landed: the data. 7b to 7f are planned.
+7a has landed: the data, and a Replanting rule it uncovered. 7b has landed: the seams. 7c to 7f
+are planned.
 
 Death & Earth, the first species carrying Death. **No terrain type in scope carries Death**
 (Deadland, the one that does, is out), so the Goblins
@@ -2221,7 +2222,7 @@ would report the seventeen maneuver faces 7f's pins settle; the pins and the man
 **Deliberately not done.** No fixture, preset or art manifest: a fixture for an unplayable species
 could only throw (7d).
 
-### 7b — Seams, and no rule moves
+### 7b — Seams, and no rule moves — **landed**
 
 1. **`duaCap(state, player, per)`**: `per × ⌈forceSize / 24⌉`. No caller until 7d; tested at 12,
    24, 25 and 36.
@@ -2244,6 +2245,43 @@ could only throw (7d).
    *before* the capture stops biting the moment it lands, and no `Effect` field is added. Also read
    by spell targeting (a Finger of Death is not offered against it) and by Soiled Ground's hook.
    No caller can reach it until a death spell exists.
+
+### What 7b found
+
+Both golden corpora replay byte-identical and unregenerated. 1184 tests pass, and so does the
+1000-game fuzz. The seams' tests are in `goblins.test.ts`, which the rest of the phase will fill;
+each of the order and Stun tests was checked to fail with its change undone.
+
+**1. Moving Stomp's burial check found the order it had been getting right by accident.** On
+`combat.attack` it was settled at the top of `stepTasks`, which `stepGame` only reaches after
+`pruneEffects`. That order is load-bearing: a dead die's own Sleep has to be pruned before it rolls
+its burial save, or `unitRoll` calls it unrollable and it fails without a die drawn. In `stepGame`
+the check now sits **after the growth offer and after pruning, before the victory check**, and a
+test drives a sleeping dead die through it. One thing moved, deliberately: a Stomp whose kill wins
+the game now rolls its burial check before the victory, where the old placement never reached it.
+No recorded game has a Dwarf, and the 6d test of a Stomp meeting Accelerated Growth proves the move.
+
+**2. There were four copies of the result-type list, not three.** The Python validator holds one
+too. And rather than teach greedy's copy the new wildcard, it is gone: **`spellResultTypes` in
+`src/data/spells.ts` is the one expander**, which the engine's `scaleModifier` and greedy's spell
+scoring both call. The plan's "miss the third and greedy prices Palsy at nothing" can no longer
+happen, for any wildcard after this one either.
+
+**3. The Temple predicate landed without its readers, and that is the plan corrected.** The plan
+put the gather-time filter, the targeting filter and Soiled Ground's hook in 7b. Each needs a death
+spell to tell it a death effect from any other, and none is in the data until 7e, so each would
+have been code no test could reach -- the half-built state 7e's tests exist to prevent. 7b ships
+`deathMagicImmune` itself (Temple on face 8, this player, not Reserves, ends with the capture) with
+its tests, and 7e wires all three readers at once.
+
+**4. Stun reaches the estimator through the one door, as predicted.** `sitsOutArmyRoll` is read by
+`armyRoll` alone, so the dice filter carries it to every army roll and to `expectedArmy` with no
+second site; a test pins that a stunned die is missing from both, still rolled by `unitRoll`, freed
+by moving, and refused Replanting (7a's rule).
+
+**5. `duaCap` reads the holder's own force**, dead and buried dice included, through `forceSize`
+-- the reading this plan settled for unequal sides. `capPer24` is its arithmetic, tested at 12, 24,
+25, 36, 48 and 49.
 
 ### 7c — Screech, Poison, Net, Stun
 
@@ -2325,7 +2363,10 @@ could only throw (7d).
     (risen means not in the DUA), the growth offer (exchanged means never killed), then the
     burial check on what is left -- and a Phoenix that fails it rolls Rise again on the way to the
     BUA. A kill-and-bury (Flame, the Temple, Fire breath) buries anyway and rolls nothing here.
-- **The Temple wakes**: 7b's predicate has callers. A test captures a Temple and aims every death
+- **The Temple wakes**: 7b's predicate gets its readers here, not in 7b (see *What 7b found*):
+  the gather in `armyRoll`, spell targeting and Soiled Ground's hook. The death spell's element is
+  read off the effect's `source` against the spell data and its caster off
+  `expiresAtStartOfTurnOf`, so no `Effect` field is added. A test captures a Temple and aims every death
   spell at the holder: Palsy and Decay gathered and skipped, Finger of Death not offered, Soiled
   Ground's check skipped for the holder's dice and made for the other side's at the same terrain.
   Then the capture is lost and the standing Palsy bites again on the next roll.

@@ -16,7 +16,7 @@
  */
 import { unitType } from '../data/load'
 import type { Element, ResultType } from '../data/types'
-import type { Spell } from '../data/spells'
+import { spellResultTypes, type Spell } from '../data/spells'
 import { missileTargets } from '../engine/combat'
 import {
   announcementProblem,
@@ -44,9 +44,6 @@ import {
 } from '../engine/types'
 
 import { expectedArmy, expectedFace, expectedMagicBySpecies, killValue, unitValue } from './estimate'
-
-/** Every result type, for Ash Storm's `'*'`. */
-const EVERY_TYPE: readonly ResultType[] = ['melee', 'missile', 'magic', 'save', 'maneuver']
 
 /** Below this a casting is noise, and a player told to be active still should not
  *  spend a turn's magic on it. */
@@ -162,7 +159,7 @@ function effectValue(state: GameState, caster: PlayerId, s: Spell, target: Spell
   for (const m of effect.modifiers) {
     if (m.kind !== 'add' && m.kind !== 'subtract') continue
     const amount = (m.amount ?? 0) * count
-    const types = m.resultType === '*' ? EVERY_TYPE : [m.resultType]
+    const types = spellResultTypes(m.resultType)
 
     for (const type of types) {
       if (effect.scope === 'army' && target.kind === 'army') {

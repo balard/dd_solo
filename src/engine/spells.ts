@@ -22,16 +22,16 @@
  * half-built work.
  */
 import { dragonDie } from '../data/load'
-import { spell, type Spell, type SpellEffectSpec, type SpellModifierSpec } from '../data/spells'
+import { spell, spellResultTypes, type Spell, type SpellEffectSpec, type SpellModifierSpec } from '../data/spells'
 
-import type { Element, ResultType } from '../data/types'
+import type { Element } from '../data/types'
 
 import { healthsOf, maxAbsorbable } from './damage'
 import { deathEntries, killUnits } from './death'
 import { returnFromDua } from './dua'
 import { armyRoll, endGlaresOf, unitRoll, type Effect, type EffectTarget } from './effects'
 import { expectNoEffects, rollArmy, rollUnits, type DieRoll } from './roll'
-import { ALL_RESULT_TYPES, type Modifier } from './pipeline'
+import type { Modifier } from './pipeline'
 
 import { damageSubRoll } from './subroll'
 import {
@@ -90,12 +90,11 @@ type SpellHandler = (state: GameState, ctx: SpellContext) => SpellOutcome
  * would not. No spell in scope divides or multiplies, so nothing exercises that today
  * -- but folding at cast time is the shape that stays right when one does.
  *
- * `'*'` expands to every result type: Ash Storm subtracts from *all* results, and five
- * rows in the data would be five places to get it wrong.
+ * A wildcard expands through `spellResultTypes`: Ash Storm subtracts from *all*
+ * results, and five rows in the data would be five places to get it wrong.
  */
 function scaleModifier(m: SpellModifierSpec, count: number): readonly Modifier[] {
-  const types: readonly ResultType[] =
-    m.resultType === '*' ? ALL_RESULT_TYPES : [m.resultType]
+  const types = spellResultTypes(m.resultType)
 
   return types.map((resultType): Modifier => {
     switch (m.kind) {

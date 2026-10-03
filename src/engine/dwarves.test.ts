@@ -546,7 +546,7 @@ describe('Stomp', () => {
     expect(entries(done, 'units_killed')).toMatchObject([{ unitIds: ['p2:0', 'p2:1'] }])
     expect(entries(done, 'units_buried')).toMatchObject([{ unitIds: ['p2:1'] }])
     // The burial check was spent: nothing is left parked on the attack.
-    expect(done.turn.combat?.attack?.burialDue).toBeUndefined()
+    expect(done.turn.burialDue).toBeUndefined()
     expect(validateState(done)).toEqual([])
   })
 

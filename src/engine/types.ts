@@ -271,14 +271,6 @@ export interface PendingAttack {
    * Growth offer. Omitted otherwise.
    */
   readonly rerollDue?: UnitId
-  /**
-   * Stomp's dead, owed their burial check (v2 Phase 6d): "those that do not generate a
-   * maneuver result are killed and must make a save roll. Those that do not generate a
-   * save result are buried." Rolled on the next machine step, for `rerollDue`'s reason
-   * -- an Accelerated Growth offer the kill raised is answered first, and an exchanged
-   * die was never killed, so `settleGrowth` takes it off this list. Omitted otherwise.
-   */
-  readonly burialDue?: { readonly sai: string; readonly unitIds: readonly UnitId[] }
 }
 
 /**
@@ -551,6 +543,18 @@ export interface TurnState {
    * Omitted when empty, near the digest.
    */
   readonly growthOffers?: readonly GrowthOffer[]
+  /**
+   * Burial checks owed to dice already dead (v2 Phase 7b), oldest first: "those that do
+   * not generate a save result are buried". Stomp's since 6d, which parked on
+   * `combat.attack` until a second source arrived whose deaths can come from anywhere --
+   * Soiled Ground (7e), at a terrain, from a melee, a spell, a dragon or a sub-roll.
+   *
+   * `stepGame` settles them **after any growth offer** (an exchanged die was never
+   * killed, so `settleGrowth` takes it off) **and after pruning** (a dead die's own Sleep
+   * must be gone before it rolls, or it fails a roll it is owed). Each rolls only what
+   * is still in the DUA by then. Omitted when empty, near the digest.
+   */
+  readonly burialDue?: readonly BurialCheck[]
 }
 
 /**
@@ -562,6 +566,15 @@ export interface TurnState {
  * to `from`. They are left out of the kill's `units_killed` line; the answer writes
  * that line for the ones declined, and `units_regrown` for the rest.
  */
+/** One burial check owed (`TurnState.burialDue`): who rolls, where they died, and what
+ *  the log names the roll after -- Stomp, or a spell. */
+export interface BurialCheck {
+  readonly source: string
+  readonly player: PlayerId
+  readonly slot: ArmyRef
+  readonly unitIds: readonly UnitId[]
+}
+
 export interface GrowthOffer {
   readonly player: PlayerId
   readonly dying: readonly { readonly unitId: UnitId; readonly from: ArmyRef }[]

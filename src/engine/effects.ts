@@ -125,6 +125,16 @@ export interface Effect {
    */
   readonly glaring?: true
   /**
+   * Stun (v2 Phase 7b; no producer until 7c): "cannot be rolled until the beginning of
+   * your turn, unless they are the target of an individual-targeting effect which forces
+   * them to. Stunned units that leave the terrain through any means are no longer
+   * stunned." So it keeps the die out of every **army** roll and out of nothing else: a
+   * sub-roll still rolls it, it may retreat or be moved, and moving ends it -- an
+   * `anchor` on the stunned die itself, 5b's end condition. `glaring`'s reach, without
+   * its owner choosing it.
+   */
+  readonly stunned?: true
+  /**
    * The effect lasts only while this unit stands at this terrain (v2 Phase 5b): it ends
    * the moment the unit leaves it or leaves play, and -- with `untilRolled` -- the moment
    * the unit is rolled. Hypnotic Glare's end conditions: "if the glaring unit leaves the
@@ -202,6 +212,11 @@ export function isGlaring(state: GameState, unitId: UnitId): boolean {
   return state.effects.some((effect) => targetsUnit(effect, unitId) && effect.glaring === true)
 }
 
+/** Stun's victims: out of army rolls, still rolled by a sub-roll, free to move. */
+export function isStunned(state: GameState, unitId: UnitId): boolean {
+  return state.effects.some((effect) => targetsUnit(effect, unitId) && effect.stunned === true)
+}
+
 /**
  * Whether this die may be rolled at all -- the question every roll asks, army or unit.
  * Sleep and Hypnotic Glare both say no; neither asks where the die may go.
@@ -213,7 +228,7 @@ export function cannotRoll(state: GameState, unitId: UnitId): boolean {
 /** Whether this die sits out an *army* roll: everything `cannotRoll` refuses, and a
  *  glaring die keeping its glare (`Effect.glaring`). A unit roll asks `cannotRoll`. */
 export function sitsOutArmyRoll(state: GameState, unitId: UnitId): boolean {
-  return cannotRoll(state, unitId) || isGlaring(state, unitId)
+  return cannotRoll(state, unitId) || isGlaring(state, unitId) || isStunned(state, unitId)
 }
 
 /**
@@ -252,6 +267,22 @@ export function iconAt(
   const terrain = state.terrains[slot]
   if (terrain.face !== 8 || terrain.capturedBy !== player) return null
   return terrainDie(terrain.dieId).eighthFace
+}
+
+/**
+ * The Temple's first sentence (v2 Phase 7b): "your controlling army and all units in it
+ * cannot be affected by any opponent's death magic". True for the army this player has
+ * at a Temple it holds on face 8, and nowhere else -- never a Reserve Army, which holds
+ * no terrain.
+ *
+ * Through `iconAt`, so losing the capture ends the immunity in the same step, with
+ * nothing stored to revoke. Dormant since v1 Phase 5e: nothing cast death magic until
+ * the Goblins. Its readers arrive with the death spells in 7e -- the gather in
+ * `armyRoll` (a Palsy cast before the capture stops biting while it is held), spell
+ * targeting, and Soiled Ground's burial check -- each with a test that can reach it.
+ */
+export function deathMagicImmune(state: GameState, player: PlayerId, ref: ArmyRef): boolean {
+  return ref !== 'reserve' && iconAt(state, player, ref) === 'temple'
 }
 
 /**

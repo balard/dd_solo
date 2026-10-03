@@ -130,6 +130,7 @@ import {
   type AirFlightOffer,
   type AnnouncedSpell,
   type ArmyRef,
+  type BurialCheck,
   type CombatState,
   type Direction,
   type DragonAttackState,
@@ -738,7 +739,6 @@ function withTargets(
       ...(targets.length > 0 ? { targets } : {}),
       ...(attack.delayed !== undefined ? { delayed: attack.delayed } : {}),
       ...(rerollDue !== undefined ? { rerollDue } : {}),
-      ...(attack.burialDue !== undefined ? { burialDue: attack.burialDue } : {}),
     },
   }
 }
@@ -1076,10 +1076,6 @@ function taskPending(
  */
 function stepTasks(state: GameState, isCounter: boolean, delayed: boolean): GameState {
   const spec = exchangeSpec(state, isCounter)
-  // Stomp's dead roll for burial a step after the kill, once anything it raised has
-  // been asked (v2 Phase 6d).
-  const burial = delayed ? undefined : state.turn.combat?.attack?.burialDue
-  if (burial !== undefined) return rollBurialDue(state, spec, burial)
   const owed = delayed ? undefined : state.turn.combat?.attack?.rerollDue
   if (owed !== undefined) return rollHeldAgain(state, spec, owed)
 
@@ -1162,21 +1158,25 @@ function applyChargeAllocate(
 }
 
 /**
- * Stomp's second roll: the dead it killed roll saves, and those with none are buried.
+ * The burial checks owed (`TurnState.burialDue`), all in one step, oldest first.
  *
- * Made a machine step after the kill, so an Accelerated Growth offer is answered first
- * -- `settleGrowth` takes an exchanged die off the list, since it was never killed --
- * and it rolls only what is in the DUA by now: a Phoenix that rose is not there.
+ * A machine step after the kills, so an Accelerated Growth offer is answered first --
+ * `settleGrowth` takes an exchanged die off the list, since it was never killed -- and
+ * each rolls only what is in the DUA by now: a Phoenix that rose is not there.
  */
-function rollBurialDue(
-  state: GameState,
-  spec: AttackSpec,
-  due: NonNullable<PendingAttack['burialDue']>,
-): GameState {
-  const combat = requireCombat(state)
-  const { burialDue: _settled, ...attack } = requireAttack(state, combat)
-  const cleared = withTurn(state, { combat: { ...combat, attack } })
-  return saveOrBury(cleared, due.unitIds, spec.defender, spec.defenderSlot, due.sai)
+function oweBurial(state: GameState, check: BurialCheck): GameState {
+  if (check.unitIds.length === 0) return state
+  return withTurn(state, { burialDue: [...(state.turn.burialDue ?? []), check] })
+}
+
+function burialStep(state: GameState): GameState {
+  const due = state.turn.burialDue
+  if (due === undefined || state.pending !== null) return state
+  const { burialDue: _settled, ...turn } = state.turn
+  return due.reduce<GameState>(
+    (next, check) => saveOrBury(next, check.unitIds, check.player, check.slot, check.source),
+    { ...state, turn },
+  )
 }
 
 /**
@@ -1777,16 +1777,14 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
   // Stomp: the dead "must make a save roll. Those that do not generate a save result
   // are buried." Not here -- an Accelerated Growth offer the kill raised is answered
   // first, and an exchanged die was never killed -- so the check is owed to the next
-  // machine step, where `rollBurialDue` makes it.
+  // machine step, where `burialStep` makes it.
   if (task.fate === 'save_or_bury') {
     const dropped = dropHeadTask(dead)
-    const combat = requireCombat(dropped)
-    const attack = requireAttack(dropped, combat)
-    return withTurn(dropped, {
-      combat: {
-        ...combat,
-        attack: { ...attack, burialDue: { sai: task.sai, unitIds: inBoardOrder(dropped, doomed) } },
-      },
+    return oweBurial(dropped, {
+      source: task.sai,
+      player: spec.defender,
+      slot: spec.defenderSlot,
+      unitIds: inBoardOrder(dropped, doomed),
     })
   }
 
@@ -3926,6 +3924,12 @@ export function stepGame(state: GameState): GameState {
   const pruned = pruneEffects(state)
   if (pruned !== state) return pruned
 
+  // Burial checks owed to the dead (v2 Phase 7b): after the growth offer, which may take
+  // a die off the list, and after pruning, which ends a dead die's own Sleep before it
+  // rolls. Before the victory check, so the action that wins still logs its burials.
+  const burial = burialStep(state)
+  if (burial !== state) return burial
+
   const victory = findVictory(state)
   if (victory !== null) {
     return withLog(
@@ -4399,18 +4403,14 @@ function settleGrowth(
     attack?.burning === undefined || exchanged.length === 0
       ? attack
       : { ...attack, burning: attack.burning.filter((id) => !exchanged.includes(id)) }
-  // Stomp's burial check likewise (v2 Phase 6d).
-  const due = turn.combat?.attack?.burialDue
-  const combat =
-    turn.combat === null || turn.combat.attack === undefined || due === undefined || exchanged.length === 0
-      ? turn.combat
-      : {
-          ...turn.combat,
-          attack: {
-            ...turn.combat.attack,
-            burialDue: { ...due, unitIds: due.unitIds.filter((id) => !exchanged.includes(id)) },
-          },
-        }
+  // Every burial check owed likewise: Stomp's (v2 Phase 6d) and Soiled Ground's.
+  const burialDue =
+    turn.burialDue === undefined || exchanged.length === 0
+      ? turn.burialDue
+      : turn.burialDue.map((check) => ({
+          ...check,
+          unitIds: check.unitIds.filter((id) => !exchanged.includes(id)),
+        }))
 
   const settled: GameState = withLog(
     {
@@ -4418,7 +4418,7 @@ function settleGrowth(
       units,
       turn: {
         ...turn,
-        combat,
+        ...(burialDue === undefined ? {} : { burialDue }),
         ...(dragonAttack === undefined ? {} : { dragonAttack }),
         ...(rest.length > 0 ? { growthOffers: rest } : {}),
       },

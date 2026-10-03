@@ -52,11 +52,40 @@ export type SpellTargetKind =
 /** Who a declarative spell's modifiers reach. The last three are terrain-scoped. */
 export type SpellScope = 'army' | 'unit' | 'all_armies' | 'attackers' | 'maneuverers'
 
-/** A modifier as the data spells it, before `*` is expanded. */
+/**
+ * A result type as the data spells it: one type, or a wildcard a reader expands with
+ * `spellResultTypes`.
+ *
+ * - `'*'` is every result type -- Ash Storm's "one result from all army rolls".
+ * - `'non_maneuver'` is every type but maneuver (v2 Phase 7b) -- Palsy's "the target's
+ *   non-maneuver rolls". Not four `subtract` rows: a combination roll takes a wildcard
+ *   once per kind it counts, which is what Ash Storm's ruling already gives `'*'`.
+ */
+export type SpellResultType = ResultType | '*' | 'non_maneuver'
+
+const EVERY_RESULT_TYPE: readonly ResultType[] = ['melee', 'missile', 'magic', 'save', 'maneuver']
+
+/**
+ * The result types a modifier in the data reaches. **The one expander**: the engine's
+ * `scaleModifier` and greedy's spell scoring both call it, so a wildcard added later
+ * cannot be learned by one and priced at nothing by the other -- which is what a
+ * second copy in `src/ai/spells.ts` would have done the day Palsy arrived.
+ */
+export function spellResultTypes(resultType: SpellResultType): readonly ResultType[] {
+  switch (resultType) {
+    case '*':
+      return EVERY_RESULT_TYPE
+    case 'non_maneuver':
+      return EVERY_RESULT_TYPE.filter((type) => type !== 'maneuver')
+    default:
+      return [resultType]
+  }
+}
+
+/** A modifier as the data spells it, before a wildcard is expanded. */
 export interface SpellModifierSpec {
   readonly kind: 'add' | 'subtract' | 'divide' | 'multiply' | 'ignore_ids'
-  /** `'*'` means every result type -- Ash Storm, and nothing else so far. */
-  readonly resultType: ResultType | '*'
+  readonly resultType: SpellResultType
   readonly amount?: number
   readonly by?: number
   readonly share?: 'all' | 'id'
@@ -119,7 +148,7 @@ const SPELL_TARGETS: readonly string[] = [
 ]
 const SPELL_SCOPES: readonly string[] = ['army', 'unit', 'all_armies', 'attackers', 'maneuverers']
 const MODIFIER_KINDS: readonly string[] = ['add', 'subtract', 'divide', 'multiply', 'ignore_ids']
-const RESULT_TYPES: readonly string[] = ['melee', 'missile', 'magic', 'save', 'maneuver', '*']
+const RESULT_TYPES: readonly string[] = ['melee', 'missile', 'magic', 'save', 'maneuver', '*', 'non_maneuver']
 
 function oneOf<T extends string>(
   value: string,
@@ -149,7 +178,7 @@ function loadEffect(raw: unknown, context: string): SpellEffectSpec {
 
   const modifiers = effect.modifiers.map((m): SpellModifierSpec => ({
     kind: oneOf<SpellModifierSpec['kind']>(m.kind, MODIFIER_KINDS, 'modifier kind', context),
-    resultType: oneOf<ResultType | '*'>(m.resultType, RESULT_TYPES, 'result type', context),
+    resultType: oneOf<SpellResultType>(m.resultType, RESULT_TYPES, 'result type', context),
     ...(m.amount === undefined ? {} : { amount: m.amount }),
     ...(m.by === undefined ? {} : { by: m.by }),
     ...(m.share === undefined ? {} : { share: m.share as 'all' | 'id' }),

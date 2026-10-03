@@ -24,7 +24,7 @@
 import { terrainDie, terrainType, unitType } from '../data/load'
 import type { Element } from '../data/types'
 
-import type { ArmyRef, GameState, RuleSet, UnitInstance } from './types'
+import { forceSize, type ArmyRef, type GameState, type PlayerId, type RuleSet, type UnitInstance } from './types'
 
 export type AbilityName =
   | 'Rapid Growth'
@@ -111,4 +111,23 @@ export function unitHasAbility(ruleSet: RuleSet, unit: UnitInstance, ability: Ab
 export function terrainHas(state: GameState, ref: ArmyRef, element: Element): boolean {
   if (ref === 'reserve') return false
   return terrainType(terrainDie(state.terrains[ref].dieId).type).elements.includes(element)
+}
+
+/**
+ * The cap on an ability that counts a player's DUA (v2 Phase 7b): Foul Stench (7d) and
+ * Cursed Bullets (Phase 8). p. 21: "the limit stated is per 24 points of total force
+ * size, or part thereof" -- so "three" is 3 up to 24, 6 from 25 to 48, and a 30-health
+ * starter game already allows 6.
+ *
+ * The force is the ability holder's own (`forceSize`, every unit it owns, dead and buried
+ * included), which is the reading PLAN-V2.md settled for unequal sides: each player's
+ * limit follows what that player brought.
+ */
+export function duaCap(state: GameState, player: PlayerId, per: number): number {
+  return capPer24(forceSize(state, player), per)
+}
+
+/** `duaCap`'s arithmetic, apart from a state: `per` for every 24 or part of 24. */
+export function capPer24(size: number, per: number): number {
+  return per * Math.ceil(size / 24)
 }

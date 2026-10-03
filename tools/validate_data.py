@@ -215,7 +215,7 @@ SPELL_TARGETS = {
     "army", "own_army", "opposing_army", "own_unit", "opposing_unit", "units", "terrain",
     "own_dua", "dua",
 }
-RESULT_TYPES = {"melee", "missile", "magic", "save", "maneuver", "*"}
+RESULT_TYPES = {"melee", "missile", "magic", "save", "maneuver", "*", "non_maneuver"}
 MODIFIER_KINDS = {"add", "subtract", "divide", "multiply", "ignore_ids"}
 SPELL_ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 

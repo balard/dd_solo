@@ -30,7 +30,7 @@ import { spell } from '../data/spells'
 
 import { applyDamage } from './damage'
 import { bury } from './dua'
-import { cannotRoll, regrows } from './effects'
+import { cannotRoll, isStunned, regrows } from './effects'
 import { faceOf, rollFaces, type DieRoll } from './roll'
 import { rollDie } from './rng'
 import { terrainHas, unitHasAbility } from './species'
@@ -246,8 +246,11 @@ export function buryEntries(
  *  - **A die that cannot be rolled does not replant** (v2 Phase 7a): asleep, netted or
  *    hypnotized, it is still on the terrain under its status when this roll is made, so
  *    it fails and draws nothing -- section 11's sub-roll rule, `RULES-V0.md` section 16.
- *    A glaring die still rolls, as it does in any unit roll. Rise from the Ashes is the
- *    other way on purpose: it rolls a die that is already dead.
+ *    A glaring die still rolls, as it does in any unit roll. A **stunned** die does not
+ *    (v2 Phase 7b): Stun lets through only a roll an individual-targeting effect forces,
+ *    and Replanting is not one -- the one reader of the status `cannotRoll` does not
+ *    bring along. Rise from the Ashes is the other way on purpose: it rolls a die that is
+ *    already dead.
  *
  * Board order, like `riseFromTheAshes`, and a unit that does not qualify draws nothing.
  * Gated on `speciesAbilities` alone (via `unitHasAbility`), not on `dua`: it moves a unit
@@ -263,7 +266,8 @@ function replanting(state: GameState, unitIds: readonly UnitId[]): DeathOutcome 
       unit.location.kind === 'terrain' &&
       unitHasAbility(state.ruleSet, unit, 'Replanting') &&
       terrainHas(state, unit.location.slot, 'water') &&
-      !cannotRoll(state, unit.id),
+      !cannotRoll(state, unit.id) &&
+      !isStunned(state, unit.id),
   )
   if (candidates.length === 0) return none
 

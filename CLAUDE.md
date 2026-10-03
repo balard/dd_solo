@@ -207,7 +207,10 @@ the dice and the opponent.
 > **v2 Phase 7 (Goblins) is under way, planned in six slices in `PLAN-V2.md`.** 7a has landed: the
 > twenty Goblins dice are in `units.json` -- Death & earth, the first species with no own terrain
 > type -- and `playable.ts` keeps them out of every game until 7d; their five new SAIs (Net,
-> Poison, Regenerate, Screech, Stun) are unbuilt.
+> Poison, Regenerate, Screech, Stun) are unbuilt. A die that cannot be rolled no longer
+> replants (one v1 golden re-recorded for it). 7b has landed too: the seams, no rule moved --
+> `duaCap`, a turn-level `burialDue` (Stomp moved onto it), a stunned status,
+> `spellResultTypes` as the one wildcard expander, and the Temple's `deathMagicImmune`.
 
 ## Read these first
 
