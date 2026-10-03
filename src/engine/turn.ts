@@ -60,6 +60,7 @@ import {
   promotionMatching,
   promotionPartners,
   recruit,
+  returnFromDua,
 } from './dua'
 import { buryEntries, buryUnits, deathEntries, killAndBury, killedIds, killUnits } from './death'
 import {
@@ -94,7 +95,7 @@ import {
 } from './roll'
 import { ignoreIdsModifiers, type Modifier } from './pipeline'
 import { CHARGE_ROLL_KINDS, DRAGON_ROLL_KINDS, type RollContext } from './sai'
-import { terrainHas, unitHasAbility } from './species'
+import { duaCap, terrainHas, unitHasAbility } from './species'
 import { targetTasks, type TargetTask } from './targeting'
 import { unitType } from '../data/load'
 import { spell } from '../data/spells'
@@ -516,6 +517,15 @@ function stepMarch(state: GameState): GameState {
       const targetSlot = requireTerrainTarget(combat.targetSlot)
       if (armyAt(state, defender, targetSlot).length === 0) return endMarch(state)
       if (armyAt(state, player, marchingSlot(state)).length === 0) return endMarch(state)
+      // Foul Stench (v2 Phase 7d): when it benches every die the defender has, there is
+      // nobody to counter with, and the offer would be a question with one answer.
+      const stench = foulStenchCount(state)
+      const defenders = inBoardOrder(state, armyAt(state, defender, targetSlot).map((unit) => unit.id))
+      if (stench > 0 && stench >= defenders.length) {
+        return endMarch(
+          withLog(state, { kind: 'foul_stench', player: defender, slot: targetSlot, unitIds: defenders, noCounter: true }),
+        )
+      }
       return {
         ...state,
         pending: {
@@ -523,8 +533,20 @@ function stepMarch(state: GameState): GameState {
           player: defender,
           slot: targetSlot,
           ...(combat.action === 'missile' ? { volley: { target: marchingRef(state) } } : {}),
+          ...(stench > 0 ? { foulStench: stench } : {}),
         },
       }
+    }
+
+    // Foul Stench (v2 Phase 7d): the counter is accepted, and the defender owes the dice
+    // that sit it out. Fewer than the army, or the offer would never have been made.
+    case 'foul_stench': {
+      const combat = requireCombat(state)
+      const slot = requireTerrainTarget(combat.targetSlot)
+      const defender = opponentOf(player)
+      const count = Math.min(foulStenchCount(state), armyAt(state, defender, slot).length)
+      if (count === 0) return withTurn(state, { marchStep: 'resolve_counter' })
+      return { ...state, pending: { kind: 'foul_stench', player: defender, slot, count } }
     }
   }
 }
@@ -757,6 +779,7 @@ function withSaves(combat: CombatState, saves: PendingSaves, next: Partial<Pendi
       ...(merged.allocation !== undefined ? { allocation: merged.allocation } : {}),
       ...(merged.wave !== undefined && merged.wave > 0 ? { wave: merged.wave } : {}),
       ...(merged.screech !== undefined && merged.screech > 0 ? { screech: merged.screech } : {}),
+      ...(merged.regenerate !== undefined && merged.regenerate > 0 ? { regenerate: merged.regenerate } : {}),
     },
   }
 }
@@ -852,7 +875,8 @@ function taskOwner(task: TargetTask, spec: AttackSpec, delayed: boolean): TaskOw
   // A Cantrip face is on a die in the rolling army, so its pool belongs to whoever
   // threw it -- the attacker on an attack roll, the defender on a save roll. Exactly
   // the split Wild Growth and the free moves make, and for the same reason.
-  const friendly = task.kind === 'promote' || task.kind === 'move' || task.kind === 'cantrip'
+  const friendly =
+    task.kind === 'promote' || task.kind === 'regenerate' || task.kind === 'move' || task.kind === 'cantrip'
   if (delayed && friendly) {
     return { player: spec.defender, army: spec.defender, slot: spec.defenderSlot }
   }
@@ -950,6 +974,10 @@ function taskHasWork(
       // No partner in the DUA and there is no decision: the whole budget is save
       // results, and `stepTasks` applies that rather than asking about it.
       return army.some((unit) => growthPartners(state, unit.id, task.budget).length > 0)
+    // Regenerate (v2 Phase 7d): nothing in the DUA that fits, and the only answer left is
+    // the saves -- applied by `autoResolve`, like Wild Growth's with no partner.
+    case 'regenerate':
+      return regenerateEligible(state, owner.player, task.budget).length > 0
     case 'move': {
       // Still in play, which is a terrain *or* Reserves: a Reserve Army's magic roll
       // is a non-maneuver roll, and "to any terrain" names no starting point. Asking
@@ -1035,6 +1063,15 @@ function taskPending(
         // Only the defender's own save roll counts save results. An attack roll
         // generates them in a type it does not count.
         saveResultsCount: delayed && owner.player === spec.defender,
+      }
+    case 'regenerate':
+      return {
+        kind: 'sai_regenerate',
+        ...common,
+        budget: task.budget,
+        saveResultsCount: delayed && owner.player === spec.defender,
+        slot: owner.slot,
+        eligible: regenerateEligible(state, owner.player, task.budget),
       }
     // Cantrip does not raise one of these: it opens a casting window instead, which
     // `stepTasks` does before it ever gets here.
@@ -1302,6 +1339,7 @@ function autoResolve(
   delayed: boolean,
 ): GameState {
   const dropped = dropHeadTask(state)
+  if (task.kind === 'regenerate') return regenerateSaves(dropped, spec, task, delayed)
   if (task.kind !== 'promote') return dropped
 
   // Wild Growth with nothing to promote into: the budget is save results, and they
@@ -1675,6 +1713,7 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
     task === undefined ||
     task.kind === 'galeforce' ||
     task.kind === 'promote' ||
+    task.kind === 'regenerate' ||
     task.kind === 'move' ||
     task.kind === 'cantrip' ||
     task.kind === 'glare'
@@ -2756,6 +2795,9 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
     // logs no `counter_suppressed` -- that line is Surprise's -- since the exchange's own
     // `charge` field already says so.
     ...(outcome.counterSuppressed || outcome.charge !== undefined ? { counterSuppressed: true as const } : {}),
+    // Foul Stench (v2 Phase 7d) belongs to the counter that may follow the attack, so it
+    // is carried out of the attack half -- and only that half, so it ends with the counter.
+    ...(!isCounter && combat.foulStench === true ? { foulStench: true as const } : {}),
   }
 
   return afterCombatStep(
@@ -4629,9 +4671,14 @@ function applyChooseAction(state: GameState, action: ActionKind | null): GameSta
     toSlot: slot,
     action,
   })
+  // Foul Stench (v2 Phase 7d): "when an army containing Goblins takes a melee action" --
+  // asked now, when the action is taken, and carried to the counter it may bench.
+  const stench =
+    action === 'melee' &&
+    armyRef(state, player, slot).some((unit) => unitHasAbility(state.ruleSet, unit, 'Foul Stench'))
   return withTurn(logged, {
     marchStep: 'resolve_attack',
-    combat: { action, targetSlot: slot, damage: 0 },
+    combat: { action, targetSlot: slot, damage: 0, ...(stench ? { foulStench: true as const } : {}) },
   })
 }
 
@@ -4668,7 +4715,140 @@ function applyCounterAttack(state: GameState, counter: boolean): GameState {
   if (!counter) {
     return endMarch(withLog(state, { kind: 'counter_declined', player: defender }))
   }
-  return withTurn(state, { marchStep: 'resolve_counter' })
+  // Foul Stench is asked once the counter is accepted, not before (owner-approved house
+  // rule, `RULES-V0.md` section 19): the defender answers both, with nothing between.
+  return withTurn(state, { marchStep: foulStenchCount(state) > 0 ? 'foul_stench' : 'resolve_counter' })
+}
+
+/** Foul Stench's three: "up to a maximum of three" per 24 health of force size, p. 21. */
+const FOUL_STENCH_PER_24 = 3
+
+/**
+ * How many of the defender's dice Foul Stench benches: "equal to the number of Goblin
+ * units in the Goblin player's DUA, up to a maximum of three [per 24 health]" (v2 Phase
+ * 7d). Zero unless a Goblin army took this melee action (`CombatState.foulStench`).
+ *
+ * Read when the counter is offered -- "after they have resolved their save roll" -- so a
+ * Goblin that died in the attack, to a Bash or a Counter, is already counted.
+ */
+function foulStenchCount(state: GameState): number {
+  const combat = state.turn.combat
+  if (combat?.foulStench !== true) return 0
+  const attacker = state.turn.marching
+  const dead = Object.values(state.units).filter(
+    (unit) =>
+      unit.owner === attacker &&
+      unit.location.kind === 'dua' &&
+      unitHasAbility(state.ruleSet, unit, 'Foul Stench'),
+  ).length
+  return Math.min(dead, duaCap(state, attacker, FOUL_STENCH_PER_24))
+}
+
+/** The defender's answer: exactly the count, from the army at the terrain. */
+function applyFoulStench(state: GameState, unitIds: readonly UnitId[]): GameState {
+  if (state.turn.marchStep !== 'foul_stench') {
+    throw new IllegalActionError(`no Foul Stench is waiting (march step ${state.turn.marchStep})`)
+  }
+  const combat = requireCombat(state)
+  const slot = requireTerrainTarget(combat.targetSlot)
+  const defender = opponentOf(state.turn.marching)
+  const army = armyAt(state, defender, slot)
+  const count = Math.min(foulStenchCount(state), army.length)
+  if (new Set(unitIds).size !== unitIds.length) {
+    throw new IllegalActionError('Foul Stench names a die twice')
+  }
+  for (const id of unitIds) {
+    if (!army.some((unit) => unit.id === id)) {
+      throw new IllegalActionError(`${id} is not in the army that would counter-attack`)
+    }
+  }
+  if (unitIds.length !== count) {
+    throw new IllegalActionError(`Foul Stench benches exactly ${count} dice, not ${unitIds.length}`)
+  }
+  const benched = inBoardOrder(state, unitIds)
+  const logged = withLog(state, { kind: 'foul_stench', player: defender, slot, unitIds: benched })
+  return withTurn(logged, { marchStep: 'resolve_counter', combat: { ...combat, benched } })
+}
+
+/** Regenerate's units half: every die of the player's in the DUA that fits the budget,
+ *  of any species -- "up to X health-worth of units from your DUA", no more said. */
+function regenerateEligible(state: GameState, player: PlayerId, budget: number): readonly UnitId[] {
+  return Object.values(state.units)
+    .filter(
+      (unit) =>
+        unit.owner === player && unit.location.kind === 'dua' && unitType(unit.typeId).health <= budget,
+    )
+    .map((unit) => unit.id)
+}
+
+/**
+ * Regenerate's saves half, after the task is off the queue: counted only on the
+ * roller's own save roll, and logged only then -- an attack roll counts no saves, and a
+ * line claiming results nothing counts would be a lie (Wild Growth's rule).
+ */
+function regenerateSaves(
+  state: GameState,
+  spec: AttackSpec,
+  task: Extract<TargetTask, { kind: 'regenerate' }>,
+  delayed: boolean,
+): GameState {
+  const owner = taskOwner(task, spec, delayed)
+  if (!delayed || owner.player !== spec.defender) return state
+  const logged = withLog(state, {
+    kind: 'units_regenerated',
+    player: owner.player,
+    sai: task.sai,
+    slot: owner.slot,
+    unitIds: [],
+    saveResults: task.budget,
+  })
+  const combat = requireCombat(logged)
+  const saves = requireSaves(logged, combat)
+  return withTurn(logged, {
+    combat: withSaves(combat, saves, { regenerate: (saves.regenerate ?? 0) + task.budget }),
+  })
+}
+
+/**
+ * Regenerate (v2 Phase 7d): "choose one: X save results, OR return up to X health-worth
+ * of units from your DUA to the army containing this unit". The units join the army now,
+ * at the roller's pause, so on a save roll they stand there when the damage is assigned
+ * -- as a Wild Growth promotion's partner does. They did not roll.
+ */
+function applySaiRegenerate(
+  state: GameState,
+  choice: Extract<GameAction, { kind: 'sai_regenerate' }>['choice'],
+): GameState {
+  const step = state.turn.marchStep
+  const delayed = step === 'sai_delayed_attack' || step === 'sai_delayed_counter'
+  if (!delayed && step !== 'sai_target_attack' && step !== 'sai_target_counter') {
+    throw new IllegalActionError(`no Regenerate is waiting (march step ${step})`)
+  }
+  const [task] = taskQueue(state)
+  if (task === undefined || task.kind !== 'regenerate') {
+    throw new IllegalActionError('no Regenerate is waiting')
+  }
+  const spec = exchangeSpec(state, step === 'sai_target_counter' || step === 'sai_delayed_counter')
+
+  if (choice.kind === 'saves') return regenerateSaves(dropHeadTask(state), spec, task, delayed)
+
+  const owner = taskOwner(task, spec, delayed)
+  const eligible = regenerateEligible(state, owner.player, task.budget)
+  if (new Set(choice.unitIds).size !== choice.unitIds.length) {
+    throw new IllegalActionError('Regenerate names a die twice')
+  }
+  for (const id of choice.unitIds) {
+    if (!eligible.includes(id)) throw new IllegalActionError(`${id} is not in your DUA within ${task.budget} health`)
+  }
+  const health = choice.unitIds.reduce((sum, id) => sum + unitType(state.units[id]?.typeId ?? '').health, 0)
+  if (health > task.budget) {
+    throw new IllegalActionError(`Regenerate returns up to ${task.budget} health-worth, not ${health}`)
+  }
+  const unitIds = inBoardOrder(state, choice.unitIds)
+  const returned = unitIds.length === 0 ? state : returnFromDua(state, unitIds, owner.slot)
+  return dropHeadTask(
+    withLog(returned, { kind: 'units_regenerated', player: owner.player, sai: task.sai, slot: owner.slot, unitIds }),
+  )
 }
 
 function applyAssignDamage(state: GameState, unitIds: readonly UnitId[]): GameState {
@@ -4957,6 +5137,10 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applySaiTargetArmy(cleared, action.slot)
     case 'sai_promote':
       return applySaiPromote(cleared, action.pairs)
+    case 'sai_regenerate':
+      return applySaiRegenerate(cleared, action.choice)
+    case 'foul_stench':
+      return applyFoulStench(cleared, action.unitIds)
     case 'sai_move':
       return applySaiMove(cleared, action.slot, action.unitIds)
     case 'reinforce':

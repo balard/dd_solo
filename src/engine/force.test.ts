@@ -181,7 +181,9 @@ describe('rollForce', () => {
       )
     }
     const mixed = Array.from({ length: 20 }, (_, seed) => speciesIn(rollForce(24, { kind: 'mixed' }, rngFrom(seed))[0]))
-    expect(mixed.some((s) => s.size === 2)).toBe(true)
+    // More than one species, not exactly two: with five in the data a mixed draw of 24
+    // health usually holds three or more (v2 Phase 7d).
+    expect(mixed.some((s) => s.size >= 2)).toBe(true)
   })
 
   it('is a pure function of the stream, and moves it on', () => {

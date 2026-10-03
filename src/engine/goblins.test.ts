@@ -19,7 +19,9 @@ import { killUnits } from './death'
 import { armyRoll, deathMagicImmune, isAsleep, isStunned, pruneEffects, unitRoll, type Effect } from './effects'
 import { advance, reduce } from './reduce'
 import { rollDice, type RngState } from './rng'
+import { meleeAsManeuver } from './pipeline'
 import { saiEffects, type RollContext } from './sai'
+import { targetTasks } from './targeting'
 import { capPer24, duaCap } from './species'
 import {
   V0_RULES,
@@ -278,8 +280,8 @@ function rngShowing(typeIds: readonly string[], faces: readonly number[]): RngSt
  *  p2 keeps a die at home, so no exchange here ends the game. */
 const attackAt = (
   action: 'melee' | 'missile',
-  p1: readonly string[],
-  p2: readonly string[],
+  p1: readonly (string | Die)[],
+  p2: readonly (string | Die)[],
   rng: RngState,
 ): GameState =>
   board(p1, [...p2, { typeId: OAK, at: { kind: 'terrain', slot: 'p2_home' } }], {
@@ -444,5 +446,176 @@ describe('Stun', () => {
     const saved = entries(done, 'combat_resolved')[0]?.saveDice ?? []
     expect(saved.map((d) => d.unitId)).toEqual(['p2:2'])
     expect(validateState(done)).toEqual([])
+  })
+})
+
+// --- Regenerate, Swamp Mastery, Foul Stench (7d) ------------------------------------
+
+const TROLL = 'goblins.troll'
+const THUG = 'goblins.thug'
+const CUTTHROAT = 'goblins.cutthroat'
+const OAK_LORD = 'treefolk.oak_lord'
+const dead = (typeId: string): Die => ({ typeId, at: { kind: 'dua' } })
+
+describe('Regenerate', () => {
+  const face = { count: 4, icon: 'SAI', sai: 'Regenerate' } as const
+
+  it('is a choice on any non-maneuver roll, and the saves where there is no room for one', () => {
+    const save: RollContext = { purpose: { kind: 'save', against: 'melee' }, isCounter: false }
+    expect(saiEffects(face, save, RULES).effects).toEqual([{ kind: 'regenerate', budget: 4 }])
+    expect(saiEffects(face, { purpose: { kind: 'maneuver' }, isCounter: false }, RULES).effects).toEqual([])
+    expect(saiEffects(face, { ...save, isSubRoll: true }, RULES).results).toEqual({ save: 4 })
+    expect(saiEffects(face, { purpose: { kind: 'dragon_attack' }, isCounter: false }, RULES).results).toEqual({
+      save: 4,
+    })
+  })
+
+  it('combines into one choice of their sum', () => {
+    const effect = (unitId: string) => ({ kind: 'regenerate', budget: 4, sai: 'Regenerate', unitId }) as const
+    expect(targetTasks([effect('a'), effect('b')])).toEqual([{ kind: 'regenerate', sai: 'Regenerate', budget: 8 }])
+  })
+
+  // p1's Watcher attacks for 3; p2's Troll answers with Regenerate, an Oak in p2's DUA.
+  const defending = () =>
+    advance(
+      attackAt(
+        'melee',
+        [WATCHER],
+        [TROLL, dead(OAK), dead(OAK_LORD)],
+        rngShowing([WATCHER, TROLL], [faceOf(WATCHER, 'MELEE'), faceOf(TROLL, 'SAI:Regenerate')]),
+      ),
+    )
+
+  it("asks the defender at its save roll, offering every dead die that fits", () => {
+    const asked = defending()
+    expect(asked.pending).toMatchObject({
+      kind: 'sai_regenerate',
+      player: 'p2',
+      budget: 4,
+      saveResultsCount: true,
+      slot: 'frontier',
+      eligible: ['p2:1', 'p2:2'],
+    })
+  })
+
+  it('as saves: X more on the roll, named on its line', () => {
+    const done = advance(reduce(defending(), { kind: 'sai_regenerate', choice: { kind: 'saves' } }))
+    const fight = entries(done, 'combat_resolved')[0]
+    expect(fight?.saveMath?.steps).toContainEqual({ source: 'Regenerate', delta: 4 })
+    expect(fight?.damage).toBe(0)
+    expect(entries(done, 'units_regenerated')).toMatchObject([{ player: 'p2', unitIds: [], saveResults: 4 }])
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('as units: back in the army before the damage is assigned, and they can take it', () => {
+    const done = advance(
+      reduce(defending(), { kind: 'sai_regenerate', choice: { kind: 'units', unitIds: ['p2:1'] } }),
+    )
+    expect(done.units['p2:1']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(entries(done, 'units_regenerated')).toMatchObject([{ player: 'p2', unitIds: ['p2:1'], slot: 'frontier' }])
+    // 3 damage against a Troll (4) and the Oak (2) that just came back: the Oak takes it.
+    expect(done.pending).toMatchObject({ kind: 'assign_damage', player: 'p2', damage: 3 })
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('refuses more health than the budget, and a die not in the DUA', () => {
+    const asked = defending()
+    expect(() =>
+      reduce(asked, { kind: 'sai_regenerate', choice: { kind: 'units', unitIds: ['p2:1', 'p2:2'] } }),
+    ).toThrow(/up to 4 health-worth/)
+    expect(() => reduce(asked, { kind: 'sai_regenerate', choice: { kind: 'units', unitIds: ['p2:0'] } })).toThrow(
+      /not in your DUA/,
+    )
+  })
+
+  it('takes the saves without asking when nothing in the DUA fits', () => {
+    const done = advance(
+      attackAt(
+        'melee',
+        [WATCHER],
+        [TROLL],
+        rngShowing([WATCHER, TROLL], [faceOf(WATCHER, 'MELEE'), faceOf(TROLL, 'SAI:Regenerate')]),
+      ),
+    )
+    expect(entries(done, 'units_regenerated')).toMatchObject([{ unitIds: [], saveResults: 4 }])
+    expect(entries(done, 'combat_resolved')[0]?.damage).toBe(0)
+  })
+
+  it("on the attacker's roll offers only the units: an attack counts no saves", () => {
+    const asked = advance(
+      attackAt(
+        'melee',
+        [TROLL, WATCHER, dead(OAK)],
+        [OAK],
+        rngShowing([TROLL, WATCHER], [faceOf(TROLL, 'SAI:Regenerate'), faceOf(WATCHER, 'MELEE')]),
+      ),
+    )
+    expect(asked.pending).toMatchObject({ kind: 'sai_regenerate', player: 'p1', saveResultsCount: false, eligible: ['p1:2'] })
+    const done = reduce(asked, { kind: 'sai_regenerate', choice: { kind: 'units', unitIds: ['p1:2'] } })
+    expect(done.units['p1:2']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+  })
+})
+
+describe('Swamp Mastery', () => {
+  it('lets a Goblin count melee as maneuver at earth, named as its own', () => {
+    const at = (dieId: string) => armyRoll(board([THUG], [OAK], { dieId }), 'p1', 'frontier', 'maneuver').modifiers
+    expect(at('highland_tower')).toContainEqual(meleeAsManeuver(['goblins'], 'Swamp Mastery'))
+    expect(at('wasteland_tower').some((m) => m.kind === 'counts_as')).toBe(false)
+  })
+})
+
+describe('Foul Stench', () => {
+  // p1's Thug shows a save: no melee, so p2's Oaks all survive to be offered a counter.
+  const goblinsAttack = (p1Dead: readonly string[], p2: readonly string[]): GameState => {
+    const base = attackAt('melee', [THUG, ...p1Dead.map(dead)], p2, rngShowing([THUG], [faceOf(THUG, 'SAVE')]))
+    const combat = base.turn.combat
+    if (combat === null) throw new Error('no combat')
+    return { ...base, turn: { ...base.turn, combat: { ...combat, foulStench: true } } }
+  }
+
+  it('is flagged when an army containing Goblins takes a melee action', () => {
+    const start = board([THUG], [OAK], {
+      dieId: 'wasteland_tower',
+      turn: { marchStep: 'action', marchingArmy: 'frontier', armiesMarched: ['frontier'] },
+    })
+    const chosen = reduce(advance(start), { kind: 'choose_action', action: 'melee' })
+    expect(chosen.turn.combat?.foulStench).toBe(true)
+    const dwarf = board(['dwarves.footman'], [OAK], {
+      dieId: 'wasteland_tower',
+      turn: { marchStep: 'action', marchingArmy: 'frontier', armiesMarched: ['frontier'] },
+    })
+    expect(reduce(advance(dwarf), { kind: 'choose_action', action: 'melee' }).turn.combat?.foulStench).toBeUndefined()
+  })
+
+  it('says how many will sit out, asks once the counter is accepted, and benches them', () => {
+    const offered = advance(goblinsAttack([CUTTHROAT, CUTTHROAT], [OAK, OAK, OAK]))
+    expect(offered.pending).toMatchObject({ kind: 'choose_counter_attack', player: 'p2', foulStench: 2 })
+
+    const asked = reduce(offered, { kind: 'choose_counter_attack', counter: true })
+    expect(asked.pending).toEqual({ kind: 'foul_stench', player: 'p2', slot: 'frontier', count: 2 })
+    expect(() => reduce(asked, { kind: 'foul_stench', unitIds: ['p2:0'] })).toThrow(/exactly 2/)
+
+    const done = advance(reduce(asked, { kind: 'foul_stench', unitIds: ['p2:1', 'p2:0'] }))
+    expect(entries(done, 'foul_stench')).toMatchObject([{ player: 'p2', unitIds: ['p2:0', 'p2:1'] }])
+    const counter = entries(done, 'combat_resolved').find((e) => e.isCounter)
+    expect(counter?.attackDice.map((d) => d.unitId)).toEqual(['p2:2'])
+    // The bench ends with the exchange.
+    expect(done.turn.combat?.benched).toBeUndefined()
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('offers no counter at all when it benches the whole army', () => {
+    const done = advance(goblinsAttack([CUTTHROAT, CUTTHROAT], [OAK, OAK]))
+    expect(done.pending?.kind).not.toBe('choose_counter_attack')
+    expect(entries(done, 'foul_stench')).toMatchObject([{ unitIds: ['p2:0', 'p2:1'], noCounter: true }])
+  })
+
+  it('counts at most three per 24 health of the Goblin force, and nothing with no dead', () => {
+    // Nine health: four dead Cutthroats and the Thug -- capped at three.
+    const capped = advance(goblinsAttack([CUTTHROAT, CUTTHROAT, CUTTHROAT, CUTTHROAT], [OAK, OAK, OAK, OAK]))
+    expect(capped.pending).toMatchObject({ kind: 'choose_counter_attack', foulStench: 3 })
+    const none = advance(goblinsAttack([], [OAK, OAK]))
+    expect(none.pending).toMatchObject({ kind: 'choose_counter_attack' })
+    expect(none.pending).not.toHaveProperty('foulStench')
   })
 })

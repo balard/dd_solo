@@ -495,6 +495,38 @@ export function LogLine({
           {where(entry.slot)}
         </p>
       )
+    // Regenerate (v2 Phase 7d): dice back from the DUA, or the saves taken instead.
+    case 'units_regenerated':
+      return (
+        <p className={entry.unitIds.length === 0 && entry.saveResults === undefined ? 'log-line muted' : 'log-line'}>
+          <strong>{entry.sai}</strong>:{' '}
+          {entry.unitIds.length > 0 ? (
+            <>
+              {who(entry.player)} {verb(entry.player, 'brings', 'bring')}{' '}
+              {entry.unitIds.map((id) => nameOf(state, id)).join(', ')} back from the DUA to{' '}
+              {where(entry.slot)}
+            </>
+          ) : entry.saveResults !== undefined ? (
+            <>
+              {who(entry.player)} {verb(entry.player, 'takes', 'take')} {entry.saveResults} saves
+            </>
+          ) : (
+            <>
+              {who(entry.player)} {verb(entry.player, 'brings', 'bring')} nobody back
+            </>
+          )}
+        </p>
+      )
+    // Foul Stench (v2 Phase 7d): the defender's dice that sit the counter out.
+    case 'foul_stench':
+      return (
+        <p className="log-line">
+          <strong>Foul Stench</strong>:{' '}
+          {entry.noCounter === true
+            ? `none of ${entry.player === human ? 'your' : "the enemy's"} dice may counter-attack`
+            : `${entry.unitIds.map((id) => nameOf(state, id)).join(', ')} may not counter-attack`}
+        </p>
+      )
     case 'effects_expired':
       return (
         <p className="log-line muted">

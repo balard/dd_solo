@@ -455,6 +455,8 @@ export interface SaveRollState {
   readonly wave?: number
   /** Screech (v2 Phase 7c): the same, under its own name (`PendingSaves.screech`). */
   readonly screech?: number
+  /** Regenerate (v2 Phase 7d): saves its roller took instead of units. */
+  readonly regenerate?: number
   /** Bash: save results equal to the melee of the die it hit (`PendingSaves.bash`). */
   readonly bash?: number
   /** Charge (v2 Phase 6e): this is the defender's combination save and melee roll. */
@@ -513,6 +515,7 @@ export function attackFacts(state: GameState, spec: AttackSpec, attack: AttackRo
       'choke',
       'confuse',
       'wild_growth',
+      'regenerate',
       'free_move',
       'cantrip',
       'wave',
@@ -592,6 +595,9 @@ export function chargeRollSpec(
   if ((saves.bonus ?? 0) > 0) {
     extra.push({ kind: 'add', resultType: 'save', amount: saves.bonus ?? 0, source: 'Wild Growth' })
   }
+  if ((saves.regenerate ?? 0) > 0) {
+    extra.push({ kind: 'add', resultType: 'save', amount: saves.regenerate ?? 0, source: 'Regenerate' })
+  }
   return { ...base, modifiers: [...base.modifiers, ...extra] }
 }
 
@@ -631,10 +637,11 @@ function defenderRollSpec(state: GameState, spec: AttackSpec, saves: SaveRollSta
 function saveRollSpec(
   state: GameState,
   spec: AttackSpec,
-  saves: Pick<SaveRollState, 'bonus' | 'wave' | 'screech' | 'bash'>,
+  saves: Pick<SaveRollState, 'bonus' | 'wave' | 'screech' | 'bash' | 'regenerate'>,
 ): RollSpec {
   const { bonus } = saves
   const bash = saves.bash ?? 0
+  const regenerate = saves.regenerate ?? 0
   const defenders = armyRoll(state, spec.defender, spec.defenderSlot, 'save')
   return {
     kinds: ['save'],
@@ -648,6 +655,11 @@ function saveRollSpec(
       ...defenders.modifiers,
       ...attackSaveCuts(saves),
       ...(bash > 0 ? [{ kind: 'add', resultType: 'save', amount: bash, source: 'Bash' } as const] : []),
+      // Regenerate's saves (v2 Phase 7d), the roller's choice rather than a face: a named
+      // step-10 add, as Bash's are.
+      ...(regenerate > 0
+        ? [{ kind: 'add', resultType: 'save', amount: regenerate, source: 'Regenerate' } as const]
+        : []),
     ],
     // It is also where Counter and Volley hit back, which is why it needs to know what
     // it is saving against.
@@ -813,7 +825,7 @@ export function finishSaves(
   // same pause the attacker's Choke was. They stay on the list; they are not dropped.
   expectOnly(
     saveRoll.effects,
-    ['riposte', 'wild_growth', 'free_move', 'cantrip', 'bash'],
+    ['riposte', 'wild_growth', 'regenerate', 'free_move', 'cantrip', 'bash'],
     `a save roll against ${spec.action}`,
   )
 
@@ -859,7 +871,7 @@ function finishCharge(
   const [swept, afterSweep] = rerollSweep(saves.dice, rollSpec, state.ruleSet, rng)
   const outcome = resolveFaces(swept, rollSpec, state.ruleSet)
   const saveRoll = asResult(outcome, 'save')
-  expectOnly(saveRoll.effects, ['riposte', 'wild_growth', 'free_move', 'cantrip', 'bash'], 'a Charge roll')
+  expectOnly(saveRoll.effects, ['riposte', 'wild_growth', 'regenerate', 'free_move', 'cantrip', 'bash'], 'a Charge roll')
 
   const melee = outcome.totals.melee ?? 0
   const meleeMath = outcome.math?.melee

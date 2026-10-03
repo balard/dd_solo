@@ -192,6 +192,13 @@ export type MarchStep =
   // its delayed effects resolved; now it says where its IDs go. The attack half only --
   // "Charge has no effect during a counter-attack".
   | 'charge_allocate'
+  /**
+   * Foul Stench (v2 Phase 7d): the defender has accepted a counter-attack against a
+   * Goblin army's melee action and owes the dice that sit it out. Between the offer and
+   * `resolve_counter` -- asked only once the counter is accepted (owner-approved house
+   * rule, `RULES-V0.md` section 19), since the same player answers both.
+   */
+  | 'foul_stench'
   | 'resolve_attack_damage'
   | 'assign_attack_damage'
   | 'assign_attack_riposte'
@@ -317,6 +324,9 @@ export interface PendingSaves {
   /** Screech (v2 Phase 7c): Wave's melee half, in its own field so the arithmetic line
    *  names it. Omitted when no Screech was rolled. */
   readonly screech?: number
+  /** Regenerate (v2 Phase 7d): save results its roller took instead of units. Its own
+   *  field, not Wild Growth's `bonus`, so the line says "+ 4 Regenerate". */
+  readonly regenerate?: number
 }
 
 /**
@@ -348,6 +358,15 @@ export interface CombatState {
   readonly riposte?: number
   /** Surprise, rolled by the attacker: the defender may not counter-attack. */
   readonly counterSuppressed?: true
+  /**
+   * Foul Stench (v2 Phase 7d): this melee action was taken by an army containing
+   * Goblins. Set when the action is chosen -- "when an army containing Goblins takes a
+   * melee action" -- so a Goblin killed later in the exchange does not take it away.
+   */
+  readonly foulStench?: true
+  /** And the defender's dice that may not counter-attack, chosen at `foul_stench`.
+   *  `armyRoll` leaves them out; dropped with the combat when the counter ends. */
+  readonly benched?: readonly UnitId[]
   /** Set at `resolve_*`, read and dropped at `resolve_*_damage`. Never present at a
    *  step the machine rests on. */
   readonly attack?: PendingAttack
@@ -717,6 +736,20 @@ export type Pending =
        * front of it, so a client knows which roll it is being offered.
        */
       readonly volley?: { readonly target: ArmyRef }
+      /** Foul Stench (v2 Phase 7d): how many of the defender's dice will sit the counter
+       *  out if it is accepted. Omitted when none. */
+      readonly foulStench?: number
+    }
+  /**
+   * Foul Stench (v2 Phase 7d): "the opposing player must select a number of their units
+   * ... The selected units cannot perform a counter-attack during this melee action."
+   * Exactly `count` of the defending army's dice -- any of them, a sleeping one included.
+   */
+  | {
+      readonly kind: 'foul_stench'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly count: number
     }
   | {
       readonly kind: 'assign_damage'
@@ -828,6 +861,25 @@ export type Pending =
        *  Reserve Army after a Tower's missile (Phase 5d) included: promotion
        *  cares about the DUA, not the terrain. */
       readonly slot: ArmyRef
+      readonly remaining: number
+    }
+  /**
+   * Regenerate (v2 Phase 7d): "choose one: Regenerate generates X save results, OR, you
+   * may return up to X health-worth of units from your DUA to the army containing this
+   * unit." Several Regenerates in one roll are one choice of their sum.
+   *
+   * `eligible` is every die of the roller's in the DUA that fits the budget, any species
+   * (the rule names none). `saveResultsCount` is Wild Growth's: on a roll that does not
+   * count saves, the saves half is legal and worth nothing, and the clients do not offer it.
+   */
+  | {
+      readonly kind: 'sai_regenerate'
+      readonly player: PlayerId
+      readonly sai: string
+      readonly budget: number
+      readonly saveResultsCount: boolean
+      readonly slot: ArmyRef
+      readonly eligible: readonly UnitId[]
       readonly remaining: number
     }
   /**
@@ -1147,6 +1199,15 @@ export type GameAction =
   /** Wild Growth. An empty list is a legal answer: it spends the whole budget on
    *  save results. */
   | { readonly kind: 'sai_promote'; readonly pairs: readonly PromotionPair[] }
+  /** Regenerate: X saves, or up to X health-worth back from the DUA -- none included. */
+  | {
+      readonly kind: 'sai_regenerate'
+      readonly choice:
+        | { readonly kind: 'saves' }
+        | { readonly kind: 'units'; readonly unitIds: readonly UnitId[] }
+    }
+  /** Foul Stench: the defender's dice that sit the counter-attack out. */
+  | { readonly kind: 'foul_stench'; readonly unitIds: readonly UnitId[] }
   /** A free move. `slot: null` declines it, which is not the same answer as moving
    *  the mover alone. */
   | {
@@ -1634,6 +1695,30 @@ export type LogEntry =
        *  instead of Wild Growth's budget. Phase 6 adds the two a dragon attack can
        *  earn. Omitted for Wild Growth's, which is every recorded game so far. */
       readonly source?: 'city' | 'dragon_treasure' | 'dragon_slain'
+    }
+  /**
+   * Regenerate (v2 Phase 7d): dice brought back from the DUA to the army that rolled it,
+   * or -- `unitIds` empty -- the save results taken instead. Omitted `saveResults` means
+   * none were counted.
+   */
+  | {
+      readonly kind: 'units_regenerated'
+      readonly player: PlayerId
+      readonly sai: string
+      readonly slot: ArmyRef
+      readonly unitIds: readonly UnitId[]
+      readonly saveResults?: number
+    }
+  /**
+   * Foul Stench (v2 Phase 7d): the defender's dice that may not counter-attack. When they
+   * are every die it has, no counter is offered at all, and `noCounter` says so.
+   */
+  | {
+      readonly kind: 'foul_stench'
+      readonly player: PlayerId
+      readonly slot: TerrainSlot
+      readonly unitIds: readonly UnitId[]
+      readonly noCounter?: true
     }
   /** City recruiting a 1-health unit from the DUA (Phase 5e). */
   | {

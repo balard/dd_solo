@@ -146,15 +146,21 @@ export function maneuverAsSaves(species: readonly string[]): Modifier {
  * Dwarves may count melee results as if they were maneuver results." Gathered at every
  * earth terrain, and applied by a roll that counts maneuver and not melee -- every
  * maneuver roll there is, and a Dwarf's own maneuver sub-roll -- where it only adds.
+ *
+ * Swamp Mastery (v2 Phase 7d) is the same sentence for the Goblins, so the factory takes
+ * the name: a shared source is a Goblin's roll reading "(Mountain Mastery)".
  */
-export function meleeAsManeuver(species: readonly string[]): Modifier {
+export function meleeAsManeuver(
+  species: readonly string[],
+  source: 'Mountain Mastery' | 'Swamp Mastery' = 'Mountain Mastery',
+): Modifier {
   return {
     kind: 'counts_as',
     from: 'melee',
     resultType: 'maneuver',
     counter: 'either',
     species,
-    source: 'Mountain Mastery',
+    source,
   }
 }
 
@@ -359,6 +365,11 @@ export type RollEffectBody =
    * that did it: a shared channel is a line that says "- 4 Wave" about a Harpy.
    */
   | { readonly kind: 'screech'; readonly amount: number }
+  /**
+   * Regenerate (v2 Phase 7d): X save results **or** up to X health-worth of the roller's
+   * dead back to this army -- the roller's choice, at Wild Growth's friendly pause.
+   */
+  | { readonly kind: 'regenerate'; readonly budget: number }
   /**
    * Hypnotic Glare (v2 Phase 5c): every defender whose save die came up an ID is
    * hypnotized, and none of their results count. Delayed, like Choke -- the question is

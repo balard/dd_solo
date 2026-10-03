@@ -5,7 +5,7 @@
  * bar renders whatever this returns, so no component ever tracks its own wizard
  * state or decides what is legal -- the engine already did both.
  */
-import { expectedArmy, expectedAttack } from '../../ai/estimate'
+import { expectedArmy, expectedAttack, foulStenchBench } from '../../ai/estimate'
 import { dragonName, terrainDie, terrainDieName, terrainFaceAction, terrainType, unitType } from '../../data/load'
 import { spell } from '../../data/spells'
 import type { Element, TerrainFaceNumber, UnitClass, UnitType } from '../../data/types'
@@ -128,6 +128,19 @@ export function plainLabel(choice: Choice): string {
 const about = (n: number): string => `≈${Math.round(n)}`
 
 /** "expect ≈6, they save ≈3": both rolls of an attack, before either is thrown. */
+/**
+ * The board as the counter will roll it, under Foul Stench (v2 Phase 7d): the bench is
+ * chosen only after the counter is accepted, so the forecast assumes the dice that would
+ * add least -- greedy's own pick -- sit it out. `armyRoll` reads `combat.benched`, so the
+ * estimate leaves them out through the one door.
+ */
+function benchedFor(state: GameState, pending: Extract<Pending, { kind: 'choose_counter_attack' }>): GameState {
+  const combat = state.turn.combat
+  if (pending.foulStench === undefined || combat === null) return state
+  const benched = foulStenchBench(state, pending.player, pending.slot, pending.foulStench)
+  return { ...state, turn: { ...state.turn, combat: { ...combat, benched } } }
+}
+
 function attackForecast(
   state: GameState,
   player: PlayerId,
@@ -159,6 +172,8 @@ export interface Prompt {
     | 'assign_damage'
     | 'sai_target'
     | 'sai_promote'
+    | 'sai_regenerate'
+    | 'foul_stench'
     | 'sai_move'
     | 'reinforce'
     | 'retreat'
@@ -360,14 +375,19 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
       // Defensive Volley (v2 Phase 5d) is a missile roll back at the army that shot,
       // wherever it stands; the ordinary counter is melee at the army in front of you.
       return {
-        question: pending.volley !== undefined ? 'Counter-attack with Defensive Volley?' : 'Counter-attack?',
+        question:
+          (pending.volley !== undefined ? 'Counter-attack with Defensive Volley?' : 'Counter-attack?') +
+          // Foul Stench (v2 Phase 7d): asked after you accept, so the cost is said here.
+          (pending.foulStench !== undefined
+            ? ` Foul Stench: you will pick ${pending.foulStench} of your dice to sit it out.`
+            : ''),
         choices: [
           {
             label: pending.volley !== undefined ? 'Volley back' : 'Counter-attack',
             detail:
               pending.volley !== undefined
                 ? attackForecast(state, pending.player, pending.slot, 'missile', pending.volley.target, true)
-                : attackForecast(state, pending.player, pending.slot, 'melee', pending.slot, true),
+                : attackForecast(benchedFor(state, pending), pending.player, pending.slot, 'melee', pending.slot, true),
             action: { kind: 'choose_counter_attack', counter: true },
           },
           { label: 'Decline', action: { kind: 'choose_counter_attack', counter: false }, passive: true },
@@ -422,6 +442,26 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
           (pending.remaining > 1 ? ` (${pending.remaining} to place)` : ''),
         choices: [],
         custom: 'sai_promote',
+      }
+
+    // Regenerate (v2 Phase 7d): the saves, or dead dice back -- tapped in the Fallen area.
+    case 'sai_regenerate':
+      return {
+        question:
+          `${pending.sai}: ` +
+          (pending.saveResultsCount ? `${pending.budget} saves, or ` : '') +
+          `up to ${pending.budget} health-worth back from your DUA` +
+          (pending.remaining > 1 ? ` (${pending.remaining} to place)` : ''),
+        choices: [],
+        custom: 'sai_regenerate',
+      }
+
+    // Foul Stench (v2 Phase 7d): your own dice, at the terrain the counter comes from.
+    case 'foul_stench':
+      return {
+        question: `Foul Stench: pick ${pending.count} of your dice at ${label(pending.slot)} to sit the counter-attack out`,
+        choices: [],
+        custom: 'foul_stench',
       }
 
     case 'sai_move':
@@ -1107,6 +1147,9 @@ export function selectModeFor(pending: Pending | null, human: 'p1' | 'p2'): Sele
     case 'sai_promote':
     case 'sai_move':
       return { side: 'mine', slot: pending.slot }
+    // Foul Stench (v2 Phase 7d): your own army, the one about to counter-attack.
+    case 'foul_stench':
+      return { side: 'mine', slot: pending.slot }
     // Your own dice, at the terrain that just rolled them.
     case 'flashfire':
       return { side: 'mine', slot: pending.slot }
@@ -1318,6 +1361,9 @@ export function pickModeFor(
     }
     case 'temple_bury':
       return any(pending.options)
+    // Regenerate (v2 Phase 7d): any of your dead that fit the budget.
+    case 'sai_regenerate':
+      return any(pending.eligible)
     default:
       return selectModeFor(pending, human)
   }

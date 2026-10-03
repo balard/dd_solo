@@ -78,6 +78,8 @@ const DECISIONS: Readonly<Record<GameAction['kind'], Reach>> = {
   sai_target: 'every',
   sai_target_army: 'every',
   sai_promote: 'every',
+  sai_regenerate: 'every',
+  foul_stench: 'every',
   sai_move: 'every',
   reinforce: 'every',
   retreat: 'every',
@@ -141,6 +143,8 @@ const LOG: Readonly<Record<LogEntry['kind'], Reach>> = {
   sai_resolved: 'every',
   sai_sub_roll: 'every',
   units_promoted: 'every',
+  units_regenerated: 'every',
+  foul_stench: 'every',
   units_recruited: 'every',
   units_moved: 'every',
   units_buried: 'every',
@@ -208,6 +212,22 @@ const RULES: Readonly<Record<string, Reach>> = {
   // A Behemoth's army attacked by a dragon, rolling its Bash face: not in 1000 games.
   dragon_bash: { elsewhere: 'dwarves.test.ts' },
   charge: 'every',
+  // The Goblins (v2 Phase 7): the targeting four by the entry they leave, Net and Stun
+  // by the status they write, Screech by its step, and Regenerate both ways.
+  'resolved:Poison': 'every',
+  'resolved:Net': 'every',
+  'resolved:Stun': 'every',
+  'effect:Net': 'every',
+  // Stun resolves within 200 games, but a die failing its maneuver to it does not.
+  'effect:Stun': 'full',
+  poison_burial: 'every',
+  screech: 'every',
+  'regenerate:units': 'every',
+  'regenerate:saves': 'every',
+  swamp_mastery: 'every',
+  // Foul Stench benching the whole army, so no counter is offered: the common case in
+  // random play, where a Goblin DUA fills fast and a defending army is often small.
+  foul_stench_no_counter: 'every',
   // The eighth face: a missile at a Reserve Army is Tower's; City and Temple are
   // their own decisions above.
   tower_reserve: 'every',
@@ -319,6 +339,7 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
           if (entry.action === 'missile' && entry.defenderSlot === 'reserve') bump('tower_reserve')
           if (entry.flamingShields !== undefined) bump('flaming_shields')
           if (entry.saveMath?.steps.some((step) => step.source === 'Wave')) bump('wave:saves')
+          if (entry.saveMath?.steps.some((step) => step.source === 'Screech')) bump('screech')
           if (entry.saveMath?.notes.some((note) => note.includes('Coastal Dodge'))) bump('coastal_dodge')
           if (entry.isCounter && entry.action === 'missile') bump('defensive_volley')
           if (entry.charge !== undefined) bump('charge')
@@ -335,9 +356,23 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
           ) {
             bump('mountain_mastery')
           }
+          if (
+            [entry.marcherMath, entry.defenderMath].some((math) =>
+              math?.notes.some((note) => note.includes('Swamp Mastery')),
+            )
+          ) {
+            bump('swamp_mastery')
+          }
           break
         case 'sai_sub_roll':
           if (entry.source === 'Stomp' && entry.fate === 'bury') bump('stomp_burial')
+          if (entry.source === 'Poison' && entry.fate === 'bury') bump('poison_burial')
+          break
+        case 'units_regenerated':
+          bump(entry.unitIds.length > 0 ? 'regenerate:units' : 'regenerate:saves')
+          break
+        case 'foul_stench':
+          if (entry.noCounter === true) bump('foul_stench_no_counter')
           break
         case 'dragon_damage':
           if (entry.bashed !== undefined) bump('dragon_bash')

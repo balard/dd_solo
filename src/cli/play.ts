@@ -476,6 +476,26 @@ function describe(entry: LogEntry, state: GameState): string | null {
 
     case 'counter_declined':
       return dim(`${entry.player} declines to counter-attack`)
+    // Regenerate (v2 Phase 7d): dice back from the DUA, or the saves taken instead.
+    case 'units_regenerated':
+      return entry.unitIds.length === 0
+        ? entry.saveResults === undefined
+          ? null
+          : green(`  ${entry.sai}: ${entry.player} takes ${entry.saveResults} saves`)
+        : green(
+            `  ${entry.sai}: ${entry.player} brings ${entry.unitIds
+              .map((id) => (state.units[id] ? name(state.units[id]!) : id))
+              .join(', ')} back from the DUA to ${SLOT_LABEL[entry.slot as TerrainSlot] ?? entry.slot}`,
+          )
+    // Foul Stench (v2 Phase 7d): the defender's dice that sit the counter out.
+    case 'foul_stench':
+      return yellow(
+        entry.noCounter === true
+          ? `  Foul Stench: none of ${entry.player}'s dice may counter-attack`
+          : `  Foul Stench: ${entry.unitIds
+              .map((id) => (state.units[id] ? name(state.units[id]!) : id))
+              .join(', ')} may not counter-attack`,
+      )
 
     // No dice strip: the terminal log prints totals, not faces.
     case 'magic_rolled':
@@ -772,7 +792,11 @@ function choicesFor(state: GameState, pending: Pending): Choice[] {
       return [
         {
           key: '1',
-          label: pending.volley !== undefined ? 'volley back (Defensive Volley)' : 'counter-attack',
+          label:
+            (pending.volley !== undefined ? 'volley back (Defensive Volley)' : 'counter-attack') +
+            (pending.foulStench !== undefined
+              ? ` (Foul Stench: ${pending.foulStench} of your dice will sit it out)`
+              : ''),
           action: { kind: 'choose_counter_attack', counter: true },
         },
         { key: '0', label: 'do not counter', action: { kind: 'choose_counter_attack', counter: false } },
@@ -856,6 +880,8 @@ function choicesFor(state: GameState, pending: Pending): Choice[] {
     case 'accelerated_growth':
     case 'announce_spells':
     case 'temple_bury':
+    case 'sai_regenerate':
+    case 'foul_stench':
     case 'dragon_breath':
     case 'dragon_allocate':
     case 'charge_allocate':
@@ -954,6 +980,53 @@ ${bold('Magic')} ${dim(`— ${plan.remaining} of ${pending.pool.points} left`)}`
       continue
     }
     casts = [...next]
+  }
+}
+
+/** Regenerate (v2 Phase 7d): the saves, or dead dice back up to the budget. */
+async function askRegenerate(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'sai_regenerate' }>,
+): Promise<GameAction> {
+  const units = pending.eligible
+    .map((id) => state.units[id])
+    .filter((u): u is UnitInstance => u !== undefined)
+  console.log(
+    `\n${bold(pending.sai)} ${dim(
+      `— up to ${pending.budget} health-worth back from your DUA, space-separated numbers` +
+        (pending.saveResultsCount ? `; or enter for ${pending.budget} saves instead` : '; or enter for none'),
+    )}`,
+  )
+  units.forEach((unit, i) => console.log(`  ${i + 1}) ${name(unit)} ${dim(`(${unitType(unit.typeId).health}h)`)}`))
+  const reply = (await ask('> ')).trim()
+  if (reply === '' && pending.saveResultsCount) return { kind: 'sai_regenerate', choice: { kind: 'saves' } }
+  // Over budget is cut from the end rather than refused: the terminal has no Confirm
+  // button to grey out.
+  const chosen: string[] = []
+  let spent = 0
+  for (const unit of pick(units, reply)) {
+    const health = unitType(unit.typeId).health
+    if (spent + health > pending.budget) continue
+    chosen.push(unit.id)
+    spent += health
+  }
+  return { kind: 'sai_regenerate', choice: { kind: 'units', unitIds: chosen } }
+}
+
+/** Foul Stench (v2 Phase 7d): exactly `count` of your dice that sit the counter out. */
+async function askFoulStench(
+  state: GameState,
+  pending: Extract<Pending, { kind: 'foul_stench' }>,
+): Promise<GameAction> {
+  const units = armyAt(state, pending.player, pending.slot)
+  for (;;) {
+    console.log(
+      `\n${bold('Foul Stench')} ${dim(`— pick exactly ${pending.count} of your dice to sit the counter-attack out`)}`,
+    )
+    units.forEach((unit, i) => console.log(`  ${i + 1}) ${name(unit)}`))
+    const picked = pick(units, (await ask('> ')).trim())
+    if (picked.length === pending.count) return { kind: 'foul_stench', unitIds: picked.map((u) => u.id) }
+    console.log(red(`  that is ${picked.length}, not ${pending.count}`))
   }
 }
 
@@ -1589,6 +1662,8 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
   if (pending.kind === 'flashfire') return askFlashfire(state, pending)
   if (pending.kind === 'rapid_growth') return askRapidGrowth(state, pending)
   if (pending.kind === 'accelerated_growth') return askAcceleratedGrowth(state, pending)
+  if (pending.kind === 'sai_regenerate') return askRegenerate(state, pending)
+  if (pending.kind === 'foul_stench') return askFoulStench(state, pending)
 
   const choices = choicesFor(state, pending)
   for (;;) {

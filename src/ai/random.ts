@@ -325,6 +325,39 @@ export const randomAi: AiPlayer = {
         return [{ kind: 'sai_promote', pairs } as GameAction, next] as const
       }
 
+      /**
+       * Regenerate (v2 Phase 7d): the saves half the time where they count, and otherwise
+       * a random affordable handful of the dead -- none included, which is legal.
+       */
+      case 'sai_regenerate': {
+        let next = rng
+        if (pending.saveResultsCount) {
+          const [saves, afterCoin] = coin(next)
+          next = afterCoin
+          if (saves) return [{ kind: 'sai_regenerate', choice: { kind: 'saves' } } as GameAction, next] as const
+        }
+        const [dead, afterShuffle] = shuffle(next, pending.eligible)
+        next = afterShuffle
+        let budget = pending.budget
+        const unitIds: UnitId[] = []
+        for (const id of dead) {
+          const [take, afterTake] = coin(next)
+          next = afterTake
+          if (!take || health(state, id) > budget) continue
+          unitIds.push(id)
+          budget -= health(state, id)
+        }
+        return [{ kind: 'sai_regenerate', choice: { kind: 'units', unitIds } } as GameAction, next] as const
+      }
+
+      // Foul Stench (v2 Phase 7d): exactly `count`, chosen at random -- a sleeping die
+      // included, which is legal and the defender's good play.
+      case 'foul_stench': {
+        const [shuffled, next] = shuffle(rng, armyRef(state, pending.player, pending.slot))
+        const unitIds = shuffled.slice(0, pending.count).map((unit) => unit.id)
+        return [{ kind: 'foul_stench', unitIds } as GameAction, next] as const
+      }
+
       /** A free move: decline half the time, and otherwise take a random destination
        *  and a random affordable handful along. */
       case 'sai_move': {

@@ -78,6 +78,11 @@ describe('presets', () => {
       'firewalkers_phoenix',
       'firewalkers_salamander',
       'firewalkers_starter',
+      'goblins_cannibal',
+      'goblins_death_naga',
+      'goblins_harpy',
+      'goblins_shambler',
+      'goblins_troll',
       'treefolk_bestiary',
       'treefolk_darktree',
       'treefolk_redwood',
@@ -99,7 +104,7 @@ describe('presets', () => {
     // Playable, not every monster in the data: a species transcribed ahead of its rules
     // (v2 Phase 5a) cannot start a game, so a fixture for it could only throw.
     const monsters = PLAYABLE_UNITS.filter((t) => t.size === 'monster')
-    expect(monsters.length).toBe(20)
+    expect(monsters.length).toBe(25)
 
     for (const monster of monsters) {
       const id = `${monster.species}_${monster.id.split('.')[1]}`

@@ -59,6 +59,8 @@ export type TargetTask =
   | { readonly kind: 'confuse'; readonly sai: string; readonly health: number }
   /** Wild Growth: split a budget between save results and promotions, at home. */
   | { readonly kind: 'promote'; readonly sai: string; readonly budget: number }
+  /** Regenerate (v2 Phase 7d): the whole budget as saves, or as dice back from the DUA. */
+  | { readonly kind: 'regenerate'; readonly sai: string; readonly budget: number }
   /**
    * Firewalking, Teleport: move `unitId` and up to `health` health-worth of its army
    * anywhere.
@@ -179,6 +181,8 @@ function taskFor(effect: RollEffect): TargetTask | null {
       return { kind: 'cantrip', sai: effect.sai, points: effect.points }
     case 'wild_growth':
       return { kind: 'promote', sai: effect.sai, budget: effect.budget }
+    case 'regenerate':
+      return { kind: 'regenerate', sai: effect.sai, budget: effect.budget }
     case 'glare':
       return { kind: 'glare', sai: effect.sai, sources: [effect.unitId] }
     default:
@@ -195,6 +199,9 @@ function combined(existing: TargetTask, effect: RollEffect): TargetTask {
     return { ...existing, health: existing.health + effect.health }
   }
   if (existing.kind === 'promote' && effect.kind === 'wild_growth') {
+    return { ...existing, budget: existing.budget + effect.budget }
+  }
+  if (existing.kind === 'regenerate' && effect.kind === 'regenerate') {
     return { ...existing, budget: existing.budget + effect.budget }
   }
   if (existing.kind === 'cantrip' && effect.kind === 'cantrip') {

@@ -405,6 +405,8 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
           return `${effect.health} health-worth rerolled`
         case 'wild_growth':
           return `${effect.budget} to split between saves and promotions`
+        case 'regenerate':
+          return `${effect.budget} saves, or up to ${effect.budget} health-worth back from the DUA`
         case 'free_move':
           return `may move itself and ${effect.health} health-worth`
         case 'bash':

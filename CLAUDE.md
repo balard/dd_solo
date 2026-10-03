@@ -212,7 +212,9 @@ the dice and the opponent.
 > `duaCap`, a turn-level `burialDue` (Stomp moved onto it), a stunned status,
 > `spellResultTypes` as the one wildcard expander, and the Temple's `deathMagicImmune`. 7c has
 > landed: Screech, Poison, Net (Sleep's status under its own name) and Stun -- `RULES-V0.md`
-> section 19.
+> section 19. 7d has landed: Regenerate, Swamp Mastery and Foul Stench (the first DUA-count
+> ability, `duaCap`), and with them **the Goblins are playable** -- five monster fixtures
+> (`goblins_*`) and every SAI and ability in the live fuzz.
 
 ## Read these first
 

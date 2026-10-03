@@ -160,6 +160,22 @@ export function decideAction(state: GameState, pending: Pending): GameAction {
     case 'sai_promote':
       return { kind: 'sai_promote', pairs: [] }
 
+    // Regenerate (v2 Phase 7d), Wild Growth's twin: passive brings nobody back, and so
+    // takes the saves wherever they count -- what declining Wild Growth gives it too.
+    case 'sai_regenerate':
+      return pending.saveResultsCount
+        ? { kind: 'sai_regenerate', choice: { kind: 'saves' } }
+        : { kind: 'sai_regenerate', choice: { kind: 'units', unitIds: [] } }
+
+    // Foul Stench (v2 Phase 7d) is forced: exactly `count`, so the first ones it has.
+    case 'foul_stench':
+      return {
+        kind: 'foul_stench',
+        unitIds: armyRef(state, pending.player, pending.slot)
+          .slice(0, pending.count)
+          .map((unit) => unit.id),
+      }
+
     case 'sai_move':
       return { kind: 'sai_move', slot: null, unitIds: [] }
 

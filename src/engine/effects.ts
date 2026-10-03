@@ -422,7 +422,12 @@ export function armyRoll(
     // than on a roll, and is read at the maneuver site by `thornsAt`.
   }
   if (doublesIds(state, player, ref)) modifiers.push(doubleIdsModifier(resultType))
-  const units = armyOf(state, player, ref).filter((unit) => !sitsOutArmyRoll(state, unit.id))
+  // Foul Stench (v2 Phase 7d): the defender's benched dice sit out the counter-attack,
+  // the one army roll they could make while the bench stands.
+  const benched = state.turn.combat?.benched ?? []
+  const units = armyOf(state, player, ref).filter(
+    (unit) => !sitsOutArmyRoll(state, unit.id) && !benched.includes(unit.id),
+  )
   modifiers.push(...abilityPermissions(state, units, ref, resultType))
 
   return { units, modifiers }
@@ -458,6 +463,12 @@ const COUNTS_AS_ABILITIES: readonly {
   { ability: 'Coastal Dodge', element: 'water', meleeRollsOnly: false, permission: maneuverAsSaves },
   { ability: 'Mountain Mastery', element: 'earth', meleeRollsOnly: false, permission: meleeAsManeuver },
   { ability: 'Dwarven Might', element: 'fire', meleeRollsOnly: true, permission: savesAsMeleeOnCounter },
+  {
+    ability: 'Swamp Mastery',
+    element: 'earth',
+    meleeRollsOnly: false,
+    permission: (species) => meleeAsManeuver(species, 'Swamp Mastery'),
+  },
 ]
 
 /**

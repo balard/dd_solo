@@ -1361,6 +1361,81 @@ function SaiHeader({
     )
   }
 
+  if (prompt.custom === 'sai_regenerate' && pending.kind === 'sai_regenerate') {
+    // Tapped in the Fallen area (9f's one way to pick a die). The units half may be
+    // nothing; the saves half is offered only where saves count, Wild Growth's rule.
+    const chosen = pending.eligible.filter((id) => selection.has(id))
+    const health = chosen.reduce((sum, id) => sum + unitType(state.units[id]?.typeId ?? '').health, 0)
+    const over = health > pending.budget
+    return (
+      <div className="action-bar">
+        <p className="question">
+          {prompt.question}
+          <span className="muted">
+            {' '}
+            — tap dice in the Fallen area{chosen.length > 0 ? ` (${health} of ${pending.budget} health)` : ''}
+          </span>
+        </p>
+        <SaiHeader state={state} sai={pending.sai} />
+        <div className="choices">
+          <button
+            type="button"
+            className={chosen.length === 0 ? 'choice secondary' : 'choice'}
+            disabled={over || (chosen.length === 0 && pending.eligible.length === 0)}
+            onClick={() => {
+              dispatch({ kind: 'sai_regenerate', choice: { kind: 'units', unitIds: chosen } })
+              onClearSelection()
+            }}
+          >
+            {chosen.length === 0
+              ? 'Bring nobody back'
+              : `Bring back ${chosen.map((id) => nameOf(state, id)).join(', ')}`}
+          </button>
+          {pending.saveResultsCount && (
+            <button
+              type="button"
+              className="choice secondary"
+              onClick={() => {
+                dispatch({ kind: 'sai_regenerate', choice: { kind: 'saves' } })
+                onClearSelection()
+              }}
+            >
+              {`Take ${pending.budget} saves`}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (prompt.custom === 'foul_stench' && pending.kind === 'foul_stench') {
+    // Your own dice at the terrain, the damage assignment's gesture, exactly `count`.
+    const chosen = [...selection].filter((id) => state.units[id]?.owner === pending.player)
+    return (
+      <div className="action-bar">
+        <p className="question">
+          {prompt.question}
+          <span className="muted">{` — ${chosen.length} of ${pending.count} picked`}</span>
+        </p>
+        <div className="choices">
+          <button
+            type="button"
+            className="choice"
+            disabled={chosen.length !== pending.count}
+            onClick={() => {
+              dispatch({ kind: 'foul_stench', unitIds: chosen })
+              onClearSelection()
+            }}
+          >
+            {chosen.length === pending.count
+              ? `Bench ${chosen.map((id) => nameOf(state, id)).join(', ')}`
+              : `Pick ${pending.count}`}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (prompt.custom === 'temple_bury' && pending.kind === 'temple_bury') {
     const chosen = pending.options.find((id) => selection.has(id))
     return (

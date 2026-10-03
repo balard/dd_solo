@@ -6,7 +6,7 @@
  * through `problemFor` with made-up inputs, and the tables through `speciesProblem`.
  * The gate on rolled forces and built forces is only observable while a species is
  * half-built; the Coral Elves were that from 5a to 5d, the Dwarves from 6a to 6f, and the
- * Goblins are from 7a to 7d.
+ * Goblins from 7a to 7d.
  */
 import { describe, expect, it } from 'vitest'
 
@@ -44,36 +44,27 @@ describe('the playable rule', () => {
 
 describe('the species in the data', () => {
   /**
-   * v2 Phase 7a: the Goblins are in the data and not playable until 7d, which builds
-   * their abilities after 7c has built four of the five SAIs and 7d the fifth. Each of
-   * those shortens the sentence below, and 7d turns this back into "all playable".
+   * v2 Phase 7d: the Goblins' abilities flipped them, so every species in the data is
+   * playable again -- the gate is visible only while a species is half-built, and the
+   * rule itself is tested above on made-up species.
    */
-  it('are the four the engine has rules for; the Goblins are in the data but not yet', () => {
-    expect(PLAYABLE_SPECIES.map((s) => s.id).sort()).toEqual(['coral_elves', 'dwarves', 'firewalkers', 'treefolk'])
-    for (const species of SPECIES) {
-      if (species.id === 'goblins') continue
-      expect(speciesProblem(species.id), species.id).toBeNull()
-    }
-    expect(speciesProblem('goblins')).toBe(
-      'Goblins are not playable yet: the SAI Regenerate and its species abilities are not implemented',
-    )
-    expect(PLAYABLE_UNITS).toHaveLength(UNIT_TYPES.length - 20)
-    expect(unitPlayable('dwarves.behemoth')).toBe(true)
-    expect(unitPlayable('goblins.cannibal')).toBe(false)
+  it('are all playable once the Goblins have their SAIs and abilities (v2 Phase 7d)', () => {
+    expect(PLAYABLE_SPECIES.map((s) => s.id).sort()).toEqual([
+      'coral_elves',
+      'dwarves',
+      'firewalkers',
+      'goblins',
+      'treefolk',
+    ])
+    for (const species of SPECIES) expect(speciesProblem(species.id), species.id).toBeNull()
+    expect(PLAYABLE_UNITS).toHaveLength(UNIT_TYPES.length)
+    expect(unitPlayable('goblins.troll')).toBe(true)
   })
 
-  it('refuse a half-built species everywhere a force comes from', () => {
-    expect(() => rollForce(24, { kind: 'species', species: 'goblins' }, rngFrom(1))).toThrow(
-      /not playable yet/,
-    )
-    const force = {
-      armies: {
-        home: ['treefolk.oak', 'treefolk.oak'],
-        campaign: ['treefolk.oak', 'treefolk.oak'],
-        horde: ['goblins.cutthroat'],
-      },
-    }
-    expect(builtForceProblem(force)).toMatch(/horde army names goblins\.cutthroat, and Goblins are not playable yet/)
+  it('accept a Goblins force from anywhere a force comes from', () => {
+    const [force] = rollForce(24, { kind: 'species', species: 'goblins' }, rngFrom(1))
+    expect(Object.values(force.armies).flat().every((id) => id.startsWith('goblins.'))).toBe(true)
+    expect(builtForceProblem(force)).toBeNull()
   })
 
   it('accept a Dwarves force from anywhere a force comes from', () => {
@@ -91,6 +82,6 @@ describe('the species in the data', () => {
         for (const id of Object.values(force.armies).flat()) seen.add(id.split('.')[0] ?? '')
       }
     }
-    expect([...seen].sort()).toEqual(['coral_elves', 'dwarves', 'firewalkers', 'treefolk'])
+    expect([...seen].sort()).toEqual(['coral_elves', 'dwarves', 'firewalkers', 'goblins', 'treefolk'])
   })
 })

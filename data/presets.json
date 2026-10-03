@@ -552,6 +552,96 @@
           "dwarves.umber_hulk"
         ]
       }
+    },
+    "goblins_cannibal": {
+      "name": "Cannibal x6",
+      "species": "goblins",
+      "armies": {
+        "home": [
+          "goblins.cannibal",
+          "goblins.cannibal",
+          "goblins.cannibal"
+        ],
+        "campaign": [
+          "goblins.cannibal",
+          "goblins.cannibal"
+        ],
+        "horde": [
+          "goblins.cannibal"
+        ]
+      }
+    },
+    "goblins_death_naga": {
+      "name": "Death Naga x6",
+      "species": "goblins",
+      "armies": {
+        "home": [
+          "goblins.death_naga",
+          "goblins.death_naga",
+          "goblins.death_naga"
+        ],
+        "campaign": [
+          "goblins.death_naga",
+          "goblins.death_naga"
+        ],
+        "horde": [
+          "goblins.death_naga"
+        ]
+      }
+    },
+    "goblins_harpy": {
+      "name": "Harpy x6",
+      "species": "goblins",
+      "armies": {
+        "home": [
+          "goblins.harpy",
+          "goblins.harpy",
+          "goblins.harpy"
+        ],
+        "campaign": [
+          "goblins.harpy",
+          "goblins.harpy"
+        ],
+        "horde": [
+          "goblins.harpy"
+        ]
+      }
+    },
+    "goblins_shambler": {
+      "name": "Shambler x6",
+      "species": "goblins",
+      "armies": {
+        "home": [
+          "goblins.shambler",
+          "goblins.shambler",
+          "goblins.shambler"
+        ],
+        "campaign": [
+          "goblins.shambler",
+          "goblins.shambler"
+        ],
+        "horde": [
+          "goblins.shambler"
+        ]
+      }
+    },
+    "goblins_troll": {
+      "name": "Troll x6",
+      "species": "goblins",
+      "armies": {
+        "home": [
+          "goblins.troll",
+          "goblins.troll",
+          "goblins.troll"
+        ],
+        "campaign": [
+          "goblins.troll",
+          "goblins.troll"
+        ],
+        "horde": [
+          "goblins.troll"
+        ]
+      }
     }
   }
 }

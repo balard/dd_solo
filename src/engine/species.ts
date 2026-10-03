@@ -35,6 +35,8 @@ export type AbilityName =
   | 'Defensive Volley'
   | 'Mountain Mastery'
   | 'Dwarven Might'
+  | 'Swamp Mastery'
+  | 'Foul Stench'
 
 /**
  * Which abilities each species has.
@@ -48,6 +50,7 @@ export const SPECIES_ABILITIES: Readonly<Record<string, readonly AbilityName[]>>
   firewalkers: ['Air Flight', 'Flaming Shields'],
   coral_elves: ['Coastal Dodge', 'Defensive Volley'],
   dwarves: ['Mountain Mastery', 'Dwarven Might'],
+  goblins: ['Swamp Mastery', 'Foul Stench'],
 }
 
 /** The rule as the full rules state it, for both clients. Beside the table for the
@@ -81,6 +84,15 @@ export const ABILITY_TEXT: Readonly<Record<AbilityName, string>> = {
   'Dwarven Might':
     'When at a terrain that contains fire, Dwarves may count save results as if they were ' +
     'melee results when rolling for a counter-attack.',
+  'Swamp Mastery':
+    'When at a terrain that contains earth, Goblins may count melee results as if they ' +
+    'were maneuver results.',
+  'Foul Stench':
+    'When an army containing Goblins takes a melee action, the opposing player must select ' +
+    'a number of their units after they have resolved their save roll. The selected units ' +
+    'cannot perform a counter-attack during this melee action. The number of units that ' +
+    "must be selected in this way is equal to the number of Goblin units in the Goblin " +
+    "player's DUA, up to a maximum of three for every 24 health of force size.",
 }
 
 /** Whether a species has `ability` -- the table alone, with no ruleset in it. */

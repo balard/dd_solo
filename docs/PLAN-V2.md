@@ -2066,7 +2066,8 @@ portrait. The tiles that looked blank in a first screenshot had not finished loa
 ## Phase 7 — Goblins
 
 7a has landed: the data, and a Replanting rule it uncovered. 7b has landed: the seams. 7c has
-landed: Screech, Poison, Net and Stun. 7d to 7f are planned.
+landed: Screech, Poison, Net and Stun. 7d has landed: Regenerate and the two abilities, and the
+Goblins are playable. 7e and 7f are planned.
 
 Death & Earth, the first species carrying Death. **No terrain type in scope carries Death**
 (Deadland, the one that does, is out), so the Goblins
@@ -2352,7 +2353,7 @@ flips the species.
 **Not checked in the browser**: the Goblins are unplayable, so no game the app can start rolls
 these faces. The labels are tested in `prompts.test.ts`; seeing them on a board is 7d's.
 
-### 7d — Regenerate, Swamp Mastery, Foul Stench, and the flip
+### 7d — Regenerate, Swamp Mastery, Foul Stench, and the flip — **landed**
 
 - **Regenerate** joins Wild Growth's friendly queue, owned by whoever rolled it. One pending,
   `sai_regenerate`: X saves, or up to X health-worth of DUA dice tapped where they lie (9f's one
@@ -2391,6 +2392,59 @@ these faces. The labels are tested in `prompts.test.ts`; seeing them on a board 
   are one face each on one monster, as Charge and Bash were, and those fired in 200; expect the same.
   Foul Stench needs a dead Goblin first, which a long random game always has. The Tower-on-Reserves
   Net drop and the Temple immunity are `{ elsewhere }` with named tests.
+
+### What 7d found
+
+The Goblins are playable. Both golden corpora replay byte-identical and unregenerated; 1210 tests
+pass, and so does the 1000-game fuzz. The rules are in `RULES-V0.md` section 19, the tests in
+`goblins.test.ts`.
+
+**1. `finishExchange` would have dropped Foul Stench before anyone read it.** The flag is set when
+the melee action is chosen ("when an army containing Goblins takes a melee action"), and the attack
+half's combat is rebuilt field by field -- so a new field is dropped by omission, as that code's
+comment warns. It is carried out of the attack half and only that half, and dropped with the
+counter. Undoing the carry fails four tests; undoing `armyRoll`'s bench filter fails the one that
+counts the counter's dice.
+
+**2. The bench reaches every reader through `armyRoll`, and the forecast needed an assumption.**
+`combat.benched` is read where the army's dice are gathered, so the counter roll and the estimate
+of it both leave the dice out with no second site. But the bench is picked *after* the counter is
+accepted, so at the offer nothing is benched yet: the "expect ≈N" on the Counter-attack button
+assumes the dice that would add least sit out (`foulStenchBench`, greedy's own pick), on a copy of
+the state with that bench in place.
+
+**3. Regenerate is Wild Growth's pause with its own field, as planned.** A friendly task, a
+`sai_regenerate` pending, `returnFromDua` (Resurrect Dead's door, not `recruit`'s one-health one),
+and `PendingSaves.regenerate` so the line says "+ 4 Regenerate" -- Bash's lesson again. The
+combined budget showed up live: two Troll faces in one roll asked one question of 8.
+
+**4. The fuzz reaches everything but one status in 200 games.** Regenerate both ways, Poison and
+its burial, Net, Screech, Swamp Mastery and Foul Stench are `'every'`. Stun resolves in 200 but no
+die failed its maneuver to it, so `effect:Stun` is `'full'` (18 in 1000). Foul Stench benching the
+whole army -- planned as rare -- is the common case: 1,078 of 1,214 Foul Stench entries in 1000
+games, because a random Goblin force's DUA fills fast and a defending army is often small. The
+Death breath, keyed off the board since 0b, is now reached in 1000 games without a line of its own:
+the Goblins summon Death dragons.
+
+**5. The flip cost what 6f's did.** Five monster fixtures, and the counts of species, fixtures,
+presets and palette dice. One test was a fact about four species: "some mixed force holds exactly
+two species" -- with five in the data a 24-health mixed draw usually holds three or more, so it
+says "more than one" now.
+
+**6. Greedy finishes every Goblins mirror**, seeds 1 to 4, against passive and against itself: 40
+games, all won. The 6f exit check, in `greedy.test.ts`.
+
+**7. In the browser**, a Troll mirror against greedy (`?forces=goblins_troll&seed=3`): the home and
+both Frontier proposals were earth dice. Greedy's Goblins attacked with a dead Troll in their DUA;
+the offer read "Counter-attack? Foul Stench: you will pick 1 of your dice to sit it out", the sheet
+lit only my three Trolls at that terrain and held Confirm until one was picked, the counter rolled
+two dice, and the log read "Foul Stench: Troll may not counter-attack". Later my own attack rolled
+two Regenerates: one question of 8, units only (an attack counts no saves), the Fallen area opened
+on its own, and "Regenerate: You bring Troll back from the DUA to Frontier". No console errors. The
+tiles draw their class shapes: the art manifest is 7f's.
+
+**Deliberately not done.** The five spells and the Temple's readers are 7e's: until then the
+Goblins roll Death magic with Resurrect Dead and Summon Dragon to spend it on.
 
 ### 7e — Death magic: the five spells
 

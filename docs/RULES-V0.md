@@ -1144,6 +1144,48 @@ for a species with no own type. The dice are in the data from 7a; the species is
 - **A stunned Treefolk does not replant** (section 16's rule): Stun lets through only a roll an
   individual-targeting effect forces, and Replanting is not one.
 
+### Regenerate (7d)
+
+| SAI | Applies | What it does here |
+|---|---|---|
+| **Regenerate** | Non-maneuver | The roller chooses: X save results, **or** up to X health-worth of their own dead -- any species, any size that fits -- back from the DUA to the army that rolled it. Where there is no room for a decision (a sub-roll, Wall of Thorns' roll, the dragon roll) it is X saves. |
+
+- **Two Regenerates are one choice of 2X** (owner-approved house rule). p. 32 combines multiples of
+  an SAI, and Regenerate says "choose one", so the combined budget is all saves or all units --
+  not Wild Growth's split, which is Wild Growth's own text.
+- **On a roll that does not count saves** -- an attack, a magic action -- only the units half is
+  offered: the saves are legal and worth nothing, Wild Growth's rule. With nothing in the DUA that
+  fits, the saves are taken without asking where they count, and nothing happens where they do not.
+- **Returned dice stand in the army before the damage is assigned**, as a Wild Growth promotion's
+  partner does, so on a save roll they may be the ones that die. They did not roll.
+
+### The abilities (7d)
+
+**Swamp Mastery** -- "when at a terrain that contains earth, Goblins may count melee results as if
+they were maneuver results". Mountain Mastery's row for the Goblins, automatic for the same reason
+(no maneuver roll counts melee), and named as itself on the arithmetic line. Every home a Goblins
+force can draw carries earth.
+
+**Foul Stench** -- "when an army containing Goblins takes a melee action, the opposing player must
+select a number of their units after they have resolved their save roll. The selected units cannot
+perform a counter-attack during this melee action." The number is the Goblins in the Goblin
+player's DUA, up to three per 24 health of that player's force, or part of 24 (p. 21).
+
+- **"Containing Goblins" is asked when the action is taken**, and remembered for the counter: a
+  Goblin killed later in the exchange, by a Bash or a Counter, does not take the stench away -- it
+  adds one to the count instead.
+- **The count is read when the counter is offered**, after the attack's damage: what is in the DUA
+  then.
+- **Asked only once the counter is accepted** (owner-approved house rule). The rule puts the
+  selection before the counter; the same player answers both with nothing rolled between, so the
+  swap changes no information and drops a question from every exchange the defender would not have
+  countered anyway. The offer says how many will sit out.
+- **When the count covers the whole army, no counter is offered at all**, and the log says so.
+- **Any die may be selected**, a sleeping or netted one included: the rule says "select their
+  units", and benching a die that could not roll anyway is good play, not a loophole.
+- Not on a counter-attack (a counter is not a melee *action*), and nothing to bench after a Charge,
+  which replaces the counter.
+
 ### House rules this species adds
 
 - **Net's "when saving against an individual targeting effect" is every save sub-roll** (owner's

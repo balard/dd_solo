@@ -830,6 +830,20 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
         }
       : NOTHING,
 
+  /**
+   * "During any non-maneuver roll, choose one: Regenerate generates X save results, OR,
+   * you may return up to X health-worth of units from your DUA to the army containing
+   * this unit." (v2 Phase 7d.)
+   *
+   * Wild Growth's shape: a friendly decision at the roller's pause, and where there is no
+   * room for one -- a sub-roll, Wall of Thorns' roll, the dragon roll -- the saves.
+   */
+  Regenerate: (x, ctx) => {
+    if (ctx.purpose.kind === 'maneuver') return NOTHING
+    if (noSideDecision(ctx)) return gives('save', x)
+    return { results: {}, effects: [{ kind: 'regenerate', budget: x }], reroll: false }
+  },
+
   Stomp: (x, ctx) => {
     if (isAttack(ctx, 'melee')) {
       return {
@@ -999,6 +1013,10 @@ export const SAI_TEXT: Readonly<Record<string, string>> = {
     "results equal to the targeted unit's melee results. During other save rolls, Bash " +
     'generates X save results.',
   Screech: 'During a melee attack, the defending army subtracts X save results.',
+  Regenerate:
+    'During any non-maneuver roll, choose one: Regenerate generates X save results, OR, ' +
+    'you may return up to X health-worth of units from your DUA to the army containing ' +
+    'this unit.',
   Poison:
     'During a melee attack, target X health-worth of units in the defending army. Each ' +
     'targeted unit makes a save roll. Those that do not generate a save result are killed ' +

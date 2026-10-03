@@ -33,6 +33,7 @@ import { applyModifiers, type ConvertibleType, type Share } from '../engine/pipe
 import { conversionsIn, defaultContextFor, faceResults } from '../engine/roll'
 import { saiEffects, type RollContext } from '../engine/sai'
 import {
+  armyAt,
   opponentOf,
   type ArmyRef,
   type GameState,
@@ -138,6 +139,11 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
       // "keep them all as saves" is always a legal split -- so on a save roll it is
       // worth its whole budget. Anywhere else it buys promotions, which are not results.
       case 'wild_growth':
+        if (resultType === 'save' && context.purpose.kind === 'save') sai += effect.budget
+        break
+      // Regenerate (v2 Phase 7d): "X saves" is always a legal answer, so on a save roll
+      // it is worth its budget, as Wild Growth is. Elsewhere it buys dice back, not results.
+      case 'regenerate':
         if (resultType === 'save' && context.purpose.kind === 'save') sai += effect.budget
         break
       // Not results in this roll: a pause, a move, or a pool spent elsewhere.
@@ -555,6 +561,29 @@ export function leastValuableMaximal(
   score: (unit: UnitInstance) => number = (unit) => unitValue(unit.typeId, ruleSet),
 ): readonly UnitId[] {
   return maximalSubsetBy(units, damage, score, 'min')
+}
+
+/**
+ * Foul Stench's bench (v2 Phase 7d): the `count` dice of this army that would add the
+ * least to a counter-attack -- by expected melee, then by board order. What greedy picks,
+ * and what the counter offer's forecast assumes you will pick.
+ */
+export function foulStenchBench(
+  state: GameState,
+  player: PlayerId,
+  slot: TerrainSlot,
+  count: number,
+): readonly UnitId[] {
+  const counter: RollContext = { purpose: { kind: 'attack', action: 'melee' }, isCounter: true }
+  const worth = (unit: UnitInstance): number => {
+    const die = expectedDie(unit.typeId, 'melee', counter, state.ruleSet)
+    return die.share.id + die.share.normal + die.share.sai
+  }
+  return [...armyAt(state, player, slot)]
+    .map((unit, index) => ({ unit, index, worth: worth(unit) }))
+    .sort((a, b) => a.worth - b.worth || a.index - b.index)
+    .slice(0, count)
+    .map((entry) => entry.unit.id)
 }
 
 /** Which of an opponent's units to take: the dearest maximal set. */

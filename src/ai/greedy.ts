@@ -50,6 +50,7 @@ import {
   expectedArmy,
   expectedAttack,
   expectedDie,
+  foulStenchBench,
   killValue,
   leastValuableMaximal,
   mostValuableMaximal,
@@ -507,6 +508,23 @@ function decide(state: GameState, pending: Pending): GameAction {
     // back, and "maybe later" is not a thing an SAI offers.
     case 'sai_promote':
       return { kind: 'sai_promote', pairs: growthPairs(state, player, pending.slot, pending.budget) }
+
+    // Regenerate (v2 Phase 7d): dice back are health kept for good, saves are one roll's
+    // worth -- so the dearest dead that fit, and the saves only when nothing does.
+    case 'sai_regenerate': {
+      const dead = pending.eligible
+        .map((id) => state.units[id])
+        .filter((unit): unit is UnitInstance => unit !== undefined)
+      const unitIds = mostValuableMaximal(dead, pending.budget, state.ruleSet)
+      if (unitIds.length === 0 && pending.saveResultsCount) {
+        return { kind: 'sai_regenerate', choice: { kind: 'saves' } }
+      }
+      return { kind: 'sai_regenerate', choice: { kind: 'units', unitIds } }
+    }
+
+    // Foul Stench (v2 Phase 7d): bench the dice that would add least to the counter.
+    case 'foul_stench':
+      return { kind: 'foul_stench', unitIds: foulStenchBench(state, player, pending.slot, pending.count) }
 
     case 'eighth_face_city': {
       const promotion = bestPromotion(state, pending.promotions)
