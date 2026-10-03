@@ -30,13 +30,14 @@ import { spell } from '../data/spells'
 
 import { applyDamage } from './damage'
 import { bury } from './dua'
-import { cannotRoll, isStunned, regrows } from './effects'
+import { cannotRoll, deathMagicImmune, isStunned, regrows } from './effects'
 import { faceOf, rollFaces, type DieRoll } from './roll'
 import { rollDie } from './rng'
 import { terrainHas, unitHasAbility } from './species'
 import {
   deadUnits,
   type ArmyRef,
+  type BurialCheck,
   type GameState,
   type GrowthOffer,
   type LogEntry,
@@ -336,7 +337,42 @@ export function killUnits(
   if (state.ruleSet.dua !== 'active') {
     return { state: recorded, risen: [], offered, replanted, replantDice, riseDice: [] }
   }
-  return { ...riseFromTheAshes(recorded, dying), offered, replanted, replantDice }
+  const risen = riseFromTheAshes(recorded, dying)
+  // Soiled Ground (v2 Phase 7e), last: it asks about the dice that "go into the DUA", so
+  // it is owed after Replanting and Rise from the Ashes, and rolled a step later, after
+  // any growth offer (`burialStep`). A kill-and-bury buries anyway.
+  const owed = options.bury === true ? risen.state : oweSoiled(risen.state, planted.state, remaining)
+  return { ...risen, state: owed, offered, replanted, replantDice }
+}
+
+/**
+ * Soiled Ground's burial checks (v2 Phase 7e), owed on the turn: "any unit killed at that
+ * terrain that goes into the DUA must make a save roll. Those that do not generate a save
+ * result are buried." Either player's dice -- "any unit" -- the caster's own included.
+ *
+ * Asked of where each die stood *before* the kill, since it is no longer at a terrain
+ * after it. The Temple's holder is spared at its own Temple when the spell is the
+ * opponent's, "cannot be affected by any opponent's death magic". `burialStep` rolls
+ * only what is still in the DUA by then: a risen Phoenix and an exchanged Treefolk are
+ * not.
+ */
+function oweSoiled(after: GameState, before: GameState, unitIds: readonly UnitId[]): GameState {
+  const checks: BurialCheck[] = []
+  for (const unit of Object.values(before.units)) {
+    if (!unitIds.includes(unit.id) || unit.location.kind !== 'terrain') continue
+    const slot = unit.location.slot
+    const soiled = before.effects.find(
+      (effect) =>
+        effect.trigger === 'soiled_ground' && effect.target.kind === 'terrain' && effect.target.slot === slot,
+    )
+    if (soiled === undefined) continue
+    if (soiled.expiresAtStartOfTurnOf !== unit.owner && deathMagicImmune(before, unit.owner, slot)) continue
+    const check = checks.find((c) => c.player === unit.owner && c.slot === slot)
+    if (check === undefined) checks.push({ source: 'Soiled Ground', player: unit.owner, slot, unitIds: [unit.id] })
+    else checks[checks.indexOf(check)] = { ...check, unitIds: [...check.unitIds, unit.id] }
+  }
+  if (checks.length === 0) return after
+  return { ...after, turn: { ...after.turn, burialDue: [...(after.turn.burialDue ?? []), ...checks] } }
 }
 
 /**

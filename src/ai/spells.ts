@@ -211,6 +211,30 @@ const HANDLER_VALUE: Readonly<Record<string, HandlerScore>> = {
       .filter((unit) => unit.owner !== caster)
       .reduce((total, unit) => total + unitValue(unit.typeId, state.ruleSet) * diesTo(state, unit.typeId, count), 0),
 
+  // Finger of Death (v2 Phase 7e): no save, so certain -- once the castings reach the
+  // die's health, which the offer's `minCount` already guarantees.
+  finger_of_death: (state, caster, _ref, target, count) =>
+    unitsOf(state, target)
+      .filter((unit) => unit.owner !== caster && count >= unitType(unit.typeId).health)
+      .reduce((total, unit) => total + unitValue(unit.typeId, state.ruleSet), 0),
+
+  // Scent of Fear (v2 Phase 7e): Mirage with no save to escape it -- a sure
+  // displacement, still worth half a kill: the die comes back next Reserves Phase.
+  scent_of_fear: (state, caster, _ref, target) =>
+    unitsOf(state, target)
+      .filter((unit) => unit.owner !== caster)
+      .reduce((total, unit) => total + unitValue(unit.typeId, state.ruleSet) / 2, 0),
+
+  // Soiled Ground (v2 Phase 7e): buries what dies at a terrain this turn, either side's.
+  // Worth something only where the enemy outnumbers nothing of ours to lose there -- a
+  // terrain where our army stands is one where our own dead roll too.
+  soiled_ground: (state, caster, _ref, target) => {
+    if (target.kind !== 'terrain') return 0
+    const theirs = army(state, opponentOf(caster), target.slot)
+    if (theirs.length === 0 || army(state, caster, target.slot).length > 0) return 0
+    return 0.15 * healthIn(theirs)
+  },
+
   // Kills the unit unless it rolls a save.
   lightning_strike: (state, caster, _ref, target) =>
     unitsOf(state, target)

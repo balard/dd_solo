@@ -21,7 +21,7 @@
  * `castSpell` guards against a spell reaching resolution anyway, not against
  * half-built work.
  */
-import { dragonDie } from '../data/load'
+import { dragonDie, unitType } from '../data/load'
 import { spell, spellResultTypes, type Spell, type SpellEffectSpec, type SpellModifierSpec } from '../data/spells'
 
 import type { Element } from '../data/types'
@@ -674,7 +674,83 @@ const acceleratedGrowth: SpellHandler = (state, ctx) => ({
   },
 })
 
+/**
+ * Finger of Death (v2 Phase 7e): "inflict one point of damage on the target with no save
+ * possible." Cumulative -- the "one" is red -- so N castings are N damage, and the die
+ * dies when N reaches its health. No roll at all, so no randomness; the offer already
+ * refused a count below the health (`spellTargets`).
+ */
+const fingerOfDeath: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'units') throw new Error('Finger of Death targets a unit')
+  const [target] = ctx.target.unitIds.filter((id) => armyRefOf(state, id) !== null)
+  if (target === undefined) return { state }
+  const unit = state.units[target]
+  if (unit === undefined || ctx.count < unitType(unit.typeId).health) return { state }
+  const where = slotOf(state, [target])
+  const outcome = killUnits(state, [target])
+  return {
+    state: { ...outcome.state, log: [...outcome.state.log, ...deathEntries(outcome, unit.owner, where, [target])] },
+  }
+}
+
+/**
+ * Soiled Ground (v2 Phase 7e): "until the beginning of your next turn, any unit killed at
+ * that terrain that goes into the DUA must make a save roll. Those that do not generate a
+ * save result are buried." An effect on the terrain that no roll gathers: `killUnits`
+ * reads it and owes the burial check on the turn (`soiledChecks` in `death.ts`).
+ */
+const soiledGround: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'terrain') throw new Error('Soiled Ground targets a terrain')
+  const slot = ctx.target.slot
+  return {
+    state: {
+      ...state,
+      effects: [
+        ...state.effects,
+        {
+          source: 'Soiled Ground',
+          target: { kind: 'terrain', slot, scope: 'deaths' },
+          modifiers: [],
+          trigger: 'soiled_ground',
+          expiresAtStartOfTurnOf: ctx.caster,
+        },
+      ],
+      log: [...state.log, { kind: 'effect_cast', player: ctx.caster, source: 'Soiled Ground', slot }],
+    },
+  }
+}
+
+/**
+ * Scent of Fear (v2 Phase 7e): "the target units are moved to their Reserve Area." Mirage
+ * without the save roll, aimed at the opponent's dice only. A move, not a death: no death
+ * trigger, no Replanting -- Roar's fate.
+ */
+const scentOfFear: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'units') throw new Error('Scent of Fear targets units')
+  const targets = stillThere(state, ctx.target.unitIds)
+  if (targets.length === 0) return { state }
+  const where = slotOf(state, targets)
+  const units = { ...state.units }
+  for (const id of targets) {
+    const unit = units[id]
+    if (unit !== undefined) units[id] = { ...unit, location: { kind: 'reserve' } }
+  }
+  return {
+    state: {
+      ...state,
+      units,
+      log: [
+        ...state.log,
+        { kind: 'units_sent_home', player: owners(state, targets), source: 'Scent of Fear', slot: where, unitIds: targets },
+      ],
+    },
+  }
+}
+
 const HANDLERS: Readonly<Record<string, SpellHandler>> = {
+  finger_of_death: fingerOfDeath,
+  soiled_ground: soiledGround,
+  scent_of_fear: scentOfFear,
   flashfire,
   accelerated_growth: acceleratedGrowth,
   hailstorm,

@@ -1720,6 +1720,17 @@ export type LogEntry =
       readonly unitIds: readonly UnitId[]
       readonly noCounter?: true
     }
+  /**
+   * Scent of Fear (v2 Phase 7e): the opponent's dice sent to their Reserve Area by a
+   * spell, with no roll -- moved, not killed. `player` is whose dice they are.
+   */
+  | {
+      readonly kind: 'units_sent_home'
+      readonly player: PlayerId
+      readonly source: string
+      readonly slot: ArmyRef
+      readonly unitIds: readonly UnitId[]
+    }
   /** City recruiting a 1-health unit from the DUA (Phase 5e). */
   | {
       readonly kind: 'units_recruited'

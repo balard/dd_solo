@@ -100,6 +100,11 @@ export type TerrainScope =
    * die being thrown.
    */
   | 'maneuverers'
+  /**
+   * Soiled Ground (v2 Phase 7e): a unit killed at this terrain. Gathered by no roll,
+   * like `'maneuverers'`: `killUnits` reads it, on the event of a death.
+   */
+  | 'deaths'
 
 export interface Effect {
   /** Spell name, SAI name, breath element -- what the log names it by. */
@@ -168,8 +173,9 @@ export interface Effect {
    * this a number rather than a flag.
    */
   readonly flashfire?: number
-  /** Accelerated Growth: what `killUnits` does instead of killing a Treefolk die. */
-  readonly trigger?: 'accelerated_growth'
+  /** Accelerated Growth: what `killUnits` does instead of killing a Treefolk die.
+   *  Soiled Ground (v2 Phase 7e): what it does after one -- a burial check, owed. */
+  readonly trigger?: 'accelerated_growth' | 'soiled_ground'
   /**
    * "Until the beginning of your next turn" -- *your* being whoever made the roll,
    * which on a counter-attack is the defending player, not the marching one.
@@ -343,6 +349,29 @@ function sourced(effect: Effect): readonly Modifier[] {
  */
 const SPELL_NAMES: ReadonlySet<string> = new Set(SPELLS.map((s) => s.name))
 
+/** The spells cast with death magic, by the name an effect carries as its source. */
+const DEATH_SPELL_NAMES: ReadonlySet<string> = new Set(
+  SPELLS.filter((s) => s.element === 'death').map((s) => s.name),
+)
+
+/**
+ * Whether the Temple holds this effect off this army (v2 Phase 7e): "your controlling
+ * army and all units in it cannot be affected by any opponent's death magic".
+ *
+ * A death spell's effect, cast by somebody other than this player -- its caster is
+ * `expiresAtStartOfTurnOf`, "until the beginning of *your* next turn" -- on an army
+ * standing at a Temple this player holds. Read off the effect's name against the data
+ * rather than stamped on the effect, for `fromSpell`'s reason: `state.effects` is in the
+ * golden digest.
+ */
+export function templeShields(state: GameState, effect: Effect, player: PlayerId, ref: ArmyRef): boolean {
+  return (
+    DEATH_SPELL_NAMES.has(effect.source) &&
+    effect.expiresAtStartOfTurnOf !== player &&
+    deathMagicImmune(state, player, ref)
+  )
+}
+
 /**
  * The save results spells add to this army's rolls (v2 Phase 6b): Stone Skin, Watery
  * Double, however many castings.
@@ -413,6 +442,10 @@ export function armyRoll(
 ): ArmyRollInput {
   const modifiers: Modifier[] = []
   for (const effect of state.effects) {
+    // The Temple (v2 Phase 7e): an opponent's death spell on the holder's army does
+    // nothing while the capture stands. Skipped here rather than revoked, so it bites
+    // again the roll after the capture is lost.
+    if (templeShields(state, effect, player, ref)) continue
     if (targetsArmy(effect, player, ref)) modifiers.push(...sourced(effect))
     else if (targetsTerrain(effect, ref, 'all_armies')) modifiers.push(...sourced(effect))
     else if (against !== undefined && targetsTerrain(effect, against, 'attackers')) {

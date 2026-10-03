@@ -487,6 +487,13 @@ function describe(entry: LogEntry, state: GameState): string | null {
               .map((id) => (state.units[id] ? name(state.units[id]!) : id))
               .join(', ')} back from the DUA to ${SLOT_LABEL[entry.slot as TerrainSlot] ?? entry.slot}`,
           )
+    // Scent of Fear (v2 Phase 7e): dice moved home by a spell, with no roll.
+    case 'units_sent_home':
+      return yellow(
+        `  ${entry.source}: ${entry.unitIds
+          .map((id) => (state.units[id] ? name(state.units[id]!) : id))
+          .join(', ')} sent back to ${entry.player}'s reserves`,
+      )
     // Foul Stench (v2 Phase 7d): the defender's dice that sit the counter out.
     case 'foul_stench':
       return yellow(

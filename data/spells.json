@@ -385,6 +385,92 @@
       }
     },
     {
+      "id": "palsy",
+      "name": "Palsy",
+      "element": "death",
+      "cost": 2,
+      "species": "any",
+      "target": "opposing_army",
+      "cumulative": true,
+      "reserves": false,
+      "cantrip": true,
+      "text": "Target any opposing army. Subtract one result from the target's non-maneuver rolls until the beginning of your next turn.",
+      "effect": {
+        "scope": "army",
+        "modifiers": [
+          {
+            "kind": "subtract",
+            "resultType": "non_maneuver",
+            "amount": 1
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
+    },
+    {
+      "id": "decay",
+      "name": "Decay",
+      "element": "death",
+      "cost": 3,
+      "species": "goblins",
+      "target": "opposing_army",
+      "cumulative": true,
+      "reserves": false,
+      "cantrip": false,
+      "text": "Target any opposing army. Subtract two melee results from the target's rolls until the beginning of your next turn.",
+      "effect": {
+        "scope": "army",
+        "modifiers": [
+          {
+            "kind": "subtract",
+            "resultType": "melee",
+            "amount": 2
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
+    },
+    {
+      "id": "finger_of_death",
+      "name": "Finger of Death",
+      "element": "death",
+      "cost": 4,
+      "species": "any",
+      "target": "opposing_unit",
+      "cumulative": true,
+      "reserves": false,
+      "cantrip": false,
+      "text": "Target any opposing unit. Inflict one point of damage on the target with no save possible.",
+      "handler": "finger_of_death"
+    },
+    {
+      "id": "soiled_ground",
+      "name": "Soiled Ground",
+      "element": "death",
+      "cost": 6,
+      "species": "any",
+      "target": "terrain",
+      "cumulative": false,
+      "reserves": false,
+      "cantrip": false,
+      "text": "Target any terrain. Until the beginning of your next turn, any unit killed at that terrain that goes into the DUA must make a save roll. Those that do not generate a save result are buried.",
+      "handler": "soiled_ground"
+    },
+    {
+      "id": "scent_of_fear",
+      "name": "Scent of Fear",
+      "element": "earth",
+      "cost": 5,
+      "species": "goblins",
+      "target": "opposing_units",
+      "cumulative": true,
+      "countScales": false,
+      "reserves": false,
+      "cantrip": false,
+      "text": "Target up to three health-worth of opposing units at any terrain. The target units are moved to their Reserve Area.",
+      "handler": "scent_of_fear"
+    },
+    {
       "id": "resurrect_dead",
       "name": "Resurrect Dead",
       "element": "elemental",

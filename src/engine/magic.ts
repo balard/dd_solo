@@ -37,10 +37,11 @@ import {
 } from '../data/spells'
 import type { Element } from '../data/types'
 
-import { iconAt, resolvesIcon } from './effects'
+import { deathMagicImmune, iconAt, resolvesIcon } from './effects'
 import { resolvesSpell, summonable } from './spells'
 import {
   army as armyOf,
+  armyRefOf,
   deadUnits,
   forceSpecies,
   livingUnits,
@@ -314,6 +315,9 @@ export interface Castable {
  * DUA never narrows anything, which keeps the field out of every recorded game. Read it
  * through `elementsFor`.
  */
+/** Scent of Fear's "up to three health-worth", per casting. */
+const SCENT_OF_FEAR_HEALTH = 3
+
 export interface SpellTargetOffer {
   readonly target: SpellTarget
   readonly minCount: number
@@ -349,6 +353,27 @@ export function spellTargets(
   caster: PlayerId,
   s: Spell,
 ): readonly SpellTargetOffer[] {
+  const offers = targetOffers(state, caster, s)
+  if (s.element !== 'death') return offers
+  // The Temple (v2 Phase 7e): the opponent's army at a Temple it holds, and every die in
+  // it, "cannot be affected by any opponent's death magic" -- so it is not offered. A
+  // terrain stays a target: Soiled Ground's check skips the holder's dice itself.
+  const enemy = opponentOf(caster)
+  return offers.filter((offer) => {
+    const target = offer.target
+    if (target.kind === 'army') return target.player === caster || !deathMagicImmune(state, enemy, target.army)
+    if (target.kind === 'units') {
+      return target.unitIds.every((id) => {
+        const unit = state.units[id]
+        const ref = unit === undefined ? null : armyRefOf(state, id)
+        return unit === undefined || unit.owner === caster || ref === null || !deathMagicImmune(state, unit.owner, ref)
+      })
+    }
+    return true
+  })
+}
+
+function targetOffers(state: GameState, caster: PlayerId, s: Spell): readonly SpellTargetOffer[] {
   const once = (target: SpellTarget): SpellTargetOffer => ({ target, minCount: 1 })
 
   const armies = (player: PlayerId): SpellTargetOffer[] =>
@@ -400,9 +425,26 @@ export function spellTargets(
     // Lightning Strike: "target any opposing unit". Reserves included -- the rules
     // shield a Reserve Army from missile fire and from dragons, and say nothing about
     // magic.
+    //
+    // Finger of Death (v2 Phase 7e): one point per casting and no save, so fewer
+    // castings than the die's health do nothing at all -- the price rides on the offer,
+    // Resurrect Dead's way.
     case 'opposing_unit':
       return livingUnits(state, opponentOf(caster)).map((unit) =>
-        once({ kind: 'units', unitIds: [unit.id] }),
+        s.handler === 'finger_of_death'
+          ? { target: { kind: 'units', unitIds: [unit.id] } as const, minCount: unitType(unit.typeId).health }
+          : once({ kind: 'units', unitIds: [unit.id] }),
+      )
+
+    // Scent of Fear (v2 Phase 7e): "up to three health-worth of opposing units at any
+    // terrain", Mirage's reading and Mirage's one unit per casting (RULES-V0.md section
+    // 19) -- so three health a casting, and a monster needs two.
+    case 'opposing_units':
+      return TERRAIN_SLOTS.flatMap((slot) =>
+        armyOf(state, opponentOf(caster), slot).map((unit) => ({
+          target: { kind: 'units', unitIds: [unit.id] } as const,
+          minCount: Math.ceil(unitType(unit.typeId).health / SCENT_OF_FEAR_HEALTH),
+        })),
       )
 
     // Mirage: "up to five health-worth of units **at any terrain**" -- so not

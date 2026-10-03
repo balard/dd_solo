@@ -517,6 +517,15 @@ export function LogLine({
           )}
         </p>
       )
+    // Scent of Fear (v2 Phase 7e): dice moved home by a spell, with no roll.
+    case 'units_sent_home':
+      return (
+        <p className="log-line">
+          <strong>{entry.source}</strong>: {entry.unitIds.map((id) => nameOf(state, id)).join(', ')}{' '}
+          {entry.unitIds.length === 1 ? 'goes' : 'go'} back to {entry.player === human ? 'your' : "the enemy's"}{' '}
+          reserves
+        </p>
+      )
     // Foul Stench (v2 Phase 7d): the defender's dice that sit the counter out.
     case 'foul_stench':
       return (

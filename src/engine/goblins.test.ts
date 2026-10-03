@@ -12,22 +12,25 @@
 import { describe, expect, it } from 'vitest'
 
 import { unitType } from '../data/load'
-import { spellResultTypes } from '../data/spells'
+import { spell, spellResultTypes } from '../data/spells'
 import { expectedArmy } from '../ai/estimate'
 
 import { killUnits } from './death'
 import { armyRoll, deathMagicImmune, isAsleep, isStunned, pruneEffects, unitRoll, type Effect } from './effects'
+import { spellTargets } from './magic'
 import { advance, reduce } from './reduce'
 import { rollDice, type RngState } from './rng'
 import { meleeAsManeuver } from './pipeline'
 import { saiEffects, type RollContext } from './sai'
 import { targetTasks } from './targeting'
 import { capPer24, duaCap } from './species'
+import { castSpell, spellEffect, type SpellContext } from './spells'
 import {
   V0_RULES,
   type GameState,
   type LogEntry,
   type RuleSet,
+  type SpellTarget,
   type TerrainSlot,
   type TurnState,
   type UnitInstance,
@@ -617,5 +620,176 @@ describe('Foul Stench', () => {
     const none = advance(goblinsAttack([], [OAK, OAK]))
     expect(none.pending).toMatchObject({ kind: 'choose_counter_attack' })
     expect(none.pending).not.toHaveProperty('foulStench')
+  })
+})
+
+// --- Death magic: the five spells and the Temple (7e) -----------------------------
+
+const ctxFor = (count: number, target: SpellTarget, caster: 'p1' | 'p2' = 'p1'): SpellContext => ({
+  caster,
+  army: 'frontier',
+  element: 'death',
+  count,
+  target,
+})
+const p2Front: SpellTarget = { kind: 'army', player: 'p2', army: 'frontier' }
+
+describe('Palsy and Decay', () => {
+  it('Palsy takes one per casting off every non-maneuver roll, and nothing off a maneuver', () => {
+    const palsy = spellEffect(spell('palsy'), ctxFor(2, p2Front))
+    expect(palsy.modifiers).toEqual(
+      ['melee', 'missile', 'magic', 'save'].map((resultType) => ({ kind: 'subtract', resultType, amount: 2 })),
+    )
+    expect(palsy.expiresAtStartOfTurnOf).toBe('p1')
+    expect(spell('palsy')).toMatchObject({ element: 'death', species: 'any', cost: 2, cantrip: true, cumulative: true })
+  })
+
+  it('Decay takes two melee per casting, and is the Goblins’ own', () => {
+    expect(spellEffect(spell('decay'), ctxFor(3, p2Front)).modifiers).toEqual([
+      { kind: 'subtract', resultType: 'melee', amount: 6 },
+    ])
+    expect(spell('decay')).toMatchObject({ element: 'death', species: 'goblins', cost: 3 })
+  })
+})
+
+describe('Finger of Death', () => {
+  const finger = (count: number) =>
+    castSpell(board([], [OAK, OAK]), spell('finger_of_death'), ctxFor(count, { kind: 'units', unitIds: ['p2:0'] }))
+      .state
+
+  it('kills when the castings reach the die’s health, with no roll at all', () => {
+    const before = board([], [OAK, OAK])
+    const state = finger(2)
+    expect(state.units['p2:0']?.location).toEqual({ kind: 'dua' })
+    expect(entries(state, 'units_killed')).toMatchObject([{ unitIds: ['p2:0'] }])
+    expect(entries(state, 'sai_sub_roll')).toEqual([])
+    expect(state.rng).toEqual(before.rng)
+  })
+
+  it('does nothing below the health, so the offer asks for the health in castings', () => {
+    expect(finger(1).units['p2:0']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    const offers = spellTargets(board([WATCHER], [OAK, CANNIBAL]), 'p1', spell('finger_of_death'))
+    expect(offers.map((o) => [o.target.kind === 'units' ? o.target.unitIds[0] : null, o.minCount])).toEqual([
+      ['p2:0', 2],
+      ['p2:1', 4],
+    ])
+  })
+})
+
+describe('Scent of Fear', () => {
+  it('sends the opponent’s dice home, with no roll and no death', () => {
+    const before = board([WATCHER], [OAK, OAK])
+    const state = castSpell(before, spell('scent_of_fear'), {
+      ...ctxFor(1, { kind: 'units', unitIds: ['p2:0'] }),
+      element: 'earth',
+    }).state
+    expect(state.units['p2:0']?.location).toEqual({ kind: 'reserve' })
+    expect(entries(state, 'units_sent_home')).toEqual([
+      { kind: 'units_sent_home', player: 'p2', source: 'Scent of Fear', slot: 'frontier', unitIds: ['p2:0'] },
+    ])
+    expect(entries(state, 'units_killed')).toEqual([])
+    expect(state.rng).toEqual(before.rng)
+  })
+
+  it('is offered at the opponent’s dice at terrains, three health a casting', () => {
+    const state = board(
+      [WATCHER],
+      [OAK, CANNIBAL, { typeId: OAK, at: { kind: 'reserve' } }, { typeId: OAK, at: { kind: 'terrain', slot: 'p1_home' } }],
+    )
+    const offers = spellTargets(state, 'p1', spell('scent_of_fear'))
+    expect(offers.map((o) => [o.target.kind === 'units' ? o.target.unitIds[0] : null, o.minCount]).sort()).toEqual([
+      ['p2:0', 1],
+      ['p2:1', 2],
+      ['p2:3', 1],
+    ])
+  })
+})
+
+describe('Soiled Ground', () => {
+  const soiled = (base: GameState, caster: 'p1' | 'p2' = 'p1'): GameState =>
+    castSpell(base, spell('soiled_ground'), ctxFor(1, { kind: 'terrain', slot: 'frontier' }, caster)).state
+
+  it('stands on the terrain until the caster’s next turn, and no roll gathers it', () => {
+    const state = soiled(board([WATCHER], [OAK]))
+    expect(state.effects).toEqual([
+      {
+        source: 'Soiled Ground',
+        target: { kind: 'terrain', slot: 'frontier', scope: 'deaths' },
+        modifiers: [],
+        trigger: 'soiled_ground',
+        expiresAtStartOfTurnOf: 'p1',
+      },
+    ])
+    expect(armyRoll(state, 'p2', 'frontier', 'save').modifiers).toEqual([])
+  })
+
+  it('owes a burial check for a die killed there, either side’s, and rolls it a step later', () => {
+    const state = soiled(board([WATCHER], [OAK, { typeId: OAK, at: { kind: 'terrain', slot: 'p2_home' } }]))
+    const killed = killUnits(state, ['p2:0', 'p2:1', 'p1:0'])
+    // The die at the Enemy home was not killed on Soiled Ground, and rolls nothing.
+    expect(killed.state.turn.burialDue).toEqual([
+      { source: 'Soiled Ground', player: 'p1', slot: 'frontier', unitIds: ['p1:0'] },
+      { source: 'Soiled Ground', player: 'p2', slot: 'frontier', unitIds: ['p2:0'] },
+    ])
+    const after = advance(killed.state)
+    expect(entries(after, 'sai_sub_roll').map((e) => [e.source, e.player, e.fate])).toEqual([
+      ['Soiled Ground', 'p1', 'bury'],
+      ['Soiled Ground', 'p2', 'bury'],
+    ])
+    expect(after.turn.burialDue).toBeUndefined()
+  })
+
+  it('owes nothing for a kill that buries anyway', () => {
+    const state = soiled(board([WATCHER], [OAK]))
+    expect(killUnits(state, ['p2:0'], { bury: true }).state.turn.burialDue).toBeUndefined()
+  })
+})
+
+describe('the Temple against death magic', () => {
+  /** p2 holds a Temple at the Frontier, on its eighth face; or held it, at 7. */
+  const temple = (face: 7 | 8, p1: readonly (string | Die)[] = [WATCHER], p2: readonly (string | Die)[] = [OAK, OAK]) => {
+    const base = board(p1, p2)
+    return {
+      ...base,
+      terrains: {
+        ...base.terrains,
+        frontier: { slot: 'frontier' as const, dieId: 'highland_temple', face, capturedBy: face === 8 ? ('p2' as const) : null },
+      },
+    }
+  }
+  const palsied = (state: GameState): GameState => ({
+    ...state,
+    effects: [spellEffect(spell('palsy'), ctxFor(1, p2Front))],
+  })
+
+  it('holds an opponent’s Palsy off the army while the capture stands, and lets it bite again after', () => {
+    // Holding the eighth face doubles the army's IDs too; what matters is no Palsy.
+    const held = palsied(temple(8))
+    expect(armyRoll(held, 'p2', 'frontier', 'melee').modifiers.filter((m) => m.source === 'Palsy')).toEqual([])
+    const lost = palsied(temple(7))
+    expect(
+      armyRoll(lost, 'p2', 'frontier', 'melee')
+        .modifiers.filter((m) => m.source === 'Palsy')
+        .map((m) => m.resultType),
+    ).toEqual(['melee', 'missile', 'magic', 'save'])
+  })
+
+  it('is not offered as a target of a death spell, and still is of any other', () => {
+    const state = temple(8, [WATCHER], [OAK, { typeId: OAK, at: { kind: 'terrain', slot: 'p2_home' } }])
+    const armies = (id: string) =>
+      spellTargets(state, 'p1', spell(id)).map((o) => (o.target.kind === 'army' ? o.target.army : null))
+    expect(armies('palsy')).toEqual(['p2_home'])
+    expect(armies('transmute_rock_to_mud')).toEqual(['frontier', 'p2_home'])
+    const units = spellTargets(state, 'p1', spell('finger_of_death')).map((o) =>
+      o.target.kind === 'units' ? o.target.unitIds[0] : null,
+    )
+    expect(units).toEqual(['p2:1'])
+  })
+
+  it('spares the holder’s dice from an opponent’s Soiled Ground, and not the other side’s', () => {
+    const state = castSpell(temple(8), spell('soiled_ground'), ctxFor(1, { kind: 'terrain', slot: 'frontier' })).state
+    expect(killUnits(state, ['p2:0', 'p1:0']).state.turn.burialDue).toEqual([
+      { source: 'Soiled Ground', player: 'p1', slot: 'frontier', unitIds: ['p1:0'] },
+    ])
   })
 })

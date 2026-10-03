@@ -96,7 +96,9 @@ const DECISIONS: Readonly<Record<GameAction['kind'], Reach>> = {
   dragon_breath: 'every',
   dragon_allocate: 'every',
   // Charge (v2 Phase 6e): a defender with IDs to split, against a Behemoth's Charge face.
-  charge_allocate: 'every',
+  // Every random game since 6e until the Goblins diluted the draws and the mirror
+  // rotation (v2 Phase 7e): 0 in 200, 5 in 1000.
+  charge_allocate: 'full',
   dragon_treasure: 'full',
   // Three dragon decisions need two dragons in one place, or dragons at two terrains
   // at once. Summon Dragon is the only way onto the board under the live rules, and a
@@ -144,6 +146,7 @@ const LOG: Readonly<Record<LogEntry['kind'], Reach>> = {
   sai_sub_roll: 'every',
   units_promoted: 'every',
   units_regenerated: 'every',
+  units_sent_home: 'every',
   foul_stench: 'every',
   units_recruited: 'every',
   units_moved: 'every',
@@ -225,6 +228,10 @@ const RULES: Readonly<Record<string, Reach>> = {
   'regenerate:units': 'every',
   'regenerate:saves': 'every',
   swamp_mastery: 'every',
+  // Soiled Ground (v2 Phase 7e): a die killed where it stands rolls its burial check.
+  // Cast 17 times in 1000 random games, and no die died on the soiled terrain before it
+  // wore off -- random play casts it anywhere -- so the check is driven by name.
+  soiled_burial: { elsewhere: 'goblins.test.ts' },
   // Foul Stench benching the whole army, so no counter is offered: the common case in
   // random play, where a Goblin DUA fills fast and a defending army is often small.
   foul_stench_no_counter: 'every',
@@ -367,6 +374,7 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
         case 'sai_sub_roll':
           if (entry.source === 'Stomp' && entry.fate === 'bury') bump('stomp_burial')
           if (entry.source === 'Poison' && entry.fate === 'bury') bump('poison_burial')
+          if (entry.source === 'Soiled Ground') bump('soiled_burial')
           break
         case 'units_regenerated':
           bump(entry.unitIds.length > 0 ? 'regenerate:units' : 'regenerate:saves')
@@ -436,6 +444,10 @@ describe('the live-rules fuzz', () => {
     // board rather than a list, so Death joins it with the first species to draw one.
     const drawn = [...counts.keys()].filter((k) => k.startsWith('drawn:')).map((k) => k.slice('drawn:'.length))
     expect(drawn.length).toBeGreaterThan(0)
-    for (const element of drawn) expectReached(counts, `breath:${element}`, 'full')
+    // Death (v2 Phase 7e) needs a Death force to summon a Death dragon that then rolls its
+    // breath: reached in one 1000-game run and missed by the next, so it has a named test.
+    for (const element of drawn) {
+      expectReached(counts, `breath:${element}`, element === 'death' ? { elsewhere: 'dragons.test.ts' } : 'full')
+    }
   })
 })

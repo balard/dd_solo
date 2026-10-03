@@ -2067,7 +2067,7 @@ portrait. The tiles that looked blank in a first screenshot had not finished loa
 
 7a has landed: the data, and a Replanting rule it uncovered. 7b has landed: the seams. 7c has
 landed: Screech, Poison, Net and Stun. 7d has landed: Regenerate and the two abilities, and the
-Goblins are playable. 7e and 7f are planned.
+Goblins are playable. 7e has landed: the five spells and the Temple. 7f is planned.
 
 Death & Earth, the first species carrying Death. **No terrain type in scope carries Death**
 (Deadland, the one that does, is out), so the Goblins
@@ -2446,7 +2446,7 @@ tiles draw their class shapes: the art manifest is 7f's.
 **Deliberately not done.** The five spells and the Temple's readers are 7e's: until then the
 Goblins roll Death magic with Resurrect Dead and Summon Dragon to spend it on.
 
-### 7e — Death magic: the five spells
+### 7e — Death magic: the five spells — **landed**
 
 - **Palsy** and **Decay** are `effect` blocks (Palsy on `'non_maneuver'`). **Finger of Death** is a
   handler straight into `killUnits` -- Firebolt's without `damageSubRoll`, since nothing rolls --
@@ -2476,6 +2476,47 @@ Goblins roll Death magic with Resurrect Dead and Summon Dragon to spend it on.
   dragon ships and is unreachable" both retire here, rewritten rather than deleted.
 - Counts that move: 27 spells in the data, 10 species spells, and greedy's `HANDLER_VALUE` gains
   three lines (a spell greedy cannot score fails a test).
+
+### What 7e found
+
+Both golden corpora replay byte-identical and unregenerated. 1223 tests and the 1000-game fuzz
+pass. The rules are in `RULES-V0.md` section 19, the tests in `goblins.test.ts` and one in
+`dragons.test.ts`; each of the Temple's three readers was checked to fail its own test with the
+reader undone.
+
+**1. There were five copies of the result-type list, not four.** 7b found the Python validator
+beside the three TypeScript ones; the JSON schema (`data/schema/spells.schema.json`) is a fifth,
+and it refused Palsy's `'non_maneuver'` the first time the data used it.
+
+**2. The spells were the shapes the table said, plus one new target kind.** Palsy and Decay are
+`effect` blocks with no code. Finger of Death is a handler straight into `killUnits` with
+`minCount` from the target's health. Soiled Ground is a terrain effect with a new scope, `'deaths'`,
+which no roll gathers -- `killUnits` reads it and owes the check on 7b's `turn.burialDue`, which is
+what that seam was built for. Scent of Fear needed `'opposing_units'`: Mirage's "units at any
+terrain", the opponent's only. Greedy prices the three handlers; the two effect blocks it prices
+through the one expander 7b made.
+
+**3. Scent of Fear is one unit per casting** (`RULES-V0.md` section 19), Mirage's house rule, so a
+monster takes two castings and three small dice take three. Written down rather than left to the
+picker: it is a real loss, and the one Mirage already accepted.
+
+**4. The fuzz had two requirements that were luck.** With the spells in, random games take new
+paths, and two things that had always fired stopped: `charge_allocate` (0 in 200, 5 in 1000) is
+`'full'` now, and the Death breath (reached in 7d's 1000, missed in this one) points at a named
+test in `dragons.test.ts` -- a Death Drake breathing on an army, the army paying five health-worth
+and keeping Dragon Plague. That test file had called the Death breath "unreachable by design",
+which stopped being true at 7d. Soiled Ground is cast 17 times in 1000 games and no die ever died
+on the soiled terrain in time, so its burial check is `{ elsewhere: 'goblins.test.ts' }` too.
+Scent of Fear is cast once in 200 games: required, and the thinnest margin in the fuzz.
+
+**5. The spell fuzz in `magic.test.ts` assumed "any" meant castable.** It requires every `any`
+spell to be cast by Treefolk and Firewalkers, and neither rolls death magic. The death spells are
+the live fuzz's, where the Goblins are; the filter says so.
+
+**Not checked in the browser**: reaching a Goblins magic action needs a force with magic dice on a
+magic face, which the monster mirrors rarely give; the spell picker is generic over target kinds,
+and every new kind it meets is `'units'`, `'army'` or `'terrain'`. 7f's starter preset is the
+board for it.
 
 ### 7f — Presets, exit checks, art
 

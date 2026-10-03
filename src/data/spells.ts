@@ -45,6 +45,8 @@ export type SpellTargetKind =
   | 'own_unit'
   | 'opposing_unit'
   | 'units'
+  /** Scent of Fear (v2 Phase 7e): Mirage's "units at any terrain", the opponent's only. */
+  | 'opposing_units'
   | 'terrain'
   | 'own_dua'
   | 'dua'
@@ -141,6 +143,7 @@ const SPELL_TARGETS: readonly string[] = [
   'opposing_army',
   'own_unit',
   'opposing_unit',
+  'opposing_units',
   'units',
   'terrain',
   'own_dua',

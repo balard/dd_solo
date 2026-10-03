@@ -52,6 +52,7 @@
               "own_unit",
               "opposing_unit",
               "units",
+              "opposing_units",
               "terrain",
               "own_dua",
               "dua"
@@ -99,7 +100,7 @@
                     "kind": { "enum": ["add", "subtract", "divide", "multiply", "ignore_ids"] },
                     "resultType": {
                       "description": "A result type, or `*` for every one of them -- Ash Storm subtracts from all results and five rows here would be five places to get it wrong.",
-                      "enum": ["melee", "missile", "magic", "save", "maneuver", "*"]
+                      "enum": ["melee", "missile", "magic", "save", "maneuver", "*", "non_maneuver"]
                     },
                     "amount": { "type": "integer", "minimum": 1 },
                     "by": { "type": "integer", "minimum": 1 },

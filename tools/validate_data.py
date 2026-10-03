@@ -212,7 +212,7 @@ def check_dragons():
 # these checks guard a transcription rather than an importer.
 SPELL_ELEMENTS = {"air", "water", "earth", "fire", "death", "elemental"}
 SPELL_TARGETS = {
-    "army", "own_army", "opposing_army", "own_unit", "opposing_unit", "units", "terrain",
+    "army", "own_army", "opposing_army", "own_unit", "opposing_unit", "units", "opposing_units", "terrain",
     "own_dua", "dua",
 }
 RESULT_TYPES = {"melee", "missile", "magic", "save", "maneuver", "*", "non_maneuver"}
@@ -277,8 +277,8 @@ def check_spells():
     # which is what tools/species.py puts there. Twenty-two spells: the starter set's
     # eighteen, the Coral Elves' two (v2 Phase 5e) and the Dwarves' two (v2 Phase 6g); a
     # later species' phase moves this number.
-    if len(doc["spells"]) != 22:
-        err(f"expected 22 spells in scope, found {len(doc['spells'])}")
+    if len(doc["spells"]) != 27:
+        err(f"expected 27 spells in scope, found {len(doc['spells'])}")
 
 
 def main():

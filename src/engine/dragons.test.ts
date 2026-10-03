@@ -18,13 +18,15 @@ import {
 } from './dragons'
 import { applyModifiers, ignoreIdsModifiers, doubleIdsModifier } from './pipeline'
 import { passiveAi } from '../ai/passive'
-import { begin, reduce } from './reduce'
+import { advance, begin, reduce } from './reduce'
+import { damageOptions } from './damage'
 import { resolveFaces } from './roll'
 import { DRAGON_ROLL_KINDS } from './sai'
 import { rollOnTheTable } from './turn'
 import { rngFrom } from './rng'
 import { BESTIARY_FORCES, STARTER_FORCES, setupGame, type ForceSpec } from './setup'
 import {
+  armyAt,
   DRAGON_RULES,
   dragonsAt,
   type DragonInPlay,
@@ -383,7 +385,8 @@ describe('dragon self-play', () => {
     }
   })
 
-  /** Death is unreachable by design: neither species can draw it. */
+  /** Death is unreachable *here*: neither starter species can draw it. The Goblins can
+   *  (v2 Phase 7), and the Death breath's own test is below, outside this fuzz. */
   it('fires all four reachable breaths, and never the fifth', () => {
     for (const element of ['air', 'earth', 'fire', 'water']) {
       expect(counters[`breath_${element}`] ?? 0, element).toBeGreaterThan(0)
@@ -668,6 +671,32 @@ describe('the two choices Summon Dragon made real', () => {
 function threeAtFrontier(): GameState {
   return placed({ water: 'water_drake', fireA: 'fire_drake', fireB: 'fire_wyrm' })
 }
+
+describe('the Death breath, in a game (v2 Phase 7e)', () => {
+  /**
+   * Reachable since the Goblins: a Death species summons a Death dragon. The live fuzz
+   * reached it in 1000 games once and missed it the next time the random games changed
+   * course, so it is driven here rather than left to chance: a Death Drake breathes on
+   * the marching army, the army pays five health-worth, and Dragon Plague stays on it.
+   */
+  it('kills five health-worth and leaves the army ignoring its IDs', () => {
+    let seed = 1
+    for (; seed < 2000; seed += 1) {
+      const [rolls] = rollDragon('p2:d', 'death_drake', false, rngFrom(seed))
+      const first = rolls[0]
+      if (rolls.length === 1 && first !== undefined && dragonFaceIcon('death_drake', first.faceIndex as DragonFaceNumber) === 'BREATH') break
+    }
+    let state = advance({ ...atDragonPhase(placed({ 'p2:d': 'death_drake' })), rng: rngFrom(seed) })
+    while (state.pending?.kind === 'dragon_breath') {
+      const pending = state.pending
+      const army = armyAt(state, pending.player, pending.slot)
+      state = advance(reduce(state, { kind: 'dragon_breath', unitIds: damageOptions(army, pending.health).suggestion }))
+    }
+    const breath = state.log.filter((e) => e.kind === 'dragon_breath')
+    expect(breath.map((e) => (e.kind === 'dragon_breath' ? e.element : null))).toEqual(['death'])
+    expect(state.log.some((e) => e.kind === 'dragon_breath_effect' && e.element === 'death')).toBe(true)
+  })
+})
 
 /** A real board under the dragon rules, with the given dragons placed. */
 function placed(spec: Readonly<Record<string, string>>): GameState {

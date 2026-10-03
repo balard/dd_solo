@@ -1617,6 +1617,9 @@ function playerEffectText(
   switch (trigger) {
     case 'accelerated_growth':
       return 'a dying unit of 2+ health swaps with a 1-health unit from this DUA'
+    // A terrain effect, never on a player -- here only so the switch stays exhaustive.
+    case 'soiled_ground':
+      return 'a unit killed here saves or is buried'
     case undefined:
       return describeModifiers(modifiers)
   }
@@ -1734,6 +1737,9 @@ function describeTerrainEffect(effect: Effect): string {
       return `${effect.thorns ?? 0} damage to an army that maneuvers here`
     case 'all_armies':
       return describeModifiers(effect.modifiers)
+    // Soiled Ground (v2 Phase 7e).
+    case 'deaths':
+      return 'a unit killed here saves or is buried'
   }
 }
 

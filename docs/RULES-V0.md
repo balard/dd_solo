@@ -556,7 +556,9 @@ Resolved so far:
   Flaming Shields for Firewalkers, plus the Species Abilities Phase that `Phase` does not yet
   model. The starter book grants none, so this is the one place v1 deliberately follows the full
   rules over the release target (`PLAN-V1.md` Phase 8).
-- **The Death dragon ships and is unreachable, deliberately.** Phase 6 draws each player's pool
+- **The Death dragon shipped unreachable, deliberately, until the Goblins** (v2 Phase 7: a Death
+  species summons it, and `dragons.test.ts` drives its breath).
+  The original note: Phase 6 draws each player's pool
   colors from their own species' two elements, and Treefolk (water, earth) and Firewalkers (air,
   fire) cover four of the five between them; `Summon Dragon` could not fetch the fifth either, since
   it needs magic of the dragon's own element and neither species casts death magic. All five
@@ -590,8 +592,8 @@ magic. During the Eighth Face Phase you may force another player to bury one uni
 their DUA." Two decisions, because two players decide: the holder decides whether to force a burial
 at all, and the opponent decides which of their own DUA units pays for it. Forcing is a real choice
 and not a formality — an opponent's DUA holding a Phoenix means forcing them hands them a roll at
-Rise from the Ashes they would not otherwise have had yet. The death-magic immunity is dormant: no
-spell exists under `magic: 'simplified'`, so nothing has needed it yet.
+Rise from the Ashes they would not otherwise have had yet. The death-magic immunity was dormant
+until v2 Phase 7e, when the Goblins brought death magic: its three readers are in section 19.
 
 **Standing Stones** does nothing at all on this rung, or any rung before Phase 7 gives magic its
 elements back — it is a rules fact, not unbuilt work, and `resolvesIcon` gates it on `magic:
@@ -1185,6 +1187,45 @@ player's DUA, up to three per 24 health of that player's force, or part of 24 (p
   units", and benching a die that could not roll anyway is good play, not a loophole.
 - Not on a counter-attack (a counter is not a melee *action*), and nothing to bench after a Charge,
   which replaces the counter.
+
+### Death magic (7e)
+
+| Spell | Element, cost | What it does here |
+|---|---|---|
+| **Palsy** | death 2, any, Cantrip | One off each of the target army's non-maneuver rolls per casting -- melee, missile, magic and save -- until the caster's next turn. A combination roll takes one from each kind it counts, Ash Storm's ruling. |
+| **Decay** | death 3, Goblins | Two melee off the target army's rolls per casting, until the caster's next turn. |
+| **Finger of Death** | death 4, any | One damage per casting to one opposing unit, no save: it dies when the castings reach its health, and fewer do nothing -- so the offer asks for at least the health in castings. No roll, no randomness. |
+| **Soiled Ground** | death 6, any | Not cumulative. Until the caster's next turn, a unit killed at that terrain that reaches the DUA rolls a save, and is buried without one. |
+| **Scent of Fear** | earth 5, Goblins | Opposing units at any terrain go to their Reserve Area. Moved, not killed: no death trigger, no Replanting. |
+
+- **Scent of Fear is one unit per casting, three health a casting** (house rule): Mirage's reading
+  ("up to five health-worth of units at any terrain", one unit a casting, section 15), so a monster
+  takes two castings. What is lost is three 1-health dice for one casting; Mirage already accepted
+  the same loss for one consistent picker.
+- **Soiled Ground reaches either side's dice**: "any unit killed at that terrain", the caster's own
+  included. It asks where a die stood *before* it died. Its check is owed on the turn and rolled a
+  step later, after any Accelerated Growth offer (an exchanged die was never killed) and after Rise
+  from the Ashes (a risen Phoenix is not in the DUA). A kill that buries anyway -- Flame, Fire
+  breath, the Temple -- owes nothing; a Phoenix that fails the check rolls Rise again on the way to
+  the BUA.
+- **Finger of Death below the health is refused at announcement**, not resolved to nothing: the
+  offer's `minCount` is the target's health, Resurrect Dead's mechanism.
+
+**The Temple wakes.** "Your controlling army and all units in it cannot be affected by any
+opponent's death magic." Three readers, each through `deathMagicImmune` (the Temple on face 8,
+this player's, not Reserves):
+
+- **The gather**: an opponent's Palsy or Decay on the holder's army is skipped while the capture
+  stands -- not removed, so it bites again on the roll after the capture is lost. A death spell is
+  recognised by name against the data, and its caster is `expiresAtStartOfTurnOf`.
+- **Targeting**: the holder's army, and every die in it, is not offered to an opponent's death
+  spell. A terrain stays a target.
+- **Soiled Ground**: the holder's dice at their own Temple roll no check when the spell is the
+  opponent's; the other side's dice there still do.
+
+**Not death magic, and easy to misread as it**: a Death dragon summoned with death magic attacking
+the Temple's holder (the dragon's attack is not magic), and Resurrect Dead paid in death (it affects
+the caster's own dice).
 
 ### House rules this species adds
 

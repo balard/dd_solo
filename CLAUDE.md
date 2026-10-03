@@ -214,7 +214,9 @@ the dice and the opponent.
 > landed: Screech, Poison, Net (Sleep's status under its own name) and Stun -- `RULES-V0.md`
 > section 19. 7d has landed: Regenerate, Swamp Mastery and Foul Stench (the first DUA-count
 > ability, `duaCap`), and with them **the Goblins are playable** -- five monster fixtures
-> (`goblins_*`) and every SAI and ability in the live fuzz.
+> (`goblins_*`) and every SAI and ability in the live fuzz. 7e has landed: Palsy, Decay, Finger of
+> Death, Soiled Ground and Scent of Fear, and the Temple's immunity to an opponent's death magic,
+> dormant since v1 Phase 5e.
 
 ## Read these first
 
@@ -435,7 +437,8 @@ Goblins)
 and 24 terrain dice (6 basic types × 4 eighth-face
 variants -- Coastland, Feyland and Flatland joined Swampland, Highland and Wasteland in Phase 5a),
 all passing validation, plus **10 dragon dice** (5 elements × drake/wyrm, 12 faces each, Phase 6)
-and **22 spells** (`data/spells.json`: the starter's 18 from Phase 7, then two per species from v2 --
+and **27 spells** (`data/spells.json`: the starter's 18 from Phase 7, then two per species from v2
+and five with the Goblins' death magic --
 hand-authored like `presets.json`, no importer
 touches it). Nothing is `TODO`: every die in scope is transcribed, and `npm run data` reports any
 spell that is in the data with no code behind it.
