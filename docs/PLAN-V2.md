@@ -9,8 +9,8 @@ landscape board to try.
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
 of work*. **Phases 0 to 6 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c, Phase 5
-as 5a to 5g, Phase 6 as 6a to 6h), each with its findings below. Phases 7 and 8 are still a draft,
-with predictions where V1 has findings.
+as 5a to 5g, Phase 6 as 6a to 6h), each with its findings below. Phase 7 (Goblins) is planned as
+slices 7a to 7f; Phase 8 is still a draft, with predictions where V1 has findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
 collection, win dice, dragons and terrains, and raise the force cap to 24 and then 36 at set
@@ -73,7 +73,7 @@ start.
 |                              |
 4  The army builder [landed]   6  Dwarves [landed]
                                |
-                               7  Death magic, then Goblins
+                               7  Goblins (Death magic inside)   [planned]
                                |
                                8  Lava Elves
 ```
@@ -2062,6 +2062,262 @@ portrait. The tiles that looked blank in a first screenshot had not finished loa
 - **A player's choice over "may".** Every ability here is automatic because converting can only
   help in the rolls it reaches; if a later species brings a combination roll counting maneuver, the
   question comes back.
+
+## Phase 7 — Goblins — **planned**
+
+Death & Earth, the first species carrying Death. **No terrain type in scope carries Death**
+(Deadland, the one that does, is out), so the Goblins
+have no own type: Phase 2's `drawHomeDie` already draws them a home among the twelve dice carrying
+earth (Swampland, Highland, Flatland), and Swamp Mastery is live at every home they can draw. The
+faces are in `data/raw/goblins.faces.txt` (20 dice, 140 faces, no `TODO` face), unimported, and the
+images are mirrored in the gitignored `assets/faces/goblins` -- **but `fetch_faces.py` has no
+Goblins pins yet**, and the set holds two maneuver images (`maneuver-1-*`, `maneuver-2-*`), which is
+exactly the Treefolk and Coral Elves case.
+
+The roster matches p. 82: heavy Thug / Cutthroat / Marauder / Cannibal, light Mugger / Ambusher /
+Filcher / Death Naga, cavalry Wardog Rider / Wolf Rider / Leopard Rider / Harpy, missile Pelter /
+Slingman / Deadeye / Shambler, magic Trickster / Hedge Wizard / Death Mage / Troll.
+
+**What the faces actually carry.** Fifteen SAI names, **five new**:
+
+| SAI | Dice | Applies | Seam |
+|---|---|---|---|
+| **Screech** | Harpy ×2 | Melee | Wave's melee half exactly: "the defending army subtracts X save results". No targets, no roll |
+| **Poison** | Death Naga ×2 | Melee | Sub-roll (4d), twice: "target X health-worth", each makes a **save** roll or is killed, and the dead save again or are buried. Stomp's chain (6d) with a save where Stomp has a maneuver |
+| **Net** | Cannibal | Melee, Missile, Individual | Smother's maneuver sub-roll, and a failure is **Sleep's status**: "may not be rolled or leave the terrain ... until the beginning of your next turn". Plus a sentence the draft missed: "when saving against an individual targeting effect, Net generates X save results" |
+| **Stun** | Cannibal | Melee | Smother's maneuver sub-roll, and a failure sits out **army** rolls only: "cannot be rolled until the beginning of your turn, unless they are the target of an individual-targeting effect which forces them to". It may leave, and leaving ends it |
+| **Regenerate** | Troll ×2 | Non-maneuver | **New.** "Choose one: X save results, OR return up to X health-worth of units from your DUA to the army containing this unit." Wild Growth's friendly pause, with a choice between two unlike things |
+
+Reused: Smite, Counter, Bullseye, Rend, Cantrip, Fly, Smother, Sleep, Surprise, and Swallow (5c).
+**The Cannibal is this phase's Behemoth**: Net, Stun, Sleep, Swallow and Surprise on one die, so
+its mirror is the laboratory for every status in the game at once -- a Netted die, a Stunned die
+and a sleeping one side by side, with a Swallow taking whichever is left.
+
+**Abilities**: Swamp Mastery (at earth, melee counts as maneuver -- Mountain Mastery's row) and
+**Foul Stench** (below). **Spells**, checked with PyMuPDF the 5e way (red `0xd12229` is
+cumulative; the R and C columns read off word positions on p. 82):
+
+| Spell | Element | Species | Cost | R | C | Cumulative | Shape |
+|---|---|---|---|---|---|---|---|
+| **Palsy** | death | any | 2 | | X | yes | `effect`: −1 on every non-maneuver roll |
+| **Decay** | death | goblins | 3 | | | yes | `effect`: −2 melee, Higher Ground's shape |
+| **Finger of Death** | death | any | 4 | | | yes | Handler: N castings, N damage to a unit, no save |
+| **Soiled Ground** | death | any | 6 | | | no | Handler: a terrain effect read by `killUnits` |
+| **Scent of Fear** | earth | goblins | 5 | | | yes | Handler: Mirage without the save, opposing units only |
+
+### Where the draft tables above are wrong for Goblins
+
+- **"Net, Web and Stun need a status that stops a die rolling and leaving, plus a new end
+  condition" is mostly built.** Net's status *is* Sleep's, word for word, and 5b's `Effect.anchor`
+  is already the "ends when the unit leaves its terrain" condition Stun needs. What is new is
+  narrower: **a status that keeps a die out of army rolls and nowhere else** -- `glaring`'s reach
+  without its owner choosing it. The draft's "Stun ends at the beginning of *your* turn, not your
+  next turn" is not a distinction: the caster's current turn has already begun, so the next
+  beginning of it is the next turn either way, and `expiresAtStartOfTurnOf` already says so.
+- **Net is not a new status, and must not become one.** Every "cannot leave its terrain" check --
+  the Retreat Step, the free moves, Path, `RandomAI`'s retreat pool, `sleepingIds` -- asks
+  `isAsleep`. A `netted` field would have to be taught to each, and the one it was not taught to
+  would let a netted die walk away with every test green. So **Net writes `asleep: true` with
+  `source: 'Net'`**, and the UI names the status by its source ("— netted"). No `Effect` field, so
+  nothing near the digest moves.
+- **Net reaches missile attacks, with an exception for the Tower.** "Net does nothing during a
+  missile attack targeting an opponent's Reserve Army from a Tower on its eighth face" -- a Reserve
+  Army stands on no terrain to be held on. It cannot be decided in `sai.ts`, which sees no
+  `GameState`; the targeting queue drops a Net task whose defender is `'reserve'`, the way a task
+  that can take nothing is dropped.
+- **Poison is not a new seam.** It is `target_enemy` with a save sub-roll (Bullseye's) and 6d's
+  `'save_or_bury'` fate (Stomp's), whose burial check already waits for an Accelerated Growth
+  offer on `combat.attack.burialDue`.
+- **Screech is Wave's melee half, and the risk is only its name.** `PendingSaves.wave` is a number,
+  and the arithmetic line calls it Wave. Screech gets its own field beside it (`screech?`), Bash's
+  lesson from 6d: a shared field is a line that names the wrong SAI.
+- **Regenerate returns units through `returnFromDua`, not `recruit` or an exchange.** "Up to X
+  health-worth of units from your DUA" -- any size, **any species** (unlike Resurrect Dead it names
+  no element, and unlike promotion it is not an exchange), so `recruit`'s one-health guard is
+  wrong for it and Resurrect Dead's door is right.
+- **Foul Stench is the first DUA-count ability, and the cap is not "3 per 24 health" flat.** p. 21:
+  "per 24 points of total force size, or part thereof" -- 3 up to 24, 6 from 25 to 48. So a 30-health
+  starter game already caps at 6, not 3. One helper, `duaCap(state, player, per)` over
+  `forceSize`, which Cursed Bullets reuses in Phase 8.
+- **Finger of Death is cumulative** ("one" is red), and so is Scent of Fear: the draft's "1
+  damage" and "3 health-worth" are per casting. N castings of Finger kill a unit of health ≤ N with
+  no roll, and fewer than its health do *nothing*, so the offer carries **`minCount` = the target's
+  health** -- Resurrect Dead's mechanism, and the reason it rides on the offer rather than in a rule.
+- **Palsy is not "no code".** "Non-maneuver rolls" is a result-type set that `'*'` cannot say, and
+  four `subtract` rows would take one per type from a combination roll where Ash Storm's ruling
+  (section 18) takes one per *kind counted* -- which is what one `'*'`-style wildcard gives for
+  free. So the spell spec gains a wildcard, `'non_maneuver'`, and **it has three expanders, not
+  one**: `scaleModifier` in `spells.ts`, the data validator's `RESULT_TYPES`, and greedy's own
+  copy in `src/ai/spells.ts`. Miss the third and greedy prices Palsy at nothing.
+- **Soiled Ground's burial check cannot park on `combat.attack`.** Stomp's `burialDue` is an
+  exchange's, and Fire breath's `burning` the dragon attack's; a Soiled Ground death can come from
+  any of them, from a spell (Finger of Death, Lightning Strike, Hailstorm) or from a sub-roll. It
+  waits on a **turn-level** list instead, settled at the next machine step after any growth offer,
+  rolling only what is still in the DUA by then (`inDua`, Phase 8's missed crash). And it has to be
+  settled **before Foul Stench counts the DUA**: a Goblin buried there no longer counts.
+- **The Temple's death-magic immunity has been dormant since v1 Phase 5e** ("your controlling army
+  and all units in it cannot be affected by any opponent's death magic", `RULES-V0.md` section 13
+  says so), and this phase wakes it. The draft did not mention it.
+- **Most of "Death magic" is already built.** `Element` has had `'death'` since v0, an elemental
+  spell accepts any element (`spellAcceptsElement`), the Death Drake, Wyrm and their breath
+  (`ignore_ids`) are in, `--el-death` is a token, and a Death species draws its home without an own
+  type. What is left is five spells, the Temple, and tests that prove the rest -- which is why
+  Death magic is no longer this phase's *first* slice (7e, below).
+
+### 7a — Data
+
+- **Gate: the monster SAI counts.** Every monster face in the raw file says 4 with no count in
+  the source. Nine of the monster SAIs here read X -- Swallow, Stun, Net, Poison, Fly, Screech,
+  Smother, Smite, Regenerate -- so the owner checked them against the dice before import, as 6a
+  did for the Dwarves: **every one is 4** (confirmed 2026-10-02). Sleep and Surprise take no X.
+  The raw file's header loses its "unconfirmed" note in this slice.
+- `tools/species.py` gains `goblins` (the roster above) and `SPECIES_SAIS` gains Net, Poison,
+  Regenerate, Screech, Stun (p. 83). The raw file's header loses its "not imported" note.
+- **The Goblins are unplayable after this slice**, by `playable.ts`. `sai.test.ts`'s partition
+  gains five deferred names, and `playable.test.ts` gets its real refusal back with the exact
+  sentence, as 6a did.
+- Expected to move: the unit count (100 dice), the SAI partition, the playable species, and any
+  test that names "the only" die with an SAI the Goblins reuse (6a's Dispel Magic lesson; here
+  Smother, Sleep, Surprise and Swallow each gain a die).
+
+### 7b — Seams, and no rule moves
+
+1. **`duaCap(state, player, per)`**: `per × ⌈forceSize / 24⌉`. No caller until 7d; tested at 12,
+   24, 25 and 36.
+2. **A turn-level burial check**, `turn.burialDue` (named, the shape `combat.attack.burialDue`
+   already has), settled by the machine step after `stepGame` raises any growth offer. **Stomp
+   moves onto it** in the same edit -- no golden has a Dwarf, so nothing recorded moves -- and the
+   6d test where Accelerated Growth exchanges one of two Stomped Oaks is the one that proves the
+   move. Fire breath's `burning` stays where it is: it is in dragon games, and nothing needs it to
+   move.
+3. **A stunned status**: `Effect.stunned?: true` with an `anchor` on the stunned unit itself.
+   `sitsOutArmyRoll` asks it; `cannotRoll` does not, so a sub-roll still rolls the die. No producer.
+4. **`'non_maneuver'`** in the spell modifier spec, in all three expanders, with no spell using it.
+5. **`deathMagicImmune(state, player, ref)`**: the Temple predicate, through `iconAt`, so losing the
+   capture ends it in the same step for free. Read at **gather time** -- an effect from a death
+   spell is skipped while the holder holds, read off the effect's `source` against the spell data
+   and its caster off `expiresAtStartOfTurnOf`, the way 6b stamps `fromSpell` -- so a Palsy cast
+   *before* the capture stops biting the moment it lands, and no `Effect` field is added. Also read
+   by spell targeting (a Finger of Death is not offered against it) and by Soiled Ground's hook.
+   No caller can reach it until a death spell exists.
+
+### 7c — Screech, Poison, Net, Stun
+
+- **Screech**: `{ kind: 'screech', amount }`, read where `wave` is, its own `PendingSaves` field and
+  its own name on the line. Applies to a counter-attack's save roll and to a Charge's combination
+  roll, as Wave does (section 18).
+- **Poison**: `target_enemy`, save sub-roll, `'save_or_bury'`. "Target X health-worth" is p. 32's
+  forced maximum, which every enemy-targeting SAI is already held to.
+- **Net**: `target_enemy`, maneuver sub-roll, a new fate that writes Sleep's effect with Net's
+  name. Missile as well as melee; the Tower-on-Reserves drop. And the **Individual** sentence: X
+  saves in any save sub-roll (`isSubRoll` with purpose `save`). House rule (approved): **every** save
+  sub-roll is "saving against an individual targeting effect" -- Bullseye, Double Strike, Lightning
+  Strike, Firebolt, Bash's victim, Poison's two rolls and a burial check -- because a sub-roll is by
+  definition one unit rolling for itself, and splitting them by who aimed would be a second
+  question asked of one roll.
+- **Stun**: as Net, with 7b's status. A stunned die **may retreat and be moved** (Roar, Path, a
+  free move), and that ends the stun.
+  - **The UI's one dimming set becomes two.** `sleepingIds` both dims a die and refuses its
+    retreat; a stunned die is dimmed and *may* retreat. `RandomAI`'s retreat filter is the
+    same split, or the fuzz never retreats a stunned die and never ends a stun that way.
+- **The estimator gets Stun and Net for free only if they live in `armyRoll`'s dice filter.** They
+  do, by 7b; a test pins that a stunned die is missing from `expectedArmy`.
+- `expectOnly`'s whitelist gains each new effect kind in the same edit, as every Phase 4 slice
+  had to be told.
+
+### 7d — Regenerate, Swamp Mastery, Foul Stench, and the flip
+
+- **Regenerate** joins Wild Growth's friendly queue, owned by whoever rolled it. One pending,
+  `sai_regenerate`: X saves, or up to X health-worth of DUA dice tapped where they lie (9f's one
+  way to pick a die). Where saves count for nothing -- an attack roll, a magic roll -- only the
+  units half is offered, by `saveResultsCount`'s rule. Where there is no room for a decision -- a
+  sub-roll, Wall of Thorns' roll, the dragon combination roll (`noSideDecision`) -- it is X saves,
+  automatically, as Wild Growth's save share already is there. Returned dice stand in the army
+  before damage is assigned, as a Wild Growth promotion does. House rule (approved): **two
+  Regenerates combine into one choice of 2X** (p. 32), not a split of saves and units -- Wild
+  Growth's split is its own text, and Regenerate says "choose one".
+- **Swamp Mastery** is Mountain Mastery's row for the Goblins. `meleeAsManeuver` currently stamps
+  `source: 'Mountain Mastery'`, so it becomes a factory taking the ability's name, or a Goblin's
+  roll reads "counted as maneuver (Mountain Mastery)".
+- **Foul Stench** is a new pending addressed to the **defender**: select exactly
+  `min(N, living defenders)` of their units, N = Goblins in the attacker's DUA capped by `duaCap(...,
+  3)`. Only on a melee *action* by an army holding a living Goblin -- not on a counter-attack, and
+  not when a Charge has already replaced the counter.
+  - **House rule (approved): asked only once the counter is accepted**, between `offer_counter` and
+    `resolve_counter`. The rule puts it after the save roll and before the counter; the same player
+    answers both with nothing rolled in between, so the swap changes no information and removes a
+    question from every exchange the defender was never going to answer. The offer shows N, and
+    **no offer is raised when N covers the whole army**.
+  - Selecting a sleeping, netted or stunned die is legal (the rule says "select their units", and
+    picking one that could not roll anyway is the defender's good play, not a loophole).
+  - **The bench is read in `armyRoll`, not at the counter site** (`turn.combat.benched`, omitted
+    when empty). The counter-attack's "expect ≈6" forecast and greedy's decision to counter go
+    through `estimate.ts`, which goes through `armyRoll`; a filter at the counter site is the
+    second door, and the forecast would count benched dice.
+- **The flip**: `SPECIES_ABILITIES` names the Goblins. Five monster fixtures (`goblins_*`), every
+  test that counts species or fixtures, and the live fuzz's counters for the five SAIs and two
+  abilities. With the flip the Goblins roll Death magic with only Resurrect Dead and Summon Dragon
+  to spend it on -- playable, since `castableSpells` offers only what resolves -- and **Summon
+  Dragon reaches the Death dragons**, so the fuzz's `breath:death` (keyed off the board since 0b)
+  becomes a requirement on its own.
+- **Predicted fuzz reach**: Screech, Poison, Regenerate and Swamp Mastery in 200 games. Net and Stun
+  are one face each on one monster, as Charge and Bash were, and those fired in 200; expect the same.
+  Foul Stench needs a dead Goblin first, which a long random game always has. The Tower-on-Reserves
+  Net drop and the Temple immunity are `{ elsewhere }` with named tests.
+
+### 7e — Death magic: the five spells
+
+- **Palsy** and **Decay** are `effect` blocks (Palsy on `'non_maneuver'`). **Finger of Death** is a
+  handler straight into `killUnits` -- Firebolt's without `damageSubRoll`, since nothing rolls --
+  with `minCount` from the target's health and `countScales` true. **Scent of Fear** is Mirage's
+  handler without the save roll, aimed at opposing units only, 3 health-worth per casting, moved
+  and not killed (Roar's fate: no death trigger, no Replanting). House rule (approved): its
+  targets may stand at **several** terrains, Mirage's "any unit at any terrain" reading (section 15).
+- **Soiled Ground** is an `Effect` on a terrain with `trigger: 'soiled_ground'`, Accelerated
+  Growth's shape -- read by `killUnits`, which pushes onto 7b's `turn.burialDue` every unit killed
+  *at that terrain* that reached the DUA. Both players' units: "any unit killed at that terrain",
+  the caster's own included, which greedy's `HANDLER_VALUE` has to price. Not cumulative.
+  - Order, all of it existing: Replanting first (never killed), the kill, Rise from the Ashes
+    (risen means not in the DUA), the growth offer (exchanged means never killed), then the
+    burial check on what is left -- and a Phoenix that fails it rolls Rise again on the way to the
+    BUA. A kill-and-bury (Flame, the Temple, Fire breath) buries anyway and rolls nothing here.
+- **The Temple wakes**: 7b's predicate has callers. A test captures a Temple and aims every death
+  spell at the holder: Palsy and Decay gathered and skipped, Finger of Death not offered, Soiled
+  Ground's check skipped for the holder's dice and made for the other side's at the same terrain.
+  Then the capture is lost and the standing Palsy bites again on the next roll.
+- **Not death magic, and easy to misread as it**: a Death dragon summoned with death magic
+  attacking the Temple's holder (the dragon's attack is not magic), and Resurrect Dead paid in death
+  (it affects the caster's own dice).
+- `RULES-V0.md` section 13's "the death-magic immunity is dormant" and section 12's "the Death
+  dragon ships and is unreachable" both retire here, rewritten rather than deleted.
+- Counts that move: 27 spells in the data, 10 species spells, and greedy's `HANDLER_VALUE` gains
+  three lines (a spell greedy cannot score fails a test).
+
+### 7f — Presets, exit checks, art
+
+- `goblins_starter` and `goblins_bestiary`, generated from the Dwarves' lists by class and size, as
+  6h did.
+- **Re-run greedy against passive and against itself** on Goblins mirrors and against every other
+  species. Values to watch: Regenerate's units half (a Troll that rebuilds its army every roll),
+  Scent of Fear (Roar's dead position again, by spell), and Palsy re-cast every turn (the
+  "defensive buff priced as insurance" stall in reverse).
+- **Art**: pins for the two maneuver images, from the owner's list of remote paths (2026-10-02):
+  variant 1 for the heavy, light, missile and magic lines and the monsters, variant 2 for the
+  cavalry. A dry run of `unit_candidates` against `assets/faces/goblins` without pins left 17
+  maneuver faces matching both variants; with them, all 140 faces resolve to exactly one image.
+  The missile line was missing from the owner's list and answered separately (2026-10-03). Every
+  other icon, the SAIs included, has one image per face. Then `fetch_faces.py --offline` and the
+  no-ambiguity check over 700 unit faces.
+- Exit criterion as for every species, plus: a Goblins home is always an earth die (a test over
+  seeds), a death spell is cast in the live fuzz, and the Death breath is reached live.
+
+### Deliberately out of this phase
+
+- **Lava Elves' Death spells** (Necromantic Wave) and the Death spells of species after them (Evil
+  Eye, Magic Drain, Open Grave, Exhume, Swamp Fever) -- each lands with its species.
+- **Cursed Bullets** uses `duaCap` and 6b's spell saves, but is Phase 8's.
+- **Ivory magic.** The rules let Ivory results cast only Elemental spells; no species in scope
+  rolls it.
 
 ---
 
