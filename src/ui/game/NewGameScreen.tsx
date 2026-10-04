@@ -13,7 +13,7 @@
  * rolled instead (v2 Phase 4c). The builder is a page of its own, reached from here
  * and returning here -- with the force it built already picked, when asked to.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { DEFAULT_OPPONENT, type OpponentName } from '../../ai/opponents'
 import type { ForcePool } from '../../engine/force'
@@ -23,6 +23,7 @@ import { ArmyBuilder } from './ArmyBuilder'
 import { defaultForceName, forceHealth } from './builder'
 import { speciesInfo } from './Elements'
 import { readSavedForces, type SavedForce } from './forceStore'
+import { readText, writeText } from './prefs'
 import {
   RANDOM_SIZES,
   newGameSetup,
@@ -116,21 +117,69 @@ function stillThere<T extends SideChoice | { readonly kind: 'random' }>(
   return side.kind === 'kept' && !kept.some((f) => f.id === side.id) ? fallback : side
 }
 
+/** What the screen remembers between games: the last choices, as a per-viewer
+ *  preference (not a save). Read defensively -- it is JSON a past version wrote. */
+interface Remembered {
+  p1?: SideChoice
+  p2?: SideChoice | { kind: 'random' }
+  randomSize?: 'same' | number
+  randomPool?: string
+  opponent?: OpponentName
+  seedText?: string
+}
+
+const REMEMBER_KEY = 'newgame'
+
+function readRemembered(kept: readonly SavedForce[]): Remembered {
+  try {
+    const raw = readText(REMEMBER_KEY)
+    if (raw === null) return {}
+    const r = JSON.parse(raw) as Record<string, unknown>
+    const out: Remembered = {}
+    const side = (v: unknown, allowRandom: boolean): SideChoice | { kind: 'random' } | undefined => {
+      const o = v as { kind?: unknown; id?: unknown } | null
+      if (o === null || typeof o !== 'object') return undefined
+      if (allowRandom && o.kind === 'random') return { kind: 'random' }
+      if (o.kind === 'preset' && CHOICES.some((c) => c.id === o.id)) return { kind: 'preset', id: o.id as string }
+      if (o.kind === 'kept' && kept.some((f) => f.id === o.id)) return { kind: 'kept', id: o.id as string }
+      return undefined
+    }
+    const p1 = side(r.p1, false)
+    if (p1 !== undefined && p1.kind !== 'random') out.p1 = p1
+    const p2 = side(r.p2, true)
+    if (p2 !== undefined) out.p2 = p2
+    if (r.randomSize === 'same' || RANDOM_SIZES.some((n) => n === r.randomSize)) out.randomSize = r.randomSize as 'same' | number
+    if (typeof r.randomPool === 'string' && POOLS.some((p) => p.value === r.randomPool)) out.randomPool = r.randomPool
+    if (OPPONENTS.some((o) => o.id === r.opponent)) out.opponent = r.opponent as OpponentName
+    if (typeof r.seedText === 'string') out.seedText = r.seedText
+    return out
+  } catch {
+    return {}
+  }
+}
+
 export function NewGameScreen({
   onStart,
 }: {
   readonly onStart: (setup: SetupOptions, opponent: OpponentName) => void
 }) {
   const [kept, setKept] = useState<readonly SavedForce[]>(() => readSavedForces())
-  const [p1, setP1] = useState<SideChoice>(() => defaultFor('treefolk'))
-  const [p2, setP2] = useState<SideChoice | { readonly kind: 'random' }>(() => defaultFor('firewalkers'))
-  const [randomSize, setRandomSize] = useState<'same' | number>('same')
-  const [randomPool, setRandomPool] = useState('mixed')
+  const [saved] = useState(() => readRemembered(kept))
+  const [p1, setP1] = useState<SideChoice>(() => saved.p1 ?? defaultFor('treefolk'))
+  const [p2, setP2] = useState<SideChoice | { readonly kind: 'random' }>(
+    () => saved.p2 ?? defaultFor('firewalkers'),
+  )
+  const [randomSize, setRandomSize] = useState<'same' | number>(saved.randomSize ?? 'same')
+  const [randomPool, setRandomPool] = useState(saved.randomPool ?? 'mixed')
   const [unequal, setUnequal] = useState(false)
-  const [opponent, setOpponent] = useState<OpponentName>(DEFAULT_OPPONENT)
-  const [seedText, setSeedText] = useState('')
+  const [opponent, setOpponent] = useState<OpponentName>(saved.opponent ?? DEFAULT_OPPONENT)
+  const [seedText, setSeedText] = useState(saved.seedText ?? '')
   const [building, setBuilding] = useState(false)
   const opponentNote = OPPONENTS.find((o) => o.id === opponent)?.note
+
+  useEffect(() => {
+    writeText(REMEMBER_KEY, JSON.stringify({ p1, p2, randomSize, randomPool, opponent, seedText }))
+  }, [p1, p2, randomSize, randomPool, opponent, seedText])
 
   if (building) {
     return (

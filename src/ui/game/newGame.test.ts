@@ -55,9 +55,9 @@ const mixed12: BuiltForce = {
 const keptMixed12: SavedForce = { id: 'mine', name: 'Mixed 12', collection: 'sorry-12', cap: 12, force: mixed12 }
 
 describe('presetChoices', () => {
-  it('offers every hand-authored force, lightest first', () => {
+  it('offers the hand-authored forces for the screen (no Treefolk, Firewalker or Coral Elf solo monsters), lightest first', () => {
     const choices = presetChoices()
-    expect(choices).toHaveLength(35)
+    expect(choices).toHaveLength(20)
 
     const healths = choices.map((c) => c.health)
     expect([...healths].sort((a, b) => a - b)).toEqual(healths)
@@ -66,10 +66,10 @@ describe('presetChoices', () => {
   })
 
   it('says how a force is split, in dice', () => {
-    const satyr = presetChoices().find((c) => c.id === 'treefolk_satyr')
+    const satyr = presetChoices().find((c) => c.id === 'dwarves_behemoth')
     expect(satyr?.split).toBe('3 / 2 / 1')
     expect(satyr?.health).toBe(24)
-    expect(satyr?.species).toBe('treefolk')
+    expect(satyr?.species).toBe('dwarves')
   })
 
   /** Health is the only thing that decides whether two forces may meet, so it is
@@ -78,7 +78,7 @@ describe('presetChoices', () => {
   it('groups by health, since that is what pairs', () => {
     const groups = choiceGroups()
     expect(groups.map((g) => g.health)).toEqual([24, 30, 35])
-    expect(groups.map((g) => g.choices.length)).toEqual([25, 5, 5])
+    expect(groups.map((g) => g.choices.length)).toEqual([10, 5, 5])
   })
 })
 

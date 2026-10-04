@@ -58,10 +58,19 @@ function choiceOf(id: string): PresetChoice {
   }
 }
 
-/** Every hand-authored force, lightest first -- which puts the monster fixtures at
- *  the top, where the reason this screen exists wants them. */
+/** Species whose solo-monster fixtures (24 health) are kept off the start screen to
+ *  keep it short. They stay in `FORCE_SETS`, so `?forces=treefolk_satyr` and the fuzzes
+ *  still reach them. */
+const HIDDEN_FIXTURE_SPECIES: readonly string[] = ['treefolk', 'firewalkers', 'coral_elves']
+
+function isHiddenFixture(id: string): boolean {
+  return HIDDEN_FIXTURE_SPECIES.some((s) => id.startsWith(`${s}_`)) &&
+    !id.endsWith('_starter') && !id.endsWith('_bestiary')
+}
+
+/** Every hand-authored force the screen offers, lightest first. */
 export function presetChoices(): readonly PresetChoice[] {
-  return PRESETS.map((p) => choiceOf(p.id)).sort(
+  return PRESETS.filter((p) => !isHiddenFixture(p.id)).map((p) => choiceOf(p.id)).sort(
     (a, b) =>
       a.health - b.health || a.species.localeCompare(b.species) || a.name.localeCompare(b.name),
   )
