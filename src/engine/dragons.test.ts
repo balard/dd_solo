@@ -663,6 +663,22 @@ describe('the two choices Summon Dragon made real', () => {
     }
     // Two terrains, so exactly one order decision: the second is forced.
     expect(asked).toBe(1)
+    // And each terrain's dragons attack once. Counting questions alone missed the
+    // repeat: beginning the second attack erased `dragonsDone`, so the first terrain
+    // attacked again -- forced, so nothing was asked (seed 88086, turn 11).
+    const attacks = state.log.flatMap((e) => (e.kind === 'dragon_attack' ? [e.slot] : []))
+    expect(new Set(attacks).size).toBe(attacks.length)
+  })
+
+  it('keeps dragonsDone when the next terrain begins', () => {
+    let state = begin(atDragonPhase(atTerrains({ a: 'fire_drake' }, { b: 'water_drake' })))
+    for (let i = 0; i < 200 && state.pending !== null && state.winner === null; i += 1) {
+      if (state.turn.dragonAttack !== undefined && (state.turn.dragonsDone ?? []).length > 0) break
+      state = reduce(state, passiveAi.decide(state, state.pending, { seed: 1, counter: 0 })[0])
+    }
+    // Mid-way through the second terrain, the first is still on the done list.
+    expect(state.turn.dragonAttack).toBeDefined()
+    expect(state.turn.dragonsDone).toHaveLength(1)
   })
 })
 

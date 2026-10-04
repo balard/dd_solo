@@ -3128,42 +3128,28 @@ function applyTempleBury(state: GameState, unitId: UnitId): GameState {
 // as an exchange holds the attacker's, and for the same reason -- a pause has to
 // happen between a step that consumes randomness and one that is pure.
 
-/** Sets or clears the phase's working state, field by field, as `finishExchange` does. */
+/**
+ * Sets or clears the phase's working state. Clearing drops the key by **omission**,
+ * and drops nothing else: every other `TurnState` field rides through untouched.
+ *
+ * This used to rebuild the turn from a list of the fields that existed in Phase 6,
+ * and every optional field added after it -- `dragonsDone`, `growthOffers`,
+ * `burialDue`, `floodedSlots`, `thorns`, `contest` -- was silently dropped by it. The
+ * one that showed: beginning the second terrain's attack erased `dragonsDone`, so
+ * the first terrain's dragons attacked again once the second was finished.
+ */
 function withDragonAttack(state: GameState, attack: DragonAttackState | null): GameState {
-  const turn = state.turn
-  const rest = {
-    marching: turn.marching,
-    phase: turn.phase,
-    marchIndex: turn.marchIndex,
-    marchStep: turn.marchStep,
-    marchingArmy: turn.marchingArmy,
-    armiesMarched: turn.armiesMarched,
-    combat: turn.combat,
-    ...(turn.eighthFaceStep !== undefined ? { eighthFaceStep: turn.eighthFaceStep } : {}),
-    ...(turn.magic !== undefined ? { magic: turn.magic } : {}),
-  }
+  const { dragonAttack: _previous, ...rest } = state.turn
   return { ...state, turn: attack === null ? rest : { ...rest, dragonAttack: attack } }
 }
 
 /**
- * Sets or clears the magic action's working state -- `withDragonAttack`'s twin, and
- * field by field for the same reason: clearing has to drop the key by **omission**,
- * or `digestState`'s `stableJson(state.turn)` grows a `"magic": null` in all
- * twenty-five recorded games.
+ * Sets or clears the magic action's working state -- `withDragonAttack`'s twin, for the
+ * same reason: clearing has to drop the key by **omission**, or `digestState`'s
+ * `stableJson(state.turn)` grows a `"magic": null` in all twenty-five recorded games.
  */
 function withMagic(state: GameState, magic: MagicState | null): GameState {
-  const turn = state.turn
-  const rest = {
-    marching: turn.marching,
-    phase: turn.phase,
-    marchIndex: turn.marchIndex,
-    marchStep: turn.marchStep,
-    marchingArmy: turn.marchingArmy,
-    armiesMarched: turn.armiesMarched,
-    combat: turn.combat,
-    ...(turn.eighthFaceStep !== undefined ? { eighthFaceStep: turn.eighthFaceStep } : {}),
-    ...(turn.dragonAttack !== undefined ? { dragonAttack: turn.dragonAttack } : {}),
-  }
+  const { magic: _previous, ...rest } = state.turn
   return { ...state, turn: magic === null ? rest : { ...rest, magic } }
 }
 
