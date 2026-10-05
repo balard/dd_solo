@@ -690,6 +690,96 @@
           "goblins.troll"
         ]
       }
+    },
+    "lava_elves_beholder": {
+      "name": "Beholder x6",
+      "species": "lava_elves",
+      "armies": {
+        "home": [
+          "lava_elves.beholder",
+          "lava_elves.beholder",
+          "lava_elves.beholder"
+        ],
+        "campaign": [
+          "lava_elves.beholder",
+          "lava_elves.beholder"
+        ],
+        "horde": [
+          "lava_elves.beholder"
+        ]
+      }
+    },
+    "lava_elves_drider": {
+      "name": "Drider x6",
+      "species": "lava_elves",
+      "armies": {
+        "home": [
+          "lava_elves.drider",
+          "lava_elves.drider",
+          "lava_elves.drider"
+        ],
+        "campaign": [
+          "lava_elves.drider",
+          "lava_elves.drider"
+        ],
+        "horde": [
+          "lava_elves.drider"
+        ]
+      }
+    },
+    "lava_elves_hell_hound": {
+      "name": "Hell Hound x6",
+      "species": "lava_elves",
+      "armies": {
+        "home": [
+          "lava_elves.hell_hound",
+          "lava_elves.hell_hound",
+          "lava_elves.hell_hound"
+        ],
+        "campaign": [
+          "lava_elves.hell_hound",
+          "lava_elves.hell_hound"
+        ],
+        "horde": [
+          "lava_elves.hell_hound"
+        ]
+      }
+    },
+    "lava_elves_lurker_in_the_deep": {
+      "name": "Lurker in the Deep x6",
+      "species": "lava_elves",
+      "armies": {
+        "home": [
+          "lava_elves.lurker_in_the_deep",
+          "lava_elves.lurker_in_the_deep",
+          "lava_elves.lurker_in_the_deep"
+        ],
+        "campaign": [
+          "lava_elves.lurker_in_the_deep",
+          "lava_elves.lurker_in_the_deep"
+        ],
+        "horde": [
+          "lava_elves.lurker_in_the_deep"
+        ]
+      }
+    },
+    "lava_elves_rakshasa": {
+      "name": "Rakshasa x6",
+      "species": "lava_elves",
+      "armies": {
+        "home": [
+          "lava_elves.rakshasa",
+          "lava_elves.rakshasa",
+          "lava_elves.rakshasa"
+        ],
+        "campaign": [
+          "lava_elves.rakshasa",
+          "lava_elves.rakshasa"
+        ],
+        "horde": [
+          "lava_elves.rakshasa"
+        ]
+      }
     }
   }
 }

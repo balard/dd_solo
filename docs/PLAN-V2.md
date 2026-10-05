@@ -2603,8 +2603,8 @@ over 60 seeds in both seats, and all three earth types turn up.
 ## Phase 8 — Lava Elves
 
 Seven slices: 8a the data, 8b the seams, 8c Stone, Web and Cloak, 8d Charm and Illusion, 8e the two
-abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a to 8d have landed;
-8e to 8g are planned.
+abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a to 8e have landed;
+8f and 8g are planned.
 
 Death & Fire, the second species carrying Death. Like the Goblins they have **no own terrain type**,
 so `drawHomeDie` draws them a home among the twelve dice carrying fire (Wasteland, Highland,
@@ -3009,7 +3009,7 @@ Watchers for Flaming Shields, and the mutation is caught.
 prices a Charm as half a kill of what it takes; 8g re-runs greedy and says whether either needs more.
 The fuzz's `sai_illusion` is `{ elsewhere }` until the 8e flip makes it reachable.
 
-### 8e — Volcanic Adaptation, Cursed Bullets, and the flip
+### 8e — Volcanic Adaptation, Cursed Bullets, and the flip — **landed**
 
 - **Volcanic Adaptation**: a row in `COUNTS_AS_ABILITIES` at fire, through 8b's factory. A Feyland
   (water and fire) holding Coral Elves and Lava Elves in one army gathers two conversions of one pair
@@ -3039,6 +3039,61 @@ The fuzz's `sai_illusion` is `{ elsewhere }` until the 8e flip makes it reachabl
   as Net was. Cursed Bullets needs a dead Lava Elf and a missile at the same terrain: expect 200.
   `{ elsewhere }` with named tests: Web's Tower drop, Illusion against a Tower's missile at
   Reserves and against Defensive Volley, Cursed Bullets on a counter, Charm against a Charge.
+
+### What 8e found
+
+Both golden corpora replay byte-identical and unregenerated. 1299 tests pass, and so does the
+1000-game fuzz, which now rolls Lava Elves: one rolled force in five draws them, and five more
+mirrors joined the rotation. `RULES-V0.md` section 20 has both abilities. Four mutations of Cursed
+Bullets (the per-die species filter, the same-terrain test, the spell saves read off the roll, the
+estimate), four caught. Saving is off, so `SAVE_VERSION` has nothing to be about.
+
+**1. Cursed Bullets never reaches a Defensive Volley, and the plan's test was the wrong way round.**
+The plan said a mixed army of Coral Elves and Lava Elves "curses its counter". But the volley is
+thrown by "Coral Elves *units*" only -- `attackerRoll` has filtered the counter's dice to them since
+5d -- so no Lava Elf's missile is ever in the roll, and the per-die rule (only Lava Elves results
+curse) leaves nothing to curse. The named test says so: the same army's own missile attack curses
+2, its volley rolls the Bowman alone and curses nothing. The fuzz's `cursed_counter` points there.
+
+**2. The damage split lives in `finishSaves`, not `finishExchange`.** The plan named the function
+that logs; the arithmetic is one level down, beside the riposte. `cursedDamage` is exported and is
+the one formula, which `expectedAttack` calls too, so the forecast on a missile button and greedy's
+target choice cannot price the curse differently from the roll. P is read off the save roll's own
+`RollMath` -- each step named for a spell, at its delta -- through `isSpellSource`, the `RollMath`
+reader beside `Modifier.fromSpell`'s, so a Cloak's lasting saves (an SAI's) never pay a cursed
+result. The Charge path needs nothing: a Charge is melee.
+
+**3. Volcanic Adaptation was a row and nothing else**, as Coastal Dodge's was -- `conversionsIn`
+already keeps two sources of one pair apart, so a Feyland's mixed army notes "1 maneuver counted as
+saves (Coastal Dodge)" and "2 maneuver counted as saves (Volcanic Adaptation)". The one test it
+moved was 8c's Cloak estimate, which priced a Lurker in the Deep on a Highland: fire, so its two
+Maneuver faces now count as saves too (2.8, not 2). That test moved to a Swampland.
+
+**4. Greedy capped four of forty Lava Elves mirror games against passive, all in the two magic
+monsters' mirrors** (Lurker in the Deep three times, Rakshasa once) -- the 10b stall a third time.
+A Lurker army has nothing to cast but Palsy (Finger of Death on a 4-health die costs 16), and
+Palsy's "−1 to the enemy's melee and missile" was weighed at half a result each, as a gain. Two
+marches a turn went to re-casting it, at about 1.5, and the outnumbered Frontier's step up the
+track, at about 0.75, never marched. Taking results off an enemy's *attack* is insurance for the
+reason a save bonus is -- it pays only if they attack before it expires -- so it is priced like one
+now (0.3 facing, 0.05 not). All forty finish, and every other greedy test still passes. The Lava Elves mirrors are an exit check in `greedy.test.ts`, as the
+Goblins' were at 7d. 8g's re-run against every other species is still 8g's.
+
+**5. Two counters fell out of 200 games, and neither is a Lava Elves rule.** A sixth species dilutes
+the race draw and the mirror rotation: Stomp (16 resolved, 9 burials in 1000) and Charm (9 in
+1000) are `'full'` now. Charm was checked rather than assumed rare: in Beholder mirrors 141 of 145
+melee-attack Charms resolve, the rest finding nothing to take. Everything else new fires in 200:
+Web (26), Cloak's effect (21), Illusion (91, and `sai_illusion` 82), Volcanic Adaptation (105) and
+Cursed Bullets (63).
+
+**Browser.** The start screen lists the five fixtures under 24 health, and a Hell Hound mirror
+against greedy played ten turns by the dock's first answer with no console error. Neither ability
+came up there -- a Hell Hound prints no maneuver and no missile -- so the cursed line was seen only
+in the tests.
+
+**Deliberately not done.** No starter or bestiary preset (8g); no art manifest (8g); Necromantic
+Wave and Fearful Flames are 8f. Greedy's Illusion pick and Charm price stay as 8d left them, for
+8g's re-run.
 
 ### 8f — Necromantic Wave and Fearful Flames
 

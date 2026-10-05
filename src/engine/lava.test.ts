@@ -5,19 +5,20 @@
  * directly: the melee sub-roll Web and Charm will roll, the save-roll bench Charm will
  * fill, the hold fate Web will share with Net, the one targeting restriction Illusion
  * will write, and the "counts as" types Necromantic Wave and Volcanic Adaptation need.
- * 8c's three SAIs follow: Stone, Web and Cloak; then 8d's Charm and Illusion.
+ * 8c's three SAIs follow: Stone, Web and Cloak; then 8d's Charm and Illusion, and 8e's
+ * two abilities, Volcanic Adaptation and Cursed Bullets.
  *
- * Boards are hand-built, because the Lava Elves are not playable until 8e and
- * `setupGame` would refuse them.
+ * Boards are hand-built: they were the only way to field a Lava Elf until the 8e flip,
+ * and they still say exactly which die stands where.
  */
 import { describe, expect, it } from 'vitest'
 
 import { UNIT_TYPES, dragonFaceIcon, unitType } from '../data/load'
 import { spell } from '../data/spells'
 import type { DragonFaceNumber } from '../data/types'
-import { expectedArmy } from '../ai/estimate'
+import { expectedArmy, expectedAttack } from '../ai/estimate'
 
-import { missileTargets, volleyers } from './combat'
+import { cursedBulletsCap, cursedDamage, cursesAt, missileTargets, resolveAttack, volleyers } from './combat'
 import { armyRoll, isAsleep, shielded, spellSaveSources, type Effect } from './effects'
 import { spellTargets } from './magic'
 import { maneuverAsSaves, type Modifier } from './pipeline'
@@ -716,7 +717,9 @@ describe('Cloak', () => {
   it("is priced as its saves in the estimate of a save roll", () => {
     // Lurker in the Deep on a save roll: its ID (4), Counter, Volley, Cloak and Fly are
     // four saves each, and five blanks -- 20 / 10 = 2. Without Cloak's line it is 1.6.
-    expect(expectedArmy(board([WATCHER], [LURKER]), 'p2', 'frontier', 'save').total).toBeCloseTo(2)
+    // At a Swampland, since 8e: at fire, Volcanic Adaptation adds its two Maneuver faces.
+    const swamp = board([WATCHER], [LURKER], { dieId: 'swampland_tower' })
+    expect(expectedArmy(swamp, 'p2', 'frontier', 'save').total).toBeCloseTo(2)
   })
 })
 
@@ -967,5 +970,221 @@ describe('Illusion', () => {
   it('is rolled on a magic action too', () => {
     const done = illusioned([RAKSHASA], 'magic')
     expect(done.effects).toContainEqual(shield('p1', 'frontier'))
+  })
+})
+
+// --- 8e: Volcanic Adaptation, Cursed Bullets ------------------------------------------
+
+const ASSASSIN = 'lava_elves.assassin'
+const BLADESMAN = 'lava_elves.bladesman'
+const DEAD_SHOT = 'lava_elves.dead_shot'
+/** Assassin: `3 ID` at face 0, `5 MISSILE` at 1, `1 MISSILE` at 3. */
+const ASSASSIN_FIVE = 1
+const ASSASSIN_ONE = 3
+/** Dead Shot: `2 MANEUVER` at face 4. Bowman: `1 MANEUVER` at 3, `2 MISSILE` at 5. */
+const DEAD_SHOT_MANEUVER = 4
+const BOWMAN_MANEUVER = 3
+const BOWMAN_TWO = 5
+const DEAD = { kind: 'dua' } as const
+
+describe('Volcanic Adaptation', () => {
+  const maneuvering = (dieId: string) =>
+    advance(
+      board([OAK], [DEAD_SHOT, { typeId: OAK, at: { kind: 'terrain', slot: 'p2_home' } }], {
+        rng: rngShowing([OAK, DEAD_SHOT], [1, DEAD_SHOT_MANEUVER]),
+        dieId,
+        turn: {
+          marchStep: 'resolve_attack',
+          marchingArmy: 'frontier',
+          armiesMarched: ['frontier'],
+          combat: { action: 'melee', targetSlot: 'frontier', damage: 0 },
+        },
+      }),
+    )
+
+  it("counts a Lava Elf's maneuver as saves at fire, and names itself", () => {
+    // A Highland is fire and earth: the Dead Shot's 2 maneuver save the Oak's 2 melee.
+    const exchange = entries(maneuvering('highland_tower'), 'combat_resolved')[0]
+    expect(exchange).toMatchObject({ attackTotal: 2, saveTotal: 2, damage: 0 })
+    expect(exchange?.saveMath?.notes).toContain('2 maneuver counted as saves (Volcanic Adaptation)')
+  })
+
+  it('does nothing at a terrain with no fire', () => {
+    // A Swampland is earth and water.
+    expect(entries(maneuvering('swampland_tower'), 'combat_resolved')[0]).toMatchObject({ saveTotal: 0, damage: 2 })
+  })
+
+  it('stands beside Coastal Dodge on a Feyland, each species under its own name', () => {
+    // Feyland is water and fire, so a mixed army there gathers both rows: one pair of
+    // types, two sources, and `conversionsIn` keeps them apart.
+    const state = board([OAK], [BOWMAN, DEAD_SHOT], { dieId: 'feyland_tower' })
+    const { modifiers } = armyRoll(state, 'p2', 'frontier', 'save')
+    const context: RollContext = { purpose: { kind: 'save', against: 'melee' }, isCounter: false }
+    expect(conversionsIn(['save'], context, modifiers).map((c) => [c.source, [...c.species]])).toEqual([
+      ['Coastal Dodge', ['coral_elves']],
+      ['Volcanic Adaptation', ['lava_elves']],
+    ])
+    const dice: RawDie[] = [
+      { unitId: 'p2:0', typeId: BOWMAN, faceIndex: BOWMAN_MANEUVER },
+      { unitId: 'p2:1', typeId: DEAD_SHOT, faceIndex: DEAD_SHOT_MANEUVER },
+    ]
+    const outcome = resolveFaces(dice, { kinds: ['save'], modifiers, context }, RULES)
+    expect(outcome.totals.save).toBe(3)
+    expect(outcome.math?.save?.notes).toEqual([
+      '1 maneuver counted as saves (Coastal Dodge)',
+      '2 maneuver counted as saves (Volcanic Adaptation)',
+    ])
+  })
+})
+
+describe('Cursed Bullets', () => {
+  /** p1's Assassin shoots the two Oaks facing it at the Frontier, with `dead` Bladesmen
+   *  in p1's DUA; the Assassin shows `face` and each Oak its save. */
+  const cursedShot = (
+    dead: number,
+    options: { face?: number; effects?: readonly Effect[]; from?: TerrainSlot; extra?: readonly string[] } = {},
+  ): GameState => {
+    const from = options.from ?? 'frontier'
+    const shooters = [ASSASSIN, ...(options.extra ?? [])]
+    const faces = [options.face ?? ASSASSIN_FIVE, ...(options.extra ?? []).map(() => BOWMAN_TWO)]
+    return board(
+      [
+        ...shooters.map((typeId) => ({ typeId, at: { kind: 'terrain', slot: from } as const })),
+        ...Array.from({ length: dead }, () => ({ typeId: BLADESMAN, at: DEAD })),
+      ],
+      [OAK, OAK, { typeId: OAK, at: { kind: 'terrain', slot: 'p2_home' } }],
+      {
+        rng: rngShowing([...shooters, OAK, OAK], [...faces, OAK_SAVE, OAK_SAVE]),
+        effects: options.effects ?? [],
+        turn: {
+          marchStep: 'resolve_attack',
+          marchingArmy: from,
+          armiesMarched: [from],
+          combat: { action: 'missile', targetSlot: 'frontier', damage: 0 },
+        },
+      },
+    )
+  }
+  const save = (source: string, amount = 1): Effect => ({
+    source,
+    target: { kind: 'army', player: 'p2', army: 'frontier' },
+    modifiers: [{ kind: 'add', resultType: 'save', amount }],
+    expiresAtStartOfTurnOf: 'p2',
+  })
+
+  it('splits the damage in two pools, and is the ordinary sum whenever it changes nothing', () => {
+    // The plan's line: 8 missile − 3 saves, 2 cursed (spell saves only) = 5.
+    expect(cursedDamage(8, 2, 3, 0)).toBe(5)
+    // Spell saves pay the cursed pool first; what they do not need joins the rest.
+    expect(cursedDamage(5, 2, 9, 1)).toBe(1)
+    expect(cursedDamage(5, 2, 9, 3)).toBe(0)
+    for (const [m, s] of [[5, 2], [5, 9], [0, 3], [7, 7]] as const) {
+      expect(cursedDamage(m, 0, s, 0)).toBe(Math.max(0, m - s))
+      // P >= C: the curse changes nothing.
+      expect(cursedDamage(m, Math.min(2, m), s + 2, 2)).toBe(Math.max(0, m - s - 2))
+    }
+  })
+
+  it('lets two missile results through eight saves, with two Lava Elves in the DUA', () => {
+    const done = advance(cursedShot(2))
+    expect(entries(done, 'combat_resolved')[0]).toMatchObject({
+      action: 'missile',
+      attackTotal: 5,
+      saveTotal: 8,
+      cursed: 2,
+      damage: 2,
+    })
+    expect(done.pending).toMatchObject({ kind: 'assign_damage', player: 'p2' })
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('does nothing with an empty DUA, and writes no field', () => {
+    const exchange = entries(advance(cursedShot(0)), 'combat_resolved')[0]
+    expect(exchange).toMatchObject({ attackTotal: 5, saveTotal: 8, damage: 0 })
+    expect(exchange).not.toHaveProperty('cursed')
+  })
+
+  it('is reduced by spell saves inside the save roll, and only those', () => {
+    // A Stone Skin: S = 9, P = 1 -- one cursed result saved, the other through.
+    const skinned = entries(advance(cursedShot(2, { effects: [save('Stone Skin')] })), 'combat_resolved')[0]
+    expect(skinned).toMatchObject({ saveTotal: 9, cursed: 2, damage: 1 })
+    // Two castings pay the whole pool, and the curse changes nothing: max(0, 5 − 10).
+    const twice = [save('Stone Skin'), save('Stone Skin')]
+    expect(entries(advance(cursedShot(2, { effects: twice })), 'combat_resolved')[0]).toMatchObject({
+      saveTotal: 10,
+      damage: 0,
+    })
+    // A Cloak's lasting saves are "non-magical": twelve saves, and both cursed results land.
+    const cloaked = entries(advance(cursedShot(2, { effects: [save('Cloak', 4)] })), 'combat_resolved')[0]
+    expect(cloaked).toMatchObject({ saveTotal: 12, cursed: 2, damage: 2 })
+  })
+
+  it('curses only a missile at its own terrain', () => {
+    expect(cursesAt({ action: 'missile', attackerSlot: 'frontier', defenderSlot: 'frontier' })).toBe(true)
+    expect(cursesAt({ action: 'missile', attackerSlot: 'p1_home', defenderSlot: 'frontier' })).toBe(false)
+    expect(cursesAt({ action: 'missile', attackerSlot: 'frontier', defenderSlot: 'reserve' })).toBe(false)
+    expect(cursesAt({ action: 'melee', attackerSlot: 'frontier', defenderSlot: 'frontier' })).toBe(false)
+    // From the home terrain to the Frontier: an ordinary missile.
+    const across = entries(advance(cursedShot(2, { from: 'p1_home' })), 'combat_resolved')[0]
+    expect(across).toMatchObject({ attackerSlot: 'p1_home', defenderSlot: 'frontier', damage: 0 })
+    expect(across).not.toHaveProperty('cursed')
+  })
+
+  it("curses only the Lava Elves dice's missile, however many the army rolls", () => {
+    // The Assassin shows 1 missile and a Bowman beside it 2: three in the total, one cursed.
+    const mixed = cursedShot(3, { face: ASSASSIN_ONE, extra: [BOWMAN] })
+    expect(entries(advance(mixed), 'combat_resolved')[0]).toMatchObject({ attackTotal: 3, cursed: 1, damage: 1 })
+  })
+
+  it('counts Lava Elves units in the DUA, not health, three per 24 of force size', () => {
+    const one = board([ASSASSIN, { typeId: LURKER, at: DEAD }, { typeId: OAK, at: DEAD }], [OAK])
+    expect(cursedBulletsCap(one, 'p1')).toBe(1)
+    const many = board([ASSASSIN, ...Array.from({ length: 5 }, () => ({ typeId: BLADESMAN, at: DEAD }))], [OAK])
+    expect(cursedBulletsCap(many, 'p1')).toBe(3)
+    expect(cursedBulletsCap({ ...many, ruleSet: { ...RULES, speciesAbilities: false } }, 'p1')).toBe(0)
+  })
+
+  it('curses nothing on a Defensive Volley: only the Coral Elves throw it', () => {
+    // p2's mixed army at an air terrain, two Lava Elves dead: its own missile attack
+    // curses, but its volley is rolled by the Bowman alone, so no Lava Elf's missile is in it.
+    const state = board(
+      [OAK],
+      [BOWMAN, ASSASSIN, { typeId: BLADESMAN, at: DEAD }, { typeId: BLADESMAN, at: DEAD }],
+      { dieId: 'coastland_tower', rng: rngShowing([BOWMAN, ASSASSIN, OAK], [BOWMAN_TWO, ASSASSIN_FIVE, 1]) },
+    )
+    const spec = {
+      action: 'missile',
+      attacker: 'p2',
+      attackerSlot: 'frontier',
+      defender: 'p1',
+      defenderSlot: 'frontier',
+    } as const
+    const volley = resolveAttack(state, { ...spec, isCounter: true })
+    expect(volley.attackRoll.dice.map((die) => die.typeId)).toEqual([BOWMAN])
+    expect(volley.cursed).toBeUndefined()
+    const attack = resolveAttack(state, { ...spec, isCounter: false })
+    expect(attack).toMatchObject({ attackTotal: 7, cursed: 2 })
+  })
+
+  it('is in the estimate of a missile at the same terrain, and not of one across', () => {
+    // Every die shooting is a Lava Elf, so the expected cursed pool is the expected total,
+    // capped at the two in the DUA.
+    const withDead = (dead: number, from: TerrainSlot) =>
+      board(
+        [
+          { typeId: ASSASSIN, at: { kind: 'terrain', slot: from } },
+          ...Array.from({ length: dead }, () => ({ typeId: BLADESMAN, at: DEAD })),
+        ],
+        [OAK, OAK],
+      )
+    const base = expectedAttack(withDead(0, 'frontier'), 'p1', 'frontier', 'missile', 'frontier')
+    const { attack, save } = base
+    const cursed = expectedAttack(withDead(2, 'frontier'), 'p1', 'frontier', 'missile', 'frontier')
+    expect(cursed.damage).toBeCloseTo(
+      cursedDamage(attack.total, Math.min(2, attack.total), save.total, 0) + attack.unsavable + attack.targeted,
+    )
+    expect(cursed.damage).toBeGreaterThan(base.damage + 1)
+    const across = expectedAttack(withDead(2, 'p1_home'), 'p1', 'p1_home', 'missile', 'frontier')
+    expect(across.damage).toBeCloseTo(base.damage)
   })
 })

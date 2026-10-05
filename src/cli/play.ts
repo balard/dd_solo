@@ -31,7 +31,7 @@ import { growthPartners, promotionGain } from '../engine/dua'
 import { isAsleep, isGlaring, isHypnotized, isStunned } from '../engine/effects'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
-import { mathPhrase, saiPhrase, spellSavedPhrase, type DieRoll, type RollMath } from '../engine/roll'
+import { cursedPhrase, mathPhrase, saiPhrase, spellSavedPhrase, type DieRoll, type RollMath } from '../engine/roll'
 import { CHARGE_ROLL_KINDS, DRAGON_ROLL_KINDS, SAI_TEXT, heldWord } from '../engine/sai'
 import { rollOnTheTable } from '../engine/turn'
 import { OWN_ARMY_NOTE, poolSplit, spellPlan, spellTargetLabel, stageCast, targetsFor } from '../engine/magic'
@@ -335,7 +335,8 @@ function describe(entry: LogEntry, state: GameState): string | null {
       const base =
         entry.saveTotal === null
           ? `${entry.attackTotal} ${entry.action}${entry.action === 'magic' ? ' ÷ 2' : ''}`
-          : `${entry.attackTotal} ${entry.action} − ${entry.saveTotal} saves`
+          : `${entry.attackTotal} ${entry.action} − ${entry.saveTotal} saves` +
+            (entry.cursed === undefined ? '' : `, ${cursedPhrase(entry.cursed)}`)
       // The SAI is named, not just its arithmetic. Without the number the line does
       // not add up; without the name it adds up and explains nothing.
       const from = (kind: 'riposte' | 'unsavable') => {

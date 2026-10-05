@@ -80,9 +80,8 @@ const DECISIONS: Readonly<Record<GameAction['kind'], Reach>> = {
   sai_promote: 'every',
   sai_regenerate: 'every',
   foul_stench: 'every',
-  // Illusion (v2 Phase 8d): the Lava Elves are not playable until 8e, which turns this
-  // into a reach of the fuzz's own.
-  sai_illusion: { elsewhere: "lava.test.ts, 'asks which army when there are two'" },
+  // Illusion (v2 Phase 8d): reached since the 8e flip.
+  sai_illusion: 'every',
   sai_move: 'every',
   reinforce: 'every',
   retreat: 'every',
@@ -212,9 +211,11 @@ const RULES: Readonly<Record<string, Reach>> = {
   // The Dwarves (v2 Phase 6): Roar, Stomp and Bash by the entry they leave, and the
   // halves that leave one of their own.
   'resolved:Roar': 'every',
-  'resolved:Stomp': 'every',
+  // Stomp resolves only from a Dwarf's maneuver; diluted by the sixth species (v2 Phase
+  // 8e) it fell out of 200 games -- 16 resolved, 9 burials in 1000.
+  'resolved:Stomp': 'full',
   'resolved:Bash': 'every',
-  stomp_burial: 'every',
+  stomp_burial: 'full',
   // A Behemoth's army attacked by a dragon, rolling its Bash face: not in 1000 games.
   dragon_bash: { elsewhere: 'dwarves.test.ts' },
   charge: 'every',
@@ -238,6 +239,25 @@ const RULES: Readonly<Record<string, Reach>> = {
   // Foul Stench benching the whole army, so no counter is offered: the common case in
   // random play, where a Goblin DUA fills fast and a defending army is often small.
   foul_stench_no_counter: 'every',
+  // The Lava Elves (v2 Phase 8): Charm and Web by the entry they leave, Web, Cloak and
+  // Illusion by the effect they write, Stone by its face (below, from the data).
+  // One face on one monster, and only a melee attack: 9 resolved in 1000 games. In the
+  // Beholder mirror 141 of 145 melee-attack Charms resolve, the rest finding nothing.
+  'resolved:Charm': 'full',
+  'resolved:Web': 'every',
+  'effect:Web': 'every',
+  'effect:Cloak': 'every',
+  'effect:Illusion': 'every',
+  volcanic_adaptation: 'every',
+  cursed_bullets: 'every',
+  // Each of these is a branch random play reaches too rarely to rely on, so a named test
+  // drives it: a Web dropped at a Reserve Army, an Illusion against a Tower's missile at
+  // Reserves and against a volley, a curse that a volley cannot make, a Charm on a Charge.
+  web_tower_drop: { elsewhere: "lava.test.ts, 'does nothing in a missile attack on a Reserve Army'" },
+  illusion_tower: { elsewhere: "lava.test.ts, 'takes a Reserve Army out of a Tower's missile targets'" },
+  illusion_volley: { elsewhere: "lava.test.ts, 'refuses a Defensive Volley at an Illusioned marching army'" },
+  cursed_counter: { elsewhere: "lava.test.ts, 'curses nothing on a Defensive Volley'" },
+  charm_charge: { elsewhere: "lava.test.ts, 'adds the charmed dice's melee to a Charge'" },
   // The eighth face: a missile at a Reserve Army is Tower's; City and Temple are
   // their own decisions above.
   tower_reserve: 'every',
@@ -351,6 +371,8 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
           if (entry.saveMath?.steps.some((step) => step.source === 'Wave')) bump('wave:saves')
           if (entry.saveMath?.steps.some((step) => step.source === 'Screech')) bump('screech')
           if (entry.saveMath?.notes.some((note) => note.includes('Coastal Dodge'))) bump('coastal_dodge')
+          if (entry.saveMath?.notes.some((note) => note.includes('Volcanic Adaptation'))) bump('volcanic_adaptation')
+          if (entry.cursed !== undefined) bump('cursed_bullets')
           if (entry.isCounter && entry.action === 'missile') bump('defensive_volley')
           if (entry.charge !== undefined) bump('charge')
           if (entry.isCounter && entry.attackMath?.notes.some((note) => note.includes('Dwarven Might'))) {

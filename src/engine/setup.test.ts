@@ -85,6 +85,11 @@ describe('presets', () => {
       'goblins_shambler',
       'goblins_starter',
       'goblins_troll',
+      'lava_elves_beholder',
+      'lava_elves_drider',
+      'lava_elves_hell_hound',
+      'lava_elves_lurker_in_the_deep',
+      'lava_elves_rakshasa',
       'treefolk_bestiary',
       'treefolk_darktree',
       'treefolk_redwood',
@@ -106,7 +111,7 @@ describe('presets', () => {
     // Playable, not every monster in the data: a species transcribed ahead of its rules
     // (v2 Phase 5a) cannot start a game, so a fixture for it could only throw.
     const monsters = PLAYABLE_UNITS.filter((t) => t.size === 'monster')
-    expect(monsters.length).toBe(25)
+    expect(monsters.length).toBe(30)
 
     for (const monster of monsters) {
       const id = `${monster.species}_${monster.id.split('.')[1]}`

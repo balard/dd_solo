@@ -27,11 +27,13 @@
  */
 import { unitType } from '../data/load'
 import type { Face, ResultType } from '../data/types'
+import { cursedBulletsCap, cursedDamage, cursesAt } from '../engine/combat'
 import { healthsOf, maxAbsorbable } from '../engine/damage'
 import { armyRoll, spellSaves } from '../engine/effects'
 import { applyModifiers, type ConvertibleType, type Share } from '../engine/pipeline'
 import { conversionsIn, defaultContextFor, faceResults } from '../engine/roll'
 import { saiEffects, type RollContext } from '../engine/sai'
+import { speciesHasAbility } from '../engine/species'
 import {
   armyAt,
   opponentOf,
@@ -457,18 +459,55 @@ export function expectedAttack(
         }
       : { melee: 0, back: 0 }
 
+  // Cursed Bullets (v2 Phase 8e): the curse as `cursedResults` caps the real one, and the
+  // defender's spell saves as the save roll would count them -- through `cursedDamage`,
+  // the one formula, which is the ordinary sum whenever nothing is cursed.
+  const saves = Math.max(0, save.total - attack.wave)
+  const cursed = expectedCursed(state, attacker, fromRef, action, target, attack.total)
+  const spellSaved = cursed > 0 ? Math.min(spellSaves(state, defender, target), saves) : 0
+
   return {
     attack,
     save,
     // A Wave comes off the saves, and never takes them below zero.
     damage:
-      Math.max(0, attack.total + charged.melee - Math.max(0, save.total - attack.wave)) +
-      attack.unsavable +
-      attack.targeted,
+      cursedDamage(attack.total + charged.melee, cursed, saves, spellSaved) + attack.unsavable + attack.targeted,
     // Only the attacker's spell saves reduce what comes back (v2 Phase 6c), exactly as
     // `finishSaves` subtracts them.
     riposte: Math.max(0, save.riposte + charged.back - spellSaves(state, attacker, fromRef)),
   }
+}
+
+/**
+ * Cursed Bullets' pool in expectation (v2 Phase 8e): the missile the Lava Elves dice are
+ * expected to show, the eighth face's ID doubling included since it is on the dice, and
+ * capped by the DUA count and the expected total as the roll caps it.
+ */
+function expectedCursed(
+  state: GameState,
+  attacker: PlayerId,
+  fromRef: ArmyRef,
+  action: 'melee' | 'missile',
+  target: ArmyRef,
+  total: number,
+): number {
+  if (!state.ruleSet.speciesAbilities || !cursesAt({ action, attackerSlot: fromRef, defenderSlot: target })) return 0
+  const cap = cursedBulletsCap(state, attacker)
+  if (cap === 0) return 0
+  const context = defaultContextFor('missile')
+  const { units, modifiers } = armyRoll(state, attacker, fromRef, 'missile', target)
+  const share = units
+    .filter((unit) => speciesHasAbility(unitType(unit.typeId).species, 'Cursed Bullets'))
+    .reduce<Share>((sum, unit) => {
+      const die = expectedDie(unit.typeId, 'missile', context, state.ruleSet).share
+      return { id: sum.id + die.id, normal: sum.normal + die.normal, sai: sum.sai + die.sai }
+    }, { id: 0, normal: 0, sai: 0 })
+  const onDice = applyModifiers(
+    share,
+    'missile',
+    modifiers.filter((m) => m.kind === 'multiply' && m.share === 'id'),
+  )
+  return Math.min(cap, onDice, total)
 }
 
 /** The maneuver an army's dice are expected to show -- what a Charge counts as melee. */

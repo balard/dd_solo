@@ -14,7 +14,7 @@ import { spell } from '../../data/spells'
 import { poolSplit } from '../../engine/magic'
 import { BREATH_NAME, DRAGON_ICON_TEXT } from '../../engine/dragons'
 import { heldWord } from '../../engine/sai'
-import { mathPhrase, saiPhrase, saisBehind, spellSavedPhrase, type RollMath } from '../../engine/roll'
+import { cursedPhrase, mathPhrase, saiPhrase, saisBehind, spellSavedPhrase, type RollMath } from '../../engine/roll'
 
 
 import {
@@ -1078,6 +1078,9 @@ export function CombatPart({
             {entry.saveTotal === null
               ? `${entry.attackTotal} ${entry.action}${entry.action === 'magic' ? ' ÷ 2' : ''}`
               : `${entry.attackTotal} ${entry.action} − ${entry.saveTotal} saves`}
+            {/* Cursed Bullets (v2 Phase 8e): without it the line is a subtraction that
+                does not come out, since only spell saves reduced these. */}
+            {entry.cursed !== undefined && <>, {cursedPhrase(entry.cursed)}</>}
             {entry.unsavable !== undefined && (
               <>
                 {' + '}

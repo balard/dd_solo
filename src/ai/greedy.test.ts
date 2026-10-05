@@ -530,6 +530,32 @@ describe('GreedyAI: self-play', () => {
     }
   })
 
+  /** And for the Lava Elves (v2 Phase 8e), the slice that made them playable. */
+  it('finishes every Lava Elves mirror against passive and against itself', () => {
+    const lava = Object.entries(FORCE_SETS).filter(([name, spec]) => isMirror(spec) && name.startsWith('lava_elves_'))
+    expect(lava.map(([name]) => name).sort()).toEqual([
+      'lava_elves_beholder',
+      'lava_elves_drider',
+      'lava_elves_hell_hound',
+      'lava_elves_lurker_in_the_deep',
+      'lava_elves_rakshasa',
+    ])
+    for (const [name, forces] of lava) {
+      for (let seed = 1; seed <= 4; seed++) {
+        for (const [label, p2] of [['passive', passiveAi], ['greedy', greedyAi]] as const) {
+          const result = runGame({
+            setup: { seed, forces, ruleSet: V1_RULES },
+            players: { p1: greedyAi, p2 },
+            aiSeed: seed,
+            maxDecisions: 20_000,
+            validate: true,
+          })
+          expect(result.stoppedBecause, `${name} against ${label}, seed ${seed}`).toBe('winner')
+        }
+      }
+    }
+  })
+
   it('finishes the Coral Elves starter and bestiary against each other species, both ways', () => {
     const pairings: readonly [string, string][] = [
       ['coral_elves_starter', 'treefolk_starter'],

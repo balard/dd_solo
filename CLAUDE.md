@@ -229,16 +229,19 @@ the dice and the opponent.
 > (Net's hold on a melee roll) and Cloak (X saves now, +X on later save rolls, written by every
 > army save roll through `castCloaks`) -- `RULES-V0.md` section 20. 8d has landed: Charm (the
 > targets roll melee for the attacker and sit out the save roll, `PendingAttack.charm`) and
-> Illusion (`sai_illusion`, written to `shielded`'s status), so every SAI in the data resolves and
-> only the abilities (8e) keep the Lava Elves out. Five more species' faces sit in `data/raw/`
-> unimported.
+> Illusion (`sai_illusion`, written to `shielded`'s status), so every SAI in the data resolves. 8e
+> has landed: Volcanic Adaptation (Coastal Dodge's row at fire) and Cursed Bullets (a missile at
+> its own terrain splits into a cursed pool only spell saves reduce, `cursedDamage` in
+> `combat.ts`), and with them **the Lava Elves are playable** -- five monster fixtures
+> (`lava_elves_*`), and every SAI and ability in the live fuzz. Five more species' faces sit in
+> `data/raw/` unimported.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 7 landed; Lava Elves, Phase 8, under way: 8a-8d landed, 8e-8g planned). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 7 landed; Lava Elves, Phase 8, under way: 8a-8e landed, 8f-8g planned). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
@@ -1021,6 +1024,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     track and capped games against `PassiveAI`, the 10b stall a second time. The terrain progress
     number has had to rise twice for the same reason, so whenever a new value outbids walking a
     terrain home, re-run greedy against passive.
+  - **So is a debuff on the enemy's attack** (v2 Phase 8e). Palsy's −1 melee and missile, weighed
+    as half a result each, was re-cast every turn by a Lurker in the Deep army that could cast
+    nothing else, and capped four of forty Lava Elves mirror games against passive. It pays only if
+    they attack before it expires, so it is priced like a save bonus now.
 - **A game record is `{ setup, actions }` and nothing else.** Replaying it reproduces the game die
   for die. `replayTo(record, n)` is undo.
 - **The golden corpora are the guard on "this changed no outcome".** `src/engine/__golden__/` holds

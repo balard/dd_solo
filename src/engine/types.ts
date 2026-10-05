@@ -1607,6 +1607,12 @@ export type LogEntry =
        * the same reason: every golden digest carries every log entry verbatim.
        */
       readonly unsavable?: number
+      /**
+       * Cursed Bullets (v2 Phase 8e): missile results inside `attackTotal` that only spell
+       * saves could reduce -- "8 missile − 3 saves, 2 cursed (spell saves only)". Omitted
+       * when zero, the digest rule above.
+       */
+      readonly cursed?: number
       /** Counter/Volley: damage this roll sent back the other way, assigned
        *  separately, after the attacking army's spell saves. Omitted when zero. */
       readonly riposte?: number

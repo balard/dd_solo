@@ -1090,6 +1090,14 @@ export function spellSavedPhrase(math: RollMath | undefined, net: number): strin
   return `${math.steps.map((step) => ` − ${-step.delta} ${step.source}`).join('')} = ${net}`
 }
 
+/**
+ * Cursed Bullets' clause on an exchange's sum (v2 Phase 8e): "8 missile − 3 saves, **2
+ * cursed (spell saves only)** = 5". One phrase for both clients, as above.
+ */
+export function cursedPhrase(cursed: number): string {
+  return `${cursed} cursed (spell saves only)`
+}
+
 /** The most one die can generate for a result type. Used by the property tests and,
  *  later, by AI evaluation. */
 export function maxResults(type: UnitType, resultType: ResultType, ruleSet: RuleSet): number {

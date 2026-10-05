@@ -116,7 +116,11 @@ function weight(state: GameState, caster: PlayerId, owner: PlayerId, ref: ArmyRe
       return facing ? 0.3 : 0.05
     case 'melee':
     case 'missile': {
-      if (!mine) return facing ? 0.5 : 0.1
+      // Taking results off the enemy's attack is insurance too, for the same reason as a
+      // save bonus: it pays only if they attack before it expires (v2 Phase 8e). At 0.5 a
+      // Palsy re-cast every turn outbid walking a terrain home, and greedy capped the
+      // magic monsters' mirrors against an opponent that never attacked.
+      if (!mine) return facing ? 0.3 : 0.05
       if (!facing && (ref === 'reserve' || missileTargets(state, owner, ref).length === 0)) return 0
       const fresh = !state.turn.armiesMarched.includes(ref) && state.turn.marchingArmy !== ref
       return fresh ? 0.6 : 0.3

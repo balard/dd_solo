@@ -467,6 +467,16 @@ function sourced(effect: Effect): readonly Modifier[] {
  */
 const SPELL_NAMES: ReadonlySet<string> = new Set(SPELLS.map((s) => s.name))
 
+/**
+ * Whether a named step on a roll's arithmetic came from a spell (v2 Phase 8e): the
+ * reader of `RollMath` that `Modifier.fromSpell` is to a gathered modifier, and by the
+ * same rule -- the name. Cursed Bullets asks it of a save roll's steps, so the spell
+ * saves it may be reduced by are the ones the roll actually counted.
+ */
+export function isSpellSource(source: string): boolean {
+  return SPELL_NAMES.has(source)
+}
+
 /** The spells cast with death magic, by the name an effect carries as its source. */
 const DEATH_SPELL_NAMES: ReadonlySet<string> = new Set(
   SPELLS.filter((s) => s.element === 'death').map((s) => s.name),
@@ -603,6 +613,10 @@ export function armyRoll(
  *   roll that counts maneuver and not melee applies it.
  * - **Dwarven Might** (v2 Phase 6f): at a fire terrain, on a melee roll, and applied
  *   only to a counter-attack -- Flaming Shields' row with the clause reversed.
+ * - **Volcanic Adaptation** (v2 Phase 8e): Coastal Dodge's row at fire, under its own
+ *   name. On a Feyland (water and fire) a mixed army of Coral Elves and Lava Elves
+ *   gathers both, and `conversionsIn` keeps them apart by source, so each species'
+ *   maneuver is noted under its own ability.
  */
 const COUNTS_AS_ABILITIES: readonly {
   readonly ability: AbilityName
@@ -624,6 +638,12 @@ const COUNTS_AS_ABILITIES: readonly {
     element: 'earth',
     meleeRollsOnly: false,
     permission: (species) => meleeAsManeuver(species, 'Swamp Mastery'),
+  },
+  {
+    ability: 'Volcanic Adaptation',
+    element: 'fire',
+    meleeRollsOnly: false,
+    permission: (species) => maneuverAsSaves(species, 'Volcanic Adaptation'),
   },
 ]
 

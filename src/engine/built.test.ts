@@ -293,7 +293,7 @@ describe('a rolled mixed force', () => {
     for (let seed = 1; seed <= 40; seed++) {
       for (const unit of Object.values(setupGame(options(seed)).units)) seen.add(unitType(unit.typeId).species)
     }
-    expect([...seen].sort()).toEqual(['coral_elves', 'dwarves', 'firewalkers', 'goblins', 'treefolk'])
+    expect([...seen].sort()).toEqual(['coral_elves', 'dwarves', 'firewalkers', 'goblins', 'lava_elves', 'treefolk'])
   })
 })
 
