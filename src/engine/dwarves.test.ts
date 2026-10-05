@@ -129,7 +129,7 @@ describe('the counts-as table', () => {
   })
 
   it('applies only where the roll counts the type it converts to', () => {
-    const rows = [savesAsMelee(['firewalkers']), maneuverAsSaves(['coral_elves'])]
+    const rows = [savesAsMelee(['firewalkers']), maneuverAsSaves(['coral_elves'], 'Coastal Dodge')]
     expect(conversionsIn(['missile'], context(false), rows)).toEqual([])
     expect(conversionsIn(['save'], { purpose: { kind: 'save', against: 'melee' }, isCounter: false }, rows).map((c) => c.source))
       .toEqual(['Coastal Dodge'])
@@ -141,7 +141,7 @@ describe('the counts-as table', () => {
     expect(shields).toMatchObject([{ from: 'save', to: 'melee', chosen: true }])
     // A roll counting maneuver and saves together: Coastal Dodge is "a roll that counts
     // saves and not maneuver", which is what it was before the table.
-    expect(conversionsIn(['save', 'maneuver'], dragon, [maneuverAsSaves(['coral_elves'])])).toEqual([])
+    expect(conversionsIn(['save', 'maneuver'], dragon, [maneuverAsSaves(['coral_elves'], 'Coastal Dodge')])).toEqual([])
   })
 
   it('merges two gathers of one permission into one conversion over both species', () => {

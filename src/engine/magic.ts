@@ -37,7 +37,7 @@ import {
 } from '../data/spells'
 import type { Element } from '../data/types'
 
-import { deathMagicImmune, iconAt, resolvesIcon } from './effects'
+import { iconAt, resolvesIcon, shielded } from './effects'
 import { resolvesSpell, summonable } from './spells'
 import {
   army as armyOf,
@@ -353,20 +353,19 @@ export function spellTargets(
   caster: PlayerId,
   s: Spell,
 ): readonly SpellTargetOffer[] {
-  const offers = targetOffers(state, caster, s)
-  if (s.element !== 'death') return offers
-  // The Temple (v2 Phase 7e): the opponent's army at a Temple it holds, and every die in
-  // it, "cannot be affected by any opponent's death magic" -- so it is not offered. A
-  // terrain stays a target: Soiled Ground's check skips the holder's dice itself.
-  const enemy = opponentOf(caster)
-  return offers.filter((offer) => {
+  // The opponent's army, and every die in it, when `shielded` says so: at a Temple it
+  // holds, against death magic (v2 Phase 7e), and under an Illusion, against any spell
+  // (8b). A terrain stays a target -- Soiled Ground's check skips the holder's dice
+  // itself -- and so does a die in no army, which no shield stands over.
+  const from = s.element === 'death' ? 'death_spell' : 'spell'
+  return targetOffers(state, caster, s).filter((offer) => {
     const target = offer.target
-    if (target.kind === 'army') return target.player === caster || !deathMagicImmune(state, enemy, target.army)
+    if (target.kind === 'army') return !shielded(state, caster, target.player, target.army, from)
     if (target.kind === 'units') {
       return target.unitIds.every((id) => {
         const unit = state.units[id]
         const ref = unit === undefined ? null : armyRefOf(state, id)
-        return unit === undefined || unit.owner === caster || ref === null || !deathMagicImmune(state, unit.owner, ref)
+        return unit === undefined || ref === null || !shielded(state, caster, unit.owner, ref, from)
       })
     }
     return true

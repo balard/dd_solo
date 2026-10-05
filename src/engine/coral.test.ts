@@ -271,7 +271,7 @@ describe('Coastal Dodge', () => {
       [{ unitId: 'k', typeId: KNIGHT, faceIndex: KNIGHT_MANEUVER }],
       {
         kinds: DRAGON_ROLL_KINDS,
-        modifiers: [maneuverAsSaves(['coral_elves'])],
+        modifiers: [maneuverAsSaves(['coral_elves'], 'Coastal Dodge')],
         context: { purpose: { kind: 'dragon_attack' }, isCounter: false },
         // No ID on the table, so nothing to allocate -- but a combination roll must say so.
         idAllocation: {},

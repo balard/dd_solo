@@ -783,6 +783,8 @@ const PLURAL: Readonly<Record<ConvertibleType, string>> = {
   melee: 'melee',
   save: 'saves',
   maneuver: 'maneuver',
+  magic: 'magic',
+  missile: 'missile',
 }
 
 /** Where each named modifier falls in steps 6 to 10, so the arithmetic reads in the
@@ -965,6 +967,18 @@ export function expectNoEffects(roll: RollResult, what: string): void {
   if (effect !== undefined) {
     throw new Error(`${what} produced a ${effect.kind} effect (${effect.sai}), which nothing reads`)
   }
+}
+
+/**
+ * What a sub-roll is for: one die rolling `resultType` on its own (Phase 4d), with the
+ * purpose an unaimed roll of that type would have and `isSubRoll` set.
+ *
+ * A melee one (v2 Phase 8b) is a melee *attack* to the SAI reference, so its results
+ * apply as written; `saiEffects` drops every effect it would make (`resultsOnly`). No
+ * melee caller until Web and Charm.
+ */
+export function subRollContext(resultType: ResultType): RollContext {
+  return { ...defaultContextFor(resultType), isSubRoll: true }
 }
 
 /**

@@ -364,8 +364,22 @@ export interface CombatState {
    * melee action" -- so a Goblin killed later in the exchange does not take it away.
    */
   readonly foulStench?: true
-  /** And the defender's dice that may not counter-attack, chosen at `foul_stench`.
-   *  `armyRoll` leaves them out; dropped with the combat when the counter ends. */
+  /**
+   * Dice that sit out the army rolls of **this half** of the exchange. `armyRoll` leaves
+   * them out and nothing else reads it, so the save roll, a Charge's combination roll
+   * and `expectedArmy` all agree with no second door.
+   *
+   * Two producers, one field (v2 Phase 8b). Foul Stench's (7d) are the defender's dice
+   * that may not counter-attack, chosen at `foul_stench` after the attack half is over;
+   * Charm's (8d) are dice that roll for the enemy and so do not roll to save, chosen at
+   * the attack's targeting pause. Which roll a bench reaches is decided by *when* it is
+   * written, because `finishExchange` rebuilds this object field by field and so drops it
+   * at the end of every half: a bench set in the attack half never reaches the counter.
+   * And it is a list of units, which are one player's each, so if Charm on a counter
+   * meets Foul Stench's bench the union leaves out exactly the right dice of whichever
+   * army rolls. A field per producer would have had one more reader and nothing to tell
+   * apart.
+   */
   readonly benched?: readonly UnitId[]
   /** Set at `resolve_*`, read and dropped at `resolve_*_damage`. Never present at a
    *  step the machine rests on. */
@@ -1665,9 +1679,9 @@ export type LogEntry =
       /**
        * What failing costs, when it is not death: Dragon Fire's dice are already dead,
        * and a failed save buries them. Net and Stun (v2 Phase 7c) hold a failure where it
-       * stands. Omitted means "or die".
+       * stands -- Net's as `'asleep'`, named by `source` (`heldWord`). Omitted means "or die".
        */
-      readonly fate?: 'bury' | 'net' | 'stun'
+      readonly fate?: 'bury' | 'asleep' | 'stun'
       /**
        * Damage the die was rolling saves against (v2 Phase 6b, `damageSubRoll`): it
        * survives when its saves leave less than its health, not on any save at all.

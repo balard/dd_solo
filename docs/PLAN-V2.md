@@ -2603,8 +2603,8 @@ over 60 seeds in both seats, and all three earth types turn up.
 ## Phase 8 — Lava Elves
 
 Seven slices: 8a the data, 8b the seams, 8c Stone, Web and Cloak, 8d Charm and Illusion, 8e the two
-abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a has landed; 8b to 8g
-are planned.
+abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a and 8b have landed;
+8c to 8g are planned.
 
 Death & Fire, the second species carrying Death. Like the Goblins they have **no own terrain type**,
 so `drawHomeDie` draws them a home among the twelve dice carrying fire (Wasteland, Highland,
@@ -2761,7 +2761,7 @@ needs it mirrored first. The pins, if any, and the manifest are 8g's.
 **Deliberately not done.** No fixture, preset or art manifest: a fixture for an unplayable species
 could only throw (8e). No face count was changed to satisfy the validator.
 
-### 8b — Seams, and no rule moves
+### 8b — Seams, and no rule moves — **landed**
 
 1. **A melee sub-roll.** `rollUnits` counting melee, with the purpose a melee attack and
    `isSubRoll`, so an SAI's "during a melee attack" *results* apply (Counter's X melee, Rend's melee
@@ -2792,6 +2792,66 @@ could only throw (8e). No face count was changed to satisfy the validator.
 The two-pool damage is **not** an 8b seam. It has one caller, it is arithmetic in one function, and
 built without Cursed Bullets it would be a pool that is always empty -- 7b's "code no test can reach"
 finding. It lands with its ability in 8e.
+
+### What 8b found
+
+Both golden corpora replay byte-identical and unregenerated. 1249 tests pass, and so does the
+1000-game fuzz. The seams' tests are in a new `lava.test.ts`, which the rest of the phase will fill,
+and each reader was checked to fail with its line undone: six mutations (the missile targets, the
+army and unit spell offers, the volley, the sub-roll rule, the Tower drop), six caught.
+
+**1. The bench needed no code at all.** The plan offered two shapes -- `benched` learning which roll
+it benches, or a second field -- to be chosen by fewer sites. The answer is neither, and zero sites:
+`finishExchange` already rebuilds `CombatState` field by field and so drops `benched` at the end of
+**each half**. Foul Stench writes it after the attack half is over, and Charm will write it at the
+attack's targeting pause, so *when* a bench is written decides which roll it reaches. And it is a
+list of unit ids, which are each one player's, so if a Charm on a counter-attack meets Foul
+Stench's bench, the union leaves out exactly the right dice of whichever army rolls. The type's
+comment says all this; the test hand-sets a bench at `resolve_attack` and shows it out of the save
+roll, out of `expectedArmy`, gone after `combat_resolved`, and back in for the counter.
+
+**2. The melee sub-roll's rule is in `saiEffects`, which is the one door every face goes through**
+-- the roller's `classify` and the estimator's `expectedFace` both call it, so a forecast and a roll
+cannot disagree about it. It drops effects only when the purpose is an attack: a save or maneuver
+sub-roll's effects still reach the caller's `expectNoEffects`, which is where a new one should be
+found. Two consequences worth naming:
+- It drops a Charge before `resolveFaces`' `charging` can see it, so a charmed Dwarf never makes
+  the roll it joins count maneuver as melee -- with no line of its own.
+- The plan's "an SAI's results apply" is each handler's business, and a sweep over every resolved
+  SAI found the exceptions: **Wild Growth and Regenerate already give saves on any sub-roll**
+  (`noSideDecision`), which a melee roll does not count. So a charmed die's Wild Growth is worth
+  nothing. That is the existing rule applied, not a new one, and the sweep asserts only what this
+  slice owns -- no effects, the same reroll.
+`subRollContext(type)` replaces the inline `{ ...defaultContextFor(type), isSubRoll: true }` in
+`turn.ts`; it is the one call 8c's `escape: 'melee'` will make.
+
+**3. Renaming the fate found that the *words* were the fate's too.** `fate: 'net'` is now
+`'asleep'`, named for the status it writes, and the Tower's drop asks it. But three clients spelled
+Net's word from the fate -- the log's `stakeOf`, the roll strip's `effectSummary` and the terminal --
+so a Web would have read "be netted". The word is `heldWord(sai)` in `sai.ts` now, beside
+`SAI_TEXT`, and a test holds every resolved SAI whose effect holds to a word other than the
+fallback "held": **Web fails it the day 8c builds it**, until 8c adds "webbed". `effectSummary`
+takes the SAI's name as a required argument, read off the face. The board's `'netted'` status
+(`dieStatuses`) still keys on the source, and its `'webbed'` twin is 8c's, as planned.
+
+**4. `shielded` needed a third member, and the volley a fourth argument.** The plan's `how` was
+missile or spell; folding the Temple in needs to know death magic from any other, so it is
+`'missile' | 'spell' | 'death_spell'`. `spellTargets` no longer returns early for a non-death spell:
+every spell goes through `shielded`, which is the identity for one with no Illusion on the board.
+A die in no army (the DUA) is never shielded. And `volleyers` takes `at`, the army the volley
+would be aimed at -- the marching army, which a missile from another terrain leaves standing
+somewhere other than the slot that was shot at. An Illusion on the *defender* refuses nothing
+there, and a test says so.
+
+**5. Widening `ConvertibleType` reached two files the plan did not name.** `estimate.ts`'s
+`Rolled` is a `Record` over it (three literal objects and the `CONVERTIBLE` list), and `roll.ts`'s
+`PLURAL` names each type on the arithmetic line; both were compile errors, which is the record
+doing its job. `maneuverAsSaves` takes the ability's name as a **required** argument rather than
+Swamp Mastery's default, and a test drives a magic-as-melee row through `conversionsIn` and
+`resolveFaces`, the path Necromantic Wave will take.
+
+**Deliberately not done.** No producer for any of it: Web and Charm are 8c and 8d, Illusion's
+effect 8d, Volcanic Adaptation's row 8e. The two-pool damage is 8e's, as the plan says.
 
 ### 8c — Stone, Web, Cloak
 

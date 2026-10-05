@@ -32,7 +32,7 @@ import { isAsleep, isGlaring, isHypnotized, isStunned } from '../engine/effects'
 import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
 import { mathPhrase, saiPhrase, spellSavedPhrase, type DieRoll, type RollMath } from '../engine/roll'
-import { CHARGE_ROLL_KINDS, DRAGON_ROLL_KINDS, SAI_TEXT } from '../engine/sai'
+import { CHARGE_ROLL_KINDS, DRAGON_ROLL_KINDS, SAI_TEXT, heldWord } from '../engine/sai'
 import { rollOnTheTable } from '../engine/turn'
 import { OWN_ARMY_NOTE, poolSplit, spellPlan, spellTargetLabel, stageCast, targetsFor } from '../engine/magic'
 
@@ -410,7 +410,13 @@ function describe(entry: LogEntry, state: GameState): string | null {
               ? `${who} escape${one} to ${entry.player}'s reserves`
               : `${who} get${one} away`
       const stake =
-        entry.fate === 'bury' ? 'be buried' : entry.fate === 'net' ? 'be netted' : entry.fate === 'stun' ? 'be stunned' : 'die'
+        entry.fate === 'bury'
+          ? 'be buried'
+          : entry.fate === 'asleep'
+            ? `be ${heldWord(entry.source)}`
+            : entry.fate === 'stun'
+              ? 'be stunned'
+              : 'die'
       // A damage sub-roll (v2 Phase 6d) is saves against a number, not any save at all.
       if (entry.damage !== undefined) {
         return yellow(

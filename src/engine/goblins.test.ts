@@ -317,7 +317,7 @@ describe('the Goblins SAIs, face by face', () => {
   it('Net targets in melee and missile alike, and saves only in a sub-roll', () => {
     for (const ctx of [melee, missile]) {
       expect(saiEffects(face('Net'), ctx, RULES).effects).toEqual([
-        { kind: 'target_enemy', health: 4, escape: 'maneuver', fate: 'net' },
+        { kind: 'target_enemy', health: 4, escape: 'maneuver', fate: 'asleep' },
       ])
     }
     expect(saiEffects(face('Net'), subSave, RULES).results).toEqual({ save: 4 })
@@ -391,7 +391,7 @@ describe('Net', () => {
     expect(asked.pending).toMatchObject({ kind: 'sai_target', sai: 'Net' })
     const done = reduce(asked, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] })
 
-    expect(entries(done, 'sai_sub_roll')).toMatchObject([{ source: 'Net', test: 'maneuver', fate: 'net', escaped: [] }])
+    expect(entries(done, 'sai_sub_roll')).toMatchObject([{ source: 'Net', test: 'maneuver', fate: 'asleep', escaped: [] }])
     expect(entries(done, 'effect_cast').map((e) => [e.source, e.unitId])).toEqual([
       ['Net', 'p2:0'],
       ['Net', 'p2:1'],

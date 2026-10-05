@@ -16,6 +16,7 @@ import { unitType } from '../../data/load'
 import type { Face, UnitClass, UnitType } from '../../data/types'
 import type { RollEffectBody } from '../../engine/pipeline'
 import { mathPhrase, type RollMath } from '../../engine/roll'
+import { heldWord } from '../../engine/sai'
 import type { UnitId, UnitInstance } from '../../engine/types'
 
 
@@ -338,7 +339,7 @@ export interface StripDie {
  * exactly like a Fly that did nothing, beside a log line reporting damage from
  * nowhere. The face art already names the SAI; this says what it did.
  */
-export function effectSummary(effects: readonly RollEffectBody[]): string | null {
+export function effectSummary(effects: readonly RollEffectBody[], sai: string): string | null {
   if (effects.length === 0) return null
 
   // **The return type is annotated on purpose.** Without it a missing arm yields
@@ -374,8 +375,8 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
               switch (effect.fate) {
                 case 'save_or_bury':
                   return `${effect.health} health-worth must maneuver or die, then save or be buried`
-                case 'net':
-                  return `${effect.health} health-worth must maneuver or be netted`
+                case 'asleep':
+                  return `${effect.health} health-worth must maneuver or be ${heldWord(sai)}`
                 case 'stun':
                   return `${effect.health} health-worth must maneuver or be stunned`
                 default:
@@ -420,7 +421,10 @@ export function effectSummary(effects: readonly RollEffectBody[]): string | null
     .join('; ')
 }
 
-const effectOf = (die: StripDie): string | null => effectSummary(die.effects ?? [])
+const effectOf = (die: StripDie): string | null => effectSummary(die.effects ?? [], saiName(die.face))
+
+/** The SAI a face shows, for a sentence that names it; empty for a normal face. */
+export const saiName = (face: Face): string => (face.icon === 'SAI' ? face.sai : '')
 
 /** The number to print on a die that generated an effect rather than results. */
 

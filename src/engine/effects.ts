@@ -173,6 +173,15 @@ export interface Effect {
    * this a number rather than a flag.
    */
   readonly flashfire?: number
+  /**
+   * Illusion (v2 Phase 8b; no producer until 8d): "until the beginning of your next turn,
+   * the target army cannot be targeted by any missile attacks or spells cast by opposing
+   * players." On an **army at a place**, Galeforce's scope: it does not follow the units,
+   * and a die that marches in later is shielded with the rest. A status rather than a
+   * modifier, for `asleep`'s reason -- it changes who may be aimed at, not any number --
+   * and read by one predicate, `shielded`.
+   */
+  readonly illusion?: true
   /** Accelerated Growth: what `killUnits` does instead of killing a Treefolk die.
    *  Soiled Ground (v2 Phase 7e): what it does after one -- a burial check, owed. */
   readonly trigger?: 'accelerated_growth' | 'soiled_ground'
@@ -289,6 +298,40 @@ export function iconAt(
  */
 export function deathMagicImmune(state: GameState, player: PlayerId, ref: ArmyRef): boolean {
   return ref !== 'reserve' && iconAt(state, player, ref) === 'temple'
+}
+
+/**
+ * What a shield can refuse (v2 Phase 8b). A death spell is a spell to an Illusion and
+ * also the one thing the Temple refuses, which is why it is its own member.
+ */
+export type ShieldedFrom = 'missile' | 'spell' | 'death_spell'
+
+/**
+ * Whether `by` may not aim this at `player`'s army at `ref` (v2 Phase 8b): the one
+ * targeting restriction, which every reader asks.
+ *
+ * Two rules in it, both about an *opponent*: Illusion, which refuses any missile
+ * attack and any spell, and the Temple (7e), which refuses death magic. They are one
+ * predicate because they are one question at the same readers -- the Temple's filter in
+ * `spellTargets` was written first, and Illusion widens it rather than starting a
+ * second one. A unit is shielded when its army is, so a unit spell aimed at a die in a
+ * shielded army is refused too; a terrain is never shielded, since a terrain spell's
+ * target is the terrain.
+ *
+ * Readers: `missileTargets` (the terrains and a Tower's Reserves), `spellTargets` (an
+ * army offer and a unit offer), and `volleyers` (Defensive Volley's counter, which is a
+ * missile attack at the marching army).
+ */
+export function shielded(
+  state: GameState,
+  by: PlayerId,
+  player: PlayerId,
+  ref: ArmyRef,
+  from: ShieldedFrom,
+): boolean {
+  if (by === player) return false
+  if (from === 'death_spell' && deathMagicImmune(state, player, ref)) return true
+  return state.effects.some((effect) => effect.illusion === true && targetsArmy(effect, player, ref))
 }
 
 /**
@@ -455,8 +498,8 @@ export function armyRoll(
     // than on a roll, and is read at the maneuver site by `thornsAt`.
   }
   if (doublesIds(state, player, ref)) modifiers.push(doubleIdsModifier(resultType))
-  // Foul Stench (v2 Phase 7d): the defender's benched dice sit out the counter-attack,
-  // the one army roll they could make while the bench stands.
+  // The bench (`CombatState.benched`): Foul Stench's dice sit out the counter-attack
+  // (v2 Phase 7d), Charm's the save roll (8d). Read here and nowhere else.
   const benched = state.turn.combat?.benched ?? []
   const units = armyOf(state, player, ref).filter(
     (unit) => !sitsOutArmyRoll(state, unit.id) && !benched.includes(unit.id),
@@ -493,7 +536,12 @@ const COUNTS_AS_ABILITIES: readonly {
   readonly permission: (species: readonly string[]) => Modifier
 }[] = [
   { ability: 'Flaming Shields', element: 'fire', meleeRollsOnly: true, permission: savesAsMelee },
-  { ability: 'Coastal Dodge', element: 'water', meleeRollsOnly: false, permission: maneuverAsSaves },
+  {
+    ability: 'Coastal Dodge',
+    element: 'water',
+    meleeRollsOnly: false,
+    permission: (species) => maneuverAsSaves(species, 'Coastal Dodge'),
+  },
   { ability: 'Mountain Mastery', element: 'earth', meleeRollsOnly: false, permission: meleeAsManeuver },
   { ability: 'Dwarven Might', element: 'fire', meleeRollsOnly: true, permission: savesAsMeleeOnCounter },
   {

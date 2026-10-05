@@ -95,6 +95,8 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
         melee: face.icon === 'MELEE' ? face.count : 0,
         save: face.icon === 'SAVE' ? face.count : 0,
         maneuver: face.icon === 'MANEUVER' ? face.count : 0,
+        magic: face.icon === 'MAGIC' ? face.count : 0,
+        missile: face.icon === 'MISSILE' ? face.count : 0,
       },
       wave: 0,
       charge: 0,
@@ -124,7 +126,7 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
         // Net and Stun (v2 Phase 7c) hold what they catch rather than killing it: out of
         // the save roll that follows and the counter-attack, which is worth something, but
         // the dice are back next turn. Half a kill of what fails the roll.
-        else if (effect.fate === 'net' || effect.fate === 'stun') targeted += effect.health / 4
+        else if (effect.fate === 'asleep' || effect.fate === 'stun') targeted += effect.health / 4
         else targeted += effect.escape === 'none' ? effect.health : effect.health / 2
         break
       // Screech (v2 Phase 7c) is Wave's melee half: saves off the roll that answers.
@@ -187,6 +189,8 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
       melee: outcome.results.melee ?? 0,
       save: outcome.results.save ?? 0,
       maneuver: outcome.results.maneuver ?? 0,
+      magic: outcome.results.magic ?? 0,
+      missile: outcome.results.missile ?? 0,
     },
     wave,
     charge,
@@ -197,7 +201,7 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
 /** Results of each type a "counts as" may move. */
 export type Rolled = Readonly<Record<ConvertibleType, number>>
 
-const CONVERTIBLE: readonly ConvertibleType[] = ['melee', 'save', 'maneuver']
+const CONVERTIBLE: readonly ConvertibleType[] = ['melee', 'save', 'maneuver', 'magic', 'missile']
 
 /** The saves a Bash is expected to give: the melee of a middling attacking die. */
 const BASH_WORTH = 3
@@ -226,7 +230,7 @@ export function expectedDie(
   let unsavable = 0
   let riposte = 0
   let targeted = 0
-  const rolled = { melee: 0, save: 0, maneuver: 0 }
+  const rolled = { melee: 0, save: 0, maneuver: 0, magic: 0, missile: 0 }
   let wave = 0
   let charge = 0
 
@@ -258,6 +262,8 @@ export function expectedDie(
       melee: rolled.melee / divisor,
       save: rolled.save / divisor,
       maneuver: rolled.maneuver / divisor,
+      magic: rolled.magic / divisor,
+      missile: rolled.missile / divisor,
     },
     wave: wave / divisor,
     charge: charge / divisor,

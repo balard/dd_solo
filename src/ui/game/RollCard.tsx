@@ -10,7 +10,7 @@
 import { unitType } from '../../data/load'
 import type { GameState, LogEntry, PlayerId } from '../../engine/types'
 
-import { RollStrip, effectSummary } from './DiceGrid'
+import { RollStrip, effectSummary, saiName } from './DiceGrid'
 import { CombatPart, LogLine, ManeuverPart } from './LogPanel'
 import type { RollStep } from './presentation'
 import { tableRollHeading } from './prompts'
@@ -165,7 +165,7 @@ function StepBody({
           <div className="roll-card-sai">
             <RollStrip dice={[die]} onInspect={onInspect} />
             <span>
-              <b>{name}</b>: {effectSummary(die.effects ?? [])}
+              <b>{name}</b>: {effectSummary(die.effects ?? [], saiName(die.face))}
             </span>
           </div>
           {step.resolved.map((entry, i) => (

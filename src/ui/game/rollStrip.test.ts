@@ -66,21 +66,26 @@ describe('chainRerolls', () => {
  */
 describe('effectSummary', () => {
   it('says nothing for a die that produced no effect', () => {
-    expect(effectSummary([])).toBeNull()
+    expect(effectSummary([], '')).toBeNull()
   })
 
   it('names Smite as damage no save can stop, which is not a melee result', () => {
-    expect(effectSummary([{ kind: 'unsavable', damage: 4 }])).toBe('4 damage, no save possible')
+    expect(effectSummary([{ kind: 'unsavable', damage: 4 }], 'Smite')).toBe('4 damage, no save possible')
   })
 
   it('names a riposte and a suppressed counter', () => {
-    expect(effectSummary([{ kind: 'riposte', damage: 3 }])).toBe('3 damage straight back')
-    expect(effectSummary([{ kind: 'suppress_counter' }])).toBe('no counter-attack')
+    expect(effectSummary([{ kind: 'riposte', damage: 3 }], 'Counter')).toBe('3 damage straight back')
+    expect(effectSummary([{ kind: 'suppress_counter' }], 'Surprise')).toBe('no counter-attack')
   })
 
   it('joins several effects from one face', () => {
     expect(
-      effectSummary([{ kind: 'unsavable', damage: 4 }, { kind: 'suppress_counter' }]),
+      effectSummary([{ kind: 'unsavable', damage: 4 }, { kind: 'suppress_counter' }], 'Smite'),
     ).toBe('4 damage, no save possible; no counter-attack')
+  })
+
+  it("names a hold by the SAI that holds, not by the fate (v2 Phase 8b)", () => {
+    const net = { kind: 'target_enemy', health: 4, escape: 'maneuver', fate: 'asleep' } as const
+    expect(effectSummary([net], 'Net')).toBe('4 health-worth must maneuver or be netted')
   })
 })

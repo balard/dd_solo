@@ -108,8 +108,15 @@ type ModifierBody =
       readonly species: readonly string[]
     }
 
-/** The result types a "counts as" in scope moves between. */
-export type ConvertibleType = 'melee' | 'save' | 'maneuver'
+/**
+ * The result types a "counts as" in scope moves between.
+ *
+ * Magic and missile since v2 Phase 8b, with no row naming either yet: Necromantic Wave
+ * (8f) counts magic as melee or missile, the first "counts as" that is a spell rather
+ * than an ability. Widening it alone moves nothing, since no permission in the game
+ * names the two -- which is the claim the v1 goldens, Flaming Shields and all, check.
+ */
+export type ConvertibleType = 'melee' | 'save' | 'maneuver' | 'magic' | 'missile'
 
 /** Flaming Shields' permission, as `armyRoll` gathers it: the dice of these species
  *  may count their rolled saves as melee, except when making a counter-attack. */
@@ -129,15 +136,23 @@ export function savesAsMelee(species: readonly string[]): Modifier {
  * Elves may count maneuver results as if they were save results." Gathered at every
  * water terrain whatever the roll, and applied only by a roll that counts saves and not
  * maneuver -- where converting can only help, so it is automatic.
+ *
+ * And Volcanic Adaptation's (v2 Phase 8e), the Lava Elves' same sentence at fire. So the
+ * name is an argument, and a **required** one (v2 Phase 8b): Swamp Mastery's row borrowed
+ * Mountain Mastery's by default until 7d, and a Lava Elf's save roll would have read
+ * "counted as save (Coastal Dodge)" the same way.
  */
-export function maneuverAsSaves(species: readonly string[]): Modifier {
+export function maneuverAsSaves(
+  species: readonly string[],
+  source: 'Coastal Dodge' | 'Volcanic Adaptation',
+): Modifier {
   return {
     kind: 'counts_as',
     from: 'maneuver',
     resultType: 'save',
     counter: 'either',
     species,
-    source: 'Coastal Dodge',
+    source,
   }
 }
 
@@ -263,12 +278,17 @@ export type RollEffectBody =
        * `'save_or_bury'` is Poison's too (v2 Phase 7c), after a save roll where Stomp's
        * is a maneuver roll.
        *
-       * `'net'` and `'stun'` (v2 Phase 7c) are a status rather than a death. Net's is
+       * `'asleep'` and `'stun'` (v2 Phase 7c) are a status rather than a death. Net's is
        * Sleep's word for word -- "may not be rolled or leave the terrain" -- so it writes
        * `asleep` under Net's name; Stun's keeps the die out of army rolls only, and ends
        * when it leaves the terrain (`Effect.stunned`, anchored on the die).
+       *
+       * `'asleep'` was `'net'` until v2 Phase 8b. Web is Net's sentence too, and a fate
+       * named for one SAI is a fate the second one forgets: the Tower's drop asked for
+       * `'net'`. So the fate names the status, and the name it is written under is the
+       * task's `sai` -- "be netted", "be webbed" (`heldWord`).
        */
-      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury' | 'net' | 'stun'
+      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury' | 'asleep' | 'stun'
       /**
        * Where a target that escaped ends up. Omitted means "where it was standing",
        * which is every escape but Seize's.

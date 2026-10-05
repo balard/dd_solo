@@ -78,7 +78,6 @@ import {
 
 import {
   asResult,
-  defaultContextFor,
   expectNoEffects,
   faceOf,
   resolveFaces,
@@ -86,6 +85,7 @@ import {
   rollFaces,
   rollPools,
   rollUnits,
+  subRollContext,
   rerollSweep,
   type DieRoll,
   type RollMath,
@@ -512,7 +512,7 @@ function stepMarch(state: GameState): GameState {
       // throw it: a Tower's missile at a Reserve Army, or at a terrain with no air, or
       // at an army whose Coral Elves died in the attack, offers nothing.
       if (combat.action === 'missile') {
-        if (volleyers(state, defender, combat.targetSlot).length === 0) return endMarch(state)
+        if (volleyers(state, defender, combat.targetSlot, marchingRef(state)).length === 0) return endMarch(state)
       }
       const targetSlot = requireTerrainTarget(combat.targetSlot)
       if (armyAt(state, defender, targetSlot).length === 0) return endMarch(state)
@@ -667,7 +667,10 @@ function stepHasWork(state: GameState, step: CombatStep): boolean {
   if (step === 'offer_counter') {
     const combat = requireCombat(state)
     if (combat.action === 'melee') return true
-    return combat.action === 'missile' && volleyers(state, opponentOf(state.turn.marching), combat.targetSlot).length > 0
+    return (
+      combat.action === 'missile' &&
+      volleyers(state, opponentOf(state.turn.marching), combat.targetSlot, marchingRef(state)).length > 0
+    )
   }
 
   return false
@@ -951,8 +954,9 @@ function taskHasWork(
     case 'enemy':
       // "Net does nothing during a missile attack targeting an opponent's Reserve Army
       // from a Tower on its eighth face" (v2 Phase 7c): a Reserve Army stands on no
-      // terrain to be held on, and a missile at Reserves is only ever a Tower's.
-      if (task.fate === 'net' && spec.defenderSlot === 'reserve') return false
+      // terrain to be held on, and a missile at Reserves is only ever a Tower's. Asked of
+      // the fate, not the name (v2 Phase 8b), since Web says the same sentence.
+      if (task.fate === 'asleep' && spec.defenderSlot === 'reserve') return false
       if (task.one === true) return army.length > 0
       return damageOptions(army, task.health).required > 0
     case 'sleep':
@@ -1805,7 +1809,7 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
   if (doomed.length === 0) return dropHeadTask(rolled)
 
   // Net and Stun (v2 Phase 7c): those that failed are held, not killed.
-  if (task.fate === 'net' || task.fate === 'stun') {
+  if (task.fate === 'asleep' || task.fate === 'stun') {
     return dropHeadTask(holdUnits(rolled, spec, task.sai, task.fate, doomed))
   }
 
@@ -1856,7 +1860,7 @@ function holdUnits(
   state: GameState,
   spec: AttackSpec,
   sai: string,
-  fate: 'net' | 'stun',
+  fate: 'asleep' | 'stun',
   unitIds: readonly UnitId[],
 ): GameState {
   const slot = requireTerrainTarget(spec.defenderSlot)
@@ -1869,7 +1873,7 @@ function holdUnits(
           source: sai,
           target: { kind: 'unit', unitId },
           modifiers: [],
-          ...(fate === 'net' ? { asleep: true as const } : { stunned: true as const, anchor: { unitId, slot } }),
+          ...(fate === 'asleep' ? { asleep: true as const } : { stunned: true as const, anchor: { unitId, slot } }),
           expiresAtStartOfTurnOf: spec.attacker,
         },
         { target: spec.defender, slot, unitId },
@@ -2237,7 +2241,7 @@ function inBoardOrder(state: GameState, unitIds: readonly UnitId[]): readonly Un
  *
  *  - **A unit that cannot be rolled fails.** A sleeping die generates nothing, so it
  *    generates no save either -- and it draws no randomness on the way.
- *  - **A sub-roll is a save roll against *nothing***, via `defaultContextFor`: a
+ *  - **A sub-roll is a save roll against *nothing***, via `subRollContext`: a
  *    Counter on a Bullseye target saves the die and sends no damage back. The narrow
  *    reading deliberately, because an effect out of here would have nobody to consume
  *    it -- which is what `expectNoEffects` refuses to let pass quietly.
@@ -2283,7 +2287,7 @@ function subRoll(
     const [rolls, next] = rollUnits(
       inputs,
       type,
-      { ...defaultContextFor(type), isSubRoll: true },
+      subRollContext(type),
       rng,
       state.ruleSet,
     )
@@ -2312,7 +2316,7 @@ function subRoll(
       ? { toReserve: true as const }
       : {}),
     // Net and Stun: failing holds the die rather than killing it (v2 Phase 7c).
-    ...(task.fate === 'net' || task.fate === 'stun' ? { fate: task.fate } : {}),
+    ...(task.fate === 'asleep' || task.fate === 'stun' ? { fate: task.fate } : {}),
   }
 
   // A glaring die that was just rolled has ended its glare (Hypnotic Glare, v2 Phase 5b):

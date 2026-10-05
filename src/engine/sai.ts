@@ -804,7 +804,7 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
     if (isAttack(ctx, 'melee') || isAttack(ctx, 'missile')) {
       return {
         results: {},
-        effects: [{ kind: 'target_enemy', health: x, escape: 'maneuver', fate: 'net' }],
+        effects: [{ kind: 'target_enemy', health: x, escape: 'maneuver', fate: 'asleep' }],
         reroll: false,
       }
     }
@@ -1041,6 +1041,20 @@ export const SAI_TEXT: Readonly<Record<string, string>> = {
 export const LIVE_SAIS: readonly string[] = Object.keys(HANDLERS)
 
 /**
+ * The word for a die a hold caught (`fate: 'asleep'`), by the SAI that caught it (v2
+ * Phase 8b): "must maneuver or be **netted**". The fate is one status under several
+ * names, so the name is what the sentence needs. Beside `SAI_TEXT` for its reason, and
+ * `sai.test.ts` holds every SAI whose fate is `'asleep'` to a word here.
+ */
+const HELD: Readonly<Record<string, string>> = {
+  Net: 'netted',
+}
+
+export function heldWord(sai: string): string {
+  return HELD[sai] ?? 'held'
+}
+
+/**
  * Whether this ruleset resolves this SAI at all.
  *
  * The question both clients actually want to ask -- "does this face do anything in
@@ -1096,7 +1110,7 @@ export function saiEffects(face: SaiFace, context: RollContext, ruleSet: RuleSet
   if (ruleSet.sai === 'inert') return NOTHING
 
   const handler = handlerFor(face.sai, ruleSet)
-  if (handler !== undefined) return handler(face.count, context, ruleSet)
+  if (handler !== undefined) return resultsOnly(handler(face.count, context, ruleSet), context)
 
   if (ruleSet.sai === 'full') {
     throw new Error(
@@ -1105,6 +1119,28 @@ export function saiEffects(face: SaiFace, context: RollContext, ruleSet: RuleSet
   }
 
   return NOTHING
+}
+
+/**
+ * A **melee sub-roll** gives results and nothing else (v2 Phase 8b): every effect its
+ * faces produce is dropped, here, by one rule.
+ *
+ * Web's targets and Charm's (8c, 8d) roll melee one die at a time, which is the first
+ * sub-roll whose purpose is an *attack*. Its SAIs' results apply as the reference says
+ * -- Counter's X melee, Rend's melee and its reroll, which is not an effect -- but every
+ * effect is aimed at "the defending army", and a die rolling for its own life, or for
+ * the enemy's total, has none: a charmed die's Smite would strike its own army, its
+ * Charm would charm nobody. It is 4d's sub-roll rule ("a save roll against nothing")
+ * for a roll that does have an enemy in its sentence, stated once rather than as a
+ * guard in every handler that ever names an attack -- and it drops a Charge's effect
+ * before `resolveFaces` can see it, so a charmed Dwarf never charges.
+ *
+ * Only an attack purpose: a save or maneuver sub-roll's effects are refused by the
+ * caller's `expectNoEffects`, which is still where a new one should be found.
+ */
+function resultsOnly(outcome: SaiOutcome, ctx: RollContext): SaiOutcome {
+  if (ctx.isSubRoll !== true || ctx.purpose.kind !== 'attack' || outcome.effects.length === 0) return outcome
+  return { ...outcome, effects: [] }
 }
 
 /** Every roll an SAI could be asked about, for the static bound below. */

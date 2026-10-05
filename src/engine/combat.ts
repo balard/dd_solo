@@ -8,7 +8,7 @@ import { terrainFaceAction } from '../data/load'
 import type { TerrainFaceNumber } from '../data/types'
 
 import { combinationSpec, type CombinationAnswer, type CombinationPools } from './combination'
-import { armyRoll, iconAt, spellSaveSources, type ArmyRollInput } from './effects'
+import { armyRoll, iconAt, shielded, spellSaveSources, type ArmyRollInput } from './effects'
 import { CHARGE_ROLL_KINDS } from './sai'
 import { terrainHas, unitHasAbility } from './species'
 import type { Modifier, RollEffect } from './pipeline'
@@ -66,6 +66,10 @@ const isHome = (slot: TerrainSlot): boolean => slot !== 'frontier'
  * missile action to attack any opponent's army." A Tower held elsewhere lends
  * nothing, which is why `iconAt` is asked at `fromSlot` and not anywhere the
  * attacker merely captured.
+ *
+ * An Illusioned army is not a target either (v2 Phase 8b), at a terrain or in Reserves.
+ * Every missile reader asks this -- the action list, the prompt, the forecast and both
+ * AIs -- so the filter is here and nowhere else.
  */
 export function missileTargets(
   state: GameState,
@@ -83,7 +87,7 @@ export function missileTargets(
 
   if (holdsTower && reserveArmy(state, defender).length > 0) targets.push('reserve')
 
-  return targets
+  return targets.filter((ref) => !shielded(state, attacker, defender, ref, 'missile'))
 }
 
 /**
@@ -298,9 +302,20 @@ function attackerRoll(state: GameState, spec: AttackSpec): ArmyRollInput {
  * Coral Elves of the army that was shot at, when it stands on a terrain containing air,
  * and only those that may roll. Empty means no volley is offered -- which it always is
  * with species abilities off, at a Reserve Army, or at a terrain with no air.
+ *
+ * `at` is the army the volley would be aimed at -- the marching army, wherever it fired
+ * from. The counter is a missile attack, so an Illusion on that army refuses it (v2
+ * Phase 8b). An Illusion on the *defender* stops nothing here: the missile it answers
+ * was aimed before the shield could be cast.
  */
-export function volleyers(state: GameState, defender: PlayerId, slot: ArmyRef): readonly UnitInstance[] {
+export function volleyers(
+  state: GameState,
+  defender: PlayerId,
+  slot: ArmyRef,
+  at: ArmyRef,
+): readonly UnitInstance[] {
   if (!state.ruleSet.speciesAbilities || slot === 'reserve' || !terrainHas(state, slot, 'air')) return []
+  if (shielded(state, defender, opponentOf(defender), at, 'missile')) return []
   return armyRoll(state, defender, slot, 'missile').units.filter((unit) =>
     unitHasAbility(state.ruleSet, unit, 'Defensive Volley'),
   )

@@ -13,6 +13,7 @@ import { dragonDie, dragonName, unitType } from '../../data/load'
 import { spell } from '../../data/spells'
 import { poolSplit } from '../../engine/magic'
 import { BREATH_NAME, DRAGON_ICON_TEXT } from '../../engine/dragons'
+import { heldWord } from '../../engine/sai'
 import { mathPhrase, saiPhrase, saisBehind, spellSavedPhrase, type RollMath } from '../../engine/roll'
 
 
@@ -55,12 +56,12 @@ const plural = (
 ): boolean => saisBehind(allDice(entry), kind).length > 1
 
 /** What failing a sub-roll costs: death, unless the entry says otherwise. */
-const stakeOf = (fate: Extract<LogEntry, { kind: 'sai_sub_roll' }>['fate']): string => {
+const stakeOf = (fate: Extract<LogEntry, { kind: 'sai_sub_roll' }>['fate'], source: string): string => {
   switch (fate) {
     case 'bury':
       return 'be buried'
-    case 'net':
-      return 'be netted'
+    case 'asleep':
+      return `be ${heldWord(source)}`
     case 'stun':
       return 'be stunned'
     case undefined:
@@ -385,7 +386,7 @@ export function LogLine({
       return (
         <div className="log-roll">
           <div className="roll-head">
-            <strong>{entry.source}</strong> &middot; {asked} or {stakeOf(entry.fate)}{' '}
+            <strong>{entry.source}</strong> &middot; {asked} or {stakeOf(entry.fate, entry.source)}{' '}
             &middot; {where(entry.slot)}
           </div>
           <RollStrip dice={entry.dice} />
