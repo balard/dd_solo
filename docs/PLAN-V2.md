@@ -2700,16 +2700,16 @@ live the moment they are playable, with a far wider list than the Goblins had at
 - **Fearful Flames is cumulative** ("one" is red), like Firebolt, whose handler it extends: N
   castings, N damage, `damageSubRoll`, and then a second save roll whose failure is **Roar's fate**
   -- moved to Reserves, not killed: no Replanting, no Rise from the Ashes, no Soiled Ground.
-- **The monster SAI counts are still unconfirmed** apart from Flame. The raw file's header says so,
-  and it is 8a's gate (below).
+- **The monster SAI counts were unconfirmed** apart from Flame, which made them 8a's gate. The
+  owner has since checked them (below).
 
 ### 8a — Data
 
 - **Gate: the monster SAI counts.** Every monster face in the raw file says 4, with no count in the
   source. Nine of the monster SAIs here read X -- Charm, Stone, Confuse, Web, Counter, Cantrip,
-  Volley, Cloak and Fly -- so the owner checks them against the dice before import, as 6a and 7a
-  did. Flame is already confirmed as 2; Illusion takes no X. The raw file's header loses its
-  "unconfirmed" and "not imported" notes in this slice.
+  Volley, Cloak and Fly -- so the owner checked them against the dice before import, as 6a and 7a
+  did: **every one is 4** (confirmed 2026-10-05), and Flame is 2. Illusion takes no X. The raw
+  file's header already says so; it loses its "not imported" note in this slice.
 - `tools/species.py` gains `lava_elves` (the roster above) and `SPECIES_SAIS` gains Charm, Cloak,
   Illusion, Stone, Web (p. 85).
 - **The Lava Elves are unplayable after this slice**, by `playable.ts`. `sai.test.ts`'s partition

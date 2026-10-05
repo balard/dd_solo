@@ -9,8 +9,8 @@
 # Face 1 is the ID face, added here: the source lists the other faces only. Its count is the
 # unit's health, 4 on a monster (invariant 7). The monster faces carry no count in the source
 # and are written as 4: right for every normal icon (invariant 7), but an SAI's count can be
-# its X instead -- Firewalkers' Gorgon prints '2 Flame' -- so a monster SAI's 4 is unconfirmed.
-# Flame is confirmed as 2 on the Beholder and Hell Hound; the other monster SAIs' 4 stays unconfirmed.
+# its X instead -- Firewalkers' Gorgon prints '2 Flame' -- so each was checked against the dice:
+# Flame is 2 on the Beholder and Hell Hound, and every other monster SAI is 4 (confirmed 2026-10-05).
 # Other faces are in the source's order. Headers are '<class>-<size>' / 'monster-<name>',
 # with the class lines as the source names them; the v4.01 roster is p. 84.
 # Anything marked TODO disagrees with the shape of a die and needs checking against one.
