@@ -21,7 +21,7 @@
  * `castSpell` guards against a spell reaching resolution anyway, not against
  * half-built work.
  */
-import { dragonDie, unitType } from '../data/load'
+import { SPECIES, dragonDie, unitType } from '../data/load'
 import { spell, spellResultTypes, type Spell, type SpellEffectSpec, type SpellModifierSpec } from '../data/spells'
 
 import type { Element } from '../data/types'
@@ -113,6 +113,19 @@ function scaleModifier(m: SpellModifierSpec, count: number): readonly Modifier[]
         return { kind: 'multiply', resultType, by: (m.by ?? 1) * count, share: m.share ?? 'all' }
       case 'ignore_ids':
         return { kind: 'ignore_ids', resultType }
+      // Necromantic Wave (v2 Phase 8f), the first "counts as" that is a spell: "all units
+      // in the target army", so every species' dice convert -- every species in the data,
+      // since a spell names none -- and on any roll, a counter-attack's included. No count
+      // scales it; it is not cumulative.
+      case 'counts_as':
+        if (m.from === undefined) throw new Error('a counts_as spell modifier names no from type')
+        return {
+          kind: 'counts_as',
+          from: m.from,
+          resultType,
+          counter: 'either',
+          species: SPECIES.map((s) => s.id),
+        }
     }
   })
 }
@@ -394,10 +407,21 @@ const stillThere = (state: GameState, ids: readonly UnitId[]): readonly UnitId[]
  */
 const mirage: SpellHandler = (state, ctx) => {
   if (ctx.target.kind !== 'units') throw new Error('Mirage targets units')
-  const targets = stillThere(state, ctx.target.unitIds)
-  if (targets.length === 0) return { state }
+  return { state: saveOrFlee(state, 'Mirage', ctx.target.unitIds) }
+}
 
-  const rolled = saveSubRoll(state, 'Mirage', targets)
+/**
+ * A save roll whose failures go to their Reserve Area: Mirage's, and Fearful Flames'
+ * second roll (v2 Phase 8f). Only units still at a terrain roll -- one in Reserves has
+ * nowhere to flee and draws nothing. Moved, not killed, so no death trigger fires; a
+ * die that cannot be rolled fails and is moved all the same (Roar's ruling: the spell
+ * moves it, it does not ask it to move).
+ */
+function saveOrFlee(state: GameState, source: string, unitIds: readonly UnitId[]): GameState {
+  const targets = stillThere(state, unitIds)
+  if (targets.length === 0) return state
+
+  const rolled = saveSubRoll(state, source, targets)
   const units = { ...rolled.state.units }
   for (const id of rolled.failed) {
     const unit = units[id]
@@ -405,23 +429,21 @@ const mirage: SpellHandler = (state, ctx) => {
   }
 
   return {
-    state: {
-      ...rolled.state,
-      units,
-      log: [
-        ...rolled.state.log,
-        {
-          kind: 'sai_sub_roll',
-          player: owners(state, targets),
-          source: 'Mirage',
-          slot: slotOf(state, targets),
-          test: 'save',
-          dice: rolled.dice,
-          escaped: targets.filter((id) => !rolled.failed.includes(id)),
-          ...(rolled.failed.length > 0 ? { toReserve: true as const } : {}),
-        },
-      ],
-    },
+    ...rolled.state,
+    units,
+    log: [
+      ...rolled.state.log,
+      {
+        kind: 'sai_sub_roll',
+        player: owners(state, targets),
+        source,
+        slot: slotOf(state, targets),
+        test: 'save',
+        dice: rolled.dice,
+        escaped: targets.filter((id) => !rolled.failed.includes(id)),
+        fate: 'flee',
+      },
+    ],
   }
 }
 
@@ -487,6 +509,27 @@ const firebolt: SpellHandler = (state, ctx) => {
   const [target] = ctx.target.unitIds.filter((id) => armyRefOf(state, id) !== null)
   if (target === undefined) return { state }
   return { state: damageSubRoll(state, target, ctx.count, 'Firebolt').state }
+}
+
+/**
+ * Fearful Flames (v2 Phase 8f): "inflict one point of damage on the target. If the target
+ * unit saves against the damage, it makes a second save roll. Unless the target unit gets
+ * a save result, it flees to reserves." Cumulative, like Firebolt, whose roll is the first
+ * one: N castings, N damage, `damageSubRoll`.
+ *
+ * House rules (`RULES-V0.md` section 20): **"saves against the damage" means survives
+ * it**, so a die with more health than the castings always rolls the second save -- the
+ * spell's point is fear, not damage. The second roll is Mirage's: any save result stays,
+ * none flees, a die in Reserves rolls nothing. A die the first roll killed -- or replanted,
+ * or raised -- is not where it was, and is asked nothing more.
+ */
+const fearfulFlames: SpellHandler = (state, ctx) => {
+  if (ctx.target.kind !== 'units') throw new Error('Fearful Flames targets a unit')
+  const [target] = ctx.target.unitIds.filter((id) => armyRefOf(state, id) !== null)
+  if (target === undefined) return { state }
+  const hit = damageSubRoll(state, target, ctx.count, 'Fearful Flames')
+  if (hit.killed) return { state: hit.state }
+  return { state: saveOrFlee(hit.state, 'Fearful Flames', [target]) }
 }
 
 /**
@@ -761,6 +804,7 @@ const HANDLERS: Readonly<Record<string, SpellHandler>> = {
   mirage,
   lightning_strike: lightningStrike,
   firebolt,
+  fearful_flames: fearfulFlames,
   flash_flood: flashFlood,
   wall_of_thorns: wallOfThorns,
 }

@@ -86,8 +86,14 @@ export function spellResultTypes(resultType: SpellResultType): readonly ResultTy
 
 /** A modifier as the data spells it, before a wildcard is expanded. */
 export interface SpellModifierSpec {
-  readonly kind: 'add' | 'subtract' | 'divide' | 'multiply' | 'ignore_ids'
+  readonly kind: 'add' | 'subtract' | 'divide' | 'multiply' | 'ignore_ids' | 'counts_as'
   readonly resultType: SpellResultType
+  /**
+   * `counts_as` only (v2 Phase 8f): the rolled type that converts into `resultType` --
+   * Necromantic Wave's magic. Both ends are plain types, which the loader checks, so a
+   * "counts as" never expands a wildcard.
+   */
+  readonly from?: ResultType
   readonly amount?: number
   readonly by?: number
   readonly share?: 'all' | 'id'
@@ -150,7 +156,8 @@ const SPELL_TARGETS: readonly string[] = [
   'dua',
 ]
 const SPELL_SCOPES: readonly string[] = ['army', 'unit', 'all_armies', 'attackers', 'maneuverers']
-const MODIFIER_KINDS: readonly string[] = ['add', 'subtract', 'divide', 'multiply', 'ignore_ids']
+const MODIFIER_KINDS: readonly string[] = ['add', 'subtract', 'divide', 'multiply', 'ignore_ids', 'counts_as']
+const PLAIN_RESULT_TYPES: readonly string[] = ['melee', 'missile', 'magic', 'save', 'maneuver']
 const RESULT_TYPES: readonly string[] = ['melee', 'missile', 'magic', 'save', 'maneuver', '*', 'non_maneuver']
 
 function oneOf<T extends string>(
@@ -168,7 +175,14 @@ function oneOf<T extends string>(
 function loadEffect(raw: unknown, context: string): SpellEffectSpec {
   const effect = raw as {
     scope: string
-    modifiers: readonly { kind: string; resultType: string; amount?: number; by?: number; share?: string }[]
+    modifiers: readonly {
+      kind: string
+      resultType: string
+      from?: string
+      amount?: number
+      by?: number
+      share?: string
+    }[]
     duration: string
   }
 
@@ -179,13 +193,23 @@ function loadEffect(raw: unknown, context: string): SpellEffectSpec {
     throw new DataError(`${context}: effect with no modifiers`)
   }
 
-  const modifiers = effect.modifiers.map((m): SpellModifierSpec => ({
-    kind: oneOf<SpellModifierSpec['kind']>(m.kind, MODIFIER_KINDS, 'modifier kind', context),
-    resultType: oneOf<SpellResultType>(m.resultType, RESULT_TYPES, 'result type', context),
-    ...(m.amount === undefined ? {} : { amount: m.amount }),
-    ...(m.by === undefined ? {} : { by: m.by }),
-    ...(m.share === undefined ? {} : { share: m.share as 'all' | 'id' }),
-  }))
+  const modifiers = effect.modifiers.map((m): SpellModifierSpec => {
+    const kind = oneOf<SpellModifierSpec['kind']>(m.kind, MODIFIER_KINDS, 'modifier kind', context)
+    if (kind === 'counts_as') {
+      const from = oneOf<ResultType>(m.from ?? '', PLAIN_RESULT_TYPES, 'counts_as from type', context)
+      const resultType = oneOf<ResultType>(m.resultType, PLAIN_RESULT_TYPES, 'counts_as result type', context)
+      if (from === resultType) throw new DataError(`${context}: a counts_as from ${from} to itself`)
+      return { kind, from, resultType }
+    }
+    if (m.from !== undefined) throw new DataError(`${context}: only a counts_as names a from type`)
+    return {
+      kind,
+      resultType: oneOf<SpellResultType>(m.resultType, RESULT_TYPES, 'result type', context),
+      ...(m.amount === undefined ? {} : { amount: m.amount }),
+      ...(m.by === undefined ? {} : { by: m.by }),
+      ...(m.share === undefined ? {} : { share: m.share as 'all' | 'id' }),
+    }
+  })
 
   return {
     scope: oneOf<SpellScope>(effect.scope, SPELL_SCOPES, 'scope', context),

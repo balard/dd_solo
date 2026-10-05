@@ -2603,8 +2603,8 @@ over 60 seeds in both seats, and all three earth types turn up.
 ## Phase 8 — Lava Elves
 
 Seven slices: 8a the data, 8b the seams, 8c Stone, Web and Cloak, 8d Charm and Illusion, 8e the two
-abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a to 8e have landed;
-8f and 8g are planned.
+abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a to 8f have landed;
+8g is planned.
 
 Death & Fire, the second species carrying Death. Like the Goblins they have **no own terrain type**,
 so `drawHomeDie` draws them a home among the twelve dice carrying fire (Wasteland, Highland,
@@ -3095,7 +3095,7 @@ in the tests.
 Wave and Fearful Flames are 8f. Greedy's Illusion pick and Charm price stay as 8d left them, for
 8g's re-run.
 
-### 8f — Necromantic Wave and Fearful Flames
+### 8f — Necromantic Wave and Fearful Flames — **landed**
 
 - **Necromantic Wave** is an `effect` block with a new modifier kind, `counts_as`, in every copy
   of the spell modifier spec -- the TypeScript type, the Python validator, the JSON schema and
@@ -3119,6 +3119,60 @@ Wave and Fearful Flames are 8f. Greedy's Illusion pick and Charm price stay as 8
 - `HANDLER_VALUE` gains Fearful Flames; greedy's effect scorer learns `counts_as` (the value of the
   army's expected magic, moved into the type it will roll next). A spell greedy cannot score fails a
   test. Counts that move: 29 spells, 12 species spells.
+
+### What 8f found
+
+Both golden corpora replay byte-identical and unregenerated. 1315 tests pass, and so does the
+1000-game fuzz, which casts both spells (Necromantic Wave 235 times and Fearful Flames 86 in 200
+games). `RULES-V0.md` section 20 has both, and a fix to Mirage. Five mutations of the new code (no
+pooling, no second roll, a Wave refused on a counter, a second roll from Reserves, the two rows
+summed in the scorer), five caught.
+
+**1. The spell modifier spec had six copies, not five, and the plan's count found them all but
+one.** The TypeScript type and its loader (`src/data/spells.ts`), the Python validator, the JSON
+schema, the engine's `scaleModifier` -- which the compiler found, through its exhaustive switch --
+and greedy's `effectValue`. The sixth is greedy's coverage test, which asked every effect for an
+`add` or `subtract` to weigh and refused the Wave. Both clients already drew `counts_as` on an
+effect chip, because 6b had made it a `Modifier` and their switches are exhaustive. A spell's
+"counts as" names no species, so the engine writes every species in the data: "all units in the
+target army".
+
+**2. The flexible pool, not the ID pool.** The plan's house rule put a Wave's magic in the ID pool
+of the dragon combination roll. Both pools are split by the same `dragon_allocate` answer, but
+step 9 doubles the ID share at a held eighth face, which would have doubled magic as if it were an
+ID. So a type that conversions would carry into two counted types is pooled
+(`pooledConversions`, beside `conversionsIn`) into the flexible pool, and the die draws its share.
+The allocation sheet called that pool "Create Fireminions" in three places; it says "flexible" now.
+Either pool lets the converted magic go to saves, which the spell does not say; that is written
+down as the simplification it is.
+
+**3. Mirage's log line had been inverted since Phase 7.** Fearful Flames' second roll is Mirage's
+roll, so `saveOrFlee` is shared now -- and the first browser game showed it reading "a save or die
+... none get away" over a die that had fled. Mirage wrote Seize's `toReserve`, whose escapees are
+the dice that move; Mirage's escapees are the ones that stay. No test had ever asserted Mirage's
+entry. A roll whose failures flee now carries `fate: 'flee'`, which is what the field means ("what
+failing costs, when it is not death"), and both clients say "a save or flee to reserves". No
+golden casts Mirage, so no digest moved.
+
+**4. A Wave rarely converts anything in random play: 4 times from 1006 casts in 1000 games.**
+It is cast by the army that holds the magic dice, during its own march, so that army has already
+acted; the Wave pays only when another army of the caster's attacks with magic faces showing, or
+the target counter-attacks. The counter is `'full'` with the numbers; the exchange tests drive the
+conversion in a melee, a missile and the dragon roll directly. Fearful Flames sends a die to
+Reserves 9 times in 200 games.
+
+**5. Greedy weighs the Wave's two rows as one choice** -- the better of melee and missile, never the
+sum -- and Fearful Flames as Firebolt's kill plus half a kill for the flight, Scent of Fear's price.
+The Lava Elves mirror exit check (8e) still finishes all forty games. Whether greedy re-casts the
+Wave every turn on a magic-heavy army is 8g's question, as planned.
+
+**Browser.** A Rakshasa mirror against greedy: the opponent cast Fearful Flames on a Rakshasa,
+which survived the damage and fled on a blank second roll, and the log read "Fearful Flames ·
+saves against 1 damage … Rakshasa survives" then "a save or flee to reserves … none save — all
+flee to reserves". No exception in the console.
+
+**Deliberately not done.** No preset, art or greedy re-run (8g). The `data/spells.json` comment and
+`src/data/spells.ts` header still say "eighteen spells"; both were stale before this slice.
 
 ### 8g — Presets, exit checks, art
 

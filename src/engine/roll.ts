@@ -448,6 +448,56 @@ export function conversionsIn(
   context: RollContext,
   modifiers: readonly Modifier[],
 ): readonly Conversion[] {
+  const all = everyConversion(kinds, context, modifiers)
+  const pooled = new Set(pooledFrom(all))
+  return all.filter((c) => !pooled.has(c.from))
+}
+
+/**
+ * A rolled type whose permissions land in **two** counted types (v2 Phase 8f): Necromantic
+ * Wave's magic "as melee or missile" in the dragon combination roll, which counts both.
+ * Converting it by every row would count each result twice, so it is the roller's choice
+ * instead -- step-8 results joining the flexible pool `dragon_allocate` already splits
+ * (`rollPools`), each typed by the answer. Every other roll counts one of the two, and
+ * `conversionsIn` converts it there as usual.
+ *
+ * The flexible pool, not the ID pool the plan named: both are split by the same answer,
+ * but step 9 doubles the ID share at a held eighth face, which would double magic that
+ * was never an ID.
+ */
+export interface PooledConversion {
+  readonly from: ConvertibleType
+  readonly species: ReadonlySet<string>
+}
+
+export function pooledConversions(
+  kinds: readonly ResultType[],
+  context: RollContext,
+  modifiers: readonly Modifier[],
+): readonly PooledConversion[] {
+  const all = everyConversion(kinds, context, modifiers)
+  return pooledFrom(all).map((from) => ({
+    from,
+    species: new Set(all.filter((c) => c.from === from).flatMap((c) => [...c.species])),
+  }))
+}
+
+/** The `from` types that automatic conversions carry into more than one counted type. */
+function pooledFrom(conversions: readonly Conversion[]): readonly ConvertibleType[] {
+  const targets = new Map<ConvertibleType, Set<ConvertibleType>>()
+  for (const c of conversions) {
+    if (c.chosen) continue
+    targets.set(c.from, (targets.get(c.from) ?? new Set()).add(c.to))
+  }
+  return [...targets].filter(([, to]) => to.size > 1).map(([from]) => from)
+}
+
+/** Every permission this roll applies, before a type landing twice is pooled. */
+function everyConversion(
+  kinds: readonly ResultType[],
+  context: RollContext,
+  modifiers: readonly Modifier[],
+): readonly Conversion[] {
   const out: Conversion[] = []
   for (const m of modifiers) {
     if (m.kind !== 'counts_as') continue
@@ -464,6 +514,21 @@ export function conversionsIn(
     else out.push(conversion)
   }
   return out
+}
+
+/** What a die rolled of the types a pooled conversion leaves to the roller (v2 Phase 8f). */
+function pooledOn(
+  pooled: readonly PooledConversion[],
+  die: RawDie,
+  face: Face,
+  contribution: Contribution,
+  ruleSet: RuleSet,
+): number {
+  const species = unitType(die.typeId).species
+  return pooled.reduce(
+    (sum, p) => sum + (p.species.has(species) ? rolledResults(face, contribution, p.from, ruleSet) : 0),
+    0,
+  )
 }
 
 /** Whether this die's results are among those a conversion moves. */
@@ -605,11 +670,12 @@ export function rollPools(
   // Only a trade has anything to choose. In a roll that does not count saves, every
   // rolled save converts and nobody is asked.
   const traded = conversionsIn(spec.kinds, spec.context, spec.modifiers).filter((c) => c.chosen)
+  const pooled = pooledConversions(spec.kinds, spec.context, spec.modifiers)
   for (const die of dice) {
     const face = faceOf(die)
     const contribution = classify(face, spec, ruleSet)
     ids += contribution.idPool
-    flexible += contribution.flexible
+    flexible += contribution.flexible + pooledOn(pooled, die, face, contribution, ruleSet)
     for (const conversion of traded) {
       if (convertsDie(conversion, die)) shields += rolledResults(face, contribution, conversion.from, ruleSet)
     }
@@ -671,6 +737,9 @@ export function resolveFaces(
   const effects: RollEffect[] = []
   let idPool = 0
   const conversions = conversionsIn(spec.kinds, spec.context, spec.modifiers)
+  // Pooled results reach the totals through the answer's flexible split (`saiResults`),
+  // so here they are only drawn on the die that rolled them.
+  const pooled = pooledConversions(spec.kinds, spec.context, spec.modifiers)
   // What each conversion found on the dice, in the order `conversionsIn` listed them.
   const found = conversions.map(() => 0)
 
@@ -679,7 +748,7 @@ export function resolveFaces(
     const contribution = classify(face, spec, ruleSet)
     // A conversion the roll makes on its own is drawn on the die that rolled it; a
     // trade is the owner's number, and is not any one die's.
-    let shownConverted = 0
+    let shownConverted = pooledOn(pooled, die, face, contribution, ruleSet)
     conversions.forEach((conversion, i) => {
       if (!convertsDie(conversion, die)) return
       const amount = rolledResults(face, contribution, conversion.from, ruleSet)

@@ -250,6 +250,12 @@ const RULES: Readonly<Record<string, Reach>> = {
   'effect:Illusion': 'every',
   volcanic_adaptation: 'every',
   cursed_bullets: 'every',
+  // The Lava Elves' spells (v2 Phase 8f), past being cast: a Wave converting a roll's
+  // magic, and a die fleeing Fearful Flames' second save. A Wave is cast by the army that
+  // holds the magic dice, which has already marched, so a random game rarely rolls a magic
+  // face into the melee or missile it reaches: 4 conversions from 1006 casts in 1000 games.
+  necromantic_wave: 'full',
+  fearful_flight: 'every',
   // Each of these is a branch random play reaches too rarely to rely on, so a named test
   // drives it: a Web dropped at a Reserve Army, an Illusion against a Tower's missile at
   // Reserves and against a volley, a curse that a volley cannot make, a Charm on a Charge.
@@ -373,6 +379,7 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
           if (entry.saveMath?.notes.some((note) => note.includes('Coastal Dodge'))) bump('coastal_dodge')
           if (entry.saveMath?.notes.some((note) => note.includes('Volcanic Adaptation'))) bump('volcanic_adaptation')
           if (entry.cursed !== undefined) bump('cursed_bullets')
+          if (entry.attackMath?.notes.some((note) => note.includes('Necromantic Wave'))) bump('necromantic_wave')
           if (entry.isCounter && entry.action === 'missile') bump('defensive_volley')
           if (entry.charge !== undefined) bump('charge')
           if (entry.isCounter && entry.attackMath?.notes.some((note) => note.includes('Dwarven Might'))) {
@@ -400,6 +407,7 @@ function tally(games: number): { counts: Map<string, number>; stuck: number; cap
           if (entry.source === 'Stomp' && entry.fate === 'bury') bump('stomp_burial')
           if (entry.source === 'Poison' && entry.fate === 'bury') bump('poison_burial')
           if (entry.source === 'Soiled Ground') bump('soiled_burial')
+          if (entry.source === 'Fearful Flames' && entry.fate === 'flee' && entry.escaped.length === 0) bump('fearful_flight')
           break
         case 'units_regenerated':
           bump(entry.unitIds.length > 0 ? 'regenerate:units' : 'regenerate:saves')

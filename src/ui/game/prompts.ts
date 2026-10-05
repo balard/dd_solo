@@ -569,7 +569,7 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
           `Your dragon roll counts melee, missile and save at once — split ` +
           [
             pending.ids > 0 ? `${pending.ids} ID` : '',
-            pending.flexible > 0 ? `${pending.flexible} Create Fireminions` : '',
+            pending.flexible > 0 ? `${pending.flexible} flexible (Create Fireminions, Necromantic Wave)` : '',
           ]
             .filter(Boolean)
             .join(' and ') +
@@ -591,7 +591,7 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
           `Charged! Your roll counts saves and melee at once — your melee hits the charging army. Split ` +
           [
             pending.ids > 0 ? `${pending.ids} ID` : '',
-            pending.flexible > 0 ? `${pending.flexible} Create Fireminions` : '',
+            pending.flexible > 0 ? `${pending.flexible} flexible (Create Fireminions, Necromantic Wave)` : '',
           ]
             .filter(Boolean)
             .join(' and ') +

@@ -233,15 +233,18 @@ the dice and the opponent.
 > has landed: Volcanic Adaptation (Coastal Dodge's row at fire) and Cursed Bullets (a missile at
 > its own terrain splits into a cursed pool only spell saves reduce, `cursedDamage` in
 > `combat.ts`), and with them **the Lava Elves are playable** -- five monster fixtures
-> (`lava_elves_*`), and every SAI and ability in the live fuzz. Five more species' faces sit in
-> `data/raw/` unimported.
+> (`lava_elves_*`), and every SAI and ability in the live fuzz. 8f has landed: Necromantic Wave
+> (the first "counts as" that is a spell -- magic as melee or missile, pooled for the roller in the
+> dragon roll, `pooledConversions`) and Fearful Flames (Firebolt's roll, then Mirage's: a blank
+> second save flees), and a fix to Mirage's log line, which had read its fleeing dice as staying
+> (`fate: 'flee'`). Five more species' faces sit in `data/raw/` unimported.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 7 landed; Lava Elves, Phase 8, under way: 8a-8e landed, 8f-8g planned). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 7 landed; Lava Elves, Phase 8, under way: 8a-8f landed, 8g planned). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
@@ -455,7 +458,7 @@ Goblins and Lava Elves)
 and 24 terrain dice (6 basic types × 4 eighth-face
 variants -- Coastland, Feyland and Flatland joined Swampland, Highland and Wasteland in Phase 5a),
 all passing validation, plus **10 dragon dice** (5 elements × drake/wyrm, 12 faces each, Phase 6)
-and **27 spells** (`data/spells.json`: the starter's 18 from Phase 7, then two per species from v2
+and **29 spells** (`data/spells.json`: the starter's 18 from Phase 7, then two per species from v2
 and five with the Goblins' death magic --
 hand-authored like `presets.json`, no importer
 touches it). Nothing is `TODO`: every die in scope is transcribed, and `npm run data` reports any

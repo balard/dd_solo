@@ -5,18 +5,20 @@
  * directly: the melee sub-roll Web and Charm will roll, the save-roll bench Charm will
  * fill, the hold fate Web will share with Net, the one targeting restriction Illusion
  * will write, and the "counts as" types Necromantic Wave and Volcanic Adaptation need.
- * 8c's three SAIs follow: Stone, Web and Cloak; then 8d's Charm and Illusion, and 8e's
- * two abilities, Volcanic Adaptation and Cursed Bullets.
+ * 8c's three SAIs follow: Stone, Web and Cloak; then 8d's Charm and Illusion, 8e's two
+ * abilities, Volcanic Adaptation and Cursed Bullets, and 8f's two spells, Necromantic
+ * Wave and Fearful Flames.
  *
  * Boards are hand-built: they were the only way to field a Lava Elf until the 8e flip,
  * and they still say exactly which die stands where.
  */
 import { describe, expect, it } from 'vitest'
 
-import { UNIT_TYPES, dragonFaceIcon, unitType } from '../data/load'
+import { SPECIES, UNIT_TYPES, dragonFaceIcon, unitType } from '../data/load'
 import { spell } from '../data/spells'
-import type { DragonFaceNumber } from '../data/types'
-import { expectedArmy, expectedAttack } from '../ai/estimate'
+import type { DragonFaceNumber, ResultType } from '../data/types'
+import { expectedArmy, expectedAttack, unitValue } from '../ai/estimate'
+import { spellValue } from '../ai/spells'
 
 import { cursedBulletsCap, cursedDamage, cursesAt, missileTargets, resolveAttack, volleyers } from './combat'
 import { armyRoll, isAsleep, shielded, spellSaveSources, type Effect } from './effects'
@@ -24,8 +26,18 @@ import { spellTargets } from './magic'
 import { maneuverAsSaves, type Modifier } from './pipeline'
 import { advance, reduce } from './reduce'
 import { rollDice, type RngState } from './rng'
-import { conversionsIn, expectNoEffects, resolveFaces, rollUnits, subRollContext, type RawDie } from './roll'
 import {
+  conversionsIn,
+  expectNoEffects,
+  pooledConversions,
+  resolveFaces,
+  rollPools,
+  rollUnits,
+  subRollContext,
+  type RawDie,
+} from './roll'
+import {
+  DRAGON_ROLL_KINDS,
   LIVE_SAIS,
   TARGETING_SAIS,
   heldWord,
@@ -34,7 +46,7 @@ import {
   type RollContext,
   type RollPurpose,
 } from './sai'
-import { castSpell } from './spells'
+import { castSpell, spellEffect } from './spells'
 import {
   SAI_RULES,
   V0_RULES,
@@ -1186,5 +1198,213 @@ describe('Cursed Bullets', () => {
     expect(cursed.damage).toBeGreaterThan(base.damage + 1)
     const across = expectedAttack(withDead(2, 'p1_home'), 'p1', 'p1_home', 'missile', 'frontier')
     expect(across.damage).toBeCloseTo(base.damage)
+  })
+})
+
+// --- 8f: Necromantic Wave, Fearful Flames ---------------------------------------------
+
+/** Warlock: `2 MELEE` at face 1, `4 MAGIC` at face 5. Oak: `2 MELEE` at face 1. */
+const WARLOCK = 'lava_elves.warlock'
+const WARLOCK_FOUR_MAGIC = 5
+
+describe('Necromantic Wave', () => {
+  /** A Wave on p1's army at the Frontier, as the spell writes it. */
+  const wave = (): Effect =>
+    spellEffect(spell('necromantic_wave'), {
+      caster: 'p1',
+      army: 'frontier',
+      element: 'death',
+      count: 1,
+      target: { kind: 'army', player: 'p1', army: 'frontier' },
+    })
+
+  it("is the Lava Elves' death spell, from Reserves, and not cumulative", () => {
+    expect(spell('necromantic_wave')).toMatchObject({
+      species: 'lava_elves',
+      element: 'death',
+      cost: 5,
+      target: 'own_army',
+      cumulative: false,
+      reserves: true,
+      cantrip: false,
+    })
+  })
+
+  it('writes magic as melee and as missile, for every species, on any roll', () => {
+    const species = SPECIES.map((s) => s.id)
+    expect(wave().modifiers).toEqual([
+      { kind: 'counts_as', from: 'magic', resultType: 'melee', counter: 'either', species },
+      { kind: 'counts_as', from: 'magic', resultType: 'missile', counter: 'either', species },
+    ])
+  })
+
+  /** p1's Warlock attacks with `action`, showing four magic; p2's two Oaks roll melee. */
+  const waved = (action: 'melee' | 'missile', effects: readonly Effect[]) =>
+    advance(
+      board([WARLOCK, { typeId: OAK, at: { kind: 'terrain', slot: 'p1_home' } }], [OAK, OAK, { typeId: OAK, at: { kind: 'terrain', slot: 'p2_home' } }], {
+        rng: rngShowing([WARLOCK, OAK, OAK], [WARLOCK_FOUR_MAGIC, OAK_MELEE, OAK_MELEE]),
+        effects,
+        turn: {
+          marchStep: 'resolve_attack',
+          marchingArmy: 'frontier',
+          armiesMarched: ['frontier'],
+          combat: { action, targetSlot: 'frontier', damage: 0 },
+        },
+      }),
+    )
+
+  it('counts a magic face in a melee attack, named on the line', () => {
+    const exchange = entries(waved('melee', [wave()]), 'combat_resolved')[0]
+    expect(exchange).toMatchObject({ action: 'melee', attackTotal: 4, saveTotal: 0, damage: 4 })
+    expect(exchange?.attackMath?.notes).toEqual(['4 magic counted as melee (Necromantic Wave)'])
+    // Without it the same face is a blank: no melee, and so no save roll either.
+    expect(entries(waved('melee', []), 'combat_resolved')[0]).toMatchObject({ attackTotal: 0, saveTotal: null })
+  })
+
+  it('counts it in a missile attack too, once', () => {
+    const exchange = entries(waved('missile', [wave()]), 'combat_resolved')[0]
+    expect(exchange).toMatchObject({ action: 'missile', attackTotal: 4 })
+    expect(exchange?.attackMath?.notes).toEqual(['4 magic counted as missile (Necromantic Wave)'])
+  })
+
+  it('applies on a counter-attack, and never to a roll that counts magic itself', () => {
+    const { modifiers } = armyRoll(board([WARLOCK], [OAK], { effects: [wave()] }), 'p1', 'frontier', 'melee')
+    const counter: RollContext = { purpose: MELEE, isCounter: true }
+    expect(conversionsIn(['melee'], counter, modifiers).map((c) => [c.from, c.to])).toEqual([['magic', 'melee']])
+    expect(conversionsIn(['magic'], ctx(MAGIC), modifiers)).toEqual([])
+    // A save roll counts neither melee nor missile. (A Highland: the Warlock's own
+    // Volcanic Adaptation converts there, and is not this.)
+    const magicIn = (kinds: readonly ResultType[], context: RollContext) =>
+      conversionsIn(kinds, context, modifiers).filter((c) => c.from === 'magic')
+    expect(magicIn(['save'], ctx(saveVs('melee')))).toEqual([])
+  })
+
+  it("leaves Cantrip's magic alone: it is not a magic result to spend on anything else", () => {
+    const state = board([LURKER], [OAK], { effects: [wave()] })
+    const { modifiers } = armyRoll(state, 'p1', 'frontier', 'melee')
+    const dice: RawDie[] = [{ unitId: 'p1:0', typeId: LURKER, faceIndex: faceOf(LURKER, 'SAI:Cantrip') }]
+    expect(resolveFaces(dice, { kinds: ['melee'], modifiers, context: ctx(MELEE) }, RULES).totals.melee).toBe(0)
+  })
+
+  it('pools magic for the roller in the dragon roll, which counts melee and missile both', () => {
+    // Converting by both rows would count the four magic twice; it joins the flexible pool
+    // `dragon_allocate` splits instead, and each result counts once, where it is put.
+    const state = board([WARLOCK], [OAK], { effects: [wave()] })
+    const { modifiers } = armyRoll(state, 'p1', 'frontier', 'melee')
+    const context = ctx(DRAGON)
+    // (A Highland: Volcanic Adaptation's maneuver-as-saves still converts, and is not this.)
+    expect(conversionsIn(DRAGON_ROLL_KINDS, context, modifiers).filter((c) => c.from === 'magic')).toEqual([])
+    expect(pooledConversions(DRAGON_ROLL_KINDS, context, modifiers).map((p) => p.from)).toEqual(['magic'])
+
+    const dice: RawDie[] = [{ unitId: 'p1:0', typeId: WARLOCK, faceIndex: WARLOCK_FOUR_MAGIC }]
+    const base = { kinds: DRAGON_ROLL_KINDS, modifiers, context, idAllocation: { melee: 0, missile: 0, save: 0 } }
+    expect(rollPools(dice, base, RULES)).toMatchObject({ ids: 0, flexible: 4 })
+    const split = resolveFaces(dice, { ...base, saiResults: { melee: 1, missile: 3 } }, RULES)
+    expect(split.totals).toEqual({ melee: 1, missile: 3, save: 0 })
+    // The die is drawn with its four, not as a blank beside a pool it fed.
+    expect(split.dice[0]?.results).toBe(4)
+  })
+
+  it("is priced as the army's expected magic, moved into the attack it will roll", () => {
+    // A Warlock in a melee attack: 2 + 2 + 4 magic over six faces, so 4/3 more melee.
+    const state = board([WARLOCK], [OAK])
+    const before = expectedArmy(state, 'p1', 'frontier', 'melee').total
+    const after = expectedArmy({ ...state, effects: [wave()] }, 'p1', 'frontier', 'melee').total
+    expect(after - before).toBeCloseTo(8 / 6)
+    const target = { kind: 'army', player: 'p1', army: 'frontier' } as const
+    // Two rows, one choice: worth the better of melee and missile, never the sum.
+    const worth = spellValue(state, 'p1', 'frontier', spell('necromantic_wave'), target, 1)
+    expect(worth).toBeGreaterThan(0)
+    expect(worth).toBeCloseTo((8 / 6) * 0.6)
+  })
+})
+
+describe('Fearful Flames', () => {
+  /** `count` castings on p2's first die, which shows `faces` in its rolls. */
+  const flames = (
+    target: string | Die,
+    faces: readonly number[],
+    count = 1,
+    effects: readonly Effect[] = [],
+  ): GameState => {
+    const typeId = typeof target === 'string' ? target : target.typeId
+    return castSpell(
+      board([WATCHER], [target, OAK], { rng: rngShowing(faces.map(() => typeId), faces), effects }),
+      spell('fearful_flames'),
+      { caster: 'p1', army: 'frontier', element: 'fire', count, target: { kind: 'units', unitIds: ['p2:0'] } },
+    ).state
+  }
+
+  it("is the Lava Elves' fire spell, cumulative, at an opposing unit", () => {
+    expect(spell('fearful_flames')).toMatchObject({
+      species: 'lava_elves',
+      element: 'fire',
+      cost: 3,
+      target: 'opposing_unit',
+      cumulative: true,
+      reserves: false,
+      cantrip: false,
+    })
+  })
+
+  it('sends a die that survives the damage and then rolls no save to its Reserve Area', () => {
+    // One point never kills a 2-health Oak, so it always rolls the second save.
+    const state = flames(OAK, [OAK_MELEE, OAK_MELEE])
+    expect(entries(state, 'sai_sub_roll')).toMatchObject([
+      { source: 'Fearful Flames', damage: 1, escaped: ['p2:0'] },
+      { source: 'Fearful Flames', test: 'save', escaped: [], fate: 'flee' },
+    ])
+    expect(state.units['p2:0']?.location).toEqual({ kind: 'reserve' })
+    expect(entries(state, 'units_killed')).toEqual([])
+    expect(validateState(state)).toEqual([])
+  })
+
+  it('keeps a die that rolls a save the second time', () => {
+    const state = flames(OAK, [OAK_MELEE, OAK_SAVE])
+    expect(entries(state, 'sai_sub_roll')[1]).toMatchObject({ escaped: ['p2:0'] })
+    expect(state.units['p2:0']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+  })
+
+  it('asks nothing more of a die the damage killed', () => {
+    const state = flames(OAK, [OAK_MELEE], 2)
+    expect(entries(state, 'sai_sub_roll')).toHaveLength(1)
+    expect(state.units['p2:0']?.location).toEqual({ kind: 'dua' })
+  })
+
+  it('rolls no second save for a die in Reserves, which has nowhere to flee', () => {
+    const state = flames({ typeId: OAK, at: { kind: 'reserve' } }, [OAK_MELEE])
+    expect(entries(state, 'sai_sub_roll')).toMatchObject([{ damage: 1, escaped: ['p2:0'] }])
+    expect(state.units['p2:0']?.location).toEqual({ kind: 'reserve' })
+    expect(state.rng.counter).toBe(rngShowing([OAK], [OAK_MELEE]).counter + 1)
+  })
+
+  it('moves a die that cannot be rolled: it saves nothing, and flees (Roar\'s ruling)', () => {
+    const asleep: Effect = {
+      source: 'Sleep',
+      target: { kind: 'unit', unitId: 'p2:0' },
+      modifiers: [],
+      asleep: true,
+      expiresAtStartOfTurnOf: 'p1',
+    }
+    const state = flames(OAK, [], 1, [asleep])
+    expect(entries(state, 'sai_sub_roll')).toMatchObject([
+      { damage: 1, dice: [], escaped: ['p2:0'] },
+      { dice: [], fate: 'flee' },
+    ])
+    expect(state.units['p2:0']?.location).toEqual({ kind: 'reserve' })
+  })
+
+  it("is a save sub-roll the second time, so an individual Cloak's saves keep the die", () => {
+    const state = flames(LURKER, [faceOf(LURKER, 'MANEUVER'), faceOf(LURKER, 'SAI:Cloak')])
+    expect(entries(state, 'sai_sub_roll')[1]).toMatchObject({ escaped: ['p2:0'] })
+    expect(state.units['p2:0']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+  })
+
+  it('is priced as the kill, and half the flight of a die that survives it', () => {
+    const state = board([WATCHER], [OAK])
+    const target = { kind: 'units', unitIds: ['p2:0'] } as const
+    // One casting never kills an Oak; it flees on its four melee faces in six, half a kill.
+    const worth = spellValue(state, 'p1', 'frontier', spell('fearful_flames'), target, 1)
+    expect(worth).toBeCloseTo((unitValue(OAK, RULES) * (4 / 6)) / 2)
   })
 })

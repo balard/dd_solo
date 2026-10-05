@@ -1345,3 +1345,34 @@ player's DUA -- not their health -- up to three per 24 health of that player's f
   only the Coral Elves throw it ("Coral Elves units may counter-attack"), so no Lava Elf's missile
   is ever in one. The plan expected a mixed army to curse its volley; the volley's own rule says
   otherwise.
+
+### The spells (8f)
+
+| Spell | Element, species | What it does here |
+|---|---|---|
+| **Necromantic Wave** | death 5, Lava Elves, R | On one of your armies until your next turn: every die in it, of any species, counts its rolled magic results as melee in a melee roll and as missile in a missile roll -- a counter-attack's included. Not cumulative. |
+| **Fearful Flames** | fire 3, Lava Elves, cumulative | One damage a casting on an opposing unit, which rolls saves against it (Firebolt's roll). If it survives, a second save roll: no save result, and it flees to its Reserve Area. |
+
+House rules (owner-approved with the plan):
+
+- **In a roll counting both melee and missile -- the dragon combination roll -- a Wave's magic is
+  the roller's to type.** Converting it by both rows would count each result twice. It joins the
+  flexible pool `dragon_allocate` already splits, beside Create Fireminions' results. The plan named
+  the ID pool; the flexible pool is the same question without the eighth face's doubling, which
+  belongs to ID results and not to magic.
+  - That pool may also be put on saves, as an ID may: the allocation sheet has no third pool. A
+    simplification, noted rather than built.
+- **Cantrip's magic does not convert.** Only a magic icon's count does; Cantrip's results in any roll
+  but a magic action are an effect for Cantrip spells, never magic results.
+- **"Saves against the damage" means survives it**, so a die with more health than the castings
+  always rolls the second save.
+- **A target in Reserves rolls no second save**, and draws nothing: it has nowhere to flee.
+- **Fleeing is Mirage's roll and Roar's ruling**: moved, not killed, so no death trigger fires, and a
+  die that cannot be rolled saves nothing and flees -- the spell moves it, it does not ask it to.
+- The second roll is a save sub-roll, so Net's and Cloak's individual saves reach it (section 19's
+  rule).
+
+**Mirage's log line was inverted** (a fix, 8f). It wrote Seize's `toReserve`, which means the dice
+that *escaped* went to Reserves, so a Mirage read "none get away" over a die that had fled and
+"escapes to reserves" over one that stayed. A roll whose failures flee now carries `fate: 'flee'`,
+and both clients read it: "a save or flee to reserves", "none save — all flee to reserves".

@@ -471,6 +471,47 @@
       "handler": "scent_of_fear"
     },
     {
+      "id": "necromantic_wave",
+      "name": "Necromantic Wave",
+      "element": "death",
+      "cost": 5,
+      "species": "lava_elves",
+      "target": "own_army",
+      "cumulative": false,
+      "reserves": true,
+      "cantrip": false,
+      "text": "Target any army. All units in the target army may count magic results as if they were melee or missile results until the beginning of your next turn.",
+      "effect": {
+        "scope": "army",
+        "modifiers": [
+          {
+            "kind": "counts_as",
+            "from": "magic",
+            "resultType": "melee"
+          },
+          {
+            "kind": "counts_as",
+            "from": "magic",
+            "resultType": "missile"
+          }
+        ],
+        "duration": "caster_next_turn"
+      }
+    },
+    {
+      "id": "fearful_flames",
+      "name": "Fearful Flames",
+      "element": "fire",
+      "cost": 3,
+      "species": "lava_elves",
+      "target": "opposing_unit",
+      "cumulative": true,
+      "reserves": false,
+      "cantrip": false,
+      "text": "Target any opposing unit. Inflict one point of damage on the target. If the target unit saves against the damage, it makes a second save roll. Unless the target unit gets a save result, it flees to reserves.",
+      "handler": "fearful_flames"
+    },
+    {
       "id": "resurrect_dead",
       "name": "Resurrect Dead",
       "element": "elemental",

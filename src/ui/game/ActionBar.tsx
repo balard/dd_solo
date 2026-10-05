@@ -406,7 +406,7 @@ function Sheet({
     const KINDS = pending.kind === 'dragon_allocate' ? DRAGON_ROLL_KINDS : CHARGE_ROLL_KINDS
     const pools = [
       { key: 'ids', label: 'ID results', total: pending.ids },
-      { key: 'flexible', label: 'Create Fireminions', total: pending.flexible },
+      { key: 'flexible', label: 'Flexible results', total: pending.flexible },
     ].filter((pool) => pool.total > 0)
 
     const spent = (poolKey: string) =>

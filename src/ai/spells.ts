@@ -18,6 +18,7 @@ import { unitType } from '../data/load'
 import type { Element, ResultType } from '../data/types'
 import { spellResultTypes, type Spell } from '../data/spells'
 import { missileTargets } from '../engine/combat'
+import { defaultContextFor } from '../engine/roll'
 import {
   announcementProblem,
   elementsFor,
@@ -43,7 +44,7 @@ import {
   type UnitInstance,
 } from '../engine/types'
 
-import { expectedArmy, expectedFace, expectedMagicBySpecies, killValue, unitValue } from './estimate'
+import { expectedArmy, expectedDie, expectedFace, expectedMagicBySpecies, killValue, unitValue } from './estimate'
 
 /** Below this a casting is noise, and a player told to be active still should not
  *  spend a turn's magic on it. */
@@ -160,7 +161,16 @@ function effectValue(state: GameState, caster: PlayerId, s: Spell, target: Spell
   if (effect === undefined) return 0
   let value = 0
 
+  // Necromantic Wave (v2 Phase 8f): rows of one `from` type are one choice -- the army
+  // uses whichever its next roll counts -- so they are worth the best of them, never the sum.
+  const converts = new Map<ResultType, number>()
+
   for (const m of effect.modifiers) {
+    if (m.kind === 'counts_as' && m.from !== undefined && effect.scope === 'army' && target.kind === 'army') {
+      const worth = conversionOn(state, caster, target.player, target.army, m.from, m.resultType as ResultType)
+      converts.set(m.from, Math.max(converts.get(m.from) ?? -Infinity, worth))
+      continue
+    }
     if (m.kind !== 'add' && m.kind !== 'subtract') continue
     const amount = (m.amount ?? 0) * count
     const types = spellResultTypes(m.resultType)
@@ -187,7 +197,29 @@ function effectValue(state: GameState, caster: PlayerId, s: Spell, target: Spell
       }
     }
   }
+  for (const worth of converts.values()) value += worth
   return value
+}
+
+/**
+ * A "counts as" on one army (v2 Phase 8f): the `from` results its dice are expected to
+ * roll in a `to` roll -- magic faces in a melee attack, which count nothing until the
+ * spell moves them -- priced as that many `to` results. The army's expected magic, moved
+ * into the type it will roll next.
+ */
+function conversionOn(
+  state: GameState,
+  caster: PlayerId,
+  owner: PlayerId,
+  ref: ArmyRef,
+  from: ResultType,
+  to: ResultType,
+): number {
+  const rolled = armyHere(state, owner, ref).reduce(
+    (sum, unit) => sum + expectedDie(unit.typeId, to, defaultContextFor(to), state.ruleSet).rolled[from],
+    0,
+  )
+  return (owner === caster ? 1 : -1) * rolled * weight(state, caster, owner, ref, to)
 }
 
 type HandlerScore = (state: GameState, caster: PlayerId, casterRef: ArmyRef, target: SpellTarget, count: number) => number
@@ -214,6 +246,17 @@ const HANDLER_VALUE: Readonly<Record<string, HandlerScore>> = {
     unitsOf(state, target)
       .filter((unit) => unit.owner !== caster)
       .reduce((total, unit) => total + unitValue(unit.typeId, state.ruleSet) * diesTo(state, unit.typeId, count), 0),
+
+  // Fearful Flames (v2 Phase 8f): Firebolt's kill, and a die that survives it flees on a
+  // blank second save -- a displacement, half a kill, as Scent of Fear prices one.
+  fearful_flames: (state, caster, _ref, target, count) =>
+    unitsOf(state, target)
+      .filter((unit) => unit.owner !== caster)
+      .reduce((total, unit) => {
+        const dies = diesTo(state, unit.typeId, count)
+        const flees = unit.location.kind === 'terrain' ? (1 - dies) * failsSave(state, unit.typeId) : 0
+        return total + unitValue(unit.typeId, state.ruleSet) * (dies + flees / 2)
+      }, 0),
 
   // Finger of Death (v2 Phase 7e): no save, so certain -- once the castings reach the
   // die's health, which the offer's `minCount` already guarantees.

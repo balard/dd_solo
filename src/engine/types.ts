@@ -1702,7 +1702,8 @@ export type LogEntry =
       /** The ones that made it. The rest are the `units_killed` entry that follows. */
       readonly escaped: readonly UnitId[]
       /** Seize: the escapees went to their Reserve Area rather than staying put.
-       *  Omitted otherwise, like every other optional field in the log. */
+       *  Omitted otherwise, like every other optional field in the log. Never a roll
+       *  whose *failures* go there -- that is `fate: 'flee'`. */
       readonly toReserve?: true
       /**
        * What failing costs, when it is not death: Dragon Fire's dice are already dead,
@@ -1710,8 +1711,11 @@ export type LogEntry =
        * stands -- Net's as `'asleep'`, named by `source` (`heldWord`). Omitted means "or die".
        * `'charm'` (v2 Phase 8d) is no stake at all: the dice rolled melee for the enemy,
        * `given` is what it came to, and `escaped` is empty.
+       * `'flee'` (v2 Phase 8f) is Mirage's and Fearful Flames' second roll: a failure goes
+       * to its Reserve Area. Mirage wrote Seize's `toReserve` until then, whose escapees
+       * are the ones that move, so its line read "none get away" over dice that fled.
        */
-      readonly fate?: 'bury' | 'asleep' | 'stun' | 'charm'
+      readonly fate?: 'bury' | 'asleep' | 'stun' | 'charm' | 'flee'
       /** Charm: the melee the dice gave the attack. Present exactly when `fate` is `'charm'`. */
       readonly given?: number
       /**

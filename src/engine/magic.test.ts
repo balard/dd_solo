@@ -67,25 +67,27 @@ const pool = (over: Partial<MagicPool> = {}): MagicPool => ({
 
 describe('the spell data', () => {
   it('holds exactly the spells the species in the data can cast', () => {
-    expect(SPELLS).toHaveLength(27)
+    expect(SPELLS).toHaveLength(29)
     // Four per element plus the two Elemental (full rules pp. 46-51), the Coral Elves'
     // air and water spell (v2 Phase 5e), the Dwarves' earth and fire (v2 Phase 6g), and
     // the Goblins' four death spells and earth one (v2 Phase 7e: Palsy, Finger of Death
-    // and Soiled Ground for any death caster, Decay and Scent of Fear their own).
+    // and Soiled Ground for any death caster, Decay and Scent of Fear their own), and the
+    // Lava Elves' death and fire spell (v2 Phase 8f: Necromantic Wave, Fearful Flames).
     // Another entry means a spell belonging to a species nobody has imported slipped in.
     const count = (element: string) => SPELLS.filter((s) => s.element === element).length
     expect([count('air'), count('water'), count('earth'), count('fire'), count('death'), count('elemental')]).toEqual([
-      5, 5, 6, 5, 4, 2,
+      5, 5, 6, 6, 5, 2,
     ])
   })
 
-  it('records the three non-cumulative spells, which no extraction could tell us', () => {
+  it('records the four non-cumulative spells, which no extraction could tell us', () => {
     // The rulebook prints the combinable number in red and text extraction drops the
     // colour, so `cumulative` is transcribed by eye and is the field most likely to
-    // be wrong. These three are the whole of the exception: Soiled Ground prints no
-    // number in red at all (v2 Phase 7e, checked with PyMuPDF on p. 82).
+    // be wrong. These four are the whole of the exception: Soiled Ground prints no
+    // number in red at all (v2 Phase 7e, checked with PyMuPDF on p. 82), and nor does
+    // Necromantic Wave (v2 Phase 8f, p. 84) -- it has no number to scale.
     const flat = SPELLS.filter((s) => !s.cumulative).map((s) => s.id).sort()
-    expect(flat).toEqual(['accelerated_growth', 'lightning_strike', 'soiled_ground'])
+    expect(flat).toEqual(['accelerated_growth', 'lightning_strike', 'necromantic_wave', 'soiled_ground'])
   })
 
   it('records the R and C columns', () => {
@@ -93,6 +95,8 @@ describe('the spell data', () => {
       'accelerated_growth',
       'fiery_weapon',
       'flashfire',
+      // v2 Phase 8f: the R column's X on p. 84.
+      'necromantic_wave',
       'path',
       'resurrect_dead',
       'stone_skin',
@@ -115,7 +119,7 @@ describe('the spell data', () => {
     for (const s of SPELLS) expect(s.text.trim().length).toBeGreaterThan(20)
   })
 
-  it('gives the ten species spells to their five species', () => {
+  it('gives the twelve species spells to their six species', () => {
     const byId = (id: string) => spell(id).species
     expect(byId('mirage')).toBe('firewalkers')
     expect(byId('flashfire')).toBe('firewalkers')
@@ -127,7 +131,9 @@ describe('the spell data', () => {
     expect(byId('higher_ground')).toBe('dwarves')
     expect(byId('decay')).toBe('goblins')
     expect(byId('scent_of_fear')).toBe('goblins')
-    expect(SPELLS.filter((s) => s.species !== 'any')).toHaveLength(10)
+    expect(byId('necromantic_wave')).toBe('lava_elves')
+    expect(byId('fearful_flames')).toBe('lava_elves')
+    expect(SPELLS.filter((s) => s.species !== 'any')).toHaveLength(12)
   })
 
   it('lets an Elemental spell take any element and a single-element spell only its own', () => {
@@ -613,7 +619,12 @@ describe('the sub-roll spells', () => {
     // Whatever the die did, it is never dead: Mirage moves, it does not kill.
     expect(moved.location.kind).not.toBe('dua')
     expect(out.state.log.some((e) => e.kind === 'units_killed')).toBe(false)
-    expect(out.state.log.some((e) => e.kind === 'sai_sub_roll' && e.source === 'Mirage')).toBe(true)
+    // The stake is fleeing, and `escaped` is who stayed (v2 Phase 8f). It wrote Seize's
+    // `toReserve` until then -- whose escapees are the ones that move -- so the line read
+    // "none get away" over a die that had fled.
+    const roll = out.state.log.find((e) => e.kind === 'sai_sub_roll' && e.source === 'Mirage')
+    expect(roll).toMatchObject({ fate: 'flee', escaped: moved.location.kind === 'terrain' ? [victim.id] : [] })
+    expect(roll).not.toHaveProperty('toReserve')
   })
 
   it('kills what a Lightning Strike beats, through the death trigger', () => {

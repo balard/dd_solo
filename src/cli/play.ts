@@ -407,6 +407,10 @@ function describe(entry: LogEntry, state: GameState): string | null {
           ? entry.escaped.length === 0
             ? 'none save, all buried'
             : `${who} save${one} and stay${one} in the DUA`
+          : entry.fate === 'flee'
+            ? entry.escaped.length === 0
+              ? 'none save, all flee to reserves'
+              : `${who} save${one} and stay${one}`
           : entry.escaped.length === 0
             ? 'none get away'
             : entry.toReserve === true
@@ -421,7 +425,9 @@ function describe(entry: LogEntry, state: GameState): string | null {
               ? 'be stunned'
               : entry.fate === 'charm'
                 ? 'roll for the enemy'
-                : 'die'
+                : entry.fate === 'flee'
+                  ? 'flee to reserves'
+                  : 'die'
       // Charm (v2 Phase 8d): no stake -- the dice rolled melee for the enemy.
       if (entry.fate === 'charm') {
         return yellow(
@@ -1305,7 +1311,7 @@ async function askDragonAllocate(pending: Pending): Promise<GameAction> {
     ),
   )
   const ids = await split(pending.ids, 'ID results')
-  const flexible = await split(pending.flexible, 'Create Fireminions results')
+  const flexible = await split(pending.flexible, 'flexible results (Create Fireminions, Necromantic Wave)')
   const shields = pending.shields ?? 0
   if (shields === 0) return { kind: pending.kind, ids, flexible }
 

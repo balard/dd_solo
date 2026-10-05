@@ -61,8 +61,11 @@ describe('the spell scorer', () => {
         expect(SCORED_HANDLERS, s.id).toContain(s.handler)
       } else {
         expect(s.effect, `${s.id} has neither an effect nor a handler`).toBeDefined()
-        const scored = (s.effect?.modifiers ?? []).some((m) => m.kind === 'add' || m.kind === 'subtract')
-        expect(scored, `${s.id}'s effect has no add or subtract to weigh`).toBe(true)
+        // A "counts as" is weighed too (v2 Phase 8f, `conversionOn`).
+        const scored = (s.effect?.modifiers ?? []).some(
+          (m) => m.kind === 'add' || m.kind === 'subtract' || m.kind === 'counts_as',
+        )
+        expect(scored, `${s.id}'s effect has nothing to weigh`).toBe(true)
       }
     }
   })

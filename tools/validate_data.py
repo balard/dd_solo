@@ -220,7 +220,10 @@ SPELL_TARGETS = {
     "own_dua", "dua",
 }
 RESULT_TYPES = {"melee", "missile", "magic", "save", "maneuver", "*", "non_maneuver"}
-MODIFIER_KINDS = {"add", "subtract", "divide", "multiply", "ignore_ids"}
+MODIFIER_KINDS = {"add", "subtract", "divide", "multiply", "ignore_ids", "counts_as"}
+# A "counts as" moves one rolled type into another (v2 Phase 8f, Necromantic Wave): both
+# ends are plain types, never a wildcard.
+CONVERTIBLE_TYPES = {"melee", "missile", "magic", "save", "maneuver"}
 SPELL_ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
@@ -276,13 +279,21 @@ def check_spells():
                     err(f"spell {sid}: unknown modifier kind {m['kind']}")
                 if m["resultType"] not in RESULT_TYPES:
                     err(f"spell {sid}: unknown result type {m['resultType']}")
+                if m["kind"] == "counts_as":
+                    if m.get("from") not in CONVERTIBLE_TYPES or m["resultType"] not in CONVERTIBLE_TYPES:
+                        err(f"spell {sid}: a counts_as names two plain result types")
+                    elif m["from"] == m["resultType"]:
+                        err(f"spell {sid}: a counts_as from {m['from']} to itself")
+                elif "from" in m:
+                    err(f"spell {sid}: only a counts_as names a from type")
 
     # A species spell belongs to an imported species -- checked above against units.json,
-    # which is what tools/species.py puts there. Twenty-two spells: the starter set's
-    # eighteen, the Coral Elves' two (v2 Phase 5e) and the Dwarves' two (v2 Phase 6g); a
-    # later species' phase moves this number.
-    if len(doc["spells"]) != 27:
-        err(f"expected 27 spells in scope, found {len(doc['spells'])}")
+    # which is what tools/species.py puts there. Twenty-nine spells: the starter set's
+    # eighteen, the Coral Elves' two (v2 Phase 5e), the Dwarves' two (v2 Phase 6g), the
+    # Goblins' five with death magic (v2 Phase 7e) and the Lava Elves' two (v2 Phase 8f);
+    # a later species' phase moves this number.
+    if len(doc["spells"]) != 29:
+        err(f"expected 29 spells in scope, found {len(doc['spells'])}")
 
 
 def main():

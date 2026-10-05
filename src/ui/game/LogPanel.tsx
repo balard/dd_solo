@@ -66,6 +66,8 @@ const stakeOf = (fate: Extract<LogEntry, { kind: 'sai_sub_roll' }>['fate'], sour
       return 'be stunned'
     case 'charm':
       return 'roll for the enemy'
+    case 'flee':
+      return 'flee to reserves'
     case undefined:
       return 'die'
   }
@@ -416,6 +418,15 @@ export function LogLine({
                 <>
                   {names(entry.escaped)} {entry.escaped.length === 1 ? 'saves and stays' : 'save and stay'} in the
                   DUA
+                </>
+              )
+            ) : entry.fate === 'flee' ? (
+              // Mirage and Fearful Flames (v2 Phase 8f): the ones that saved stay put.
+              entry.escaped.length === 0 ? (
+                <span className="muted">none save — all flee to reserves</span>
+              ) : (
+                <>
+                  {names(entry.escaped)} {entry.escaped.length === 1 ? 'saves and stays' : 'save and stay'}
                 </>
               )
             ) : entry.escaped.length === 0 ? (
