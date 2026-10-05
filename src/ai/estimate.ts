@@ -173,6 +173,10 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
       case 'charge':
         charge = 1
         break
+      // Cloak (v2 Phase 8c): this roll's X saves are already in `results`. The effect is
+      // the same X on save rolls still to come, which no single roll's estimate prices.
+      case 'cloak':
+        break
       // Exhaustive, so an effect kind a later species adds is a build error here
       // rather than a face greedy silently prices at nothing (v2 Phase 6d).
       default:

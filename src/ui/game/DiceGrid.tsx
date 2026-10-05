@@ -187,7 +187,7 @@ export function DiceGrid({
         const what = count > 1 ? `${count} × ${describe(type)}` : describe(type)
         const status = glare?.get(unit.id)
         const label = isAsleep
-          ? `${what} — ${status === 'netted' ? 'netted' : 'asleep'}`
+          ? `${what} — ${status === 'netted' || status === 'webbed' ? status : 'asleep'}`
           : status === 'stunned'
             ? `${what} — stunned, sits out its army's rolls`
             : status === 'hypnotized'
@@ -382,6 +382,9 @@ export function effectSummary(effects: readonly RollEffectBody[], sai: string): 
                 default:
                   return `${effect.health} health-worth must maneuver or die`
               }
+            case 'melee':
+              // Web (v2 Phase 8c): a melee or be held, the only melee escape there is.
+              return `${effect.health} health-worth must roll melee or be ${heldWord(sai)}`
             case 'id':
               // Swallow's one die stays and dies unless it shows its ID; Seize's
               // health-worth goes home on one.
@@ -416,6 +419,8 @@ export function effectSummary(effects: readonly RollEffectBody[], sai: string): 
           return 'the dragon that did the most takes it back, and you save as much'
         case 'charge':
           return 'a charge: maneuver counts as melee, and they answer with saves and melee'
+        case 'cloak':
+          return `+${effect.saves} save to this army until your next turn`
       }
     })
     .join('; ')

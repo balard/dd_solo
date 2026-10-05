@@ -225,14 +225,17 @@ the dice and the opponent.
 > moved -- a melee sub-roll whose effects `saiEffects` drops (`subRollContext`), the bench on the
 > save roll (`combat.benched`, which needed no code), the hold fate renamed `'asleep'` with its word
 > from the SAI (`heldWord`), one targeting restriction (`shielded`, which the Temple folds into),
-> and "counts as" between any two types. Five more species' faces sit in `data/raw/` unimported.
+> and "counts as" between any two types. 8c has landed: Stone (Smite on melee and missile), Web
+> (Net's hold on a melee roll) and Cloak (X saves now, +X on later save rolls, written by every
+> army save roll through `castCloaks`) -- `RULES-V0.md` section 20. Five more species' faces sit
+> in `data/raw/` unimported.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 7 landed; Lava Elves, Phase 8, under way: 8a-8b landed, 8c-8g planned). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 7 landed; Lava Elves, Phase 8, under way: 8a-8c landed, 8d-8g planned). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |

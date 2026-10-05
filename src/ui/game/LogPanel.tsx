@@ -360,7 +360,7 @@ export function LogLine({
           })
           .join(', ')
       const asked =
-        entry.test === 'id' ? 'an ID icon' : entry.test === 'save' ? 'a save' : 'a maneuver'
+        entry.test === 'id' ? 'an ID icon' : entry.test === 'save' ? 'a save' : entry.test === 'melee' ? 'a melee' : 'a maneuver'
 
       // A damage sub-roll (v2 Phase 6d: Bash, and Firebolt in 6g): not "any save gets
       // away" but saves against a number, so it says the number.

@@ -21,6 +21,7 @@ import {
 import { growthPartners, promotionGain } from '../../engine/dua'
 import { ALL_RESULT_TYPES, type Modifier } from '../../engine/pipeline'
 import { isAsleep, isGlaring, isHypnotized, isStunned, type Effect } from '../../engine/effects'
+import { heldWord } from '../../engine/sai'
 import { legalDirections, rollsOnTheTable, type TableRoll } from '../../engine/turn'
 import {
   TERRAIN_SLOTS,
@@ -1259,8 +1260,8 @@ export function effectsOnArmy(
   const glare = dieStatuses(state)
   for (const unit of armyAt(state, player, slot)) {
     const status = glare.get(unit.id)
-    // A netted die is asleep, and was counted with the sleepers above.
-    if (status === undefined || status === 'netted') continue
+    // A netted or webbed die is asleep, and was counted with the sleepers above.
+    if (status === undefined || isHeld(status)) continue
     if (status === 'stunned') {
       const stun = state.effects.find(
         (e) => e.target.kind === 'unit' && e.target.unitId === unit.id && e.stunned === true,
@@ -1758,15 +1759,21 @@ function describeTerrainEffect(effect: Effect): string {
  * -- each may still be picked to move -- so they are a label and a look, never a reason
  * a die cannot be selected. That is `sleepingIds`' job alone.
  *
- * `'netted'` is the one that *is* asleep: Net writes Sleep's status under its own name
- * (`holdUnits`), so `sleepingIds` already locks the die and this only renames it.
+ * `'netted'` and `'webbed'` (v2 Phase 8c) are the ones that *are* asleep: Net and Web
+ * write Sleep's status under their own names (`holdUnits`), so `sleepingIds` already
+ * locks the die and this only renames it -- by `heldWord`, the engine's one word for it.
  */
-export type DieStatus = 'hypnotized' | 'glaring' | 'stunned' | 'netted'
+export type DieStatus = 'hypnotized' | 'glaring' | 'stunned' | 'netted' | 'webbed'
+
+/** The asleep statuses that are a hold rather than Sleep itself. */
+const isHeld = (status: DieStatus): status is 'netted' | 'webbed' =>
+  status === 'netted' || status === 'webbed'
 
 export function dieStatuses(state: GameState): ReadonlyMap<UnitId, DieStatus> {
   const out = new Map<UnitId, DieStatus>()
   for (const unit of Object.values(state.units)) {
-    if (isAsleep(state, unit.id) && sleepSource(state, unit.id) === 'Net') out.set(unit.id, 'netted')
+    const held = isAsleep(state, unit.id) ? heldWord(sleepSource(state, unit.id) ?? '') : null
+    if (held === 'netted' || held === 'webbed') out.set(unit.id, held)
     else if (isHypnotized(state, unit.id)) out.set(unit.id, 'hypnotized')
     else if (isStunned(state, unit.id)) out.set(unit.id, 'stunned')
     else if (isGlaring(state, unit.id)) out.set(unit.id, 'glaring')

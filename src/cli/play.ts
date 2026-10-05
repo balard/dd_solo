@@ -151,10 +151,12 @@ function effectsOn(state: GameState, player: PlayerId, slot: TerrainSlot): reado
 
   for (const unit of armyAt(state, player, slot)) {
     if (isAsleep(state, unit.id)) {
-      const net = state.effects.some(
-        (e) => e.target.kind === 'unit' && e.target.unitId === unit.id && e.asleep === true && e.source === 'Net',
-      )
-      out.push(`${name(unit)} is ${net ? 'netted' : 'asleep'} — cannot be rolled or leave`)
+      // Net and Web (v2 Phase 8c) write Sleep's status under their own names.
+      const source = state.effects.find(
+        (e) => e.target.kind === 'unit' && e.target.unitId === unit.id && e.asleep === true,
+      )?.source
+      const word = source === undefined || source === 'Sleep' ? 'asleep' : heldWord(source)
+      out.push(`${name(unit)} is ${word} — cannot be rolled or leave`)
     } else if (isStunned(state, unit.id)) out.push(`${name(unit)} is stunned — sits out its army's rolls`)
     else if (isHypnotized(state, unit.id)) out.push(`${name(unit)} is hypnotized — cannot be rolled`)
     else if (isGlaring(state, unit.id)) out.push(`${name(unit)} is glaring — sits out its army's rolls`)
@@ -398,7 +400,7 @@ function describe(entry: LogEntry, state: GameState): string | null {
         .join(', ')
       const one = entry.escaped.length === 1 ? 's' : ''
       const asked =
-        entry.test === 'id' ? 'an ID icon' : entry.test === 'save' ? 'a save' : 'a maneuver'
+        entry.test === 'id' ? 'an ID icon' : entry.test === 'save' ? 'a save' : entry.test === 'melee' ? 'a melee' : 'a maneuver'
       const got =
         entry.fate === 'bury'
           ? entry.escaped.length === 0

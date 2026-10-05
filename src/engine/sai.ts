@@ -345,6 +345,23 @@ const HANDLERS: Readonly<Record<string, SaiHandler>> = {
     return NOTHING
   },
 
+  /**
+   * "During a melee or missile attack, Stone does X damage to the defending army with no
+   * save possible. During a dragon attack, Stone generates X missile results." (v2 Phase
+   * 8c.)
+   *
+   * Smite's handler on two actions, and missile rather than melee against a dragon. So it
+   * is the first unsavable damage on a missile exchange -- a Tower's at a Reserve Army
+   * included -- which `finishSaves` reads by kind and never by action.
+   */
+  Stone: (x, ctx) => {
+    if (isAttack(ctx, 'melee') || isAttack(ctx, 'missile')) {
+      return { results: {}, effects: [{ kind: 'unsavable', damage: x }], reroll: false }
+    }
+    if (ctx.purpose.kind === 'dragon_attack') return gives('missile', x)
+    return NOTHING
+  },
+
   /** "During a melee attack, the defending army cannot counter-attack ... Surprise
    *  has no effect during a counter-attack." */
   Surprise: (_x, ctx) =>
@@ -813,6 +830,52 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
   },
 
   /**
+   * "During a melee or missile attack, target up to X health-worth of units in the
+   * defending army. The targets make a melee roll. Those that do not generate a melee
+   * result are webbed and cannot be rolled or leave the terrain they currently occupy
+   * until the beginning of your next turn. Web does nothing during a missile action
+   * targeting an opponent's Reserve Army from a Tower on its eighth-face." (v2 Phase 8c.)
+   *
+   * Net with a melee roll for the escape -- 8b's melee sub-roll, whose effects
+   * `resultsOnly` drops -- and the same hold, so the Tower drop and every check that
+   * keeps a sleeping die in place reach it with no edit. Unlike Net it gives nothing in
+   * a sub-roll: Web's sentence has no "when saving" half.
+   */
+  Web: (x, ctx) =>
+    isAttack(ctx, 'melee') || isAttack(ctx, 'missile')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: x, escape: 'melee', fate: 'asleep' }],
+          reroll: false,
+        }
+      : NOTHING,
+
+  /**
+   * "During a save roll or dragon attack, add X non-magical save results to the army
+   * containing this unit until the beginning of your next turn. During a magic action,
+   * Cloak generates X magic results. During a roll for an individual-targeting effect,
+   * Cloak generates X magic, maneuver, melee, missile, or save results." (v2 Phase 8c.)
+   *
+   * Three rolls, three answers:
+   *  - **A sub-roll** is an individual-targeting roll (7c's house rule), and the specific
+   *    sentence wins: X of whatever it counts, and no effect.
+   *  - **An army's save roll or the dragon roll**: X saves now, and an effect of +X save
+   *    for every save roll after it until the roller's next turn (`castCloaks`). Wall of
+   *    Thorns' roll and a spell's save roll are save rolls by purpose, so they write it
+   *    too; the first counts no saves, so it gets only the effect.
+   *  - **A magic action**: X magic, as Cantrip's first sentence.
+   * In the 'full' table because the effect has a duration, as Sleep's does.
+   */
+  Cloak: (x, ctx) => {
+    if (ctx.isSubRoll === true) return choiceOf(x, ctx.purpose, ['magic', 'maneuver', 'melee', 'missile', 'save'])
+    if (ctx.purpose.kind === 'save' || ctx.purpose.kind === 'dragon_attack') {
+      return { results: { save: x }, effects: [{ kind: 'cloak', saves: x }], reroll: false }
+    }
+    if (isAttack(ctx, 'magic')) return gives('magic', x)
+    return NOTHING
+  },
+
+  /**
    * "During a melee attack, target up to X health-worth of units in the defending army.
    * The targets make a maneuver roll. Those that do not generate a maneuver result are
    * stunned and cannot be rolled until the beginning of your turn, unless they are the
@@ -1035,6 +1098,20 @@ export const SAI_TEXT: Readonly<Record<string, string>> = {
     'stunned and cannot be rolled until the beginning of your turn, unless they are the ' +
     'target of an individual-targeting effect which forces them to. Stunned units that ' +
     'leave the terrain through any means are no longer stunned.',
+  Stone:
+    'During a melee or missile attack, Stone does X damage to the defending army with no ' +
+    'save possible. During a dragon attack, Stone generates X missile results.',
+  Web:
+    'During a melee or missile attack, target up to X health-worth of units in the ' +
+    'defending army. The targets make a melee roll. Those that do not generate a melee ' +
+    'result are webbed and cannot be rolled or leave the terrain they currently occupy ' +
+    "until the beginning of your next turn. Web does nothing during a missile action " +
+    "targeting an opponent's Reserve Army from a Tower on its eighth face.",
+  Cloak:
+    'During a save roll or dragon attack, add X non-magical save results to the army ' +
+    'containing this unit until the beginning of your next turn. During a magic action, ' +
+    'Cloak generates X magic results. During a roll for an individual-targeting effect, ' +
+    'Cloak generates X magic, maneuver, melee, missile, or save results.',
 }
 
 /** The SAI names `sai: 'results'` resolves. Anything else on a face is inert. */
@@ -1048,6 +1125,7 @@ export const LIVE_SAIS: readonly string[] = Object.keys(HANDLERS)
  */
 const HELD: Readonly<Record<string, string>> = {
   Net: 'netted',
+  Web: 'webbed',
 }
 
 export function heldWord(sai: string): string {

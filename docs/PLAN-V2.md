@@ -2603,8 +2603,8 @@ over 60 seeds in both seats, and all three earth types turn up.
 ## Phase 8 — Lava Elves
 
 Seven slices: 8a the data, 8b the seams, 8c Stone, Web and Cloak, 8d Charm and Illusion, 8e the two
-abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a and 8b have landed;
-8c to 8g are planned.
+abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a, 8b and 8c have
+landed; 8d to 8g are planned.
 
 Death & Fire, the second species carrying Death. Like the Goblins they have **no own terrain type**,
 so `drawHomeDie` draws them a home among the twelve dice carrying fire (Wasteland, Highland,
@@ -2853,7 +2853,7 @@ Swamp Mastery's default, and a test drives a magic-as-melee row through `convers
 **Deliberately not done.** No producer for any of it: Web and Charm are 8c and 8d, Illusion's
 effect 8d, Volcanic Adaptation's row 8e. The two-pool damage is 8e's, as the plan says.
 
-### 8c — Stone, Web, Cloak
+### 8c — Stone, Web, Cloak — **landed**
 
 - **Stone**: Smite's handler, on a melee *or* missile attack, X missile in a dragon attack. A test
   that the `unsavable` path works on a missile exchange, where nothing has put it before -- and on
@@ -2876,6 +2876,50 @@ effect 8d, Volcanic Adaptation's row 8e. The two-pool damage is 8e's, as the pla
   - `expectOnly` in `resolveSaves` and the dragon roll's effect handling both let it through, in
     the same edit. Several Cloaks are several effects, so they stack across rolls; the chip counts them.
 - `expectedFace` learns Stone (Smite's line) and Cloak's saves; a test pins both in `expectedArmy`.
+
+### What 8c found
+
+Both golden corpora replay byte-identical and unregenerated. 1270 tests pass, and so does the
+1000-game fuzz -- which cannot roll a Lava Elf yet, so 8e is where these three meet random play.
+`RULES-V0.md` has a section 20 now. The new code was checked the 8b way: seven mutations (Cloak
+at each of its four sites, Web's melee escape, Stone's missile half), seven caught.
+
+**1. Cloak had four homes, not two.** The plan named the exchange's save roll and the dragon roll.
+A spell's save roll (Hailstorm) and Wall of Thorns' roll are save rolls by *purpose* too, and both
+ended in `expectNoEffects` -- so a Lurker in the Deep rolling Cloak against a Hailstorm would have
+thrown mid-spell. All four now let it through and write it with one function, `castCloaks`. That
+needed `castEffect` out of `turn.ts`, since `spells.ts` does not import the turn machine; it lives
+in `effects.ts` now and `turn.ts` imports it. Wall of Thorns' roll counts melee, so a Cloak there
+is only the lasting +X -- **a reading, not an owner decision**: the roll is "a melee roll instead of
+a save roll", and Counter and Volley already treat it as a save roll by giving saves it does not
+count. Section 20 says so.
+
+**2. The effect sits on the army, so its log line names no die.** `castCloaks` first passed the
+Cloak's unit id, and the line read "Cloak settles on Lurker in the Deep". `effect_cast.unitId` is
+"omitted when the effect sits on the whole army", so it is omitted: "Cloak settles on your army at
+Frontier".
+
+**3. Stone needed its handler and nothing else.** `finishSaves` reads `unsavable` by kind and never
+by action, so a missile exchange and a Tower's missile at Reserves took it with no edit, and the
+estimator priced it the same way: `expectedFace` sums `unsavable` from whatever the handler says,
+so the plan's "`expectedFace` learns Stone" was already true, and Cloak's saves likewise (they are
+results). Only the exhaustive effect switch learned `'cloak'`. Stone went into the `'results'`
+table beside Smite, whose handler it is; Web and Cloak into `'full'` (a target, a duration). The
+partition is 16 / 27 / 2 deferred.
+
+**4. Web's melee escape was four small edits and one real one.** The unions (`escape` in two
+places, the log's `test`) and `subRoll`'s type pick are mechanical. The real one is that 8b's rule
+now runs in a game: a webbed Fireshadow that rolls Smite in its melee roll gets no melee, is
+webbed, and strikes nobody, and one that rolls Counter escapes on its 4 melee. The board's
+`'webbed'` status, the dice label and the terminal all ask `heldWord` rather than a second table.
+
+**5. A Beholder cannot be estimated on the `'full'` rung until 8d.** Its Charm and Illusion are
+unbuilt, and `'full'` refuses an unbuilt face, so the Stone estimate test prices it on the
+`'results'` rung, where Stone lives and the rest are inert. Nothing a player can reach rolls one.
+
+**Deliberately not done.** No UI pass in a browser: no game can field a Lava Elf until 8e, and the
+three new sentences ("must roll melee or be webbed", "+4 save to this army", "webbed") are pure
+functions with tests. Charm and Illusion are 8d.
 
 ### 8d — Charm and Illusion
 

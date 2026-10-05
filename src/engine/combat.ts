@@ -838,9 +838,10 @@ export function finishSaves(
 
   // Wild Growth and the free moves are the defender's own, and were answered at the
   // same pause the attacker's Choke was. They stay on the list; they are not dropped.
+  // Cloak (v2 Phase 8c) is cast by `finishExchange`, once this roll has been counted.
   expectOnly(
     saveRoll.effects,
-    ['riposte', 'wild_growth', 'regenerate', 'free_move', 'cantrip', 'bash'],
+    ['riposte', 'wild_growth', 'regenerate', 'free_move', 'cantrip', 'bash', 'cloak'],
     `a save roll against ${spec.action}`,
   )
 
@@ -886,7 +887,11 @@ function finishCharge(
   const [swept, afterSweep] = rerollSweep(saves.dice, rollSpec, state.ruleSet, rng)
   const outcome = resolveFaces(swept, rollSpec, state.ruleSet)
   const saveRoll = asResult(outcome, 'save')
-  expectOnly(saveRoll.effects, ['riposte', 'wild_growth', 'regenerate', 'free_move', 'cantrip', 'bash'], 'a Charge roll')
+  expectOnly(
+    saveRoll.effects,
+    ['riposte', 'wild_growth', 'regenerate', 'free_move', 'cantrip', 'bash', 'cloak'],
+    'a Charge roll',
+  )
 
   const melee = outcome.totals.melee ?? 0
   const meleeMath = outcome.math?.melee

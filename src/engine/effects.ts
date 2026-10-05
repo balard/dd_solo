@@ -40,6 +40,7 @@ import {
   savesAsMelee,
   savesAsMeleeOnCounter,
   type Modifier,
+  type RollEffect,
 } from './pipeline'
 import { terrainHas, unitHasAbility, type AbilityName } from './species'
 import { terrainDie } from '../data/load'
@@ -298,6 +299,80 @@ export function iconAt(
  */
 export function deathMagicImmune(state: GameState, player: PlayerId, ref: ArmyRef): boolean {
   return ref !== 'reserve' && iconAt(state, player, ref) === 'temple'
+}
+
+/**
+ * Casts an effect with a duration, and says so in the log.
+ *
+ * "Until the beginning of your next turn" -- *your* being the roller, which on a
+ * counter-attack is the defending player rather than the marching one. `expireEffects`
+ * reads that field at the top of each turn, so getting it wrong shortens or doubles
+ * the effect rather than failing.
+ *
+ * Here rather than in `turn.ts` since v2 Phase 8c: Cloak is cast from a spell's save
+ * roll as well as from the march, and `spells.ts` does not import the turn machine.
+ */
+export function castEffect(
+  state: GameState,
+  caster: PlayerId,
+  effect: Effect,
+  where: {
+    /** Omitted for a terrain effect, which belongs to nobody. */
+    readonly target?: PlayerId
+    readonly slot: ArmyRef
+    readonly unitId?: UnitId
+  },
+): GameState {
+  return {
+    ...state,
+    effects: [...state.effects, effect],
+    log: [
+      ...state.log,
+      {
+        kind: 'effect_cast',
+        player: caster,
+        source: effect.source,
+        ...(where.target !== undefined ? { target: where.target } : {}),
+        slot: where.slot,
+        ...(where.unitId !== undefined ? { unitId: where.unitId } : {}),
+      },
+    ],
+  }
+}
+
+/**
+ * Cloak's lasting half (v2 Phase 8c): every Cloak in a save roll that has just been
+ * resolved, written as +X save on the roller's army at its place until the roller's
+ * next turn. One effect per face, so two Cloaks are two effects and the chip counts them.
+ *
+ * **Called once the roll is resolved, and by every army save roll**: an exchange's (and
+ * a Charge's), the dragon combination roll, Wall of Thorns' roll and a spell's save
+ * roll. Written after, so the roll that rolled the Cloak counts its X once -- as its
+ * own step-8 results -- and gathers the effect only from the next roll on. Not a
+ * `Modifier.fromSpell`: the name is an SAI's, so a Cloak never reduces a riposte, a
+ * Charge or a cursed missile ("non-magical").
+ */
+export function castCloaks(
+  state: GameState,
+  player: PlayerId,
+  ref: ArmyRef,
+  effects: readonly RollEffect[],
+): GameState {
+  return effects.reduce<GameState>((next, effect) => {
+    if (effect.kind !== 'cloak') return next
+    return castEffect(
+      next,
+      player,
+      {
+        source: effect.sai,
+        target: { kind: 'army', player, army: ref },
+        modifiers: [{ kind: 'add', resultType: 'save', amount: effect.saves }],
+        expiresAtStartOfTurnOf: player,
+      },
+      // On the army, not the die that rolled it, so the line names no unit.
+      { target: player, slot: ref },
+    )
+  }, state)
 }
 
 /**

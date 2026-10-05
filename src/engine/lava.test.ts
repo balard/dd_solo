@@ -5,25 +5,37 @@
  * directly: the melee sub-roll Web and Charm will roll, the save-roll bench Charm will
  * fill, the hold fate Web will share with Net, the one targeting restriction Illusion
  * will write, and the "counts as" types Necromantic Wave and Volcanic Adaptation need.
+ * 8c's three SAIs follow: Stone, Web and Cloak.
  *
  * Boards are hand-built, because the Lava Elves are not playable until 8e and
  * `setupGame` would refuse them.
  */
 import { describe, expect, it } from 'vitest'
 
-import { UNIT_TYPES, unitType } from '../data/load'
+import { UNIT_TYPES, dragonFaceIcon, unitType } from '../data/load'
 import { spell } from '../data/spells'
+import type { DragonFaceNumber } from '../data/types'
 import { expectedArmy } from '../ai/estimate'
 
 import { missileTargets, volleyers } from './combat'
-import { armyRoll, shielded, type Effect } from './effects'
+import { armyRoll, isAsleep, shielded, spellSaveSources, type Effect } from './effects'
 import { spellTargets } from './magic'
 import { maneuverAsSaves, type Modifier } from './pipeline'
 import { advance, reduce } from './reduce'
 import { rollDice, type RngState } from './rng'
 import { conversionsIn, expectNoEffects, resolveFaces, rollUnits, subRollContext, type RawDie } from './roll'
-import { LIVE_SAIS, TARGETING_SAIS, heldWord, saiEffects, type RollContext, type RollPurpose } from './sai'
 import {
+  LIVE_SAIS,
+  TARGETING_SAIS,
+  heldWord,
+  resolvesSai,
+  saiEffects,
+  type RollContext,
+  type RollPurpose,
+} from './sai'
+import { castSpell } from './spells'
+import {
+  SAI_RULES,
   V0_RULES,
   type CombatState,
   type GameState,
@@ -399,5 +411,311 @@ describe('a "counts as" between magic and missile', () => {
     const die: RawDie = { unitId: 'p1:0', typeId: sunflare.id, faceIndex: magic }
     expect(resolveFaces([die], { kinds: ['melee'], modifiers: [row], context }, RULES).totals.melee).toBe(count)
     expect(resolveFaces([die], { kinds: ['melee'], modifiers: [], context }, RULES).totals.melee).toBe(0)
+  })
+})
+
+// --- 8c: Stone, Web, Cloak --------------------------------------------------------------
+
+const BEHOLDER = 'lava_elves.beholder'
+const DRIDER = 'lava_elves.drider'
+const LURKER = 'lava_elves.lurker_in_the_deep'
+/** Oak's first melee face, `2 MELEE`. */
+const OAK_MELEE = 1
+
+const face = (sai: string, count = 4) => ({ count, icon: 'SAI', sai }) as const
+const ctx = (purpose: RollPurpose, isSubRoll = false): RollContext =>
+  isSubRoll ? { purpose, isCounter: false, isSubRoll: true } : { purpose, isCounter: false }
+const MELEE: RollPurpose = { kind: 'attack', action: 'melee' }
+const MISSILE: RollPurpose = { kind: 'attack', action: 'missile' }
+const MAGIC: RollPurpose = { kind: 'attack', action: 'magic' }
+const DRAGON: RollPurpose = { kind: 'dragon_attack' }
+const saveVs = (against: 'melee' | 'missile' | null): RollPurpose => ({ kind: 'save', against })
+
+/** p1 attacks p2's army at the Frontier, about to roll; p2 keeps an Oak at home. */
+const attackAt = (
+  action: 'melee' | 'missile',
+  p1: readonly (string | Die)[],
+  p2: readonly (string | Die)[],
+  rng: RngState,
+): GameState =>
+  board(p1, [...p2, { typeId: OAK, at: { kind: 'terrain', slot: 'p2_home' } }], {
+    rng,
+    turn: {
+      marchStep: 'resolve_attack',
+      marchingArmy: 'frontier',
+      armiesMarched: ['frontier'],
+      combat: { action, targetSlot: 'frontier', damage: 0 },
+    },
+  })
+
+/** The same attack aimed at p2's Reserve Army instead: a Tower's only missile there. */
+const atReserves = (state: GameState, typeIds: readonly string[]): GameState => {
+  const units = { ...state.units }
+  typeIds.forEach((typeId, i) => {
+    units[`p2:r${i}`] = { id: `p2:r${i}`, typeId, owner: 'p2', location: { kind: 'reserve' } }
+  })
+  return { ...state, units, turn: { ...state.turn, combat: { action: 'missile', targetSlot: 'reserve', damage: 0 } } }
+}
+
+describe('Stone', () => {
+  it('is unsavable damage in a melee or a missile attack, and missile against a dragon', () => {
+    for (const purpose of [MELEE, MISSILE]) {
+      expect(saiEffects(face('Stone'), ctx(purpose), RULES)).toEqual({
+        results: {},
+        effects: [{ kind: 'unsavable', damage: 4 }],
+        reroll: false,
+      })
+    }
+    expect(saiEffects(face('Stone'), ctx(DRAGON), RULES).results).toEqual({ missile: 4 })
+    for (const purpose of [MAGIC, saveVs('melee'), { kind: 'maneuver' } as const]) {
+      expect(saiEffects(face('Stone'), ctx(purpose), RULES)).toEqual({ results: {}, effects: [], reroll: false })
+    }
+  })
+
+  it("is on the results rung with Smite, whose handler it is", () => {
+    expect(resolvesSai('Stone', SAI_RULES)).toBe(true)
+    expect(LIVE_SAIS).toContain('Stone')
+  })
+
+  it('kills through a missile exchange, where nothing unsavable reached before', () => {
+    const rng = rngShowing([BEHOLDER], [faceOf(BEHOLDER, 'SAI:Stone')])
+    const done = advance(attackAt('missile', [BEHOLDER], [OAK, OAK, OAK], rng))
+    // A Stone-only attack rolls no missile, so the defenders roll no saves -- and still lose 4.
+    expect(entries(done, 'combat_resolved')[0]).toMatchObject({
+      action: 'missile',
+      attackTotal: 0,
+      saveTotal: null,
+      unsavable: 4,
+      damage: 4,
+    })
+    expect(done.pending).toMatchObject({ kind: 'assign_damage', player: 'p2' })
+    expect(validateState(done)).toEqual([])
+  })
+
+  it("reaches a Reserve Army through a Tower's missile", () => {
+    const rng = rngShowing([BEHOLDER], [faceOf(BEHOLDER, 'SAI:Stone')])
+    const asked = advance(atReserves(attackAt('missile', [BEHOLDER], [], rng), [OAK, OAK]))
+    expect(entries(asked, 'combat_resolved')[0]).toMatchObject({ defenderSlot: 'reserve', unsavable: 4, damage: 4 })
+    const done = advance(reduce(asked, { kind: 'assign_damage', unitIds: ['p2:r0', 'p2:r1'] }))
+    expect(done.units['p2:r0']?.location).toEqual({ kind: 'dua' })
+    expect(done.units['p2:r1']?.location).toEqual({ kind: 'dua' })
+    expect(validateState(done)).toEqual([])
+  })
+
+  it("is priced as Smite's line in the estimate: unsavable, and never a result", () => {
+    // On the results rung, where Stone lives beside Smite: the Beholder's Charm and
+    // Illusion are unbuilt until 8d, and the full rung refuses an unbuilt face.
+    const state: GameState = { ...board([BEHOLDER], [OAK]), ruleSet: SAI_RULES }
+    const melee = expectedArmy(state, 'p1', 'frontier', 'melee')
+    const missile = expectedArmy(state, 'p1', 'frontier', 'missile')
+    // One Stone face in ten, four damage: 0.4 unsavable whichever action carries it.
+    expect(melee.unsavable).toBeCloseTo(0.4)
+    expect(missile.unsavable).toBeCloseTo(0.4)
+  })
+})
+
+describe('Web', () => {
+  it('targets in melee and missile alike, escapes on melee, and gives nothing in a sub-roll', () => {
+    for (const purpose of [MELEE, MISSILE]) {
+      expect(saiEffects(face('Web'), ctx(purpose), RULES).effects).toEqual([
+        { kind: 'target_enemy', health: 4, escape: 'melee', fate: 'asleep' },
+      ])
+    }
+    // Unlike Net, which saves when its own die is targeted.
+    expect(saiEffects(face('Web'), ctx(saveVs(null), true), RULES)).toEqual({ results: {}, effects: [], reroll: false })
+    expect(saiEffects(face('Net'), ctx(saveVs(null), true), RULES).results).toEqual({ save: 4 })
+  })
+
+  const webbing = (targets: readonly string[], targetFaces: readonly number[]) =>
+    advance(
+      attackAt(
+        'melee',
+        [DRIDER, WATCHER],
+        targets,
+        rngShowing(
+          [DRIDER, WATCHER, ...targets.slice(0, targetFaces.length)],
+          [faceOf(DRIDER, 'SAI:Web'), faceOf(WATCHER, 'MELEE'), ...targetFaces],
+        ),
+      ),
+    )
+
+  it("holds what fails its melee roll with Sleep's status under Web's name, and lets a melee go", () => {
+    const asked = webbing([OAK, OAK, OAK], [OAK_SAVE, OAK_MELEE])
+    expect(asked.pending).toMatchObject({ kind: 'sai_target', sai: 'Web' })
+    const done = reduce(asked, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] })
+
+    expect(entries(done, 'sai_sub_roll')).toMatchObject([
+      { source: 'Web', test: 'melee', fate: 'asleep', escaped: ['p2:1'] },
+    ])
+    expect(isAsleep(done, 'p2:0')).toBe(true)
+    expect(isAsleep(done, 'p2:1')).toBe(false)
+    expect(done.effects).toEqual([
+      { source: 'Web', target: { kind: 'unit', unitId: 'p2:0' }, modifiers: [], asleep: true, expiresAtStartOfTurnOf: 'p1' },
+    ])
+    expect(heldWord('Web')).toBe('webbed')
+    // Webbed, not killed, and out of the save roll that follows.
+    expect(done.units['p2:0']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    const saved = entries(done, 'combat_resolved')[0]?.saveDice ?? []
+    expect(saved.map((d) => d.unitId)).toEqual(['p2:1', 'p2:2'])
+    expect(validateState(done)).toEqual([])
+  })
+
+  it("rolls a target's SAI for its results only: a Smite strikes nobody, a Counter escapes", () => {
+    const fireshadow = (sai: string) => {
+      const asked = webbing([FIRESHADOW], [faceOf(FIRESHADOW, `SAI:${sai}`)])
+      return reduce(asked, { kind: 'sai_target', unitIds: ['p2:0'] })
+    }
+    const smote = fireshadow('Smite')
+    expect(entries(smote, 'sai_sub_roll')).toMatchObject([{ source: 'Web', test: 'melee', escaped: [] }])
+    expect(isAsleep(smote, 'p2:0')).toBe(true)
+    // The Smite was dropped by 8b's rule: nothing came back at p1's army.
+    expect(entries(smote, 'units_killed').filter((e) => e.player === 'p1')).toEqual([])
+    expect(entries(fireshadow('Counter'), 'sai_sub_roll')).toMatchObject([{ escaped: ['p2:0'] }])
+  })
+
+  it("does nothing in a missile attack on a Reserve Army, a Tower's only missile there", () => {
+    const rng = rngShowing([DRIDER], [faceOf(DRIDER, 'SAI:Web')])
+    const after = advance(atReserves(attackAt('missile', [DRIDER], [], rng), [OAK]))
+    expect(after.pending?.kind).not.toBe('sai_target')
+    expect(entries(after, 'sai_sub_roll')).toEqual([])
+  })
+
+  it('asks at a terrain in a missile attack', () => {
+    const rng = rngShowing([DRIDER], [faceOf(DRIDER, 'SAI:Web')])
+    expect(advance(attackAt('missile', [DRIDER], [OAK], rng)).pending).toMatchObject({ kind: 'sai_target', sai: 'Web' })
+  })
+})
+
+describe('Cloak', () => {
+  const cloakOn = (player: PlayerId, army: TerrainSlot): Effect => ({
+    source: 'Cloak',
+    target: { kind: 'army', player, army },
+    modifiers: [{ kind: 'add', resultType: 'save', amount: 4 }],
+    expiresAtStartOfTurnOf: player,
+  })
+
+  it('saves X and lasts in a save roll or a dragon attack', () => {
+    const lasting = { results: { save: 4 }, effects: [{ kind: 'cloak', saves: 4 }], reroll: false }
+    for (const purpose of [saveVs('melee'), saveVs('missile'), saveVs(null), DRAGON]) {
+      expect(saiEffects(face('Cloak'), ctx(purpose), RULES)).toEqual(lasting)
+    }
+  })
+
+  it('is X magic in a magic action, and nothing in any other attack or a maneuver', () => {
+    expect(saiEffects(face('Cloak'), ctx(MAGIC), RULES)).toEqual({ results: { magic: 4 }, effects: [], reroll: false })
+    for (const purpose of [MELEE, MISSILE, { kind: 'maneuver' } as const]) {
+      expect(saiEffects(face('Cloak'), ctx(purpose), RULES)).toEqual({ results: {}, effects: [], reroll: false })
+    }
+  })
+
+  it('is X of whatever an individual-targeting roll counts, and no effect', () => {
+    expect(saiEffects(face('Cloak'), ctx(saveVs(null), true), RULES)).toEqual({ results: { save: 4 }, effects: [], reroll: false })
+    expect(saiEffects(face('Cloak'), ctx({ kind: 'maneuver' }, true), RULES).results).toEqual({ maneuver: 4 })
+    expect(saiEffects(face('Cloak'), subRollContext('melee'), RULES).results).toEqual({ melee: 4 })
+  })
+
+  /** p1's Watcher hits for 3; p2's Lurkers show these faces and its Oak a save. */
+  const cloaked = (lurkers: number) =>
+    advance(
+      attackAt(
+        'melee',
+        [WATCHER],
+        [...Array.from({ length: lurkers }, () => LURKER), OAK],
+        rngShowing(
+          [WATCHER, ...Array.from({ length: lurkers }, () => LURKER), OAK],
+          [faceOf(WATCHER, 'MELEE'), ...Array.from({ length: lurkers }, () => faceOf(LURKER, 'SAI:Cloak')), OAK_SAVE],
+        ),
+      ),
+    )
+
+  it('counts its X once in the save roll it is rolled in, and adds X to every save roll after', () => {
+    const done = cloaked(1)
+    // Cloak's 4 and the Oak's 4: eight, not twelve -- the effect is written after the roll.
+    expect(entries(done, 'combat_resolved')[0]?.saveTotal).toBe(8)
+    expect(entries(done, 'effect_cast')).toEqual([
+      { kind: 'effect_cast', player: 'p2', source: 'Cloak', target: 'p2', slot: 'frontier' },
+    ])
+    expect(done.effects).toEqual([cloakOn('p2', 'frontier')])
+    expect(armyRoll(done, 'p2', 'frontier', 'save').modifiers).toContainEqual({
+      kind: 'add',
+      resultType: 'save',
+      amount: 4,
+      source: 'Cloak',
+    })
+    // "Non-magical": no spell save, so it never reduces a riposte, a Charge or a curse.
+    expect(spellSaveSources(done, 'p2', 'frontier')).toEqual([])
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('stacks: two Cloaks are two effects', () => {
+    const done = cloaked(2)
+    expect(entries(done, 'combat_resolved')[0]?.saveTotal).toBe(12)
+    expect(done.effects).toEqual([cloakOn('p2', 'frontier'), cloakOn('p2', 'frontier')])
+  })
+
+  it("is written by a spell's save roll too", () => {
+    const state = board([WATCHER], [LURKER, OAK], {
+      rng: rngShowing([LURKER, OAK], [faceOf(LURKER, 'SAI:Cloak'), OAK_SAVE]),
+    })
+    const outcome = castSpell(state, spell('hailstorm'), {
+      caster: 'p1',
+      army: 'frontier',
+      element: 'air',
+      count: 3,
+      target: { kind: 'army', player: 'p2', army: 'frontier' },
+    })
+    expect(entries(outcome.state, 'spell_saves')).toMatchObject([{ source: 'Hailstorm', saves: 8 }])
+    expect(outcome.state.effects).toEqual([cloakOn('p2', 'frontier')])
+  })
+
+  it("is written by Wall of Thorns' roll, which stands in for a save roll and counts melee", () => {
+    const ward: Effect = {
+      source: 'Wall of Thorns',
+      target: { kind: 'terrain', slot: 'frontier', scope: 'maneuverers' },
+      modifiers: [],
+      thorns: 6,
+      expiresAtStartOfTurnOf: 'p2',
+    }
+    const state = board([LURKER, OAK], [{ typeId: OAK, at: { kind: 'terrain', slot: 'p2_home' } }], {
+      rng: rngShowing([LURKER, OAK], [faceOf(LURKER, 'SAI:Cloak'), OAK_MELEE]),
+      effects: [ward],
+      turn: { marchStep: 'thorns_damage', marchingArmy: 'frontier', armiesMarched: ['frontier'] },
+    })
+    const done = advance(state)
+    // The Oak's 2 melee is all the roll counts; the Cloak is only the lasting +4 save.
+    expect(entries(done, 'thorns')).toMatchObject([{ melee: 2, damage: 4 }])
+    expect(done.effects).toContainEqual(cloakOn('p1', 'frontier'))
+  })
+
+  it('is written by the dragon roll, which counts its saves once', () => {
+    const claw = (() => {
+      for (let n = 1; n <= 12; n++) if (dragonFaceIcon('fire_drake', n as DragonFaceNumber) === 'CLAW') return n - 1
+      throw new Error('a fire drake has no claw')
+    })()
+    const counts = [12, 10, 6]
+    const faces = [claw, faceOf(LURKER, 'SAI:Cloak'), OAK_SAVE]
+    let rng: RngState | null = null
+    for (let counter = 0; counter < 400_000 && rng === null; counter += 1) {
+      const [indices] = rollDice({ seed: 1, counter }, counts)
+      if (faces.every((f, i) => indices[i] === f)) rng = { seed: 1, counter }
+    }
+    if (rng === null) throw new Error('no counter shows a claw, a Cloak and a save')
+    const base = board([LURKER, OAK], [{ typeId: OAK, at: { kind: 'terrain', slot: 'p2_home' } }], {
+      rng,
+      turn: { phase: 'dragon_attack' },
+    })
+    const done = advance({
+      ...base,
+      dragons: { d: { id: 'd', dieId: 'fire_drake', owner: 'p2', location: { kind: 'terrain', slot: 'frontier' } } },
+    })
+    expect(entries(done, 'dragon_roll')).toMatchObject([{ player: 'p1', totals: { save: 8 } }])
+    expect(done.effects).toContainEqual(cloakOn('p1', 'frontier'))
+    expect(validateState(done)).toEqual([])
+  })
+
+  it("is priced as its saves in the estimate of a save roll", () => {
+    // Lurker in the Deep on a save roll: its ID (4), Counter, Volley, Cloak and Fly are
+    // four saves each, and five blanks -- 20 / 10 = 2. Without Cloak's line it is 1.6.
+    expect(expectedArmy(board([WATCHER], [LURKER]), 'p2', 'frontier', 'save').total).toBeCloseTo(2)
   })
 })

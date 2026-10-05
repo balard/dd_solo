@@ -1059,6 +1059,37 @@ describe('Net and Stun on the board (v2 Phase 7c)', () => {
   })
 })
 
+describe('Web and Cloak on the board (v2 Phase 8c)', () => {
+  it("calls a webbed die webbed, locked like a netted one, under Web's name", () => {
+    const base = fresh()
+    const [webbed] = armyAt(base, 'p2', 'frontier')
+    const state: GameState = {
+      ...base,
+      effects: [
+        { source: 'Web', target: { kind: 'unit', unitId: webbed!.id }, modifiers: [], asleep: true, expiresAtStartOfTurnOf: 'p1' },
+      ],
+    }
+    expect(dieStatuses(state).get(webbed!.id)).toBe('webbed')
+    expect([...sleepingIds(state)]).toEqual([webbed!.id])
+    expect(effectsOnArmy(state, 'p2', 'frontier', 'p1')).toEqual([
+      { source: 'Web', what: `${unitType(webbed!.typeId).name} cannot be rolled or leave`, until: 'your next turn' },
+    ])
+  })
+
+  it('counts two Cloaks on one army as one chip of two', () => {
+    const cloak = {
+      source: 'Cloak',
+      target: { kind: 'army', player: 'p2', army: 'frontier' },
+      modifiers: [{ kind: 'add', resultType: 'save', amount: 4 }],
+      expiresAtStartOfTurnOf: 'p2',
+    } as const
+    const state: GameState = { ...fresh(), effects: [cloak, cloak] }
+    const chips = effectChips(effectsOnArmy(state, 'p2', 'frontier', 'p1'))
+    expect(chips).toHaveLength(1)
+    expect(chips[0]).toMatchObject({ source: 'Cloak', count: 2 })
+  })
+})
+
 describe('Hypnotic Glare on the board', () => {
   /** A glare from a p1 die at the Frontier onto a p2 die there, hand-built (v2 Phase 5c). */
   const glared = () => {

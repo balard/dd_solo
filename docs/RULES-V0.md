@@ -1238,3 +1238,43 @@ the caster's own dice).
   does nothing during a missile attack targeting an opponent's Reserve Army from a Tower" -- and a
   missile at Reserves is only ever a Tower's, so the queue drops a Net task aimed at one, the way
   it drops a task that can take nothing.
+
+## 20. Lava Elves (v2 Phase 8)
+
+Death & Fire. Like the Goblins they have no own terrain type, so their home is drawn among the
+twelve dice carrying fire (Wasteland, Highland, Feyland). The dice are in the data from 8a; the
+species is playable from 8e. Every large Lava Elf prints a 5 face and every medium one a 4, which
+is why the validator's ceiling is health+2 (`data/ICONS.md`).
+
+### A melee sub-roll (8b)
+
+Web's targets and Charm's roll melee one die at a time, the first sub-roll whose purpose is an
+attack. **Its SAIs give results and rerolls and nothing else**: Counter's X melee and Rend's melee
+and second throw count, and every effect -- Smite's or Stone's damage, a targeting face's victims, a
+Charge -- is dropped, since a die rolling for its own life or for the enemy's total has no
+"defending army" to aim at. Section 11's sub-roll rule, for a roll that does have an enemy in its
+sentence. An SAI that already turns into saves on any sub-roll (Wild Growth, Regenerate) gives saves
+the melee roll does not count.
+
+### Stone, Web, Cloak (8c)
+
+| SAI | Applies | What it does here |
+|---|---|---|
+| **Stone** | Dragon attack, melee, missile | X damage to the defending army with no save possible, in a melee **or a missile** attack -- a Tower's missile at a Reserve Army included. X missile results in a dragon attack. Smite's handler on two actions, so it is live on the `'results'` rung beside Smite. |
+| **Web** | Melee, missile | Up to X health-worth roll **melee** (the sub-roll above); those with none are **webbed** until the roller's next turn: Net's hold under Web's name, so every rule that holds a sleeping die holds them. Does nothing in a missile attack on a Reserve Army. Unlike Net it gives nothing in a sub-roll of its own die. |
+| **Cloak** | Dragon attack, individual, magic, save | In an army's save roll or the dragon roll: X saves, and +X save on that army at its place until the roller's next turn. In a magic action: X magic. In a sub-roll: X of whatever the roll counts, and no effect. |
+
+- **The roll Cloak is rolled in counts it** (owner-approved house rule). The X joins that roll as
+  ordinary step-8 results, and the lasting +X is written once the roll is resolved, so the roll
+  that made it does not gather it as well: one Cloak is worth X now and X on every save roll after.
+  The other reading -- the effect starts afterwards and this roll gets nothing -- makes a Cloak
+  worthless against the attack that provoked it.
+- **Every army save roll writes it**: an exchange's save roll (and a Charge's combination roll,
+  which is that save roll), the dragon combination roll, a spell's save roll (Hailstorm), and Wall
+  of Thorns' roll -- a melee roll "instead of a save roll", whose purpose is a save roll. That last
+  counts no saves, so it gets only the lasting effect.
+- **"Non-magical" means not a spell save.** A Cloak's +X is an SAI's, so it never reduces damage
+  only spell saves may reduce: a riposte, a Charge's melee, a cursed missile.
+- **Several Cloaks are several effects**, one per face, and stack; the board counts them on one chip.
+- **Webbed is asleep, under Web's name**, as netted is under Net's: the fate is the status
+  (`'asleep'`) and the word comes from the SAI (`heldWord`). The board says "webbed".

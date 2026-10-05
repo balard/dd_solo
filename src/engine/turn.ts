@@ -65,6 +65,8 @@ import {
 import { buryEntries, buryUnits, deathEntries, killAndBury, killedIds, killUnits } from './death'
 import {
   armyRoll,
+  castCloaks,
+  castEffect,
   flashfireBudget,
   thornsAt,
   expireEffects,
@@ -1605,38 +1607,6 @@ function applyDragonFlashfire(state: GameState, unitIds: readonly UnitId[]): Gam
   })
 }
 
-/**
- * Casts an effect with a duration, and says so in the log.
- *
- * "Until the beginning of your next turn" -- *your* being the roller, which on a
- * counter-attack is the defending player rather than the marching one. `expireEffects`
- * reads that field at the top of each turn, so getting it wrong shortens or doubles
- * the effect rather than failing.
- */
-function castEffect(
-  state: GameState,
-  caster: PlayerId,
-  effect: Effect,
-  where: {
-    /** Omitted for a terrain effect, which belongs to nobody. */
-    readonly target?: PlayerId
-    readonly slot: ArmyRef
-    readonly unitId?: UnitId
-  },
-): GameState {
-  return withLog(
-    { ...state, effects: [...state.effects, effect] },
-    {
-      kind: 'effect_cast',
-      player: caster,
-      source: effect.source,
-      ...(where.target !== undefined ? { target: where.target } : {}),
-      slot: where.slot,
-      ...(where.unitId !== undefined ? { unitId: where.unitId } : {}),
-    },
-  )
-}
-
 /** Where a spell's `effect_cast` line points, from what the caster named. */
 function castSite(target: SpellTarget): {
   readonly target?: PlayerId
@@ -2230,9 +2200,9 @@ function inBoardOrder(state: GameState, unitIds: readonly UnitId[]): readonly Un
 /**
  * The sub-roll: the targets roll for their lives, and the ones that make it get out.
  *
- * Three escapes, from two questions. Bullseye and Double Strike ask for a **save**
- * result, Smother and Firecloud for a **maneuver** one -- a question about a total, so
- * those go through `rollUnits`. Seize asks whether the die shows an **ID icon** -- a
+ * Four escapes, from two questions. Bullseye and Double Strike ask for a **save**
+ * result, Smother and Firecloud for a **maneuver** one, Web (v2 Phase 8c) for a
+ * **melee** one -- a question about a total, so those go through `rollUnits`. Seize asks whether the die shows an **ID icon** -- a
  * question about a face, so it is `rollFaces` and a look at the face, which also keeps
  * an ID roll from tripping the `'full'` refusal on an unbuilt SAI a target happens to
  * show.
@@ -2279,7 +2249,9 @@ function subRoll(
       if (face.icon === 'ID') escaped.push(die.unitId)
     }
   } else {
-    const type = task.escape === 'save' ? 'save' : 'maneuver'
+    // Web's melee roll (v2 Phase 8c) is 8b's melee sub-roll: its SAIs' results count,
+    // and every effect it would make was dropped by `saiEffects` already.
+    const type = task.escape === 'save' ? 'save' : task.escape === 'melee' ? 'melee' : 'maneuver'
     // `isSubRoll` is what tells an SAI this is one die rolling for its life rather
     // than an army rolling for the action -- see `RollContext`. Without it a Firewalking
     // face offers a free move nobody can be asked about, and `expectNoEffects` below
@@ -2305,7 +2277,7 @@ function subRoll(
     player: spec.defender,
     source: task.sai,
     slot: spec.defenderSlot,
-    test: task.escape === 'id' ? 'id' : task.escape === 'save' ? 'save' : 'maneuver',
+    test: task.escape === 'id' || task.escape === 'save' || task.escape === 'melee' ? task.escape : 'maneuver',
     dice,
     escaped,
     // Omitted when the army was already the Reserve Army (a Tower's missile,
@@ -2804,8 +2776,13 @@ function finishExchange(state: GameState, isCounter: boolean): GameState {
     ...(!isCounter && combat.foulStench === true ? { foulStench: true as const } : {}),
   }
 
+  // Cloak (v2 Phase 8c): the save roll has been counted, so its Cloaks are written now
+  // and reach the defender's save rolls from the next one on.
+  const logged = withLog({ ...state, rng: outcome.rng }, ...entries)
+  const cloaked = castCloaks(logged, defender, defenderSlot, outcome.saveRoll?.effects ?? [])
+
   return afterCombatStep(
-    withTurn(withLog({ ...state, rng: outcome.rng }, ...entries), { combat: next }),
+    withTurn(cloaked, { combat: next }),
     isCounter ? 'resolve_counter_damage' : 'resolve_attack_damage',
   )
 }
@@ -3573,7 +3550,8 @@ function resolveArmyRoll(
   // silence -- which is what a Wild Growth or a Firewalking on a dragon roll had been
   // doing since Phase 6. Bash is the one effect that belongs here (v2 Phase 6d), and
   // `finishDragonDamage` spends it; anything else is refused rather than dropped.
-  expectOnly(outcome.effects, ['bash_dragon'], "the army's dragon roll")
+  // Cloak (v2 Phase 8c) is written once the roll is logged, below.
+  expectOnly(outcome.effects, ['bash_dragon', 'cloak'], "the army's dragon roll")
   const bashes = outcome.effects.filter((effect) => effect.kind === 'bash_dragon').length
 
   const totals = {
@@ -3582,7 +3560,7 @@ function resolveArmyRoll(
     save: outcome.totals.save ?? 0,
   }
 
-  const logged = withLog(state, {
+  const rolled = withLog(state, {
     kind: 'dragon_roll',
     player: attack.defender,
     slot: attack.slot,
@@ -3591,6 +3569,7 @@ function resolveArmyRoll(
     ...(outcome.countedAs !== undefined ? { flamingShields: outcome.countedAs } : {}),
     ...(outcome.math !== undefined ? { math: outcome.math } : {}),
   })
+  const logged = castCloaks(rolled, attack.defender, attack.slot, outcome.effects)
 
   return withDragonAttack(logged, {
     ...attack,
@@ -4567,11 +4546,12 @@ function stepThorns(state: GameState): GameState {
   )
   // The army is rolling against a hedge, so there is nowhere for a riposte or a
   // targeting SAI to go: refuse rather than drop, as every other roll with no home
-  // for an effect does.
-  expectNoEffects(roll, "Wall of Thorns' melee roll")
+  // for an effect does. A Cloak has one (v2 Phase 8c): this roll stands in for a save
+  // roll, so its effect is written after the line, though its saves count for nothing.
+  expectOnly(roll.effects, ['cloak'], "Wall of Thorns' melee roll")
 
   const damage = Math.max(0, owed - roll.total)
-  const logged = withLog({ ...state, rng }, {
+  const thorned = withLog({ ...state, rng }, {
     kind: 'thorns',
     player,
     slot,
@@ -4581,6 +4561,7 @@ function stepThorns(state: GameState): GameState {
     ...(roll.countedAs !== undefined ? { flamingShields: roll.countedAs } : {}),
     ...(roll.math !== undefined ? { math: roll.math } : {}),
   })
+  const logged = castCloaks(thorned, player, slot, roll.effects)
 
   // Damage too small to kill anything is dropped rather than asked about, exactly as
   // after an exchange.

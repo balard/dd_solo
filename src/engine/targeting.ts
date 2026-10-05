@@ -34,7 +34,7 @@ export type TargetTask =
       readonly sai: string
       /** Health-worth to pick from the army this roll is aimed at. */
       readonly health: number
-      readonly escape: 'none' | 'save' | 'maneuver' | 'id'
+      readonly escape: 'none' | 'save' | 'maneuver' | 'melee' | 'id'
       /** Roar's `'reserve'` and Stomp's `'save_or_bury'` from v2 Phase 6d; Net's and
        *  Stun's statuses from 7c (Net's under the status's name since 8b). */
       readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury' | 'asleep' | 'stun'

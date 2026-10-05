@@ -29,7 +29,8 @@ import type { Element } from '../data/types'
 import { healthsOf, maxAbsorbable } from './damage'
 import { deathEntries, killUnits } from './death'
 import { returnFromDua } from './dua'
-import { armyRoll, endGlaresOf, unitRoll, type Effect, type EffectTarget } from './effects'
+import { armyRoll, castCloaks, endGlaresOf, unitRoll, type Effect, type EffectTarget } from './effects'
+import { expectOnly } from './combat'
 import { expectNoEffects, rollArmy, rollUnits, type DieRoll } from './roll'
 import type { Modifier } from './pipeline'
 
@@ -226,26 +227,26 @@ function spellSaveRoll(
     isCounter: false,
     isTrigger: true,
   })
-  expectNoEffects(roll, `${source}'s save roll`)
+  // A Cloak is the one effect with somewhere to go (v2 Phase 8c): its saves are in this
+  // roll, and its effect is written after the line.
+  expectOnly(roll.effects, ['cloak'], `${source}'s save roll`)
 
-  return {
-    state: {
-      ...{ ...state, rng },
-      log: [
-        ...state.log,
-        {
-          kind: 'spell_saves',
-          player,
-          source,
-          slot: ref,
-          saves: roll.total,
-          dice: roll.dice,
-          ...(roll.math !== undefined ? { math: roll.math } : {}),
-        },
-      ],
-    },
-    saves: roll.total,
+  const rolled: GameState = {
+    ...{ ...state, rng },
+    log: [
+      ...state.log,
+      {
+        kind: 'spell_saves',
+        player,
+        source,
+        slot: ref,
+        saves: roll.total,
+        dice: roll.dice,
+        ...(roll.math !== undefined ? { math: roll.math } : {}),
+      },
+    ],
   }
+  return { state: castCloaks(rolled, player, ref, roll.effects), saves: roll.total }
 }
 
 /**

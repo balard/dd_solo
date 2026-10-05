@@ -267,7 +267,7 @@ export type RollEffectBody =
        * generate a save result are killed" -- and `'id'` is a question about a face,
        * which is why Seize rolls its targets without resolving them.
        */
-      readonly escape: 'none' | 'save' | 'maneuver' | 'id'
+      readonly escape: 'none' | 'save' | 'maneuver' | 'melee' | 'id'
       /**
        * What happens to a target that did not escape.
        *
@@ -425,6 +425,15 @@ export type RollEffectBody =
    * the attacking army's maneuver into melee by the time it does.
    */
   | { readonly kind: 'charge' }
+  /**
+   * Cloak (v2 Phase 8c): "during a save roll or dragon attack, add X non-magical save
+   * results to the army containing this unit until the beginning of your next turn".
+   * The X saves are also this roll's own step-8 results -- a house rule, `RULES-V0.md`
+   * section 20: the roll Cloak is rolled in counts it -- and this is the rest: an
+   * effect of +X save on the roller's army at its place, written once the roll is
+   * resolved (`castCloaks`), so the roll that made it never gathers it as well.
+   */
+  | { readonly kind: 'cloak'; readonly saves: number }
 
 /** A `RollEffectBody` once `resolveRoll` has stamped it with the die that made it,
  *  so the log can say *which* Fireshadow smote you. */

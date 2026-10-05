@@ -1666,8 +1666,9 @@ export type LogEntry =
       /** A Reserve Army after a Tower's missile (Phase 5d): Bullseye and Seize
        *  both reach one. */
       readonly slot: ArmyRef
-      /** What the targets had to produce. `'id'` is a face, the other two a total. */
-      readonly test: 'save' | 'maneuver' | 'id'
+      /** What the targets had to produce. `'id'` is a face, the others a total. `'melee'`
+       *  is Web's (v2 Phase 8c), the first sub-roll whose purpose is an attack. */
+      readonly test: 'save' | 'maneuver' | 'melee' | 'id'
       /** Empty for a target that could not be rolled at all -- a sleeping die, which
        *  generates nothing and so fails. */
       readonly dice: readonly DieRoll[]
