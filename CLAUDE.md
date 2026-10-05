@@ -227,15 +227,18 @@ the dice and the opponent.
 > from the SAI (`heldWord`), one targeting restriction (`shielded`, which the Temple folds into),
 > and "counts as" between any two types. 8c has landed: Stone (Smite on melee and missile), Web
 > (Net's hold on a melee roll) and Cloak (X saves now, +X on later save rolls, written by every
-> army save roll through `castCloaks`) -- `RULES-V0.md` section 20. Five more species' faces sit
-> in `data/raw/` unimported.
+> army save roll through `castCloaks`) -- `RULES-V0.md` section 20. 8d has landed: Charm (the
+> targets roll melee for the attacker and sit out the save roll, `PendingAttack.charm`) and
+> Illusion (`sai_illusion`, written to `shielded`'s status), so every SAI in the data resolves and
+> only the abilities (8e) keep the Lava Elves out. Five more species' faces sit in `data/raw/`
+> unimported.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 7 landed; Lava Elves, Phase 8, under way: 8a-8c landed, 8d-8g planned). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 7 landed; Lava Elves, Phase 8, under way: 8a-8d landed, 8e-8g planned). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |

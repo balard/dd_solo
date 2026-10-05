@@ -46,7 +46,7 @@ describe('the species in the data', () => {
   /**
    * v2 Phase 8a: the Lava Elves are in the data and not playable until 8e, which builds
    * their abilities after 8c and 8d have built the five SAIs. 8c built Stone, Web and
-   * Cloak, 8d shortens the sentence again, and 8e turns this back into "all playable".
+   * Cloak, 8d Charm and Illusion, and 8e turns this back into "all playable".
    */
   it('are the five the engine has rules for; the Lava Elves are in the data but not yet', () => {
     expect(PLAYABLE_SPECIES.map((s) => s.id).sort()).toEqual([
@@ -61,8 +61,7 @@ describe('the species in the data', () => {
       expect(speciesProblem(species.id), species.id).toBeNull()
     }
     expect(speciesProblem('lava_elves')).toBe(
-      'Lava Elves are not playable yet: the SAIs Charm, Illusion and its species abilities ' +
-        'are not implemented',
+      'Lava Elves are not playable yet: its species abilities are not implemented',
     )
     expect(PLAYABLE_UNITS).toHaveLength(UNIT_TYPES.length - 20)
     expect(unitPlayable('goblins.troll')).toBe(true)

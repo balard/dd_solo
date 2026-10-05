@@ -127,6 +127,9 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
         // the save roll that follows and the counter-attack, which is worth something, but
         // the dice are back next turn. Half a kill of what fails the roll.
         else if (effect.fate === 'asleep' || effect.fate === 'stun') targeted += effect.health / 4
+        // Charm (v2 Phase 8d): the dice are not lost, but their saves are out of the roll and
+        // their melee joins the attack -- worth about half a kill of what is charmed.
+        else if (effect.fate === 'charm') targeted += effect.health / 2
         else targeted += effect.escape === 'none' ? effect.health : effect.health / 2
         break
       // Screech (v2 Phase 7c) is Wave's melee half: saves off the roll that answers.
@@ -176,6 +179,9 @@ export function expectedFace(face: Face, resultType: ResultType, context: RollCo
       // Cloak (v2 Phase 8c): this roll's X saves are already in `results`. The effect is
       // the same X on save rolls still to come, which no single roll's estimate prices.
       case 'cloak':
+        break
+      // Illusion (v2 Phase 8d) changes who may aim at an army, not any number.
+      case 'illusion':
         break
       // Exhaustive, so an effect kind a later species adds is a build error here
       // rather than a face greedy silently prices at nothing (v2 Phase 6d).

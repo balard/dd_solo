@@ -504,6 +504,14 @@ function decide(state: GameState, pending: Pending): GameAction {
       return { kind: 'sai_target_army', slot: slot ?? pending.options[0] ?? 'frontier' }
     }
 
+    // Illusion (v2 Phase 8d): shield the most health, the army that has most to lose to a
+    // missile or a spell. Roughly priced on purpose; 8g re-runs greedy against itself to
+    // see whether it should ask who can actually reach each army.
+    case 'sai_illusion': {
+      const pick = best(pending.options, (ref) => healthIn(army(state, player, ref)))
+      return { kind: 'sai_illusion', army: pick ?? pending.options[0] ?? 'reserve' }
+    }
+
     // Every friendly offer is taken: a promotion is health that never has to be won
     // back, and "maybe later" is not a thing an SAI offers.
     case 'sai_promote':

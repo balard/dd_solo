@@ -1090,6 +1090,21 @@ describe('Web and Cloak on the board (v2 Phase 8c)', () => {
   })
 })
 
+describe('Illusion in the dock (v2 Phase 8d)', () => {
+  it('offers your armies as buttons, an army not being a die', () => {
+    const prompt = promptFor(
+      { kind: 'sai_illusion', player: 'p1', sai: 'Illusion', options: ['frontier', 'reserve'], remaining: 1 },
+      'p1',
+      fresh(),
+    )
+    expect(prompt.question).toMatch(/^Illusion: shield which of your armies/)
+    expect(prompt.choices.map((c) => c.action)).toEqual([
+      { kind: 'sai_illusion', army: 'frontier' },
+      { kind: 'sai_illusion', army: 'reserve' },
+    ])
+  })
+})
+
 describe('Hypnotic Glare on the board', () => {
   /** A glare from a p1 die at the Frontier onto a p2 die there, hand-built (v2 Phase 5c). */
   const glared = () => {

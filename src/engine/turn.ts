@@ -763,6 +763,9 @@ function withTargets(
     ...combat,
     attack: {
       dice: attack.dice,
+      // Charm's melee (v2 Phase 8d) belongs to the roll, not to the queue, so it is
+      // carried: this rebuild is field by field, and drops whatever it does not name.
+      ...(attack.charm !== undefined ? { charm: attack.charm } : {}),
       ...(targets.length > 0 ? { targets } : {}),
       ...(attack.delayed !== undefined ? { delayed: attack.delayed } : {}),
       ...(rerollDue !== undefined ? { rerollDue } : {}),
@@ -880,8 +883,13 @@ function taskOwner(task: TargetTask, spec: AttackSpec, delayed: boolean): TaskOw
   // A Cantrip face is on a die in the rolling army, so its pool belongs to whoever
   // threw it -- the attacker on an attack roll, the defender on a save roll. Exactly
   // the split Wild Growth and the free moves make, and for the same reason.
+  // Illusion (v2 Phase 8d) is friendly too, and comes only off an attack roll.
   const friendly =
-    task.kind === 'promote' || task.kind === 'regenerate' || task.kind === 'move' || task.kind === 'cantrip'
+    task.kind === 'promote' ||
+    task.kind === 'regenerate' ||
+    task.kind === 'move' ||
+    task.kind === 'cantrip' ||
+    task.kind === 'illusion'
   if (delayed && friendly) {
     return { player: spec.defender, army: spec.defender, slot: spec.defenderSlot }
   }
@@ -913,6 +921,41 @@ function chokeEligible(state: GameState, spec: AttackSpec, saves: PendingSaves):
     if (!ids.includes(die.unitId)) ids.push(die.unitId)
   }
   return ids
+}
+
+/**
+ * Confuse's legal targets (v2 Phase 8d): the defenders that have a die in the save roll.
+ *
+ * "Re-roll the targeted units, ignoring all previous results" asks about a die that
+ * rolled, and a die that sat the save roll out -- charmed, asleep, stunned, glaring --
+ * has no result to ignore. Before Charm this let Confuse aim at a sleeping die and throw
+ * it for nothing; Charm made it common, since every charmed die sits the roll out.
+ */
+function confuseEligible(state: GameState, spec: AttackSpec, saves: PendingSaves): readonly UnitId[] {
+  const army = armyRef(state, spec.defender, spec.defenderSlot)
+  return army.filter((unit) => saves.dice.some((die) => die.unitId === unit.id)).map((unit) => unit.id)
+}
+
+/** The armies an Illusion may shield (v2 Phase 8d): every army of the roller's, a
+ *  Reserve Army included -- "any of your armies". */
+function illusionArmies(state: GameState, player: PlayerId): readonly ArmyRef[] {
+  return ([...TERRAIN_SLOTS, 'reserve'] as const).filter((ref) => armyRef(state, player, ref).length > 0)
+}
+
+/** Illusion's shield on one army, until the roller's next turn. */
+function castIllusion(state: GameState, player: PlayerId, army: ArmyRef, sai: string): GameState {
+  return castEffect(
+    state,
+    player,
+    {
+      source: sai,
+      target: { kind: 'army', player, army },
+      modifiers: [],
+      illusion: true,
+      expiresAtStartOfTurnOf: player,
+    },
+    { target: player, slot: army },
+  )
 }
 
 /**
@@ -965,8 +1008,17 @@ function taskHasWork(
       return army.length > 0
     case 'galeforce':
       return opposingArmies(state, spec.attacker).length > 0
-    case 'confuse':
-      return damageOptions(army, task.health).required > 0
+    case 'confuse': {
+      // Only dice that rolled saves can be thrown again (v2 Phase 8d), as only those
+      // that rolled an ID can be choked.
+      const saves = state.turn.combat?.saves
+      if (saves === undefined) return false
+      const eligible = confuseEligible(state, spec, saves)
+      return damageOptions(army.filter((unit) => eligible.includes(unit.id)), task.health).required > 0
+    }
+    // Illusion: with one army there is nothing to choose, and `autoResolve` shields it.
+    case 'illusion':
+      return illusionArmies(state, owner.player).length > 1
     case 'choke': {
       // Nothing rolled an ID, nothing to choke -- and the army may be picked from only
       // within that set, so the budget is measured over it too.
@@ -1032,8 +1084,18 @@ function taskPending(
       return { kind: 'sai_target', ...common, ...aimed, limit: { kind: 'health', budget: task.health } }
     case 'sleep':
       return { kind: 'sai_target', ...common, ...aimed, limit: { kind: 'one' } }
-    case 'confuse':
-      return { kind: 'sai_target', ...common, ...aimed, limit: { kind: 'health', budget: task.health } }
+    case 'confuse': {
+      const saves = requireSaves(state, requireCombat(state))
+      return {
+        kind: 'sai_target',
+        ...common,
+        ...aimed,
+        limit: { kind: 'health', budget: task.health },
+        eligible: confuseEligible(state, spec, saves),
+      }
+    }
+    case 'illusion':
+      return { kind: 'sai_illusion', ...common, options: illusionArmies(state, owner.player) }
     case 'choke': {
       const saves = requireSaves(state, requireCombat(state))
       return {
@@ -1292,6 +1354,7 @@ function rollHeldAgain(state: GameState, spec: AttackSpec, unitId: UnitId): Game
         ...combat,
         attack: {
           dice: [...attack.dice, ...dice],
+          ...(attack.charm !== undefined ? { charm: attack.charm } : {}),
           ...(targets.length > 0 ? { targets } : {}),
           ...(delayedTasks.length > 0 ? { delayed: delayedTasks } : {}),
         },
@@ -1346,6 +1409,13 @@ function autoResolve(
 ): GameState {
   const dropped = dropHeadTask(state)
   if (task.kind === 'regenerate') return regenerateSaves(dropped, spec, task, delayed)
+  // Illusion with one army to shield (v2 Phase 8d): no question, and the shield lands --
+  // the log's `effect_cast` line is what says so.
+  if (task.kind === 'illusion') {
+    const owner = taskOwner(task, spec, delayed)
+    const [only] = illusionArmies(dropped, owner.player)
+    return only === undefined ? dropped : castIllusion(dropped, owner.player, only, task.sai)
+  }
   if (task.kind !== 'promote') return dropped
 
   // Wild Growth with nothing to promote into: the budget is save results, and they
@@ -1668,6 +1738,92 @@ function applySaiTargetArmy(state: GameState, slot: TerrainSlot): GameState {
 }
 
 /**
+ * Charm (v2 Phase 8d): the charmed dice roll melee for the attacker, and sit out the
+ * save roll.
+ *
+ * "The owner rolls these units and adds their results to the attacking army's
+ * results." Each is a **unit roll** (p. 28) through 8b's melee sub-roll: no army
+ * modifier reaches it -- neither its owner's Palsy nor the attacker's Fiery Weapon --
+ * its species ability does, and its SAIs give results and nothing else. A die that may
+ * not be rolled adds nothing and draws nothing; a stunned one rolls, since Charm forces
+ * it to. Board order, `death.ts`'s rule.
+ *
+ * The total is parked on the attack (`PendingAttack.charm`) and joins it as step-8
+ * results named Charm; the dice go on the bench, which `armyRoll` reads, so they sit
+ * out the save roll -- a Charge's combination roll included -- and nothing after it,
+ * because `finishExchange` drops the bench with the half.
+ */
+function applyCharm(
+  state: GameState,
+  spec: AttackSpec,
+  task: Extract<TargetTask, { kind: 'enemy' }>,
+  unitIds: readonly UnitId[],
+): GameState {
+  const ordered = inBoardOrder(state, unitIds)
+  const [rolls, rng] = rollUnits(
+    ordered.map((id) => unitRoll(state, id)),
+    'melee',
+    subRollContext('melee'),
+    state.rng,
+    state.ruleSet,
+  )
+  const dice: DieRoll[] = []
+  let given = 0
+  for (const sub of rolls) {
+    if (sub.roll === null) continue
+    // Never fires: a melee sub-roll's effects are dropped by `saiEffects` (8b).
+    expectNoEffects(sub.roll, `${task.sai}'s melee roll`)
+    dice.push(...sub.roll.dice)
+    given += sub.roll.total
+  }
+
+  const logged = endGlaresOf(
+    withLog(
+      { ...state, rng },
+      {
+        kind: 'sai_sub_roll',
+        player: spec.defender,
+        source: task.sai,
+        slot: spec.defenderSlot,
+        test: 'melee',
+        dice,
+        escaped: [],
+        fate: 'charm',
+        given,
+      },
+    ),
+    rolls.filter((sub) => sub.roll !== null).map((sub) => sub.unitId),
+  )
+
+  const combat = requireCombat(logged)
+  const attack = requireAttack(logged, combat)
+  const charm = (attack.charm ?? 0) + given
+  const benched = [...(combat.benched ?? []), ...ordered.filter((id) => !(combat.benched ?? []).includes(id))]
+  return dropHeadTask(
+    withTurn(logged, {
+      combat: { ...combat, benched, attack: { ...attack, ...(charm > 0 ? { charm } : {}) } },
+    }),
+  )
+}
+
+/** Illusion (v2 Phase 8d): the army the roller picked, shielded until their next turn. */
+function applySaiIllusion(state: GameState, army: ArmyRef): GameState {
+  const step = state.turn.marchStep
+  if (step !== 'sai_target_attack' && step !== 'sai_target_counter') {
+    throw new IllegalActionError(`no Illusion is waiting for an army (march step ${step})`)
+  }
+  const [task] = taskQueue(state)
+  if (task === undefined || task.kind !== 'illusion') throw new IllegalActionError('no Illusion is waiting for an army')
+
+  const spec = exchangeSpec(state, step === 'sai_target_counter')
+  const owner = taskOwner(task, spec, false)
+  if (!illusionArmies(state, owner.player).includes(army)) {
+    throw new IllegalActionError(`${owner.player} has no army at ${army} for ${task.sai} to shield`)
+  }
+  return dropHeadTask(castIllusion(state, owner.player, army, task.sai))
+}
+
+/**
  * Applies one targeting SAI to the units the roller picked.
  *
  * The selection rule is the opponent-targeting one: the maximum must be taken (full
@@ -1690,7 +1846,8 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
     task.kind === 'regenerate' ||
     task.kind === 'move' ||
     task.kind === 'cantrip' ||
-    task.kind === 'glare'
+    task.kind === 'glare' ||
+    task.kind === 'illusion'
   ) {
     throw new IllegalActionError('no SAI is waiting for unit targets')
   }
@@ -1734,7 +1891,9 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
   const pool =
     task.kind === 'choke' && saves !== undefined
       ? army.filter((unit) => chokeEligible(state, spec, saves).includes(unit.id))
-      : army
+      : task.kind === 'confuse' && saves !== undefined
+        ? army.filter((unit) => confuseEligible(state, spec, saves).includes(unit.id))
+        : army
 
   if (task.kind === 'enemy' && task.one === true) {
     // Swallow: one die, Sleep's count rule -- and "select the maximum number of
@@ -1761,6 +1920,7 @@ function applySaiTarget(state: GameState, unitIds: readonly UnitId[]): GameState
 
   if (task.kind === 'confuse') return applyConfuse(named, task, unitIds)
   if (task.kind === 'choke') return applyChoke(named, spec, task, unitIds)
+  if (task.fate === 'charm') return applyCharm(named, spec, task, unitIds)
 
   // Roar: "immediately moved to their Reserve Area before the defending army rolls for
   // saves". Not killed, so no death trigger fires -- a Treefolk at water is not
@@ -5112,6 +5272,8 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return applySaiRegenerate(cleared, action.choice)
     case 'foul_stench':
       return applyFoulStench(cleared, action.unitIds)
+    case 'sai_illusion':
+      return applySaiIllusion(cleared, action.army)
     case 'sai_move':
       return applySaiMove(cleared, action.slot, action.unitIds)
     case 'reinforce':

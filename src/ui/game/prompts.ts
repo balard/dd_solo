@@ -486,6 +486,18 @@ export function promptFor(pending: Pending, human: 'p1' | 'p2', state: GameState
         })),
       }
 
+    // Illusion (v2 Phase 8d): an army is not a die (9f), so buttons, Galeforce's shape.
+    case 'sai_illusion':
+      return {
+        question:
+          `${pending.sai}: shield which of your armies from missiles and spells?` +
+          (pending.remaining > 1 ? ` (${pending.remaining} to place)` : ''),
+        choices: pending.options.map((ref) => ({
+          label: label(ref),
+          action: { kind: 'sai_illusion', army: ref },
+        })),
+      }
+
     case 'reinforce':
       return { question: 'Send units from reserve?', choices: [], custom: 'reinforce' }
 

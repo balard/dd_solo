@@ -184,6 +184,10 @@ export function decideAction(state: GameState, pending: Pending): GameAction {
     case 'sai_target_army':
       return { kind: 'sai_target_army', slot: pending.options[0] ?? 'frontier' }
 
+    // Illusion (v2 Phase 8d) is forced too: the shield lands on some army.
+    case 'sai_illusion':
+      return { kind: 'sai_illusion', army: pending.options[0] ?? 'reserve' }
+
     case 'reinforce':
       return { kind: 'reinforce', moves: [] }
 

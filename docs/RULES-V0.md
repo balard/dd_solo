@@ -1278,3 +1278,36 @@ the melee roll does not count.
 - **Several Cloaks are several effects**, one per face, and stack; the board counts them on one chip.
 - **Webbed is asleep, under Web's name**, as netted is under Net's: the fate is the status
   (`'asleep'`) and the word comes from the SAI (`heldWord`). The board says "webbed".
+
+### Charm and Illusion (8d)
+
+| SAI | Applies | What it does here |
+|---|---|---|
+| **Charm** | Melee | Up to X health-worth of the defenders -- p. 32's forced maximum -- roll **melee** for the attacker (the sub-roll above), and their total joins the attack as step-8 results named Charm ("0 on the dice + 4 Charm = 4"). They sit out the save roll, and may still take the attack's damage. |
+| **Illusion** | Magic, melee, missile | On any attack roll, a counter-attack's and a magic action's included: one of the roller's armies -- a terrain or the Reserve Army -- may not be targeted by an opponent's missile attack or spell until the roller's next turn. |
+
+House rules (owner-approved with the plan):
+
+- **A charmed die rolls as a unit** (p. 28): no army modifier reaches it -- not its owner's Palsy or
+  Dancing Lights, not the attacker's Fiery Weapon -- and its own species ability does, so a charmed
+  Firewalker at fire counts its saves as melee **for the enemy**. Its SAIs give results and nothing
+  else, so its Smite strikes nobody and its Charm charms nobody.
+- **It sits out the save roll and nothing after.** It may counter-attack and take a riposte, and it
+  can be neither Choked nor Confused, since both act on dice that rolled saves. Against a **Charge**
+  it sits out the combination roll, which is that save roll, and adds its melee to the attacker's.
+- **A die that cannot be rolled adds nothing** and draws nothing; a stunned die rolls, by Stun's own
+  exception for an individual-targeting effect that forces it to.
+- **Every Illusion face is its own choice**, not one combined choice: there is no X to combine, so two
+  faces may shield two armies.
+- **No question when there is one army to shield**: the effect lands, and the log says so.
+- **"Cannot be targeted by spells" covers a unit spell aimed at a die in the army** -- Finger of
+  Death, Lightning Strike, Firebolt, Mirage, Scent of Fear -- and not a terrain spell, whose target
+  is the terrain. One predicate, `shielded`, answers this and the Temple's death-magic immunity.
+- **Illusion cannot stop the attack it is rolled against**: a missile already aimed has landed. It
+  refuses the next one, including a Defensive Volley at an Illusioned marching army.
+
+**Confuse picks only dice that rolled saves** (a rule fix, 8d). "Re-roll the targeted units,
+ignoring all previous results" asks about a die with a result; a charmed, sleeping, stunned or
+glaring die has none. Before this Confuse could aim at a sleeping die and throw it for nothing; it
+is held to the dice in the save roll the way Choke is held to those that rolled an ID. No recorded
+game moved.

@@ -361,9 +361,12 @@ export function effectSummary(effects: readonly RollEffectBody[], sai: string): 
           switch (effect.escape) {
             case 'none':
               // Roar moves its targets home rather than killing them (v2 Phase 6d).
+              // Charm (v2 Phase 8d) takes nobody: the dice roll for the attacker instead.
               return effect.fate === 'reserve'
                 ? `${effect.health} health-worth sent to reserves`
-                : `${effect.health} health-worth ${effect.fate === 'bury' ? 'killed and buried' : 'killed'}`
+                : effect.fate === 'charm'
+                  ? `${effect.health} health-worth roll melee for you instead of saving`
+                  : `${effect.health} health-worth ${effect.fate === 'bury' ? 'killed and buried' : 'killed'}`
             case 'save':
               // Poison's dead roll again, for burial (v2 Phase 7c).
               return effect.fate === 'save_or_bury'
@@ -421,6 +424,8 @@ export function effectSummary(effects: readonly RollEffectBody[], sai: string): 
           return 'a charge: maneuver counts as melee, and they answer with saves and melee'
         case 'cloak':
           return `+${effect.saves} save to this army until your next turn`
+        case 'illusion':
+          return 'one of your armies shielded from missiles and spells'
       }
     })
     .join('; ')

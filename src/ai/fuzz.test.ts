@@ -80,6 +80,9 @@ const DECISIONS: Readonly<Record<GameAction['kind'], Reach>> = {
   sai_promote: 'every',
   sai_regenerate: 'every',
   foul_stench: 'every',
+  // Illusion (v2 Phase 8d): the Lava Elves are not playable until 8e, which turns this
+  // into a reach of the fuzz's own.
+  sai_illusion: { elsewhere: "lava.test.ts, 'asks which army when there are two'" },
   sai_move: 'every',
   reinforce: 'every',
   retreat: 'every',

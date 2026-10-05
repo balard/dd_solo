@@ -273,6 +273,8 @@ export function expectOnly(
  */
 export interface AttackRollState {
   readonly dice: readonly RawDie[]
+  /** Charm (v2 Phase 8d): melee the charmed dice gave this attack. Omitted when none. */
+  readonly charm?: number
 }
 
 /**
@@ -323,11 +325,17 @@ export function volleyers(
 
 /** The spec the attack roll is resolved under. Built in one place because
  *  `rollAttack` and `resolveSaves` must agree on it exactly. */
-function attackRollSpec(spec: AttackSpec, modifiers: readonly Modifier[]): RollSpec {
+function attackRollSpec(spec: AttackSpec, modifiers: readonly Modifier[], attack?: AttackRollState): RollSpec {
+  const charm = attack?.charm ?? 0
   return {
     kinds: [spec.action],
     modifiers,
     context: { purpose: { kind: 'attack', action: spec.action }, isCounter: spec.isCounter },
+    // Charm (v2 Phase 8d): the charmed dice's melee, step-8 results that are on none of
+    // the attacker's faces -- Wild Growth's seam, so the line reads "+ 5 Charm". Passed by
+    // the two readers of the totals (`attackFacts`, `parkedAttackRoll`); the readers of
+    // the effects never need it.
+    ...(charm > 0 ? { saiResults: { [spec.action]: charm }, saiResultsSource: 'Charm' } : {}),
     /*
      * Tower's "if attacking a Reserve Army, only count non-ID missile results"
      * (Phase 5d).
@@ -511,7 +519,7 @@ export interface AttackFacts {
  */
 export function attackFacts(state: GameState, spec: AttackSpec, attack: AttackRollState): AttackFacts {
   const attackers = attackerRoll(state, spec)
-  const rollSpec = attackRollSpec(spec, attackers.modifiers)
+  const rollSpec = attackRollSpec(spec, attackers.modifiers, attack)
   const attackRoll = asResult(resolveFaces(attack.dice, rollSpec, state.ruleSet), spec.action)
 
   // Every targeting kind is consumed by a step *before* the totals are read, so by the
@@ -537,6 +545,7 @@ export function attackFacts(state: GameState, spec: AttackSpec, attack: AttackRo
       'screech',
       'glare',
       'charge',
+      'illusion',
     ],
     `a ${spec.action} attack`,
   )
@@ -742,7 +751,7 @@ export function parkedAttackRoll(
 ): RollResult {
   const attackers = attackerRoll(state, spec)
   return asResult(
-    resolveFaces(attack.dice, attackRollSpec(spec, attackers.modifiers), state.ruleSet),
+    resolveFaces(attack.dice, attackRollSpec(spec, attackers.modifiers, attack), state.ruleSet),
     spec.action,
   )
 }

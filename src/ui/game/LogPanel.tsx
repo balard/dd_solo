@@ -64,6 +64,8 @@ const stakeOf = (fate: Extract<LogEntry, { kind: 'sai_sub_roll' }>['fate'], sour
       return `be ${heldWord(source)}`
     case 'stun':
       return 'be stunned'
+    case 'charm':
+      return 'roll for the enemy'
     case undefined:
       return 'die'
   }
@@ -361,6 +363,21 @@ export function LogLine({
           .join(', ')
       const asked =
         entry.test === 'id' ? 'an ID icon' : entry.test === 'save' ? 'a save' : entry.test === 'melee' ? 'a melee' : 'a maneuver'
+
+      // Charm (v2 Phase 8d): no escape and no stake. The dice rolled melee for the
+      // attacker, and the line says what that came to.
+      if (entry.fate === 'charm') {
+        return (
+          <div className="log-roll">
+            <div className="roll-head">
+              <strong>{entry.source}</strong> &middot; {entry.player === human ? 'your' : "the enemy's"} charmed dice
+              roll for {entry.player === human ? 'the enemy' : 'you'} &middot; {where(entry.slot)}
+            </div>
+            <RollStrip dice={entry.dice} />
+            <div className="roll-sum">{entry.given ?? 0} melee to the attack</div>
+          </div>
+        )
+      }
 
       // A damage sub-roll (v2 Phase 6d: Bash, and Firebolt in 6g): not "any save gets
       // away" but saves against a number, so it says the number.

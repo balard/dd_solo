@@ -36,8 +36,9 @@ export type TargetTask =
       readonly health: number
       readonly escape: 'none' | 'save' | 'maneuver' | 'melee' | 'id'
       /** Roar's `'reserve'` and Stomp's `'save_or_bury'` from v2 Phase 6d; Net's and
-       *  Stun's statuses from 7c (Net's under the status's name since 8b). */
-      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury' | 'asleep' | 'stun'
+       *  Stun's statuses from 7c (Net's under the status's name since 8b); Charm's
+       *  melee for the attacker from 8d. */
+      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury' | 'asleep' | 'stun' | 'charm'
       /** Seize: where an escapee goes. Omitted means it stays where it stood. */
       readonly escapeTo?: 'reserve'
       /**
@@ -89,6 +90,12 @@ export type TargetTask =
    * combined: it targets an individual unit (p. 32).
    */
   | { readonly kind: 'bash'; readonly sai: string }
+  /**
+   * Illusion (v2 Phase 8d): one of the roller's own armies, shielded. The attacker's,
+   * since it applies only to attacks; asked only when there is more than one army to
+   * choose, and never combined.
+   */
+  | { readonly kind: 'illusion'; readonly sai: string }
 
 /** The effect kinds that wait for the save dice: step 2, "Delayed Effects". */
 const DELAYED: readonly RollEffect['kind'][] = ['choke', 'confuse', 'glare']
@@ -127,7 +134,8 @@ function build(effects: readonly RollEffect[]): readonly TargetTask[] {
     // named there outright, "SAIs that move units out of the army ... are always
     // resolved one by one". A free move also *is* a particular die, so there is
     // nothing to merge it into.
-    if (effect.kind === 'sleep' || effect.kind === 'galeforce' || effect.kind === 'bash') {
+    // Illusion (v2 Phase 8d) has no X to combine, so two faces are two armies, as for Sleep.
+    if (effect.kind === 'sleep' || effect.kind === 'galeforce' || effect.kind === 'bash' || effect.kind === 'illusion') {
       tasks.push({ kind: effect.kind, sai: effect.sai })
       continue
     }

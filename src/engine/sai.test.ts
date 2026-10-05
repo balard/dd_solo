@@ -426,8 +426,8 @@ describe('the rungs of ruleSet.sai', () => {
     // Dwarves' four, the same way -- 6d built Roar, Stomp and Bash, and 6e Charge.
     // v2 Phase 7a: the Goblins' five. 7c built Net, Poison, Screech and Stun, and 7d
     // Regenerate. v2 Phase 8a: the Lava Elves' five. 8c built Stone, Web and Cloak, and
-    // 8d builds Charm and Illusion.
-    const deferred = new Set<string>(['Charm', 'Illusion'])
+    // 8d Charm and Illusion.
+    const deferred = new Set<string>()
     const live = new Set(LIVE_SAIS)
     const targeting = new Set(TARGETING_SAIS)
 
@@ -441,8 +441,8 @@ describe('the rungs of ruleSet.sai', () => {
     // all quote it, and nothing else would notice it going stale. Each Phase 4 slice
     // moves names from `deferred` into `TARGETING_SAIS` and edits these two numbers.
     expect(live.size, 'SAIs live under sai: results').toBe(16)
-    expect(targeting.size, 'targeting SAIs built so far').toBe(27)
-    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(2)
+    expect(targeting.size, 'targeting SAIs built so far').toBe(29)
+    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(0)
     expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(0)
 
     for (const name of names) {

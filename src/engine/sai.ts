@@ -851,6 +851,37 @@ const FULL_HANDLERS: Readonly<Record<string, SaiHandler>> = {
       : NOTHING,
 
   /**
+   * "During a melee attack, target up to X health-worth of units in the defending army;
+   * those units don't roll to save during this march. Instead, the owner rolls these
+   * units and adds their results to the attacking army's results. Those units may take
+   * damage from the melee attack as normal." (v2 Phase 8d.)
+   *
+   * A targeting task held to p. 32's forced maximum like every other. Answering it rolls
+   * the targets through the melee sub-roll (`applyCharm`), whose effects 8b's rule drops,
+   * benches them for the save roll, and joins their melee to the attack as step-8
+   * results named Charm.
+   */
+  Charm: (x, ctx) =>
+    isAttack(ctx, 'melee')
+      ? {
+          results: {},
+          effects: [{ kind: 'target_enemy', health: x, escape: 'none', fate: 'charm' }],
+          reroll: false,
+        }
+      : NOTHING,
+
+  /**
+   * "During a magic, melee or missile attack, target any of your armies. Until the
+   * beginning of your next turn, the target army cannot be targeted by any missile
+   * attacks or spells cast by opposing players." (v2 Phase 8d.)
+   *
+   * Every attack roll, a counter-attack's and a magic action's included -- the roller is
+   * the attacker either way. No X: the face's count is unread.
+   */
+  Illusion: (_x, ctx) =>
+    ctx.purpose.kind === 'attack' ? { results: {}, effects: [{ kind: 'illusion' }], reroll: false } : NOTHING,
+
+  /**
    * "During a save roll or dragon attack, add X non-magical save results to the army
    * containing this unit until the beginning of your next turn. During a magic action,
    * Cloak generates X magic results. During a roll for an individual-targeting effect,
@@ -1107,6 +1138,15 @@ export const SAI_TEXT: Readonly<Record<string, string>> = {
     'result are webbed and cannot be rolled or leave the terrain they currently occupy ' +
     "until the beginning of your next turn. Web does nothing during a missile action " +
     "targeting an opponent's Reserve Army from a Tower on its eighth face.",
+  Charm:
+    'During a melee attack, target up to X health-worth of units in the defending army; ' +
+    "those units don't roll to save during this march. Instead, the owner rolls these units " +
+    "and adds their results to the attacking army's results. Those units may take damage " +
+    'from the melee attack as normal.',
+  Illusion:
+    'During a magic, melee or missile attack, target any of your armies. Until the ' +
+    'beginning of your next turn, the target army cannot be targeted by any missile ' +
+    'attacks or spells cast by opposing players.',
   Cloak:
     'During a save roll or dragon attack, add X non-magical save results to the army ' +
     'containing this unit until the beginning of your next turn. During a magic action, ' +

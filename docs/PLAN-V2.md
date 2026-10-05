@@ -2603,8 +2603,8 @@ over 60 seeds in both seats, and all three earth types turn up.
 ## Phase 8 — Lava Elves
 
 Seven slices: 8a the data, 8b the seams, 8c Stone, Web and Cloak, 8d Charm and Illusion, 8e the two
-abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a, 8b and 8c have
-landed; 8d to 8g are planned.
+abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a to 8d have landed;
+8e to 8g are planned.
 
 Death & Fire, the second species carrying Death. Like the Goblins they have **no own terrain type**,
 so `drawHomeDie` draws them a home among the twelve dice carrying fire (Wasteland, Highland,
@@ -2921,7 +2921,7 @@ unbuilt, and `'full'` refuses an unbuilt face, so the Stone estimate test prices
 three new sentences ("must roll melee or be webbed", "+4 save to this army", "webbed") are pure
 functions with tests. Charm and Illusion are 8d.
 
-### 8d — Charm and Illusion
+### 8d — Charm and Illusion — **landed**
 
 - **Charm** is a `target_enemy` task with a new fate, `'charm'`, at the targeting pause, the attacker's, "up to X health-worth"
   held to p. 32's forced maximum like every other. Answering it rolls the targets through 8b's melee
@@ -2955,6 +2955,59 @@ functions with tests. Charm and Illusion are 8d.
 - `PassiveAI`, `RandomAI` and `GreedyAI` answer `sai_illusion`; the prompt lists armies as buttons,
   since an army is not a die (9f).
 - `expectOnly` gains whatever kinds these two add. Every phase since 4b has had to be told.
+
+### What 8d found
+
+Both golden corpora replay byte-identical and unregenerated. 1286 tests pass, and so does the
+1000-game fuzz, which still cannot roll a Lava Elf: every SAI in the data now resolves (16 on the
+results rung, 29 on the full one, 0 unbuilt), and the species is held back only by its abilities,
+which are 8e's. `RULES-V0.md` section 20 has both, and a rule fix to Confuse. Seven mutations of the
+new code, six caught and one equivalent (below).
+
+**1. Charm's stash lives on the attack, and the attack is rebuilt field by field twice.** The plan
+said "stashes their total on `combat.attack`", and the obvious edit leaves it there for exactly one
+step: `withTargets` rebuilds the attack after every answer and named only the dice and the queues,
+so the next task on the queue -- a Flame on a second Beholder -- dropped the Charm's melee without a
+sound. `withTargets` and `rollHeldAgain` both carry `charm` now, and a test answers a Flame after a
+Charm. The second is defensive: step-3 rerolls always drain before a step-4 Charm, so nothing is
+stashed when it rebuilds -- kept because a field-by-field rebuild that skips a field is this file's
+oldest bug.
+
+**2. The Charm's melee joins the attack where Wild Growth's saves joined a save roll.**
+`attackRollSpec` takes the parked attack and turns `charm` into `saiResults` named Charm, so the
+line reads "0 on the dice + 4 Charm = 4". Only the two readers of the totals pass it (`attackFacts`,
+`parkedAttackRoll`); the four that read effects do not need it. `savesNeeded` follows from the
+total, so a Charm-only attack still earns the defenders their save roll.
+
+**3. The charm's roll reuses `sai_sub_roll`**, with `fate: 'charm'` and `given`, rather than a new log
+kind. It is already a roll stop, "news" for its owner and the resolution of an SAI, so the
+presentation needed nothing; the two renderers say "your charmed dice roll for the enemy ... 4 melee
+to the attack". `stakeOf`'s exhaustive switch learned the case, which is how the second renderer
+was found.
+
+**4. Confuse could aim at a die that rolled nothing, since Sleep.** A charmed die sits out the save
+roll, so "Confused only if it was in a roll those can see" needed a rule, and reading for it found
+the old gap: Confuse's pool was the whole defending army, so a sleeping, stunned or glaring die could
+be picked and thrown for nothing. It is held to the dice in the save roll now (`confuseEligible`,
+Choke's shape, on the pending's `eligible`, which both clients and all three AIs already read). No
+golden moved.
+
+**5. Illusion is a friendly task on the attack's targeting queue**, which is where Wild Growth and
+the free moves wait when an *attack* rolls them -- the plan's "the queue Wild Growth and the free
+moves use" -- owned by the attacker through `taskOwner`. With one army it never asks: `autoResolve`
+shields it, the "nothing to choose" rule the queue already had. The mutation that drops Illusion from
+`taskOwner`'s friendly list survives, and is equivalent: the task reads only the owner's *player*,
+which is the attacker either way. It stays in the list for the reader.
+
+**6. One 8d test passed for the wrong reason.** "A charmed die gets no army modifier" was first
+tested on Watchers under Dancing Lights, and a mutation that handed the charm roll its owner's army
+modifiers survived: Dancing Lights subtracts at step 6, and Flaming Shields' converted saves are added
+at step 10, so the total came out the same. It is two tests now, Oaks under Dancing Lights and
+Watchers for Flaming Shields, and the mutation is caught.
+
+**Deliberately rough, for 8g.** Greedy shields the army with the most health and the estimator
+prices a Charm as half a kill of what it takes; 8g re-runs greedy and says whether either needs more.
+The fuzz's `sai_illusion` is `{ elsewhere }` until the 8e flip makes it reachable.
 
 ### 8e — Volcanic Adaptation, Cursed Bullets, and the flip
 

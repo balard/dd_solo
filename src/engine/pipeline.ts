@@ -287,8 +287,11 @@ export type RollEffectBody =
        * named for one SAI is a fate the second one forgets: the Tower's drop asked for
        * `'net'`. So the fate names the status, and the name it is written under is the
        * task's `sai` -- "be netted", "be webbed" (`heldWord`).
+       *
+       * `'charm'` (v2 Phase 8d) is no fate at all for the dice, which stay where they are:
+       * they roll melee for the attacker (`applyCharm`) and sit out the save roll.
        */
-      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury' | 'asleep' | 'stun'
+      readonly fate: 'kill' | 'bury' | 'reserve' | 'save_or_bury' | 'asleep' | 'stun' | 'charm'
       /**
        * Where a target that escaped ends up. Omitted means "where it was standing",
        * which is every escape but Seize's.
@@ -434,6 +437,13 @@ export type RollEffectBody =
    * resolved (`castCloaks`), so the roll that made it never gathers it as well.
    */
   | { readonly kind: 'cloak'; readonly saves: number }
+  /**
+   * Illusion (v2 Phase 8d): "target any of your armies. Until the beginning of your next
+   * turn, the target army cannot be targeted by any missile attacks or spells cast by
+   * opposing players." A friendly task with no number, so never combined: two faces may
+   * shield two armies.
+   */
+  | { readonly kind: 'illusion' }
 
 /** A `RollEffectBody` once `resolveRoll` has stamped it with the die that made it,
  *  so the log can say *which* Fireshadow smote you. */

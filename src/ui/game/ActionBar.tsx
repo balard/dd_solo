@@ -1496,7 +1496,9 @@ function SaiHeader({
       {/* Galeforce picks a terrain rather than dice, so it comes through the ordinary
           button path -- but it is still an SAI being chosen in the middle of a roll,
           and it gets the same roll strip and the same rule text as the rest. */}
-      {pending.kind === 'sai_target_army' && <SaiHeader state={state} sai={pending.sai} />}
+      {(pending.kind === 'sai_target_army' || pending.kind === 'sai_illusion') && (
+        <SaiHeader state={state} sai={pending.sai} />
+      )}
       <div className="choices">
         {prompt.choices.map((choice, i) => (
           <button

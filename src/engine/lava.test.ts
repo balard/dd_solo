@@ -5,7 +5,7 @@
  * directly: the melee sub-roll Web and Charm will roll, the save-roll bench Charm will
  * fill, the hold fate Web will share with Net, the one targeting restriction Illusion
  * will write, and the "counts as" types Necromantic Wave and Volcanic Adaptation need.
- * 8c's three SAIs follow: Stone, Web and Cloak.
+ * 8c's three SAIs follow: Stone, Web and Cloak; then 8d's Charm and Illusion.
  *
  * Boards are hand-built, because the Lava Elves are not playable until 8e and
  * `setupGame` would refuse them.
@@ -433,7 +433,7 @@ const saveVs = (against: 'melee' | 'missile' | null): RollPurpose => ({ kind: 's
 
 /** p1 attacks p2's army at the Frontier, about to roll; p2 keeps an Oak at home. */
 const attackAt = (
-  action: 'melee' | 'missile',
+  action: 'melee' | 'missile' | 'magic',
   p1: readonly (string | Die)[],
   p2: readonly (string | Die)[],
   rng: RngState,
@@ -503,9 +503,9 @@ describe('Stone', () => {
   })
 
   it("is priced as Smite's line in the estimate: unsavable, and never a result", () => {
-    // On the results rung, where Stone lives beside Smite: the Beholder's Charm and
-    // Illusion are unbuilt until 8d, and the full rung refuses an unbuilt face.
-    const state: GameState = { ...board([BEHOLDER], [OAK]), ruleSet: SAI_RULES }
+    // Every face of the Beholder resolves since 8d, so on the full rung: Flame, Charm and
+    // Confuse are `targeted`, never `unsavable`, and Illusion is nothing at all.
+    const state = board([BEHOLDER], [OAK])
     const melee = expectedArmy(state, 'p1', 'frontier', 'melee')
     const missile = expectedArmy(state, 'p1', 'frontier', 'missile')
     // One Stone face in ten, four damage: 0.4 unsavable whichever action carries it.
@@ -717,5 +717,255 @@ describe('Cloak', () => {
     // Lurker in the Deep on a save roll: its ID (4), Counter, Volley, Cloak and Fly are
     // four saves each, and five blanks -- 20 / 10 = 2. Without Cloak's line it is 1.6.
     expect(expectedArmy(board([WATCHER], [LURKER]), 'p2', 'frontier', 'save').total).toBeCloseTo(2)
+  })
+})
+
+// --- 8d: Charm, Illusion --------------------------------------------------------------
+
+const RAKSHASA = 'lava_elves.rakshasa'
+const BEHEMOTH = 'dwarves.behemoth'
+/** Watcher: `3 MELEE` at face 1, `2 SAVE` at face 2. */
+const WATCHER_SAVE = 2
+
+describe('Charm', () => {
+  it('targets in a melee attack, with no escape and no death, and in nothing else', () => {
+    expect(saiEffects(face('Charm'), ctx(MELEE), RULES).effects).toEqual([
+      { kind: 'target_enemy', health: 4, escape: 'none', fate: 'charm' },
+    ])
+    for (const purpose of [MISSILE, MAGIC, saveVs('melee'), DRAGON]) {
+      expect(saiEffects(face('Charm'), ctx(purpose), RULES)).toEqual({ results: {}, effects: [], reroll: false })
+    }
+    // 8b's rule: a charmed Beholder's own Charm charms nobody.
+    expect(saiEffects(face('Charm'), subRollContext('melee'), RULES).effects).toEqual([])
+  })
+
+  /** p1's dice show these faces; then the charmed dice and the save roll, in that order. */
+  const charming = (
+    p1: readonly string[],
+    p1Faces: readonly number[],
+    p2: readonly (string | Die)[],
+    rolled: readonly string[],
+    rolledFaces: readonly number[],
+    extra: Partial<GameState> = {},
+  ): GameState =>
+    advance({
+      ...attackAt('melee', p1, p2, rngShowing([...p1, ...rolled], [...p1Faces, ...rolledFaces])),
+      ...extra,
+    })
+
+  it('rolls the targets for the attacker, benches them for the save roll, and adds their melee', () => {
+    // The Beholder's Charm takes two Oaks, which roll 2 melee each for p1; the third Oak
+    // saves alone, and shows melee, so it saves nothing.
+    const asked = charming([BEHOLDER], [faceOf(BEHOLDER, 'SAI:Charm')], [OAK, OAK, OAK], [OAK, OAK, OAK], [
+      OAK_MELEE,
+      OAK_MELEE,
+      OAK_MELEE,
+    ])
+    expect(asked.pending).toMatchObject({ kind: 'sai_target', sai: 'Charm', limit: { kind: 'health', budget: 4 } })
+    // p. 32's forced maximum, as for every SAI aimed at the opponent.
+    expect(() => reduce(asked, { kind: 'sai_target', unitIds: ['p2:0'] })).toThrow()
+
+    const done = reduce(asked, { kind: 'sai_target', unitIds: ['p2:1', 'p2:0'] })
+    expect(entries(done, 'sai_sub_roll')).toMatchObject([
+      { player: 'p2', source: 'Charm', test: 'melee', fate: 'charm', given: 4, escaped: [] },
+    ])
+    expect(entries(done, 'sai_sub_roll')[0]?.dice.map((d) => d.unitId)).toEqual(['p2:0', 'p2:1'])
+    const resolved = entries(done, 'combat_resolved')[0]
+    expect(resolved).toMatchObject({ attackTotal: 4, saveTotal: 0, damage: 4 })
+    expect(resolved?.saveDice?.map((d) => d.unitId)).toEqual(['p2:2'])
+    // "9 on the dice + 5 Charm = 14", here 0 + 4.
+    expect(resolved?.attackMath?.steps).toContainEqual({ source: 'Charm', delta: 4 })
+    // "Those units may take damage from the melee attack as normal."
+    expect(done.pending).toMatchObject({ kind: 'assign_damage', player: 'p2' })
+    expect(done.turn.combat?.benched).toBeUndefined()
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('sits out only the save roll: the charmed dice counter-attack', () => {
+    // The third Oak saves 4 against the 4: nothing dies, and the counter is offered.
+    const asked = charming([BEHOLDER], [faceOf(BEHOLDER, 'SAI:Charm')], [OAK, OAK, OAK], [OAK, OAK, OAK], [
+      OAK_MELEE,
+      OAK_MELEE,
+      OAK_SAVE,
+    ])
+    const offered = advance(reduce(asked, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] }))
+    expect(offered.pending).toMatchObject({ kind: 'choose_counter_attack', player: 'p2' })
+    const countered = advance(reduce(offered, { kind: 'choose_counter_attack', counter: true }))
+    const counter = entries(countered, 'combat_resolved').find((e) => e.isCounter)
+    expect(counter?.attackDice.slice(0, 3).map((d) => d.unitId)).toEqual(['p2:0', 'p2:1', 'p2:2'])
+  })
+
+  it("rolls each die as a unit: no army modifier of its owner's reaches it", () => {
+    // Dancing Lights' six melee off p2's army would zero an army roll of these Oaks; a unit
+    // roll never sees it (p. 28).
+    const lights: Effect = {
+      source: 'Dancing Lights',
+      target: { kind: 'army', player: 'p2', army: 'frontier' },
+      modifiers: [{ kind: 'subtract', resultType: 'melee', amount: 6 }],
+      expiresAtStartOfTurnOf: 'p1',
+    }
+    const asked = charming([BEHOLDER], [faceOf(BEHOLDER, 'SAI:Charm')], [OAK, OAK, OAK], [OAK, OAK, OAK], [
+      OAK_MELEE,
+      OAK_MELEE,
+      OAK_SAVE,
+    ], { effects: [lights] })
+    const done = reduce(asked, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] })
+    expect(entries(done, 'sai_sub_roll')[0]).toMatchObject({ fate: 'charm', given: 4 })
+  })
+
+  it('rolls each die with its own species ability: Flaming Shields, for the enemy', () => {
+    // Highland is fire and earth, so a charmed Watcher's 2 saves are 2 melee.
+    const asked = charming(
+      [BEHOLDER],
+      [faceOf(BEHOLDER, 'SAI:Charm')],
+      [WATCHER, WATCHER, OAK],
+      [WATCHER, WATCHER, OAK],
+      [WATCHER_SAVE, WATCHER_SAVE, OAK_SAVE],
+    )
+    const done = reduce(asked, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] })
+    expect(entries(done, 'sai_sub_roll')[0]).toMatchObject({ fate: 'charm', given: 4 })
+  })
+
+  it('takes nothing from a die that cannot be rolled, and draws nothing for it', () => {
+    const sleep: Effect = {
+      source: 'Sleep',
+      target: { kind: 'unit', unitId: 'p2:0' },
+      modifiers: [],
+      asleep: true,
+      expiresAtStartOfTurnOf: 'p1',
+    }
+    const asked = charming([BEHOLDER], [faceOf(BEHOLDER, 'SAI:Charm')], [OAK, OAK, OAK], [OAK, OAK], [OAK_MELEE, OAK_SAVE], {
+      effects: [sleep],
+    })
+    const done = reduce(asked, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] })
+    const charmed = entries(done, 'sai_sub_roll')[0]
+    expect(charmed?.dice.map((d) => d.unitId)).toEqual(['p2:1'])
+    expect(charmed).toMatchObject({ given: 2 })
+    // Asleep and charmed both sit out: the save roll is the third Oak alone.
+    expect(entries(done, 'combat_resolved')[0]?.saveDice?.map((d) => d.unitId)).toEqual(['p2:2'])
+  })
+
+  it('outlives the next task on the queue: a Flame answered after it keeps the melee', () => {
+    // Two Beholders, Charm then Flame (two health-worth, killed and buried). The queue's
+    // rebuild after the Flame must still carry the Charm's 4.
+    const asked = charming(
+      [BEHOLDER, BEHOLDER],
+      [faceOf(BEHOLDER, 'SAI:Charm'), faceOf(BEHOLDER, 'SAI:Flame')],
+      [OAK, OAK, OAK, OAK],
+      [OAK, OAK, OAK],
+      [OAK_MELEE, OAK_MELEE, OAK_SAVE],
+    )
+    const flamed = reduce(asked, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] })
+    expect(flamed.pending).toMatchObject({ kind: 'sai_target', sai: 'Flame' })
+    const done = reduce(flamed, { kind: 'sai_target', unitIds: ['p2:2'] })
+    expect(entries(done, 'combat_resolved')[0]).toMatchObject({ attackTotal: 4, saveTotal: 4, damage: 0 })
+  })
+
+  it("adds the charmed dice's melee to a Charge, and keeps them out of the combination roll", () => {
+    // The Behemoth charges and the Beholder charms. The charmed Oaks' 4 melee join the
+    // attack; the third Oak alone makes the combination save and melee roll.
+    const asked = charming(
+      [BEHOLDER, BEHEMOTH],
+      [faceOf(BEHOLDER, 'SAI:Charm'), faceOf(BEHEMOTH, 'SAI:Charge')],
+      [OAK, OAK, OAK],
+      [OAK, OAK, OAK],
+      [OAK_MELEE, OAK_MELEE, OAK_SAVE],
+    )
+    const done = advance(reduce(asked, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] }))
+    const resolved = entries(done, 'combat_resolved')[0]
+    expect(resolved).toMatchObject({ attackTotal: 4, saveTotal: 4, damage: 0, charge: { melee: 0 } })
+    expect(resolved?.saveDice?.map((d) => d.unitId)).toEqual(['p2:2'])
+  })
+})
+
+describe('Confuse after a Charm', () => {
+  it('picks only among the dice that rolled saves, so never a charmed or sleeping one', () => {
+    const sleep: Effect = {
+      source: 'Sleep',
+      target: { kind: 'unit', unitId: 'p2:1' },
+      modifiers: [],
+      asleep: true,
+      expiresAtStartOfTurnOf: 'p1',
+    }
+    const state = attackAt(
+      'melee',
+      [BEHOLDER, WATCHER],
+      [OAK, OAK],
+      rngShowing([BEHOLDER, WATCHER, OAK], [faceOf(BEHOLDER, 'SAI:Confuse'), faceOf(WATCHER, 'MELEE'), OAK_MELEE]),
+    )
+    const asked = advance({ ...state, effects: [sleep] })
+    expect(asked.pending).toMatchObject({ kind: 'sai_target', sai: 'Confuse', eligible: ['p2:0'] })
+    expect(() => reduce(asked, { kind: 'sai_target', unitIds: ['p2:0', 'p2:1'] })).toThrow()
+  })
+})
+
+describe('Illusion', () => {
+  it('shields one of your armies from any attack roll, and does nothing elsewhere', () => {
+    for (const purpose of [MELEE, MISSILE, MAGIC]) {
+      expect(saiEffects(face('Illusion'), ctx(purpose), RULES).effects).toEqual([{ kind: 'illusion' }])
+    }
+    for (const purpose of [saveVs('melee'), DRAGON, { kind: 'maneuver' } as const]) {
+      expect(saiEffects(face('Illusion'), ctx(purpose), RULES)).toEqual({ results: {}, effects: [], reroll: false })
+    }
+    expect(saiEffects(face('Illusion'), subRollContext('melee'), RULES).effects).toEqual([])
+  })
+
+  const illusioned = (p1: readonly (string | Die)[], action: 'melee' | 'magic' = 'melee', faces = 1) =>
+    advance(
+      attackAt(
+        action,
+        p1,
+        [OAK],
+        rngShowing(
+          Array.from({ length: faces }, () => RAKSHASA),
+          Array.from({ length: faces }, () => faceOf(RAKSHASA, 'SAI:Illusion')),
+        ),
+      ),
+    )
+  const shield = (player: PlayerId, army: TerrainSlot | 'reserve'): Effect => ({
+    source: 'Illusion',
+    target: { kind: 'army', player, army },
+    modifiers: [],
+    illusion: true,
+    expiresAtStartOfTurnOf: player,
+  })
+
+  it('lands without a question when there is one army to shield, and the log says so', () => {
+    const done = illusioned([RAKSHASA])
+    expect(entries(done, 'effect_cast')).toEqual([
+      { kind: 'effect_cast', player: 'p1', source: 'Illusion', target: 'p1', slot: 'frontier' },
+    ])
+    expect(done.effects).toEqual([shield('p1', 'frontier')])
+    // And it does what it is for: p2 may not aim a missile at it.
+    expect(missileTargets(done, 'p2', 'frontier')).toEqual([])
+  })
+
+  it('asks which army when there are two', () => {
+    const asked = illusioned([RAKSHASA, { typeId: OAK, at: { kind: 'reserve' } }])
+    expect(asked.pending).toEqual({
+      kind: 'sai_illusion',
+      player: 'p1',
+      sai: 'Illusion',
+      options: ['frontier', 'reserve'],
+      remaining: 1,
+    })
+    expect(() => reduce(asked, { kind: 'sai_illusion', army: 'p2_home' })).toThrow()
+    const done = reduce(asked, { kind: 'sai_illusion', army: 'reserve' })
+    expect(done.effects).toEqual([shield('p1', 'reserve')])
+    expect(validateState(done)).toEqual([])
+  })
+
+  it('never combines: two faces are two choices, which may shield two armies', () => {
+    const asked = illusioned([RAKSHASA, RAKSHASA, { typeId: OAK, at: { kind: 'terrain', slot: 'p1_home' } }], 'melee', 2)
+    expect(asked.pending).toMatchObject({ kind: 'sai_illusion', remaining: 2 })
+    const second = reduce(asked, { kind: 'sai_illusion', army: 'frontier' })
+    expect(second.pending).toMatchObject({ kind: 'sai_illusion', remaining: 1 })
+    const done = reduce(second, { kind: 'sai_illusion', army: 'p1_home' })
+    expect(done.effects).toEqual([shield('p1', 'frontier'), shield('p1', 'p1_home')])
+  })
+
+  it('is rolled on a magic action too', () => {
+    const done = illusioned([RAKSHASA], 'magic')
+    expect(done.effects).toContainEqual(shield('p1', 'frontier'))
   })
 })

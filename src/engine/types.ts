@@ -257,6 +257,13 @@ export type MarchStep =
 export interface PendingAttack {
   readonly dice: readonly RawDie[]
   /**
+   * Charm (v2 Phase 8d): the melee the charmed dice rolled for this attack, which joins
+   * it as step-8 results named Charm. Written when the Charm is answered, read by every
+   * resolution of the attack after it, and carried by each rebuild of this object.
+   * Omitted when nothing was charmed.
+   */
+  readonly charm?: number
+  /**
    * Targeting decisions this roll owes, in resolution order, drained one per action.
    *
    * Omitted when the roll owes none, which is every roll in a `V0_RULES` game -- the
@@ -897,6 +904,18 @@ export type Pending =
       readonly remaining: number
     }
   /**
+   * Illusion (v2 Phase 8d): which of your armies to shield until your next turn. Any
+   * terrain or the Reserve Army -- an army at a place, Galeforce's scope. Raised only
+   * when there are two or more; with one the shield simply lands.
+   */
+  | {
+      readonly kind: 'sai_illusion'
+      readonly player: PlayerId
+      readonly sai: string
+      readonly options: readonly ArmyRef[]
+      readonly remaining: number
+    }
+  /**
    * Firewalking, Teleport: this die moves, and may take up to three health-worth of
    * its army with it, to any terrain.
    *
@@ -1222,6 +1241,8 @@ export type GameAction =
     }
   /** Foul Stench: the defender's dice that sit the counter-attack out. */
   | { readonly kind: 'foul_stench'; readonly unitIds: readonly UnitId[] }
+  /** Illusion: the army to shield. */
+  | { readonly kind: 'sai_illusion'; readonly army: ArmyRef }
   /** A free move. `slot: null` declines it, which is not the same answer as moving
    *  the mover alone. */
   | {
@@ -1681,8 +1702,12 @@ export type LogEntry =
        * What failing costs, when it is not death: Dragon Fire's dice are already dead,
        * and a failed save buries them. Net and Stun (v2 Phase 7c) hold a failure where it
        * stands -- Net's as `'asleep'`, named by `source` (`heldWord`). Omitted means "or die".
+       * `'charm'` (v2 Phase 8d) is no stake at all: the dice rolled melee for the enemy,
+       * `given` is what it came to, and `escaped` is empty.
        */
-      readonly fate?: 'bury' | 'asleep' | 'stun'
+      readonly fate?: 'bury' | 'asleep' | 'stun' | 'charm'
+      /** Charm: the melee the dice gave the attack. Present exactly when `fate` is `'charm'`. */
+      readonly given?: number
       /**
        * Damage the die was rolling saves against (v2 Phase 6b, `damageSubRoll`): it
        * survives when its saves leave less than its health, not on any save at all.

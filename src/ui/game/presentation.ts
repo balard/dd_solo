@@ -113,6 +113,8 @@ const RESOLVES: ReadonlySet<string> = new Set([
   'confuse',
   'wild_growth',
   'free_move',
+  // Illusion (v2 Phase 8d): a shield on an army, which the board then draws.
+  'illusion',
 ])
 
 const resolves = (die: DieRoll): boolean => (die.effects ?? []).some((effect) => RESOLVES.has(effect.kind))

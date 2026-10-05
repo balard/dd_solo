@@ -88,4 +88,10 @@ describe('effectSummary', () => {
     const net = { kind: 'target_enemy', health: 4, escape: 'maneuver', fate: 'asleep' } as const
     expect(effectSummary([net], 'Net')).toBe('4 health-worth must maneuver or be netted')
   })
+
+  it('says a Charm takes nobody, and what an Illusion does (v2 Phase 8d)', () => {
+    const charm = { kind: 'target_enemy', health: 4, escape: 'none', fate: 'charm' } as const
+    expect(effectSummary([charm], 'Charm')).toBe('4 health-worth roll melee for you instead of saving')
+    expect(effectSummary([{ kind: 'illusion' }], 'Illusion')).toBe('one of your armies shielded from missiles and spells')
+  })
 })

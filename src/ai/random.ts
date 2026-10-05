@@ -394,6 +394,11 @@ export const randomAi: AiPlayer = {
         ] as const
       }
 
+      case 'sai_illusion': {
+        const [ref, next] = pick(rng, pending.options)
+        return [{ kind: 'sai_illusion', army: ref ?? 'reserve' } as GameAction, next] as const
+      }
+
       case 'reinforce': {
         // A destination *per unit*, not one for the batch: "you may split the reserve
         // units up, sending some to one terrain and some to another". One slot for

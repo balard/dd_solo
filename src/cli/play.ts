@@ -418,7 +418,16 @@ function describe(entry: LogEntry, state: GameState): string | null {
             ? `be ${heldWord(entry.source)}`
             : entry.fate === 'stun'
               ? 'be stunned'
-              : 'die'
+              : entry.fate === 'charm'
+                ? 'roll for the enemy'
+                : 'die'
+      // Charm (v2 Phase 8d): no stake -- the dice rolled melee for the enemy.
+      if (entry.fate === 'charm') {
+        return yellow(
+          `  ${bold(entry.source)}: ${entry.player}'s charmed dice roll ${entry.given ?? 0} melee for the attack` +
+            (entry.dice.length > 0 ? dim(`\n    ${entry.dice.map(shown).join('  ')}`) : ''),
+        )
+      }
       // A damage sub-roll (v2 Phase 6d) is saves against a number, not any save at all.
       if (entry.damage !== undefined) {
         return yellow(
@@ -882,6 +891,17 @@ function choicesFor(state: GameState, pending: Pending): Choice[] {
         label: `move to ${SLOT_LABEL[slot]}`,
         action: { kind: 'spell_move', slot } as GameAction,
       }))
+
+    // Illusion (v2 Phase 8d): one of your armies, which is a menu, not a dice sheet.
+    case 'sai_illusion':
+      return pending.options.map((ref, i) => {
+        const units = armyRef(state, pending.player, ref)
+        return {
+          key: String(i + 1),
+          label: `${pending.sai}: shield your army at ${SLOT_LABEL[ref as TerrainSlot] ?? ref} ${dim(`(${units.length}d/${health(units)}h)`)}`,
+          action: { kind: 'sai_illusion', army: ref } as GameAction,
+        }
+      })
 
     case 'spell_summon':
       return pending.options.map((dragonId, i) => ({
