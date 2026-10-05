@@ -9,8 +9,8 @@ landscape board to try.
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
 of work*. **Phases 0 to 7 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c, Phase 5
-as 5a to 5g, Phase 6 as 6a to 6h, Phase 7 as 7a to 7f), each with its findings below. Phase 8 is
-still a draft, with predictions where V1 has findings.
+as 5a to 5g, Phase 6 as 6a to 6h, Phase 7 as 7a to 7f), each with its findings below. **Phase 8
+(Lava Elves) is planned** as slices 8a to 8g, with predictions where the landed phases have findings.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
 collection, win dice, dragons and terrains, and raise the force cap to 24 and then 36 at set
@@ -2597,6 +2597,298 @@ over 60 seeds in both seats, and all three earth types turn up.
 - **Cursed Bullets** uses `duaCap` and 6b's spell saves, but is Phase 8's.
 - **Ivory magic.** The rules let Ivory results cast only Elemental spells; no species in scope
   rolls it.
+
+---
+
+## Phase 8 — Lava Elves
+
+Planned, not started. Seven slices: 8a the data, 8b the seams, 8c Stone, Web and Cloak, 8d Charm and
+Illusion, 8e the two abilities and the flip, 8f the two spells, 8g presets, exit checks and art.
+
+Death & Fire, the second species carrying Death. Like the Goblins they have **no own terrain type**,
+so `drawHomeDie` draws them a home among the twelve dice carrying fire (Wasteland, Highland,
+Feyland), and Volcanic Adaptation is live at every home they can draw. The faces are in
+`data/raw/lava_elves.faces.txt` (20 dice, 140 faces, no `TODO` face), unimported. The images are
+mirrored in the gitignored `assets/faces/lava-elves`: one ID per die, one image per SAI, and **one
+maneuver image** (`maneuver-1-*`) -- the Firewalkers' case, so no maneuver pins are expected.
+
+The roster matches p. 84: heavy Bladesman / Duelist / Conqueror / Beholder, light Scout / Spy /
+Infiltrator / Drider, cavalry Spider Rider / Scorpion Knight / Wyvern Rider / Hell Hound, missile
+Fusilier / Dead Shot / Assassin / Lurker in the Deep, magic Adept / Warlock / Necromancer /
+Rakshasa. (p. 84 prints "Dead-Shot"; the raw file's "Dead Shot" gives the id `dead_shot` either
+way, so this is only the display name.)
+
+**What the faces actually carry.** Thirteen SAI names, **five new** (p. 85):
+
+| SAI | Dice | Applies | Seam |
+|---|---|---|---|
+| **Stone** | Beholder | Dragon Attack, Melee, Missile | Smite's handler on two actions: "X damage to the defending army with no save possible"; X missile in a dragon attack |
+| **Web** | Drider ×2 | Melee, Missile | Net with a **melee** sub-roll: "the targets make a melee roll. Those that do not generate a melee result are webbed and cannot be rolled or leave the terrain ... until the beginning of your next turn". Net's Tower-on-Reserves exception, word for word |
+| **Cloak** | Lurker in the Deep | Dragon Attack, Individual, Magic, Save | "During a save roll or dragon attack, add X **non-magical** save results to the army containing this unit until the beginning of your next turn." X magic in a magic action; X of any one type "during a roll for an individual-targeting effect" |
+| **Charm** | Beholder | Melee | **New.** "Target up to X health-worth of units in the defending army; those units don't roll to save during this march. Instead, the owner rolls these units and adds their results to the attacking army's results. Those units may take damage from the melee attack as normal." |
+| **Illusion** | Rakshasa ×2, Beholder | Magic, Melee, Missile | **New.** "Target any of your armies. Until the beginning of your next turn, the target army cannot be targeted by any missile attacks or spells cast by opposing players." |
+
+Reused: Smite, Counter, Bullseye, Cantrip, Flame, Fly, Confuse and **Volley** -- which is a Treefolk
+SAI since v1 and needs nothing. Flame is **2** on the Beholder and the Hell Hound (confirmed when
+the faces went in, commit a6def0a), so the Hell Hound's two Flame faces combine by name to four
+health-worth. **The Beholder is this phase's Cannibal**: Flame, Charm, Stone, Confuse and Illusion on
+one die, so its mirror is where Charm meets every other targeting SAI at once.
+
+**Abilities** (p. 84): **Volcanic Adaptation** (at fire, maneuver counts as save -- Coastal Dodge's
+row) and **Cursed Bullets** (below). **Spells**, read with PyMuPDF the 5e way (red `0xd12229` is
+cumulative; the R and C columns off word positions on p. 84):
+
+| Spell | Element | Species | Cost | R | C | Cumulative | Shape |
+|---|---|---|---|---|---|---|---|
+| **Necromantic Wave** | death | lava_elves | 5 | X | | no | `effect`: magic counts as melee or missile |
+| **Fearful Flames** | fire | lava_elves | 3 | | | yes | Handler: Firebolt's damage, then a second save or flee to Reserves |
+
+The Lava Elves also roll into everything already built for their two elements: Palsy, Finger of
+Death and Soiled Ground (death, `any`), and every fire spell the Firewalkers cast. So their magic is
+live the moment they are playable, with a far wider list than the Goblins had at 7d.
+
+### Where the draft tables above are wrong for Lava Elves
+
+- **Web is not "a status plus a new end condition".** Net built both: Web writes Sleep's status
+  under its own name, exactly as Net does, and the Tower drop already exists. What is new is
+  narrower and is shared with Charm: **no sub-roll in the game counts melee yet.** Every 4d sub-roll is
+  a save or a maneuver roll, both of which reach SAIs whose effects are harmless there ("a Counter on
+  it saves but sends no damage back"). A melee roll reaches Smite, Stone, Flame, Charm and Web
+  themselves, every one an *effect* aimed at "the defending army" -- which, for a die rolling for
+  its own life or for its enemy's total, is nobody, or its own side.
+- **Charm is a sub-roll too, and its results join the attack, not a save roll.** The draft's "a die
+  of one player's rolling for the other's total" is right, and it lands on two seams that exist:
+  the targeting pause before the save roll (4b), where the charmed dice are chosen and rolled, and
+  `RollSpec.saiResults` (step 8), where results that are not on the roller's faces already join a
+  roll (Wild Growth's save share, Regenerate's). The new parts are the melee sub-roll above and **a
+  bench for the save roll**: Foul Stench's `combat.benched` is read by `armyRoll`, and is the
+  counter-attack's only. Charmed dice sit out the save roll (and a Charge's combination roll, which
+  is that save roll) and **not** the counter -- "don't roll to save" says nothing about attacking.
+- **Illusion's "restricts targeting, which no effect does yet" was true when written and is not
+  now.** The Temple (7e) already filters `spellTargets` by a predicate on the target's army. Illusion
+  widens that filter rather than starting a second one, and adds the reader the Temple never needed:
+  `missileTargets` -- and through it the Tower's missile at Reserves, the forecast on every missile
+  button and both AIs' target lists. It also reaches the one missile that is not an action:
+  **Defensive Volley's counter** (5d) is a missile attack, so it is not offered against an
+  Illusioned attacker. An Illusion on the defender cannot stop the attack it is rolled in -- the
+  missile is already aimed -- only the next one.
+- **Cloak is the first effect with a duration rolled on a save roll**, and the first written by the
+  dragon combination roll. Sleep, Galeforce and the rest come off attack rolls, so `resolveSaves`'
+  `expectOnly` and `resolveArmyRoll`'s refusal have never had to let one through: the Phase 4c
+  lesson, a sixth time. "Non-magical" means **not a spell save** -- `fromSpell` is read off the
+  effect's source, so a Cloak never reduces a riposte, a Charge or a cursed missile, with no field
+  added. And the draft missed the Individual sentence, which is Net's from 7c with five types.
+- **Cursed Bullets uses spell saves, but not the way Charge does.** Charge and the riposte are
+  whole damage with no roll, reduced by `spellSaves`. A cursed missile is **part of** an attack the
+  defender does roll saves against, so the damage splits in two pools in `finishExchange`, and the
+  spell saves have to be found **inside** the save roll -- the roll's own `fromSpell` additions, from
+  its `RollMath`, not a second gather. Three more facts the draft's line does not say: only
+  **Lava Elves'** missile results curse, a per-die, per-species count in a mixed army (Flaming
+  Shields' `species` key, not the army's); only at **the same terrain**, which a missile from one
+  terrain to another, or a Tower's at Reserves, is not; and N counts **units** in the DUA, not health,
+  capped by 7b's `duaCap(state, player, 3)`.
+- **Volcanic Adaptation is Coastal Dodge's row, and `maneuverAsSaves` stamps "Coastal Dodge".**
+  Swamp Mastery's lesson from 7d: the factory takes the ability's name, or a Lava Elf's save roll
+  reads "counted as save (Coastal Dodge)".
+- **Necromantic Wave is the first "counts as" that is not an ability**, and three things stand in
+  its way. `ConvertibleType` is `'melee' | 'save' | 'maneuver'`, so neither magic nor missile can
+  be named. A spell's `effect` block has no `counts_as` modifier kind -- and the spell modifier
+  spec has **five copies** (7e found the fifth, the JSON schema). And "melee **or** missile" as two
+  rows converts every magic result **twice** in a roll that counts both -- the dragon combination
+  roll -- because `conversionsIn` applies each row whose target the roll counts. It is also
+  beneficial, so it is `own_army` by 9a's rule, which means the Temple's immunity never meets it.
+- **Fearful Flames is cumulative** ("one" is red), like Firebolt, whose handler it extends: N
+  castings, N damage, `damageSubRoll`, and then a second save roll whose failure is **Roar's fate**
+  -- moved to Reserves, not killed: no Replanting, no Rise from the Ashes, no Soiled Ground.
+- **The monster SAI counts are still unconfirmed** apart from Flame. The raw file's header says so,
+  and it is 8a's gate (below).
+
+### 8a — Data
+
+- **Gate: the monster SAI counts.** Every monster face in the raw file says 4, with no count in the
+  source. Nine of the monster SAIs here read X -- Charm, Stone, Confuse, Web, Counter, Cantrip,
+  Volley, Cloak and Fly -- so the owner checks them against the dice before import, as 6a and 7a
+  did. Flame is already confirmed as 2; Illusion takes no X. The raw file's header loses its
+  "unconfirmed" and "not imported" notes in this slice.
+- `tools/species.py` gains `lava_elves` (the roster above) and `SPECIES_SAIS` gains Charm, Cloak,
+  Illusion, Stone, Web (p. 85).
+- **The Lava Elves are unplayable after this slice**, by `playable.ts`. `sai.test.ts`'s partition
+  gains five deferred names; `playable.test.ts` gets its real refusal back with the exact sentence,
+  a rolled Lava Elves force that throws, and a built force with a Bladesman that gets the sentence.
+- Expected to move: the unit count (120 dice, 840 faces, six species), the SAI partition (45 in the
+  data), the playable species, and any test naming "the only" die with an SAI the Lava Elves reuse
+  -- 6a's Dispel Magic lesson; here Flame, Confuse, Volley and Cantrip each gain a die, and Flame a
+  second monster printing 2.
+
+### 8b — Seams, and no rule moves
+
+1. **A melee sub-roll.** `rollUnits` counting melee, with the purpose a melee attack and
+   `isSubRoll`, so an SAI's "during a melee attack" *results* apply (Counter's X melee, Rend's melee
+   and its reroll). **Every effect it produces is dropped**, by one rule in one place rather than a
+   whitelist that grows -- the 4d sub-roll rule ("a save roll against nothing") stated for a roll that
+   does have an enemy in its sentence. Tested with a Smite, a Stone-shaped `unsavable` and a
+   targeting face on the rolling die, each producing nothing. No caller until 8c.
+2. **The save-roll bench.** `combat.benched` learns which roll it benches (the counter's, as now, or
+   the save roll's), or a second field beside it -- 8b decides, by which is fewer sites. Read in
+   `armyRoll` and nowhere else, so the save roll, a Charge's combination roll and `expectedArmy` all
+   leave the dice out with no second door (7d's lesson). Built field by field, dropped with the
+   attack half. Tested with a hand-set bench, as Stun's status was in 7b with no producer.
+3. **The hold fate takes its SAI's name.** `fate: 'net'` writes `asleep` with `source: 'Net'`; it
+   becomes a fate that carries the name, and the Tower-on-Reserves drop asks the fate, not the
+   name -- or Web's drop is the one that was forgotten. The Goblins tests are the guard; nothing
+   recorded has a Goblin.
+4. **One targeting restriction.** An Effect status `illusion?: true` on an army at a place (the
+   "army at a place" scope Galeforce uses: it does not follow the units), and one predicate --
+   `shielded(state, by, player, ref, how)` for `how` in missile or spell -- that the Temple's death
+   filter in `spellTargets` folds into. Readers: `missileTargets` (terrains and the Tower's Reserves),
+   `spellTargets` (an army offer, and a unit offer for any die standing in a shielded army), and
+   Defensive Volley's counter offer. Terrain offers are untouched. No producer; tested with a
+   hand-built effect at each reader, each checked to fail with its reader undone.
+5. **`ConvertibleType` gains `magic` and `missile`**, and `maneuverAsSaves` becomes a factory taking
+   the ability's name. Both are pure widening: the v1 goldens have Flaming Shields in them and must
+   replay byte-identical through it.
+
+The two-pool damage is **not** an 8b seam. It has one caller, it is arithmetic in one function, and
+built without Cursed Bullets it would be a pool that is always empty -- 7b's "code no test can reach"
+finding. It lands with its ability in 8e.
+
+### 8c — Stone, Web, Cloak
+
+- **Stone**: Smite's handler, on a melee *or* missile attack, X missile in a dragon attack. A test
+  that the `unsavable` path works on a missile exchange, where nothing has put it before -- and on
+  a Tower's missile at Reserves.
+- **Web**: `target_enemy`, escape `'melee'` (8b's sub-roll), the hold fate under Web's name. Melee
+  and missile; the Tower drop. The UI's status map gains `'webbed'`, a label only (`sleepingIds`
+  already locks the die, as for Net), and the sub-roll's log line says "a melee or be webbed".
+  `RandomAI`'s retreat filter needs nothing: it asks `isAsleep`.
+- **Cloak**, on three rolls:
+  - **A save roll or the dragon roll: X saves now, and an effect for later.** The X joins the roll
+    it was rolled in as ordinary SAI results (step 8), and an effect of +X save on "the army
+    containing this unit" -- at its place, the roller as caster -- reaches every save roll after it
+    until the roller's next turn. Not both on the same roll: the effect is written after the roll is
+    resolved, so the roll that made it never gathers it. House rule (approved): **the roll Cloak is
+    rolled in counts it.** The other reading -- the effect starts afterwards and this roll gets
+    nothing -- makes a Cloak worthless against the attack that provoked it.
+  - **A magic action**: X magic results.
+  - **An individual-targeting roll** (any sub-roll, 7c's house rule): X of the type the roll counts,
+    and no effect -- the specific sentence wins over "a save roll".
+  - `expectOnly` in `resolveSaves` and the dragon roll's effect handling both let it through, in
+    the same edit. Several Cloaks are several effects, so they stack across rolls; the chip counts them.
+- `expectedFace` learns Stone (Smite's line) and Cloak's saves; a test pins both in `expectedArmy`.
+
+### 8d — Charm and Illusion
+
+- **Charm** is a `target_enemy` task with a new fate, `'charm'`, at the targeting pause, the attacker's, "up to X health-worth"
+  held to p. 32's forced maximum like every other. Answering it rolls the targets through 8b's melee
+  sub-roll, stashes their total on `combat.attack`, benches them for the save roll, and the attack
+  is resolved with that total as `saiResults` named Charm -- "9 on the dice + 5 Charm = 14".
+  House rules (approved):
+  - **A charmed die rolls as a unit** (p. 28): no army modifier reaches it -- not its owner's
+    Palsy, not the attacker's Fiery Weapon -- and its species ability does, so a charmed Firewalker
+    at fire counts its saves as melee **for the enemy**. That is what "the owner rolls these units"
+    gives literally, and it is the only reading that needs no new rule.
+  - **Its SAIs give results and nothing else** (8b), so a charmed die's Smite does not strike its
+    own army and its Charm charms nobody.
+  - **It sits out the save roll and nothing after**: it may counter-attack, take the riposte's
+    damage, and be Choked or Confused only if it was in a roll those can see -- which, sitting out the
+    save roll, it is not.
+  - **A die that cannot be rolled adds nothing**, by 4d's rule, and a stunned die rolls, by Stun's
+    own exception for "an individual-targeting effect which forces them to". Charm is one.
+  - **Against a Charge**, the charmed dice sit out the combination roll and add their melee to the
+    attacker's -- 6e's roll is the save roll, so this needs no case of its own; a test says so.
+  - The UI: a Charm is a stop, and its sub-roll is a roll stop of its own (3c's rule).
+- **Illusion** is a friendly task, the attacker's (it applies only to attacks, so never the
+  defender's), in the queue Wild Growth and the free moves use, and in the magic roll's. One new
+  pending, `sai_illusion`: pick one of your armies -- any terrain or the Reserve Army, by 8b's
+  "army at a place". It writes 8b's status until the roller's next turn. House rules (approved):
+  - **Every Illusion face is its own choice**, not one combined choice: an Illusion has no X to
+    combine, so two faces may shield two armies. Sleep's treatment, for Sleep's reason.
+  - **No question when there is one army to shield**: the effect lands, and the log says so.
+  - **"Cannot be targeted by spells" covers a unit spell aimed at a die in the army** -- Finger of
+    Death, Lightning Strike, Firebolt, Mirage, Scent of Fear -- and not a terrain spell, whose
+    target is the terrain. The Temple's reading, which is why one predicate serves both.
+- `PassiveAI`, `RandomAI` and `GreedyAI` answer `sai_illusion`; the prompt lists armies as buttons,
+  since an army is not a die (9f).
+- `expectOnly` gains whatever kinds these two add. Every phase since 4b has had to be told.
+
+### 8e — Volcanic Adaptation, Cursed Bullets, and the flip
+
+- **Volcanic Adaptation**: a row in `COUNTS_AS_ABILITIES` at fire, through 8b's factory. A Feyland
+  (water and fire) holding Coral Elves and Lava Elves in one army gathers two conversions of one pair
+  under two names, each keyed to its species; `conversionsIn` already merges by source, and a test
+  pins that the line names both.
+- **Cursed Bullets**: automatic, since it can only help the attacker (Flaming Shields' house rule).
+  On a missile attack at the attacker's own terrain:
+  - **N** = Lava Elves **units** in the attacker's DUA, capped by `duaCap(state, player, 3)`.
+  - **The cursed pool** C = min(N, the missile results Lava Elves dice show, the attack's total).
+    House rule (approved): **only results on Lava Elves dice curse** -- an ID doubled by the eighth
+    face is on the die and counts, a Fiery Weapon's +2 is on no die and does not.
+  - **The arithmetic**, with S the defender's saves and P the spell saves inside S:
+    damage = max(0, C − P) + max(0, (M − C) − (S − min(P, C))). Spell saves pay the cursed pool
+    first, because only they can, and what they do not need joins the rest. When P ≥ C the curse
+    changes nothing, which is the test that the formula is not a second rule.
+  - `combat_resolved` gains `cursed?` (omitted when zero, the digest rule), and the line reads
+    "8 missile − 3 saves, 2 cursed (spell saves only) = 5". `expectedAttack` learns it, so the
+    missile forecast and greedy's target choice see it with no second site.
+  - It applies to a Defensive Volley counter too -- a missile attack at the same terrain -- so a
+    mixed army of Coral Elves and Lava Elves curses its counter. A test, since nothing else would.
+- **The flip**: `SPECIES_ABILITIES` names the Lava Elves. Five monster fixtures (`lava_elves_*`),
+  every test that counts species or fixtures, and the live fuzz's counters for the five SAIs, the
+  new pending and the two abilities. Their death and fire magic is live immediately (above), so the
+  Death breath and the death spells gain a second species in the fuzz.
+- **Predicted fuzz reach**: Stone, Web and Cloak in 200 games (two Web faces on one monster, and
+  Cloak on a monster that rolls often); Charm and Illusion in 200 as one face each on a monster,
+  as Net was. Cursed Bullets needs a dead Lava Elf and a missile at the same terrain: expect 200.
+  `{ elsewhere }` with named tests: Web's Tower drop, Illusion against a Tower's missile at
+  Reserves and against Defensive Volley, Cursed Bullets on a counter, Charm against a Charge.
+
+### 8f — Necromantic Wave and Fearful Flames
+
+- **Necromantic Wave** is an `effect` block with a new modifier kind, `counts_as`, in every copy
+  of the spell modifier spec -- the TypeScript type, the Python validator, the JSON schema and
+  greedy's scorer at least; 7e found its last copy only when the data refused Palsy. Count them
+  before writing the first one. Two rows, magic as melee and magic as missile, every species,
+  `counter: 'either'`, `own_army`, castable from Reserves. House rules (approved):
+  - **In a roll counting both melee and missile -- the dragon combination roll -- magic is
+    flexible**, joining the ID pool that `dragon_allocate` already splits, rather than converting
+    twice. Every other roll counts one of the two, and the row for the other does nothing.
+  - **Cantrip's magic does not convert.** "Magic results that only allow you to cast Cantrip
+    spells" are not magic results to spend on anything else; only a magic icon's count converts.
+- **Fearful Flames**: Firebolt's handler, then, if the target is still alive and on a terrain, a
+  second save sub-roll; no save result moves it to its Reserve Area. House rules (approved):
+  - **"Saves against the damage" means survives it**, so a target with more health than the
+    castings always rolls the second save. With fewer castings than its health the first roll
+    cannot kill, which is the spell's point: it is a fear spell, not a damage one.
+  - **A target already in Reserves rolls no second save**, and draws nothing: it has nowhere to
+    flee.
+  - Fleeing is Roar's fate, including Roar's ruling on a die that may not leave its terrain.
+  - The second roll is a save sub-roll, so Net's and Cloak's Individual saves reach it (7c's rule).
+- `HANDLER_VALUE` gains Fearful Flames; greedy's effect scorer learns `counts_as` (the value of the
+  army's expected magic, moved into the type it will roll next). A spell greedy cannot score fails a
+  test. Counts that move: 29 spells, 12 species spells.
+
+### 8g — Presets, exit checks, art
+
+- `lava_elves_starter` and `lava_elves_bestiary`, generated from the Goblins' lists by class and
+  size, as 6h and 7f did.
+- **Re-run greedy** against passive and against itself, on Lava Elves mirrors and against every
+  other species. Values to watch: Illusion on an army nobody can reach (insurance priced as a gain,
+  the 10b stall), Charm's targets (expected melee gained plus saves removed, not either alone), and
+  Necromantic Wave re-cast every turn on a magic-heavy army.
+- **Art**: a dry run of `unit_candidates` against `assets/faces/lava-elves` first. One maneuver
+  image means no maneuver pins; what to check is **`flame-m` on a face printing 2**, the first
+  monster SAI whose count is not 4 since the Gorgon, and `fly-1` / `fly-5` on the Wyvern Rider.
+  Then `fetch_faces.py --offline` and the no-ambiguity check over 840 unit faces.
+- Exit criterion as for every species, plus: a Lava Elves home is always a fire die (a test over
+  seeds, all three fire types turning up), a Necromantic Wave is cast in the live fuzz, and an
+  Illusioned army is refused a missile in a browser game.
+
+### Deliberately out of this phase
+
+- **The species after Lava Elves** (Amazons, Feral, Frostwings, Scalders, Swamp Stalkers, Undead)
+  are not in this plan. Their raw faces are in `data/raw/`, and four of them still carry `TODO` faces
+  the owner has to check against the dice before any of them is imported.
+- **Ivory magic**, as in Phase 7.
 
 ---
 
