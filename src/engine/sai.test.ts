@@ -425,8 +425,9 @@ describe('the rungs of ruleSet.sai', () => {
     // that builds one moves it out of here, and 5c built all six. v2 Phase 6a: the
     // Dwarves' four, the same way -- 6d built Roar, Stomp and Bash, and 6e Charge.
     // v2 Phase 7a: the Goblins' five. 7c built Net, Poison, Screech and Stun, and 7d
-    // Regenerate.
-    const deferred = new Set<string>()
+    // Regenerate. v2 Phase 8a: the Lava Elves' five. 8c builds Stone, Web and Cloak, and
+    // 8d Charm and Illusion.
+    const deferred = new Set<string>(['Charm', 'Cloak', 'Illusion', 'Stone', 'Web'])
     const live = new Set(LIVE_SAIS)
     const targeting = new Set(TARGETING_SAIS)
 
@@ -435,13 +436,13 @@ describe('the rungs of ruleSet.sai', () => {
       for (const face of type.faces) if (face.icon === 'SAI') names.add(face.sai)
     }
 
-    expect(names.size).toBe(40)
+    expect(names.size).toBe(45)
     // The split is pinned because the prose in CLAUDE.md, RULES-V0.md and PLAN-V1.md
     // all quote it, and nothing else would notice it going stale. Each Phase 4 slice
     // moves names from `deferred` into `TARGETING_SAIS` and edits these two numbers.
     expect(live.size, 'SAIs live under sai: results').toBe(15)
     expect(targeting.size, 'targeting SAIs built so far').toBe(25)
-    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(0)
+    expect(deferred.size, 'SAIs in the data still unbuilt').toBe(5)
     expect(needsSpells.size, 'SAIs waiting on Phase 7').toBe(0)
 
     for (const name of names) {

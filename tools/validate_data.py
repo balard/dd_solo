@@ -85,9 +85,13 @@ def check_units():
                         f"{uid}: monster face '{n} {icon}' is not 4 results"
                         + (" (fine if that number is the SAI's X value)" if icon.startswith("SAI:") else ""))
 
-        # A face carrying more icons than the die's largest plausible count is a typo.
+        # A face carrying more icons than the die's largest plausible count is a typo. That
+        # is health+2 on a non-monster (the monster rule above already pins 4): a flat 4
+        # was a fact about the starter set, and the Lava Elves print 5 on every large die
+        # and 4 on every medium one (v2 Phase 8a).
+        ceiling = 4 if u["size"] == "monster" else u["health"] + 2
         for n, icon in parsed:
-            if n > 4:
+            if n > ceiling:
                 err(f"{uid}: face '{n} {icon}' has an implausible count")
 
         # SAI names must match the rulebook, or it is a transcription typo.

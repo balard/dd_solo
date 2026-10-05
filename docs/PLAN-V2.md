@@ -2602,8 +2602,9 @@ over 60 seeds in both seats, and all three earth types turn up.
 
 ## Phase 8 — Lava Elves
 
-Planned, not started. Seven slices: 8a the data, 8b the seams, 8c Stone, Web and Cloak, 8d Charm and
-Illusion, 8e the two abilities and the flip, 8f the two spells, 8g presets, exit checks and art.
+Seven slices: 8a the data, 8b the seams, 8c Stone, Web and Cloak, 8d Charm and Illusion, 8e the two
+abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a has landed; 8b to 8g
+are planned.
 
 Death & Fire, the second species carrying Death. Like the Goblins they have **no own terrain type**,
 so `drawHomeDie` draws them a home among the twelve dice carrying fire (Wasteland, Highland,
@@ -2703,7 +2704,7 @@ live the moment they are playable, with a far wider list than the Goblins had at
 - **The monster SAI counts were unconfirmed** apart from Flame, which made them 8a's gate. The
   owner has since checked them (below).
 
-### 8a — Data
+### 8a — Data — **landed**
 
 - **Gate: the monster SAI counts.** Every monster face in the raw file says 4, with no count in the
   source. Nine of the monster SAIs here read X -- Charm, Stone, Confuse, Web, Counter, Cantrip,
@@ -2719,6 +2720,46 @@ live the moment they are playable, with a far wider list than the Goblins had at
   data), the playable species, and any test naming "the only" die with an SAI the Lava Elves reuse
   -- 6a's Dispel Magic lesson; here Flame, Confuse, Volley and Cantrip each gain a die, and Flame a
   second monster printing 2.
+
+### What 8a found
+
+Both golden corpora replay byte-identical and unregenerated, and 1227 tests pass. `npm run data`
+writes 120 dice and 840 faces with 45/45 SAIs in the data. Saving is off, so `SAVE_VERSION` has
+nothing to be about.
+
+**1. The gate the plan named was not the one that stopped the import.** The monster counts were
+settled before the slice began; what failed was `validate_data.py`, which refused six faces as
+"an implausible count": `5 MELEE` on the Conqueror and the Infiltrator, `5 MANEUVER` on the
+Infiltrator, `5 SAI:Fly` on the Wyvern Rider, `5 MISSILE` on the Assassin and `5 MAGIC` on the
+Necromancer. Its ceiling was a flat 4, written at the initial commit from the starter set, where
+nothing prints more. **The faces are right and the ceiling was wrong.** It is the species'
+signature, not six typos: every large Lava Elf has a 5 face and every medium one a 4 -- "4 on a
+2-health die" was a lone Oak until now and is six faces here -- and 8g's own art note already expects a `fly-5` image on the Wyvern Rider. The
+ceiling is now **health+2 on a non-monster** (3, 4, 5) and 4 on a monster, which the monster rule
+pinned already. That is tighter than before on small dice and passes all six species; the
+"more than health+1" warning stays, and now names thirteen faces.
+
+**2. Three tests moved, not four.** All three are counts of the data: 120 unit dice and six
+species, the SAI partition (45 names, five `deferred`), and the playable species -- the real
+refusal again ("the SAIs Charm, Cloak, Illusion, Stone, Web and its species abilities"), with a
+rolled Lava Elves force that throws and a built force with a Bladesman that gets the sentence. 8c
+and 8d shorten it; 8e turns it back into "all playable". **No "the only die with" test moved**,
+because the two that exist ask about SAIs the Lava Elves do not print (Dispel Magic, Sleep). The
+plan's guess that Flame, Confuse, Volley and Cantrip would move a pinned list was a guess about
+tests that do not exist: nothing pins those carriers. The fuzz's per-SAI counters read
+`PLAYABLE_UNITS`, so they meet the new dice at the 8e flip, not here.
+
+**3. Nothing else counted species.** The builder palette, the start screen, rolled forces and
+the fuzz all read `PLAYABLE_SPECIES`, which still lists five, and "all reach a rolled force"
+in `playable.test.ts` still expects exactly those five -- so it is now the test that says the
+Lava Elves are kept out.
+
+**4. The art resolver is not run in this slice.** `assets/faces/lava-elves` is not on this
+machine (`assets/faces/` holds the four earlier species, terrain and dragons), so 8g's dry run
+needs it mirrored first. The pins, if any, and the manifest are 8g's.
+
+**Deliberately not done.** No fixture, preset or art manifest: a fixture for an unplayable species
+could only throw (8e). No face count was changed to satisfy the validator.
 
 ### 8b — Seams, and no rule moves
 

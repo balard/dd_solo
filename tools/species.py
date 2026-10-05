@@ -84,6 +84,19 @@ SPECIES = {
             "magic":   ["Trickster", "Hedge Wizard", "Death Mage", "Troll"],
         },
     },
+    # v4.01 p. 84. Death & fire: like the Goblins they have no own type, so their home
+    # is drawn among the fire dice. p. 84 prints 'Dead-Shot'; the id is dead_shot either way.
+    "lava_elves": {
+        "name": "Lava Elves",
+        "elements": ["death", "fire"],
+        "units": {
+            "heavy":   ["Bladesman", "Duelist", "Conqueror", "Beholder"],
+            "light":   ["Scout", "Spy", "Infiltrator", "Drider"],
+            "cavalry": ["Spider Rider", "Scorpion Knight", "Wyvern Rider", "Hell Hound"],
+            "missile": ["Fusilier", "Dead Shot", "Assassin", "Lurker in the Deep"],
+            "magic":   ["Adept", "Warlock", "Necromancer", "Rakshasa"],
+        },
+    },
 }
 
 # Normal action icons. Anything else parsed off a face is treated as an SAI.
@@ -104,6 +117,7 @@ SPECIES_SAIS = {
     "coral_elves": {"Entangle", "Ferry", "Hypnotic Glare", "Swallow", "Tail", "Wave"},  # p. 71
     "dwarves": {"Bash", "Charge", "Roar", "Stomp"},  # p. 73
     "goblins": {"Net", "Poison", "Regenerate", "Screech", "Stun"},  # p. 83
+    "lava_elves": {"Charm", "Cloak", "Illusion", "Stone", "Web"},  # p. 85
 }
 
 # Every SAI name a face may carry; anything else parsed off a face is a typo.

@@ -36,6 +36,13 @@
         "death",
         "earth"
       ]
+    },
+    "lava_elves": {
+      "name": "Lava Elves",
+      "elements": [
+        "death",
+        "fire"
+      ]
     }
   },
   "units": [
@@ -1837,6 +1844,366 @@
         "4 SAI:Regenerate",
         "4 MANEUVER",
         "4 SAI:Smite"
+      ]
+    },
+    {
+      "id": "lava_elves.bladesman",
+      "name": "Bladesman",
+      "species": "lava_elves",
+      "class": "heavy_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 SAVE",
+        "1 MELEE",
+        "1 MELEE",
+        "1 MISSILE",
+        "2 MELEE"
+      ]
+    },
+    {
+      "id": "lava_elves.duelist",
+      "name": "Duelist",
+      "species": "lava_elves",
+      "class": "heavy_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 SAVE",
+        "4 MELEE",
+        "2 MELEE",
+        "2 MANEUVER",
+        "2 MISSILE"
+      ]
+    },
+    {
+      "id": "lava_elves.conqueror",
+      "name": "Conqueror",
+      "species": "lava_elves",
+      "class": "heavy_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "2 MISSILE",
+        "5 MELEE",
+        "1 MELEE",
+        "3 SAVE",
+        "4 SAI:Smite"
+      ]
+    },
+    {
+      "id": "lava_elves.beholder",
+      "name": "Beholder",
+      "species": "lava_elves",
+      "class": "heavy_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 MAGIC",
+        "2 SAI:Flame",
+        "4 SAVE",
+        "4 SAI:Charm",
+        "4 SAI:Stone",
+        "4 SAI:Confuse",
+        "4 MELEE",
+        "4 SAI:Illusion",
+        "4 SAVE"
+      ]
+    },
+    {
+      "id": "lava_elves.scout",
+      "name": "Scout",
+      "species": "lava_elves",
+      "class": "light_melee",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "2 MELEE",
+        "1 MANEUVER",
+        "1 MANEUVER",
+        "1 MELEE",
+        "1 MISSILE"
+      ]
+    },
+    {
+      "id": "lava_elves.spy",
+      "name": "Spy",
+      "species": "lava_elves",
+      "class": "light_melee",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "4 MELEE",
+        "4 MANEUVER",
+        "1 MANEUVER",
+        "1 MELEE",
+        "2 MISSILE"
+      ]
+    },
+    {
+      "id": "lava_elves.infiltrator",
+      "name": "Infiltrator",
+      "species": "lava_elves",
+      "class": "light_melee",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "5 MELEE",
+        "5 MANEUVER",
+        "1 MANEUVER",
+        "1 MELEE",
+        "4 SAI:Counter"
+      ]
+    },
+    {
+      "id": "lava_elves.drider",
+      "name": "Drider",
+      "species": "lava_elves",
+      "class": "light_melee",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Web",
+        "4 MANEUVER",
+        "4 SAVE",
+        "4 MELEE",
+        "4 MISSILE",
+        "4 MANEUVER",
+        "4 SAI:Web",
+        "4 SAVE",
+        "4 MELEE"
+      ]
+    },
+    {
+      "id": "lava_elves.spider_rider",
+      "name": "Spider Rider",
+      "species": "lava_elves",
+      "class": "cavalry",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "2 MANEUVER",
+        "1 MANEUVER",
+        "1 MELEE",
+        "1 MISSILE"
+      ]
+    },
+    {
+      "id": "lava_elves.scorpion_knight",
+      "name": "Scorpion Knight",
+      "species": "lava_elves",
+      "class": "cavalry",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "4 MELEE",
+        "3 MANEUVER",
+        "2 MELEE",
+        "1 MELEE",
+        "2 SAVE"
+      ]
+    },
+    {
+      "id": "lava_elves.wyvern_rider",
+      "name": "Wyvern Rider",
+      "species": "lava_elves",
+      "class": "cavalry",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "4 MELEE",
+        "5 SAI:Fly",
+        "1 SAI:Fly",
+        "2 MELEE",
+        "4 MISSILE"
+      ]
+    },
+    {
+      "id": "lava_elves.hell_hound",
+      "name": "Hell Hound",
+      "species": "lava_elves",
+      "class": "cavalry",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 MANEUVER",
+        "4 MELEE",
+        "4 SAVE",
+        "2 SAI:Flame",
+        "2 SAI:Flame",
+        "4 MELEE",
+        "4 MANEUVER",
+        "4 SAVE",
+        "4 MELEE"
+      ]
+    },
+    {
+      "id": "lava_elves.fusilier",
+      "name": "Fusilier",
+      "species": "lava_elves",
+      "class": "missile",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 MELEE",
+        "2 MISSILE",
+        "1 MISSILE",
+        "1 MANEUVER",
+        "1 SAVE"
+      ]
+    },
+    {
+      "id": "lava_elves.dead_shot",
+      "name": "Dead Shot",
+      "species": "lava_elves",
+      "class": "missile",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MELEE",
+        "2 MISSILE",
+        "2 MISSILE",
+        "2 MANEUVER",
+        "4 MISSILE"
+      ]
+    },
+    {
+      "id": "lava_elves.assassin",
+      "name": "Assassin",
+      "species": "lava_elves",
+      "class": "missile",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "5 MISSILE",
+        "3 MISSILE",
+        "1 MISSILE",
+        "4 SAI:Bullseye",
+        "3 MELEE"
+      ]
+    },
+    {
+      "id": "lava_elves.lurker_in_the_deep",
+      "name": "Lurker in the Deep",
+      "species": "lava_elves",
+      "class": "missile",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 SAI:Counter",
+        "4 MAGIC",
+        "4 MANEUVER",
+        "4 SAI:Cantrip",
+        "4 MAGIC",
+        "4 SAI:Volley",
+        "4 SAI:Cloak",
+        "4 SAI:Fly",
+        "4 MANEUVER"
+      ]
+    },
+    {
+      "id": "lava_elves.adept",
+      "name": "Adept",
+      "species": "lava_elves",
+      "class": "magic",
+      "size": "small",
+      "health": 1,
+      "dieType": "d6",
+      "faces": [
+        "1 ID",
+        "1 SAVE",
+        "1 MAGIC",
+        "1 MAGIC",
+        "1 MANEUVER",
+        "2 MAGIC"
+      ]
+    },
+    {
+      "id": "lava_elves.warlock",
+      "name": "Warlock",
+      "species": "lava_elves",
+      "class": "magic",
+      "size": "medium",
+      "health": 2,
+      "dieType": "d6",
+      "faces": [
+        "2 ID",
+        "2 MELEE",
+        "2 MAGIC",
+        "2 MAGIC",
+        "2 MANEUVER",
+        "4 MAGIC"
+      ]
+    },
+    {
+      "id": "lava_elves.necromancer",
+      "name": "Necromancer",
+      "species": "lava_elves",
+      "class": "magic",
+      "size": "large",
+      "health": 3,
+      "dieType": "d6",
+      "faces": [
+        "3 ID",
+        "2 SAVE",
+        "5 MAGIC",
+        "2 MAGIC",
+        "3 MELEE",
+        "4 SAI:Cantrip"
+      ]
+    },
+    {
+      "id": "lava_elves.rakshasa",
+      "name": "Rakshasa",
+      "species": "lava_elves",
+      "class": "magic",
+      "size": "monster",
+      "health": 4,
+      "dieType": "d10",
+      "faces": [
+        "4 ID",
+        "4 MANEUVER",
+        "4 SAI:Illusion",
+        "4 MELEE",
+        "4 MAGIC",
+        "4 SAI:Illusion",
+        "4 SAVE",
+        "4 SAI:Counter",
+        "4 MAGIC",
+        "4 MELEE"
       ]
     }
   ]

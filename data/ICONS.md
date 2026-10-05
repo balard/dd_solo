@@ -8,7 +8,9 @@ generates. The Firewalker `Guardian` — a 1-health small unit — has a face re
 So every face is written **`<count> <ICON>`**.
 
 Counts broadly scale with size, but not by a formula you can rely on: most faces carry at most
-health+1 icons, yet the Treefolk `Oak` (2 health) has a `4 SAVE` face. Transcribe, never compute.
+health+1 icons, yet the Treefolk `Oak` (2 health) has a `4 SAVE` face, and the Lava Elves print 4
+on every medium die and 5 on every large one. Transcribe, never compute. The validator's ceiling is
+health+2 on a non-monster.
 
 Getting this wrong makes every damage number in the game wrong, which is why the validator
 enforces it.
@@ -31,7 +33,7 @@ enforces it.
 **SAI names must match the rulebook.** The starter set's two species between them use exactly the
 25 SAIs documented in the starter rulebook (pp. 10–11) — no more, no fewer. Each later species adds
 the SAIs its v4.01 species page lists (`SPECIES_SAIS` in `tools/species.py`; Coral Elves add six,
-Dwarves four, Goblins five).
+Dwarves four, Goblins five, Lava Elves five).
 The validator holds the union and errors on anything outside it, which catches transcription typos.
 
 **The count on an SAI face is not always a result count.** For result-generating SAIs it is
