@@ -10,6 +10,7 @@
 # unit's health, 4 on a monster (invariant 7). The monster faces carry no count in the source
 # and are written as 4: right for every normal icon (invariant 7), but an SAI's count can be
 # its X instead -- Firewalkers' Gorgon prints '2 Flame' -- so a monster SAI's 4 is unconfirmed.
+# Flame is confirmed as 2 on the Beholder and Hell Hound; the other monster SAIs' 4 stays unconfirmed.
 # Other faces are in the source's order. Headers are '<class>-<size>' / 'monster-<name>',
 # with the class lines as the source names them; the v4.01 roster is p. 84.
 # Anything marked TODO disagrees with the shape of a die and needs checking against one.
@@ -164,11 +165,10 @@ magic-small
 # ---- Monsters ----
 
 # Beholder -- monster, 4 health
-# TODO: Flame written as 4; the Gorgon prints '2 Flame', so check this die
 monster-beholder
 4 ID
 4 Magic
-4 Flame
+2 Flame
 4 Save
 4 Charm
 4 Stone
@@ -192,14 +192,13 @@ monster-drider
 
 # Hell Hound -- monster, 4 health
 # listed as 'Hell hound'; 'Hell Hound' is the v4.01 roster's spelling
-# TODO: Flame written as 4; the Gorgon prints '2 Flame', so check this die
 monster-hell-hound
 4 ID
 4 Maneuver
 4 Melee
 4 Save
-4 Flame
-4 Flame
+2 Flame
+2 Flame
 4 Melee
 4 Maneuver
 4 Save
