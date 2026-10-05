@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { SPECIES, UNIT_TYPES, dragonFaceIcon, unitType } from '../data/load'
+import { SPECIES, UNIT_TYPES, dragonFaceIcon, terrainDie, terrainType, unitType } from '../data/load'
 import { spell } from '../data/spells'
 import type { DragonFaceNumber, ResultType } from '../data/types'
 import { expectedArmy, expectedAttack, unitValue } from '../ai/estimate'
@@ -46,9 +46,11 @@ import {
   type RollContext,
   type RollPurpose,
 } from './sai'
+import { setupGame } from './setup'
 import { castSpell, spellEffect } from './spells'
 import {
   SAI_RULES,
+  V1_RULES,
   V0_RULES,
   type CombatState,
   type GameState,
@@ -1406,5 +1408,31 @@ describe('Fearful Flames', () => {
     // One casting never kills an Oak; it flees on its four melee faces in six, half a kill.
     const worth = spellValue(state, 'p1', 'frontier', spell('fearful_flames'), target, 1)
     expect(worth).toBeCloseTo((unitValue(OAK, RULES) * (4 / 6)) / 2)
+  })
+})
+
+// --- setup (8g) ------------------------------------------------------------------------
+
+describe('a Lava Elves force at setup', () => {
+  /**
+   * Death & fire, and no terrain type carries death: like the Goblins, their home is
+   * drawn among the dice carrying their other element, fire. Either seat, over many seeds.
+   */
+  it('always draws a fire die for its home', () => {
+    const elements = (dieId: string) => terrainType(terrainDie(dieId).type).elements
+    const types = new Set<string>()
+    for (let seed = 1; seed <= 60; seed += 1) {
+      for (const [seat, forces] of [
+        ['p1_home', { p1: 'lava_elves_starter', p2: 'treefolk_starter' }],
+        ['p2_home', { p1: 'goblins_bestiary', p2: 'lava_elves_bestiary' }],
+      ] as const) {
+        const state = setupGame({ seed, forces: { kind: 'named', forces }, ruleSet: V1_RULES })
+        const dieId = state.terrains[seat].dieId
+        expect(elements(dieId), `seed ${seed}, ${seat}: ${dieId}`).toContain('fire')
+        types.add(terrainDie(dieId).type)
+      }
+    }
+    // All three fire types turn up, so it is a draw among them and not one of them.
+    expect([...types].sort()).toEqual(['feyland', 'highland', 'wasteland'])
   })
 })

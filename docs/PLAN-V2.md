@@ -2600,11 +2600,11 @@ over 60 seeds in both seats, and all three earth types turn up.
 
 ---
 
-## Phase 8 — Lava Elves
+## Phase 8 — Lava Elves — **landed**
 
 Seven slices: 8a the data, 8b the seams, 8c Stone, Web and Cloak, 8d Charm and Illusion, 8e the two
-abilities and the flip, 8f the two spells, 8g presets, exit checks and art. 8a to 8f have landed;
-8g is planned.
+abilities and the flip, 8f the two spells, 8g presets, exit checks and art. All seven have landed,
+and with them Phase 8.
 
 Death & Fire, the second species carrying Death. Like the Goblins they have **no own terrain type**,
 so `drawHomeDie` draws them a home among the twelve dice carrying fire (Wasteland, Highland,
@@ -3174,7 +3174,7 @@ flee to reserves". No exception in the console.
 **Deliberately not done.** No preset, art or greedy re-run (8g). The `data/spells.json` comment and
 `src/data/spells.ts` header still say "eighteen spells"; both were stale before this slice.
 
-### 8g — Presets, exit checks, art
+### 8g — Presets, exit checks, art — **landed**
 
 - `lava_elves_starter` and `lava_elves_bestiary`, generated from the Goblins' lists by class and
   size, as 6h and 7f did.
@@ -3189,6 +3189,65 @@ flee to reserves". No exception in the console.
 - Exit criterion as for every species, plus: a Lava Elves home is always a fire die (a test over
   seeds, all three fire types turning up), a Necromantic Wave is cast in the live fuzz, and an
   Illusioned army is refused a missile in a browser game.
+
+### What 8g found
+
+Both golden corpora replay byte-identical and unregenerated. 1317 tests pass, and so does the
+1000-game fuzz.
+
+**1. The presets are the pattern, die for die.** `lava_elves_starter` (30 health: 10 / 11 / 9) and
+`lava_elves_bestiary` (35: 14 / 14 / 7) were generated from the Goblins' lists by class and size,
+so neither is a hand count; the bestiary holds all five monsters and all five large dice. The preset
+counts moved again: 42 presets, 27 of them on the start screen (the solo monsters of the first three
+species stay off it), with six each of 30 and 35 health. Like every species' starter since the Coral Elves, they are reached from the start
+screen, not from `?forces=` -- `FORCE_SETS` names only the original pairing and the monster mirrors,
+which the first browser attempt found by asking for `lava_elves_bestiary` and getting a random game.
+
+**2. Greedy finishes everything.** The starter and bestiary against every other species, both ways,
+seeds 1 to 3, against passive and against greedy: 60 games, all won, now in `greedy.test.ts`. A
+temporary sweep of 200 more with Lava Elves on both sides (starter and bestiary mirrors, against
+passive and against itself) also ended every game with a winner, the longest at 981 decisions -- so
+none of the three values the plan worried about stalls a game:
+- **Illusion** was cast 249 times. Greedy shields the army with the most health, which was its own
+  home 143 times of 241 picks; whether that army could have been reached is not something the sweep
+  can see, and it stalls nothing.
+- **Charm** resolved 60 times and handed the attacker 116 melee.
+- **Necromantic Wave was never cast.** The plan worried about the opposite -- a Wave re-cast every
+  turn. Greedy prices it as the army's expected magic moved into melee or missile, and at
+  five points it loses every auction to Fearful Flames (753
+  castings), Palsy (643) and Fiery Weapon (256). That is a price, not a stall, and it is left for the
+  greedy pass that tunes spells rather than this exit check. The sweep was deleted.
+
+**3. Art: all 140 faces resolve, offline, with no pins.** `assets/faces/lava-elves` is mirrored now
+(it was not at 8a). One maneuver image (`maneuver-1-*`), as the plan expected, so the resolver's
+candidate list finds it with no `FACE_ART_VARIANTS` entry. `flame-m` is the image for both
+monsters printing 2 Flame -- a monster takes `-m` whatever its count -- and the Wyvern Rider's two Fly
+faces take `fly-5` and `fly-1` by their counts. `fetch_faces.py --offline` mapped 840 unit faces with
+nothing ambiguous or missing. In the browser every Lava Elves tile draws its portrait.
+
+**4. The exit checks, in the browser.** Lava Elves bestiary mirror against greedy, played to the end
+("You lose", turn 16); Lava Elves starter against Rakshasa ×6, twice to the end ("You win", turns 9
+and 5) and a third time to the moment that mattered: my home held, its Tower live, the enemy's home
+army of three Rakshasas wearing an **Illusion ×3** chip -- and "Fire at which army?" offered the
+Frontier alone. A Web targeting sheet came up along the way, answered with its Auto pick. No
+script errors; the only console errors were the dev server's reconnect attempts from an earlier,
+stopped session.
+
+**5. One exit check was missing a test, and has one now:** a Lava Elves home is always a fire die,
+over 60 seeds in both seats, and all three fire types (Feyland, Highland, Wasteland) turn up.
+
+**Phase 8's exit criterion, checked.**
+- Every Lava Elves mirror finishes in self-play and against passive (8e), and the starter and
+  bestiary against every other species (8g).
+- Every SAI, ability and spell fires in the live fuzz, within 200 games except Charm's resolution
+  and a Wave converting a roll (both in 1000). Five things random play does not reach are driven by
+  named tests instead: Web's drop against a Tower's missile at Reserves, Illusion against a Tower's
+  missile and against a volley, Cursed Bullets on a volley (which cannot happen), and Charm against
+  a Charge.
+- A mixed force with Lava Elves in it plays in one live-fuzz game in five.
+- A Lava Elves starter game and a bestiary game were played to their end in the browser, and an
+  Illusioned army was refused a missile there.
+- Neither golden corpus moved in Phase 8.
 
 ### Deliberately out of this phase
 

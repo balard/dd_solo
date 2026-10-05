@@ -634,6 +634,37 @@ describe('GreedyAI: self-play', () => {
     }
   })
 
+  /** The Lava Elves' exit check (v2 Phase 8g): the same twenty pairings' shape, with the
+   *  Goblins now among the other species. */
+  it('finishes the Lava Elves starter and bestiary against each other species, both ways', () => {
+    const pairings: readonly [string, string][] = [
+      ['lava_elves_starter', 'treefolk_starter'],
+      ['firewalkers_starter', 'lava_elves_starter'],
+      ['lava_elves_starter', 'coral_elves_starter'],
+      ['dwarves_starter', 'lava_elves_starter'],
+      ['lava_elves_starter', 'goblins_starter'],
+      ['lava_elves_bestiary', 'firewalkers_bestiary'],
+      ['treefolk_bestiary', 'lava_elves_bestiary'],
+      ['lava_elves_bestiary', 'coral_elves_bestiary'],
+      ['dwarves_bestiary', 'lava_elves_bestiary'],
+      ['goblins_bestiary', 'lava_elves_bestiary'],
+    ]
+    for (const [p1, p2] of pairings) {
+      for (let seed = 1; seed <= 3; seed++) {
+        for (const [label, other] of [['passive', passiveAi], ['greedy', greedyAi]] as const) {
+          const result = runGame({
+            setup: { seed, forces: { kind: 'named', forces: { p1, p2 } }, ruleSet: V1_RULES },
+            players: { p1: greedyAi, p2: other },
+            aiSeed: seed,
+            maxDecisions: 20_000,
+            validate: true,
+          })
+          expect(result.stoppedBecause, `${p1} vs ${p2} (${label}), seed ${seed}`).toBe('winner')
+        }
+      }
+    }
+  })
+
   it('never draws from the rng it is handed', () => {
     const state = board([{ id: 'a', typeId: 'treefolk.oak', at: at('frontier') }])
     const rng = rngFrom(5)

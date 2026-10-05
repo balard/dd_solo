@@ -219,6 +219,32 @@
         ]
       }
     },
+    "lava_elves_starter": {
+      "name": "Lava Elves starter force",
+      "species": "lava_elves",
+      "armies": {
+        "home": [
+          "lava_elves.conqueror",
+          "lava_elves.duelist",
+          "lava_elves.bladesman",
+          "lava_elves.dead_shot",
+          "lava_elves.warlock"
+        ],
+        "campaign": [
+          "lava_elves.beholder",
+          "lava_elves.infiltrator",
+          "lava_elves.scorpion_knight",
+          "lava_elves.spy"
+        ],
+        "horde": [
+          "lava_elves.assassin",
+          "lava_elves.wyvern_rider",
+          "lava_elves.adept",
+          "lava_elves.spider_rider",
+          "lava_elves.fusilier"
+        ]
+      }
+    },
     "goblins_bestiary": {
       "name": "Goblins bestiary",
       "species": "goblins",
@@ -238,6 +264,28 @@
         "horde": [
           "goblins.harpy",
           "goblins.leopard_rider"
+        ]
+      }
+    },
+    "lava_elves_bestiary": {
+      "name": "Lava Elves bestiary",
+      "species": "lava_elves",
+      "armies": {
+        "home": [
+          "lava_elves.beholder",
+          "lava_elves.conqueror",
+          "lava_elves.rakshasa",
+          "lava_elves.necromancer"
+        ],
+        "campaign": [
+          "lava_elves.drider",
+          "lava_elves.infiltrator",
+          "lava_elves.lurker_in_the_deep",
+          "lava_elves.assassin"
+        ],
+        "horde": [
+          "lava_elves.hell_hound",
+          "lava_elves.wyvern_rider"
         ]
       }
     },

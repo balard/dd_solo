@@ -218,7 +218,7 @@ the dice and the opponent.
 > dormant since v1 Phase 5e. 7f has landed: a starter and a bestiary preset, the exit checks, and
 > the art manifest.
 
-> **v2 Phase 8 (Lava Elves) is under way, planned in seven slices in `PLAN-V2.md`.** 8a has
+> **v2 Phase 8 (Lava Elves) has landed: a sixth species, playable everywhere.** 8a has
 > landed: the twenty Lava Elves dice are in `units.json` -- Death & fire, the second species with
 > no own terrain type -- and `playable.ts` keeps them out of every game until 8e; their five new
 > SAIs (Charm, Cloak, Illusion, Stone, Web) are unbuilt. 8b has landed too: the seams, no rule
@@ -237,14 +237,17 @@ the dice and the opponent.
 > (the first "counts as" that is a spell -- magic as melee or missile, pooled for the roller in the
 > dragon roll, `pooledConversions`) and Fearful Flames (Firebolt's roll, then Mirage's: a blank
 > second save flees), and a fix to Mirage's log line, which had read its fleeing dice as staying
-> (`fate: 'flee'`). Five more species' faces sit in `data/raw/` unimported.
+> (`fate: 'flee'`). 8g has landed: a starter and a bestiary preset, the exit checks (a Lava Elves
+> home is always a fire die; an Illusioned army refused a missile in a browser game), and the art
+> manifest, which needed no pins. House rules are in `RULES-V0.md` section 20, and each slice's
+> findings under Phase 8 in `PLAN-V2.md`. Five more species' faces sit in `data/raw/` unimported.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 7 landed; Lava Elves, Phase 8, under way: 8a-8f landed, 8g planned). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 8 landed, Lava Elves the last). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
