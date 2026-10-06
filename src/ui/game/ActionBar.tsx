@@ -69,6 +69,8 @@ import {
   type SpellDraftCast,
 } from '../../engine/magic'
 
+import { liveExchange } from './exchange'
+import { StepBar } from './StepBar'
 import { useFaceArt } from './useFaceArt'
 
 /**
@@ -129,8 +131,14 @@ export function ActionBar(props: {
     pending?.player === human &&
     (pickModeFor(state, pending, human, selection, rest.pairs, rest.aiming) !== null || options !== null)
 
+  // The exchange this decision is in, if any (v2 Phase 9b): the same bar the roll cards
+  // drew, so a Flame's target sheet sits on the SAIs step between the attack card and
+  // the saves card. Shown while the enemy decides too -- that is still the exchange.
+  const exchange = state.winner === null && pending !== null ? liveExchange(state) : null
+
   return (
     <div className="action-dock">
+      {exchange !== null && <StepBar exchange={exchange} />}
       {state.winner === null && (
         <RollsBehindBlock
           state={state}

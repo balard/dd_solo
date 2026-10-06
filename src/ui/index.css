@@ -343,10 +343,122 @@ body {
 
 /* One roll, before the game moves on. */
 .roll-card { padding: 12px 14px 12px; }
-.roll-card-title {
+/* Whose roll and where, with the number it came to beside it (v2 Phase 9b). */
+.roll-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   margin: 0 0 6px;
+}
+.roll-card-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
   font-size: var(--fs-lg);
   font-weight: 600;
+  text-wrap: balance;
+}
+.roll-card-total {
+  color: var(--muted);
+  font-size: var(--fs-md);
+  white-space: nowrap;
+}
+.roll-card-total b {
+  color: var(--fg);
+  font-size: var(--fs-2xl);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- the step bar (v2 Phase 9b) ------------------------------------------- */
+
+/* The exchange, on every card and sheet in it: a strip across the dialog's top. On a
+   card it bleeds to the card's edges; in the decision dock it is the dock's first row. */
+.step-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  background: var(--sunk);
+  border-bottom: 1px solid var(--line);
+  border-radius: 12px 12px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+}
+.roll-card > .step-bar { margin: -12px -14px 8px; }
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.step-dot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 9px;
+  line-height: 1;
+}
+.step.is-done .step-dot { background: var(--muted); border-color: var(--muted); color: var(--panel); }
+.step.is-now { color: var(--accent); font-weight: 700; }
+.step.is-now .step-dot { background: var(--accent); border-color: var(--accent); }
+/* A step this exchange skipped: struck, never hidden, so the bar keeps its shape. */
+.step.is-none { opacity: .5; }
+.step.is-none .step-label { text-decoration: line-through; }
+.step-sep { flex: none; width: 12px; height: 1.5px; background: var(--line); }
+/* An SAI the exchange waits on. 16px: it shows the order, and is never tapped. */
+.step-chip {
+  border: 1px solid var(--sai);
+  border-radius: 999px;
+  padding: 0 6px;
+  color: var(--sai);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.step-chip.is-now { background: var(--sai); color: var(--panel); }
+.step-chip.is-done { opacity: .55; text-decoration: line-through; }
+.step-bar-break { display: none; }
+
+/* A phone upright: the four steps keep one line and the chips take the next, rather
+   than pushing Result onto a second line (9a finding 4). */
+@media (max-width: 599px) {
+  .step-bar .step-chip { order: 2; }
+  .step-bar .step-bar-break { display: block; order: 1; flex-basis: 100%; height: 0; }
+}
+
+/* A phone held sideways: 390px tall, so a line of chrome is a line of board (9a
+   finding 5). Only the current step keeps its name, the bar shares the heading's line,
+   and Continue sits beside the dice rather than under them. */
+@media (max-height: 500px) {
+  .step:not(.is-now) .step-label { display: none; }
+  .step-sep { width: 6px; }
+  .roll-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'head bar' 'body foot';
+    column-gap: 12px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .roll-card > .step-bar {
+    grid-area: bar;
+    justify-content: flex-end;
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 0;
+  }
+  .roll-card-head { grid-area: head; }
+  .roll-card-body { grid-area: body; }
+  .roll-card-foot { grid-area: foot; align-self: end; margin-top: 0; }
+  .action-dock > .step-bar { padding: 4px 14px; }
 }
 .roll-card-body .log-roll { margin: 0; }
 .roll-card-foot {

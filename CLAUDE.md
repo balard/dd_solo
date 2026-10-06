@@ -248,13 +248,18 @@ the dice and the opponent.
 > bar that belongs to the exchange (cards and decision sheets alike), whose chips show the SAI
 > order but are too small to choose it; the board marks a die only on the card that resolves it;
 > and a live save roll stops being shown twice. 9b-9e build from them.
+>
+> **9b has landed: the card frame.** Every roll card and every decision sheet in an exchange draws
+> one step bar (`exchange.ts`, `StepBar.tsx`); a card names whose roll and where, with its total
+> beside it; the enemy's losses to an exchange are a card of their own; and an SAI resolved while
+> its exchange is paused is shown then, not after the saves. UI only.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 8 landed, Lava Elves the last; Phase 9, the roll dialog, under way: 9a's mockups landed). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 8 landed, Lava Elves the last; Phase 9, the roll dialog, under way: 9a and 9b landed). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
@@ -1196,6 +1201,19 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     the SAI's card and reorders the second so each spell is named first. `spell_cast` carries no
     target; "where" is its consequence lines.
   - **The enemy's spells are a stop; yours are not**, though a roll inside yours is.
+  - **Every stop carries the exchange it belongs to** (v2 Phase 9b, `exchange.ts`), and the
+    step bar draws it on cards and decision sheets alike: Melee, SAIs, Saves, Result, with the
+    SAIs the exchange waits on as chips. A logged stop is placed from its entry; a decision by
+    `liveExchange`, from the march step and the parked rolls. A chip from the *resisting* roll
+    shows only from that step on, or the attack card gives the saves away.
+  - **The enemy's losses to an exchange are a stop** (`losses`). They are written after the
+    cursor -- the AI chooses them once you continue -- so `logSteps` reads the whole log and
+    finds the exchange by looking back.
+  - **An SAI resolved while its exchange is paused is shown then**, off the parked attack, and
+    skipped when the exchange is written (`resolvedBefore`). When a save roll is first shown
+    live, every step-4 SAI goes just before it, including one that logged nothing.
+  - **A save roll shown live is drawn once**: the logged stop is the Result (`outcomeOnly`),
+    unless a Flashfire rerolled it since.
   - The cards draw with `CombatPart`, `ManeuverPart` and `LogLine`, the log's own pieces.
 - **A decision shows the roll still on the table, above the sheet** (`RollsBehindBlock` in
   `ActionBar`, v1 Phase 9d). **The same block shows while the enemy is deciding**, which is when a

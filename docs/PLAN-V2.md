@@ -11,7 +11,7 @@ wrong* write-ups before starting anything that touches the same seam. This docum
 of work*. **Phases 0 to 8 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c, Phase 5
 as 5a to 5g, Phase 6 as 6a to 6h, Phase 7 as 7a to 7f, Phase 8 as 8a to 8g), each with its findings
 below. **Phase 9 (the roll dialog) is under way** as slices 9a to 9e, and it includes the decision on
-who orders the SAIs. 9a (the mockups) has landed.
+who orders the SAIs. 9a (the mockups) and 9b (the card frame) have landed.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
 collection, win dice, dragons and terrains, and raise the force cap to 24 and then 36 at set
@@ -3362,7 +3362,7 @@ current step lit, waiting SAIs as chips on it. Mock four exchanges: a melee with
 roll with a Cantrip, a contested maneuver, and a two-SAI roll where the order is the player's.
 Answer in the mockup whether the step bar fits a phone held upright.
 
-**9b — The card frame.** UI only. The heading names whose roll and which terrain, totals
+**9b — The card frame — landed.** UI only. The heading names whose roll and which terrain, totals
 and `math` appear on every card including live ones, and outcomes say "you" and "the enemy".
 The roll-off's two labels match. `presentation.ts` gains the exchange each stop belongs to, which
 the step bar reads. The cards still draw with `CombatPart`, `ManeuverPart` and `LogLine`, so a
@@ -3456,9 +3456,10 @@ Frontier".
 
 **7. Result is a step, and when the enemy takes the damage it needs a new stop.** When you take
 the damage, the Result step is your damage sheet, carrying the arithmetic ("9 melee − 5 saves").
-When the enemy takes it, their losses pass with no card today: in the mockup's *Today* frames the
-Explorer is gone from the board while the saves card is still up. 9b adds a card for the kill that
-follows a `combat_resolved`, and 9c marks the dice on it.
+When the enemy takes it, their losses pass with no card today. (The mockup's *Today* frames have
+the Explorer gone while the saves card is still up. That was wrong: the AI waits on the cards, so
+the dice go after you continue, with nothing saying so. See *What 9b found*.) 9b adds a card for
+the kill that follows a `combat_resolved`, and 9c marks the dice on it.
 
 **8. 9c: mark, don't rewind, and the mark waits too.** The log already says where a die was before
 it moved: `units_killed` and `sai_resolved` carry their `slot`, `units_moved` its `from`, and
@@ -3501,6 +3502,81 @@ your 5 saves." Its chip is on the step whose roll showed the Cantrip.
   holds for `docs/` too).
 - **9e is not decided here.** The fourth exchange draws the question as it would be asked. Whether
   it is asked at all is still 9e's measurement.
+
+### What 9b found
+
+UI only. The engine, both golden corpora and `SAVE_VERSION` did not move, and no test outside
+`src/ui` changed. Played in a browser on the Genie mirror (`?forces=firewalkers_genie&seed=5`) on a
+laptop, a phone held sideways and a phone upright, in light and dark.
+
+**1. The exchange is its own module, `exchange.ts`, with two doors.** A logged stop is placed by
+`presentation.ts`, which has the entry in hand (`combatExchange`, `maneuverExchange`,
+`magicExchange`, `dragonExchange`). A decision is placed by `liveExchange`, from the state it is
+asked in: the march step says where the machine stands, and `rollsOnTheTable` says which SAIs
+rolled. Every `RollStep` carries an optional `exchange`, and `StepBar` draws it on the card and on
+the decision sheet alike. A roll-off, a Replanting or a spell cast between marches belongs to no
+exchange, and those cards draw no bar.
+- **A Cantrip window is read as at the step it returns to**, with its chip lit. On the log's side,
+  a run of spells is placed by the `cantrip` entry behind it and the exchange written after it, or
+  else by the paused exchange.
+- **What earns a chip is wider than what earns a card.** A Cantrip, a Regenerate and a Hypnotic
+  Glare pause the exchange without a card of their own, so they are chips and not stops. Glare
+  joins Choke and Confuse on the Saves step, because the engine resolves all three at the delayed
+  pause (`targeting.ts`).
+
+**2. The plan's 9a finding 7 was half wrong.** The enemy's dead do not leave the board while the
+saves card is up. The AI waits on the cards, so it chooses its losses only after you continue, and
+the dice then vanished with no card. The new `losses` stop is that card. It is written *after* the
+cursor, past the exchange it paid for, so `logSteps` now reads the whole log from the cursor rather
+than a slice, and finds the exchange by looking back. Only the enemy's losses stop: you chose yours.
+
+**3. The bar found two ordering bugs, by going backwards.** Both predate this phase, and both
+looked fine with "roll 3 of 4" in the corner.
+- **An enemy SAI that resolved while its exchange was still paused** (a Firecloud, then your save
+  roll's Cantrip) waited for the exchange to be written. It came after the saves, and without what
+  it did, because its resolution was behind the cursor by then. It is now shown when it resolves,
+  off the attack still parked, and the written exchange skips it (`resolvedBefore`).
+- **An SAI that logged nothing**, a Firewalking that stayed put, had nothing for that rule to see.
+  So the first time a save roll is shown live, every step-4 SAI of the parked attack goes just
+  before it: by then all of them have been answered. Both cases have engine-driven tests.
+
+**4. 9a finding 9's rule needed an exception.** A save roll shown live is drawn once, and its
+logged stop is the Result. But a Flashfire can reroll a save die after the live card. In play a
+Firewalking came back a Cantrip, and the outcome-only card hid the die that changed. A `flashfire`
+entry for the saver since the cursor brings the strip back.
+
+**5. Two more slips, found in a browser.**
+- **The live attack card showed the save roll's chips**: a Firewalking on Saves before anyone had
+  seen the save dice. A chip from the resisting roll is now marked `resisting` and drawn only from
+  that step on. A delayed SAI also sits on Saves but belongs to the attack, so it shows from the
+  start.
+- **A live counter-attack read "You roll melee"**, because a table roll carries only the action.
+  Its heading now asks the exchange.
+
+**6. 9a's screen rules hold as measured.** On a phone held sideways the card is 108px of 390 (28%):
+the bar shares the heading's line with only the current step named, and Continue sits beside the
+dice. On a phone upright it is 221px of 844 (26%): the four steps keep one line and the chips take
+a row of their own. Both are CSS, under `max-height: 500px` and `max-width: 599px`.
+
+**7. Headings and outcomes.** "The enemy rolls melee at Your home" with **9** melee beside it, "You
+roll to stop it at the Frontier", "The enemy's Flame at Your home", "What it came to at Your home".
+The log's own lines now say "you win", "you stop the enemy" and "= 4 damage to you". The marcher is
+read off whose dice rolled, since `maneuver_contested` does not say. The roll-off's strips read "your
+horde" and "the enemy's horde". `headingOf` is a pure function, tested without a DOM.
+
+**Deliberately not done.**
+- **The decision sheet's roll strips keep their old labels.** `tableRollHeading` still says "The
+  enemy's melee attack" over a counter's dice. The strips behind a sheet are 9d's readable pass.
+- **A live counter is "Counter" on the bar even when it will be a Defensive Volley.** The march
+  carries only the action it chose. The logged card says "Volley".
+- **A dragon attack's Result step lights only on a decision sheet.** `dragon_damage` is not a stop,
+  and making it one is 9c's question (what the board shows) as much as this slice's.
+- **The board still runs ahead of the cards.** In the sideways screenshot the ticker already read
+  "You lose Genie, Genie, Genie" over a counter-attack card. That is 9c.
+- **The fuzzes time out under load, which is not this slice.** With the dev server and the browser
+  pane running, `greedy.test.ts`'s and `species.test.ts`'s self-play passed their limits. With
+  nothing else running the whole suite passed, 1343 of 1343 in about 230s. Nothing outside `src/ui`
+  changed.
 
 ### Exit criterion
 

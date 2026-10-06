@@ -17,7 +17,9 @@ import {
   type CombatEntry,
   type ManeuverEntry,
   type OwnerOf,
+  marcherOf,
 } from './presentation'
+import { barSteps, combatExchange, liveExchange, stepState } from './exchange'
 import { rollsBehind } from './prompts'
 
 /** A die showing face `faceIndex` of `typeId`, as a roll records it. */
@@ -106,7 +108,7 @@ describe('rollSteps', () => {
   it('stops on an SAI that resolves something, carrying what it resolved', () => {
     const steps = rollSteps([flamed, combat({ attackDice: [plain, flame] })], 'p1')
     expect(steps.map((s) => s.kind)).toEqual(['attack', 'sai', 'resist'])
-    expect(steps[1]).toEqual({ kind: 'sai', die: flame, resolved: [flamed] })
+    expect(steps[1]).toMatchObject({ kind: 'sai', die: flame, resolved: [flamed] })
   })
 
   it('stops on a maneuver, then the opposing maneuver', () => {
@@ -156,7 +158,8 @@ describe('rollSteps', () => {
       }
       const steps = rollSteps([subRoll, attack], 'p1', mine)
       expect(steps.map((s) => s.kind)).toEqual(['attack', 'roll', 'resist'])
-      expect(steps[1]).toEqual({ kind: 'roll', entry: subRoll })
+      // On the Flame's step: the sub-roll is what the Flame resolved.
+      expect(steps[1]).toMatchObject({ kind: 'roll', entry: subRoll, exchange: { kind: 'melee', at: 'sais' } })
     })
 
     it('leaves the enemy’s SAIs a stop: you never saw them chosen', () => {
@@ -344,6 +347,31 @@ describe('a roll paused on a decision', () => {
     expect(pastEverything(asked)).toEqual({ log: asked.log.length, step: 0, shown: ['attack'] })
     expect(rollStops(asked, pastEverything(asked), 'p1')).toEqual([])
   })
+
+  /** v2 Phase 9b: the live card and the sheet after it share the exchange's bar. */
+  it('puts the Swallow’s sheet on the SAIs step, after its attack card on the roll', () => {
+    const asked = swallowing()
+    expect(liveExchange(asked)).toEqual({
+      kind: 'melee',
+      roller: 'p1',
+      slot: 'frontier',
+      at: 'sais',
+      chips: [{ name: 'Swallow', on: 'sais', state: 'now' }],
+    })
+    const [card] = rollStops(asked, { log: 0, step: 0 }, 'p1')
+    expect(card?.exchange).toMatchObject({ at: 'roll', chips: [{ name: 'Swallow', state: 'waiting' }] })
+
+    // Past the rolls the exchange is in the log, and its Result reads it from there.
+    // The Leviathan rolled nothing but Swallow, so there was no save roll to make.
+    const done = advance(reduce(asked, { kind: 'sai_target', unitIds: ['p2:oak'] }))
+    expect(done.pending).toMatchObject({ kind: 'choose_counter_attack', player: 'p2' })
+    expect(liveExchange(done)).toMatchObject({
+      kind: 'melee',
+      at: 'result',
+      none: ['resist'],
+      chips: [{ name: 'Swallow', state: 'done' }],
+    })
+  })
 })
 
 /**
@@ -439,5 +467,240 @@ describe('a Cantrip window', () => {
       kind: 'live',
       rolls: [{ kind: 'attack', action: 'melee' }, { kind: 'save' }],
     })
+  })
+
+  /**
+   * Found in a browser (v2 Phase 9b), where the step bar made it visible by going
+   * backwards: the enemy's SAI resolved, the exchange paused again on your save roll's
+   * Cantrip, and the SAI's card came only once the exchange was written -- after the
+   * saves, and without what it did, which was behind the cursor by then.
+   */
+  it('shows the enemy’s SAI when it resolves, before the saves it came ahead of', () => {
+    // Genie face 4 is `4 SAI:Firecloud`, face 2 `4 SAVE` (no maneuver: the target dies),
+    // face 3 `4 SAI:Cantrip`. The Oak's melee is there so the attack is not zero, which
+    // would make no save roll at all.
+    const asked = exchange(
+      'p2',
+      [
+        ['p2:genie', GENIE, 'p2'],
+        ['p2:oak', OAK, 'p2'],
+        ['p1:genie1', GENIE, 'p1'],
+        ['p1:genie2', GENIE, 'p1'],
+        ['p1:genie3', GENIE, 'p1'],
+      ],
+      rngShowing([GENIE, OAK, GENIE, GENIE, GENIE], [4, 1, 2, 3, 3]),
+    )
+    expect(asked.pending).toMatchObject({ kind: 'sai_target', player: 'p2', sai: 'Firecloud' })
+    const shownAttack = pastEverything(asked)
+
+    const windowed = advance(reduce(asked, { kind: 'sai_target', unitIds: ['p1:genie1'] }))
+    expect(windowed.pending).toMatchObject({ kind: 'announce_spells', player: 'p1' })
+    const stops = rollStops(windowed, shownAttack, 'p1')
+    expect(stops.map((stop) => stop.kind)).toEqual(['sai', 'live'])
+    expect(stops[0]).toMatchObject({
+      resolved: expect.arrayContaining([expect.objectContaining({ kind: 'sai_resolved', sai: 'Firecloud' })]),
+      exchange: { at: 'sais', chips: [{ name: 'Firecloud', state: 'now' }] },
+    })
+    expect(stops[1]?.exchange?.at).toBe('resist')
+
+    // Once the exchange is written, the Firecloud is not shown a second time.
+    let cursor = shownAttack
+    for (let i = 0; i < stops.length; i++) cursor = advanceCursor(windowed, cursor, 'p1')
+    const done = advance(reduce(windowed, { kind: 'announce_spells', casts: [] }))
+    expect(rollStops(done, cursor, 'p1').map((stop) => stop.kind)).not.toContain('sai')
+  })
+
+  /** The same, for an SAI that logged nothing: a Firewalking that stayed put. */
+  it('shows the enemy’s step-4 SAIs before the saves even when they logged nothing', () => {
+    // Genie face 7 is `4 SAI:Firewalking`; Oak face 1 is `2 MELEE`.
+    const asked = exchange(
+      'p2',
+      [
+        ['p2:genie', GENIE, 'p2'],
+        ['p2:oak', OAK, 'p2'],
+        ['p1:genie1', GENIE, 'p1'],
+        ['p1:genie2', GENIE, 'p1'],
+      ],
+      rngShowing([GENIE, OAK, GENIE, GENIE], [7, 1, 3, 3]),
+    )
+    expect(asked.pending).toMatchObject({ kind: 'sai_move', player: 'p2', sai: 'Firewalking' })
+    const shownAttack = pastEverything(asked)
+
+    const windowed = advance(reduce(asked, { kind: 'sai_move', slot: null, unitIds: [] }))
+    expect(windowed.pending).toMatchObject({ kind: 'announce_spells', player: 'p1' })
+    const stops = rollStops(windowed, shownAttack, 'p1')
+    expect(stops.map((stop) => stop.kind)).toEqual(['sai', 'live'])
+    expect(stops[0]).toMatchObject({ resolved: [], exchange: { at: 'sais' } })
+
+    let cursor = shownAttack
+    for (let i = 0; i < stops.length; i++) cursor = advanceCursor(windowed, cursor, 'p1')
+    const done = advance(reduce(windowed, { kind: 'announce_spells', casts: [] }))
+    expect(rollStops(done, cursor, 'p1').map((stop) => stop.kind)).not.toContain('sai')
+  })
+
+  /**
+   * v2 Phase 9b: a Cantrip window is read as at the step it goes back to, with its chip
+   * lit: the attacker's on SAIs, the saver's on Saves.
+   */
+  it('puts a window on the step whose roll showed the Cantrip', () => {
+    const attacking = exchange(
+      'p1',
+      [
+        ['p1:genie1', GENIE, 'p1'],
+        ['p1:genie2', GENIE, 'p1'],
+        ['p1:genie3', GENIE, 'p1'],
+        ['p2:oak', OAK, 'p2'],
+      ],
+      rngShowing([GENIE, GENIE, GENIE], [3, 3, 6]),
+    )
+    expect(liveExchange(attacking)).toMatchObject({
+      kind: 'melee',
+      roller: 'p1',
+      at: 'sais',
+      chips: [
+        { name: 'Cantrip', on: 'sais', state: 'now' },
+        { name: 'Cantrip', on: 'sais', state: 'now' },
+      ],
+    })
+
+    const saving = exchange(
+      'p2',
+      [
+        ['p2:oak', OAK, 'p2'],
+        ['p1:genie1', GENIE, 'p1'],
+        ['p1:genie2', GENIE, 'p1'],
+      ],
+      rngShowing([OAK, GENIE, GENIE], [1, 3, 3]),
+    )
+    expect(liveExchange(saving)).toMatchObject({
+      kind: 'melee',
+      roller: 'p2',
+      at: 'resist',
+      chips: [
+        { name: 'Cantrip', on: 'resist', state: 'now' },
+        { name: 'Cantrip', on: 'resist', state: 'now' },
+      ],
+    })
+    // The two live cards before it: the attack on its roll, the saves on Saves. Found
+    // in a browser: the attack card showed the save roll's Cantrip chips, which gave
+    // the saves away before their card.
+    const [attackCard, savesCard] = rollStops(saving, { log: 0, step: 0 }, 'p1')
+    expect(attackCard?.exchange).toMatchObject({ at: 'roll', chips: [] })
+    expect(savesCard?.exchange).toMatchObject({ at: 'resist', chips: [{ name: 'Cantrip' }, { name: 'Cantrip' }] })
+  })
+})
+
+/**
+ * v2 Phase 9b: every stop says which exchange it is in and where that exchange stands,
+ * which the step bar draws. The bar belongs to the exchange, so the attack card, the
+ * SAI's card and the saves card of one melee draw one bar with a different step lit.
+ */
+describe('the exchange a stop belongs to', () => {
+  const cantripDie = rolled('firewalkers.genie', 3, 0, [{ kind: 'cantrip', points: 4 }])
+  const killed = (player: 'p1' | 'p2'): LogEntry => ({ kind: 'units_killed', player, slot: 'p1_home', unitIds: ['u1'] })
+
+  it('walks one melee through its steps, the Flame waiting, then now, then done', () => {
+    const steps = rollSteps([flamed, combat({ attackDice: [plain, flame] })], 'p1')
+    expect(steps.map((s) => [s.exchange?.kind, s.exchange?.at, s.exchange?.chips.map((c) => c.state)])).toEqual([
+      ['melee', 'roll', ['waiting']],
+      ['melee', 'sais', ['now']],
+      ['melee', 'resist', ['done']],
+    ])
+    // Whose and where travel with it, for the card's heading.
+    expect(steps[1]?.exchange).toMatchObject({ roller: 'p2', slot: 'p1_home' })
+  })
+
+  it('strikes through what the exchange skipped, and keeps its shape', () => {
+    const plainMelee = combatExchange(combat(), 'roll')
+    expect(barSteps(plainMelee.kind).map(({ step }) => stepState(plainMelee, step))).toEqual([
+      'now',
+      'none',
+      'todo',
+      'todo',
+    ])
+    const noSaves = combatExchange(combat({ saveDice: null, saveTotal: null }), 'result')
+    expect(barSteps(noSaves.kind).map(({ step }) => stepState(noSaves, step))).toEqual(['done', 'none', 'none', 'now'])
+  })
+
+  it('names a counter, and a counter with missile a volley', () => {
+    expect(combatExchange(combat({ isCounter: true }), 'roll').kind).toBe('counter')
+    expect(combatExchange(combat({ isCounter: true, action: 'missile' }), 'roll').kind).toBe('volley')
+  })
+
+  /**
+   * 9a finding 9, found by playing: a save roll parked on a decision was a live stop,
+   * and then the logged exchange drew the same strip again. The second is the Result.
+   */
+  it('draws a save roll shown live only once: the logged stop is the outcome', () => {
+    const state = { log: [combat()], units: {}, turn: { combat: null } } as unknown as GameState
+    const stops = rollStops(state, { log: 0, step: 0, shown: ['attack', 'save'] }, 'p1')
+    expect(stops).toEqual([expect.objectContaining({ kind: 'resist', outcomeOnly: true })])
+    expect(stops[0]?.exchange?.at).toBe('result')
+
+    // Found in a browser: a Flashfire rerolled a save die after the live card, and the
+    // outcome-only card hid the die that changed. Then the saves are drawn again.
+    const flashed: LogEntry = { kind: 'flashfire', player: 'p1', slot: 'p1_home', unitIds: ['u1'] }
+    const after = { log: [flashed, combat()], units: {}, turn: { combat: null } } as unknown as GameState
+    const redrawn = rollStops(after, { log: 0, step: 0, shown: ['attack', 'save'] }, 'p1')
+    expect(redrawn).toEqual([expect.objectContaining({ kind: 'resist' })])
+    expect(redrawn[0]).not.toHaveProperty('outcomeOnly')
+  })
+
+  /**
+   * 9a finding 7: the enemy chooses who it loses out of sight, after you continue past
+   * the saves, and the dice used to leave the board with no card. Written after the
+   * cursor, so the stop is found by looking back at the exchange it paid for.
+   */
+  it('stops on the enemy’s losses to an exchange, never on yours', () => {
+    const attack = combat({ attacker: 'p1', defender: 'p2', defenderSlot: 'p2_home' })
+    const state = (log: readonly LogEntry[]) => ({ log, units: {}, turn: { combat: null } }) as unknown as GameState
+    const after = rollStops(state([attack, killed('p2')]), { log: 1, step: 0 }, 'p1')
+    expect(after).toEqual([expect.objectContaining({ kind: 'losses', entry: killed('p2') })])
+    expect(after[0]?.exchange).toMatchObject({ kind: 'melee', at: 'result', slot: 'p2_home' })
+
+    expect(rollStops(state([combat(), killed('p1')]), { log: 1, step: 0 }, 'p1')).toEqual([])
+    // An SAI's kill is on the SAI's card, before the exchange is written.
+    expect(rollSteps([flamed, killed('p2'), combat({ attackDice: [plain, flame] })], 'p1').map((s) => s.kind)).not.toContain(
+      'losses',
+    )
+  })
+
+  it('puts the enemy’s Cantrip spells on the step whose roll showed the Cantrip', () => {
+    const cast: LogEntry = { kind: 'spell_cast', player: 'p2', spell: 'ash_storm', element: 'fire', count: 2 }
+    const opened: LogEntry = { kind: 'cantrip', player: 'p2', slot: 'p1_home', points: 4 }
+    const steps = rollSteps([opened, cast, combat({ attackDice: [plain, cantripDie] })], 'p1')
+    const spells = steps.find((s) => s.kind === 'spells')
+    expect(spells?.exchange).toMatchObject({ kind: 'melee', at: 'sais', chips: [{ name: 'Cantrip', state: 'now' }] })
+  })
+
+  it('puts a magic action’s spells on its Spells step', () => {
+    const cast: LogEntry = { kind: 'spell_cast', player: 'p2', spell: 'ash_storm', element: 'fire', count: 2 }
+    const steps = rollSteps([magic([plain], 'p2'), cast], 'p1')
+    expect(steps.map((s) => [s.kind, s.exchange?.kind, s.exchange?.at])).toEqual([
+      ['roll', 'magic', 'roll'],
+      ['spells', 'magic', 'result'],
+    ])
+  })
+
+  it('reads who maneuvered off the dice, for "you win" rather than "the marcher wins"', () => {
+    const mine: OwnerOf = (id) => (id === 'mine' ? 'p1' : 'p2')
+    const contest: ManeuverEntry = { ...maneuver, marcherDice: [{ ...plain, unitId: 'mine' }] }
+    expect(marcherOf(contest, mine)).toBe('p1')
+    expect(marcherOf({ ...contest, marcherDice: [] }, mine)).toBe('p1')
+    const steps = rollSteps([contest], 'p1', mine)
+    expect(steps.map((s) => [s.exchange?.roller, s.exchange?.at])).toEqual([
+      ['p1', 'roll'],
+      ['p1', 'resist'],
+    ])
+  })
+
+  it('puts a roll-off in no exchange at all', () => {
+    const rollOff: LogEntry = {
+      kind: 'roll_off',
+      winner: 'p1',
+      rolls: { p1: 4, p2: 2 },
+      dice: { p1: [plain], p2: [plain] },
+    } as unknown as LogEntry
+    expect(rollSteps([rollOff], 'p1')).toEqual([{ kind: 'roll', entry: rollOff }])
   })
 })

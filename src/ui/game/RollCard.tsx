@@ -6,14 +6,20 @@
  * roll with what they came to, then the question those rolls lead to. Every part is
  * drawn with the log's own pieces (`CombatPart`, `ManeuverPart`, `LogLine`), so the card
  * and the log cannot show one roll two ways.
+ *
+ * **The frame is v2 Phase 9b's**: the exchange's step bar on top, then a heading that
+ * says whose roll and where, with the total beside it on every card that has one -- a
+ * live card included, whose total used to be a bare number in the strip. The strips'
+ * own labels ("MANEUVER", "SAVES") are left off here, because the heading says it.
  */
 import { unitType } from '../../data/load'
-import type { GameState, LogEntry, PlayerId } from '../../engine/types'
+import type { ArmyRef, GameState, LogEntry, PlayerId } from '../../engine/types'
 
 import { RollStrip, effectSummary, saiName } from './DiceGrid'
 import { CombatPart, LogLine, ManeuverPart } from './LogPanel'
-import type { RollStep } from './presentation'
-import { tableRollHeading } from './prompts'
+import { marcherOf, ownerIn, type RollStep } from './presentation'
+import { slotLabel } from './prompts'
+import { StepBar } from './StepBar'
 import type { RollShown } from './useGame'
 
 export function RollCard({
@@ -28,19 +34,26 @@ export function RollCard({
   onInspect: (unitId: string) => void
 }) {
   const { step } = shown
+  const { title, total } = headingOf(step, state, human)
+  const more = shown.of - shown.number
   return (
     <div className="roll-card">
-      <p className="roll-card-title">{titleOf(step, state, human)}</p>
+      {step.exchange !== undefined && <StepBar exchange={step.exchange} />}
+      <div className="roll-card-head">
+        <p className="roll-card-title">{title}</p>
+        {total !== null && (
+          <span className="roll-card-total">
+            <b>{total.n}</b> {total.of}
+          </span>
+        )}
+      </div>
       <div className="roll-card-body">
         <StepBody step={step} state={state} human={human} onInspect={onInspect} />
       </div>
       <div className="roll-card-foot">
-        <span className="muted">
-          roll {shown.number} of {shown.of}
-        </span>
-        {shown.of - shown.number > 0 && (
+        {more > 0 && (
           <button type="button" className="choice secondary minor" onClick={shown.skip}>
-            Skip {shown.of - shown.number} more
+            Skip {more} more
           </button>
         )}
         {/* Focused, so Enter or Space steps through without hunting for the button. */}
@@ -52,67 +65,156 @@ export function RollCard({
   )
 }
 
-/** Whose roll this is, in a few words. The dice and the numbers are the body's job. */
-function titleOf(step: RollStep, state: GameState, human: PlayerId): string {
+interface Heading {
+  readonly title: string
+  /** "9 melee": the number the card is about, beside its heading. */
+  readonly total: { readonly n: number; readonly of: string } | null
+}
+
+/** "at Your home", "at the Frontier", "in Reserves": where, as a phrase. */
+export function atPlace(slot: ArmyRef, human: PlayerId): string {
+  if (slot === 'reserve') return 'in Reserves'
+  const label = slotLabel(slot, human)
+  return label === 'Your home' ? `at ${label}` : `at the ${label}`
+}
+
+/** A terrain as the object of a verb: "Your home", "the Frontier". */
+function place(slot: ArmyRef, human: PlayerId): string {
+  return atPlace(slot, human).replace(/^(at|in) /, '')
+}
+
+/** Whose roll this is, what for and where -- and the number it came to. */
+export function headingOf(step: RollStep, state: GameState, human: PlayerId): Heading {
   const who = (player: PlayerId) => (player === human ? 'You' : 'The enemy')
   const whose = (player: PlayerId) => (player === human ? 'Your' : 'The enemy’s')
+  const rolls = (player: PlayerId) => `${who(player)} ${player === human ? 'roll' : 'rolls'}`
+  const at = (slot: ArmyRef) => atPlace(slot, human)
+  const opp = (player: PlayerId): PlayerId => (player === 'p1' ? 'p2' : 'p1')
+  const none = (title: string): Heading => ({ title, total: null })
+  const where = step.exchange === undefined ? '' : ` ${at(step.exchange.slot)}`
+
   switch (step.kind) {
-    case 'attack':
-      return `${who(step.entry.attacker)} ${step.entry.attacker === human ? 'roll' : 'rolls'} ${
-        step.entry.isCounter ? 'a counter-attack' : `a ${step.entry.action} attack`
-      }`
-    case 'resist':
-      return step.entry.saveDice === null
-        ? 'What it comes to'
-        : `${whose(step.entry.defender)} saves`
-    case 'maneuver':
-      return 'The maneuver roll'
-    case 'counter_maneuver':
-      return 'The opposing maneuver roll'
+    case 'attack': {
+      const { entry } = step
+      const what = entry.isCounter
+        ? entry.action === 'missile'
+          ? 'a defensive volley'
+          : 'a counter-attack'
+        : entry.action
+      const ends =
+        entry.attackerSlot === entry.defenderSlot
+          ? at(entry.defenderSlot)
+          : `from ${place(entry.attackerSlot, human)} ${at(entry.defenderSlot)}`
+      return { title: `${rolls(entry.attacker)} ${what} ${ends}`, total: { n: entry.attackTotal, of: entry.action } }
+    }
+    case 'resist': {
+      const { entry } = step
+      if (step.outcomeOnly === true || entry.saveDice === null) {
+        return {
+          title: `${step.outcomeOnly === true ? 'What it came to' : 'No save roll'} ${at(entry.defenderSlot)}`,
+          total: { n: entry.damage, of: 'damage' },
+        }
+      }
+      const saves = entry.defender === human ? 'You save' : 'The enemy saves'
+      return {
+        title: `${saves}${entry.charge === undefined ? '' : ' and strike back'} ${at(entry.defenderSlot)}`,
+        total: entry.saveTotal === null ? null : { n: entry.saveTotal, of: 'saves' },
+      }
+    }
+    case 'maneuver': {
+      const marcher = marcherOf(step.entry, ownerIn(state))
+      return {
+        title: marcher === undefined ? 'The maneuver roll' : `${rolls(marcher)} to turn ${place(step.entry.slot, human)}`,
+        total: { n: step.entry.marcher, of: 'maneuver' },
+      }
+    }
+    case 'counter_maneuver': {
+      const marcher = marcherOf(step.entry, ownerIn(state))
+      return {
+        title:
+          marcher === undefined
+            ? 'The opposing maneuver roll'
+            : `${rolls(opp(marcher))} to stop it ${at(step.entry.slot)}`,
+        total: { n: step.entry.defender, of: 'maneuver' },
+      }
+    }
     case 'sai': {
       const owner = state.units[step.die.unitId]?.owner
-      const name = unitType(step.die.typeId).name
-      return owner === undefined ? name : `${whose(owner)} ${name}`
+      const name = step.die.face.icon === 'SAI' ? step.die.face.sai : unitType(step.die.typeId).name
+      return none(owner === undefined ? `${name}${where}` : `${whose(owner)} ${name}${where}`)
     }
     case 'spells': {
       const first = step.entries[0]
       const caster = first !== undefined && 'player' in first ? first.player : null
+      const cantrip = step.exchange !== undefined && step.exchange.kind !== 'magic'
       // Not "The enemy casts": every line under it already says that.
-      return caster === null ? 'Spells' : `${whose(caster)} spells`
+      return none(caster === null ? 'Spells' : `${whose(caster)} ${cantrip ? 'Cantrip spells' : 'spells'}`)
+    }
+    case 'losses':
+      return none(`${whose(step.entry.player)} losses ${at(step.entry.slot)}`)
+    case 'live': {
+      const { roll } = step.roll
+      const n = roll.total
+      const total = (of: string) => (n === undefined ? null : { n, of })
+      switch (step.roll.kind) {
+        case 'attack': {
+          // A counter is named as one: the table roll carries only the action.
+          const kind = step.exchange?.kind
+          const what =
+            kind === 'counter' ? 'a counter-attack' : kind === 'volley' ? 'a defensive volley' : step.roll.action ?? 'an attack'
+          return { title: `${rolls(step.roll.player)} ${what}${where}`, total: total(step.roll.action ?? '') }
+        }
+        case 'save':
+          return { title: `${step.roll.player === human ? 'You save' : 'The enemy saves'}${where}`, total: total('saves') }
+        case 'maneuver':
+          return step.roll.player === state.turn.marching
+            ? {
+                title: `${rolls(step.roll.player)} to turn ${step.exchange === undefined ? 'the terrain' : place(step.exchange.slot, human)}`,
+                total: total('maneuver'),
+              }
+            : { title: `${rolls(step.roll.player)} to stop it${where}`, total: total('maneuver') }
+        case 'dragon':
+          return { title: `${whose(step.roll.player)} army answers the dragons${where}`, total: null }
+      }
     }
     case 'roll':
-      return wholeRollTitle(step.entry, whose)
-    case 'live':
-      return tableRollHeading(step.roll, human)
+      return wholeRollHeading(step.entry, human)
   }
 }
 
-/** A roll nobody resists, named for what it is. */
-function wholeRollTitle(entry: LogEntry, whose: (player: PlayerId) => string): string {
+/** A roll nobody resists, named for what it is and where. */
+function wholeRollHeading(entry: LogEntry, human: PlayerId): Heading {
+  const who = (player: PlayerId) => (player === human ? 'You' : 'The enemy')
+  const whose = (player: PlayerId) => (player === human ? 'Your' : 'The enemy’s')
+  const at = (slot: ArmyRef) => atPlace(slot, human)
+  const none = (title: string): Heading => ({ title, total: null })
   switch (entry.kind) {
     case 'roll_off':
     case 'order_of_play':
-      return 'The Horde roll-off'
+      return none('The Horde roll-off')
     case 'magic_rolled':
-      return `${whose(entry.player)} magic roll`
+      return {
+        title: `${who(entry.player)} ${entry.player === human ? 'roll' : 'rolls'} magic ${at(entry.slot)}`,
+        total: { n: entry.total, of: 'magic' },
+      }
     case 'sai_sub_roll':
-      return 'Rolling to survive'
+      return none(`Rolling to survive ${entry.source} ${at(entry.slot)}`)
     case 'confused':
-      return 'Confused dice roll again'
+      return none(`Confused dice roll again ${at(entry.slot)}`)
     case 'spell_saves':
-      return 'Saves against a spell'
+      return { title: `${whose(entry.player)} saves against ${entry.source} ${at(entry.slot)}`, total: { n: entry.saves, of: 'saves' } }
     case 'thorns':
-      return 'Wall of Thorns'
+      return none('Wall of Thorns')
     case 'replanting':
-      return 'Replanting'
+      return none(`${whose(entry.player)} Replanting ${at(entry.slot)}`)
     case 'units_risen':
-      return 'Rise from the Ashes'
+      return none('Rise from the Ashes')
     case 'dragon_attack':
-      return 'The dragons attack'
+      return none(`The dragons attack ${at(entry.slot)}`)
     case 'dragon_roll':
-      return `${whose(entry.player)} army answers the dragons`
+      return none(`${whose(entry.player)} army answers the dragons ${at(entry.slot)}`)
     default:
-      return 'A roll'
+      return none('A roll')
   }
 }
 
@@ -133,26 +235,32 @@ function StepBody({
     case 'attack':
       return (
         <div className="log-roll">
-          <CombatPart entry={step.entry} part="attack" human={human} />
+          <CombatPart entry={step.entry} part="attack" human={human} head={false} />
         </div>
       )
     case 'resist':
       return (
         <div className="log-roll">
-          <CombatPart entry={step.entry} part="saves" human={human} />
+          {step.outcomeOnly !== true && <CombatPart entry={step.entry} part="saves" human={human} head={false} />}
           <CombatPart entry={step.entry} part="outcome" human={human} />
         </div>
       )
     case 'maneuver':
       return (
         <div className="log-roll">
-          <ManeuverPart entry={step.entry} part="maneuver" />
+          <ManeuverPart entry={step.entry} part="maneuver" human={human} head={false} />
         </div>
       )
     case 'counter_maneuver':
       return (
         <div className="log-roll">
-          <ManeuverPart entry={step.entry} part="opposing" />
+          <ManeuverPart
+            entry={step.entry}
+            part="opposing"
+            human={human}
+            head={false}
+            {...withMarcher(marcherOf(step.entry, ownerIn(state)))}
+          />
         </div>
       )
     // One die and what it did, in the words the roll strip's tooltip already uses, then
@@ -165,7 +273,7 @@ function StepBody({
           <div className="roll-card-sai">
             <RollStrip dice={[die]} onInspect={onInspect} />
             <span>
-              <b>{name}</b>: {effectSummary(die.effects ?? [], saiName(die.face))}
+              <b>{name}</b> ({unitType(die.typeId).name}): {effectSummary(die.effects ?? [], saiName(die.face))}
             </span>
           </div>
           {step.resolved.map((entry, i) => (
@@ -175,7 +283,8 @@ function StepBody({
       )
     }
     // A roll someone is deciding about, as it landed: the SAI faces are marked on the
-    // strip, and the decision that follows says what they do.
+    // strip, and the decision that follows says what they do. Its total is in the
+    // heading now; the strip keeps the arithmetic.
     case 'live': {
       const { roll } = step.roll
       return (
@@ -199,5 +308,11 @@ function StepBody({
           ))}
         </div>
       )
+    case 'losses':
+      return <LogLine entry={step.entry} state={state} human={human} />
   }
 }
+
+/** `marcher` only when known: `exactOptionalPropertyTypes` takes no `undefined`. */
+const withMarcher = (marcher: PlayerId | undefined): { marcher?: PlayerId } =>
+  marcher === undefined ? {} : { marcher }

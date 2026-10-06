@@ -29,7 +29,7 @@ import {
 
 
 import { RollStrip } from './DiceGrid'
-import { logShows, type CombatEntry, type ManeuverEntry } from './presentation'
+import { logShows, marcherOf, ownerIn, type CombatEntry, type ManeuverEntry } from './presentation'
 import { DragonFaceArt } from './FaceArt'
 import { speciesInfo } from './Elements'
 import { proposalLabel, slotLabel } from './prompts'
@@ -118,7 +118,7 @@ export function LogLine({
       }
       return (
         <div className="log-roll">
-          <div className="roll-head">horde roll-off</div>
+          <div className="roll-head">your horde</div>
           <RollStrip dice={entry.dice[human]} total={entry.rolls[human]} />
           <div className="roll-head">the enemy&rsquo;s horde</div>
           <RollStrip
@@ -145,7 +145,7 @@ export function LogLine({
       }
       return (
         <div className="log-roll">
-          <div className="roll-head">horde roll-off</div>
+          <div className="roll-head">your horde</div>
           <RollStrip dice={entry.dice[human]} total={entry.rolls[human]} />
           <div className="roll-head">the enemy&rsquo;s horde</div>
           <RollStrip dice={entry.dice[other]} total={entry.rolls[other]} />
@@ -194,8 +194,8 @@ export function LogLine({
     case 'maneuver_contested':
       return (
         <div className="log-roll">
-          <ManeuverPart entry={entry} part="maneuver" />
-          <ManeuverPart entry={entry} part="opposing" />
+          <ManeuverPart entry={entry} part="maneuver" human={human} />
+          <ManeuverPart entry={entry} part="opposing" human={human} {...withMarcher(marcherOf(entry, ownerIn(state)))} />
         </div>
       )
     case 'terrain_moved':
@@ -1009,40 +1009,65 @@ export function LogLine({
   }
 }
 
-/** One side of a contested maneuver: the marcher's roll, or the opposing roll and who won. */
+/**
+ * One side of a contested maneuver: the marcher's roll, or the opposing roll and who won.
+ *
+ * `head` is the strip's own label, which a roll card leaves off because its heading says
+ * whose roll it is and where (v2 Phase 9b). `marcher` turns "the marcher wins" into
+ * "you win" -- the entry does not say who marched, so the caller reads it off the dice.
+ */
 export function ManeuverPart({
   entry,
   part,
+  human,
+  marcher,
+  head = true,
 }: {
   entry: ManeuverEntry
   part: 'maneuver' | 'opposing'
+  human: PlayerId
+  marcher?: PlayerId
+  head?: boolean
 }): ReactElement {
   return part === 'maneuver' ? (
     <>
-      <div className="roll-head">maneuver</div>
+      {head && <div className="roll-head">maneuver</div>}
       <RollStrip dice={entry.marcherDice} total={entry.marcher} {...withMath(entry.marcherMath)} />
     </>
   ) : (
     <>
-      <div className="roll-head">opposing maneuver</div>
+      {head && <div className="roll-head">opposing maneuver</div>}
       <RollStrip dice={entry.defenderDice} total={entry.defender} {...withMath(entry.defenderMath)} />
       <div className="roll-sum">
-        {entry.marcher} vs {entry.defender} maneuver;{' '}
-        <b>{entry.marcherWins ? 'the marcher wins' : 'the marcher loses'}</b>
+        {entry.marcher} vs {entry.defender} maneuver; <b>{contestOutcome(entry.marcherWins, marcher, human)}</b>
       </div>
     </>
   )
 }
+
+/** Who won a contest, in "you" and "the enemy" when the marcher is known. */
+function contestOutcome(marcherWins: boolean, marcher: PlayerId | undefined, human: PlayerId): string {
+  if (marcher === undefined) return marcherWins ? 'the marcher wins' : 'the marcher loses'
+  if (marcherWins) return marcher === human ? 'you win' : 'the enemy wins'
+  return marcher === human ? 'the enemy stops you' : 'you stop the enemy'
+}
+
+/** `marcher` only when known: `exactOptionalPropertyTypes` takes no `undefined`. */
+const withMarcher = (marcher: PlayerId | undefined): { marcher?: PlayerId } =>
+  marcher === undefined ? {} : { marcher }
 
 /** One part of a combat exchange: its attack roll, its save roll, or what they came to. */
 export function CombatPart({
   entry,
   part,
   human,
+  head = true,
 }: {
   entry: CombatEntry
   part: 'attack' | 'saves' | 'outcome'
   human: PlayerId
+  /** The strip's own label; a roll card's heading says it instead (v2 Phase 9b). */
+  head?: boolean
 }): ReactElement | null {
   const where = (slot: ArmyRef) => slotLabel(slot, human)
   switch (part) {
@@ -1052,7 +1077,7 @@ export function CombatPart({
           {/* Name both ends whenever they differ — a missile shot across the board,
               or a counter coming back the other way. Melee and magic hit the army in
               front of them, so repeating one terrain twice would be noise. */}
-          <div className="roll-head">
+          {head && <div className="roll-head">
             {entry.isCounter ? (entry.action === 'missile' ? 'defensive volley' : 'counter-attack') : entry.action}
             {entry.attackerSlot === entry.defenderSlot ? (
               <> · {where(entry.defenderSlot)}</>
@@ -1062,7 +1087,7 @@ export function CombatPart({
                 {where(entry.attackerSlot)} &rarr; {where(entry.defenderSlot)}
               </>
             )}
-          </div>
+          </div>}
           <RollStrip dice={entry.attackDice} total={entry.attackTotal} {...withMath(entry.attackMath)} />
         </>
       )
@@ -1070,7 +1095,7 @@ export function CombatPart({
       return entry.saveDice === null ? null : (
         <>
           {/* A Charge's answer counts melee too (v2 Phase 6e). */}
-          <div className="roll-head">{entry.charge === undefined ? 'saves' : 'saves and melee — charged'}</div>
+          {head && <div className="roll-head">{entry.charge === undefined ? 'saves' : 'saves and melee — charged'}</div>}
           <RollStrip
             dice={entry.saveDice}
             {...(entry.saveTotal === null ? {} : { total: entry.saveTotal })}
@@ -1101,6 +1126,8 @@ export function CombatPart({
             )}
             {' = '}
             <b>{entry.damage}</b> damage
+            {/* Whose, in the card's words (v2 Phase 9b): "4 damage to you". */}
+            {entry.damage > 0 && (entry.defender === human ? ' to you' : ' to the enemy')}
           </div>
           {/* A save face in a melee attack is otherwise a number from nowhere: the
               strip shows a shield, the total counts it as melee, and only this line

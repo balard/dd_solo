@@ -52,6 +52,23 @@ import type { DieRoll } from '../../engine/roll'
 import { rollsOnTheTable, type TableRoll } from '../../engine/turn'
 import type { GameState, LogEntry, PlayerId, UnitId } from '../../engine/types'
 
+import {
+  combatExchange,
+  dragonExchange,
+  exchangeAt,
+  liveExchange,
+  magicExchange,
+  maneuverExchange,
+  resolves,
+  stepOfDie,
+  type BarStep,
+  type CombatEntry,
+  type Exchange,
+  type ManeuverEntry,
+} from './exchange'
+
+export type { CombatEntry, ManeuverEntry } from './exchange'
+
 /**
  * Whether `LogLine` draws anything for this entry. The two kinds it renders as `null`,
  * named here so the ticker skips them rather than drawing a blank. The case in `LogLine`
@@ -61,15 +78,23 @@ export function logShows(entry: LogEntry): boolean {
   return entry.kind !== 'game_start' && entry.kind !== 'terrain_placed'
 }
 
-export type CombatEntry = Extract<LogEntry, { kind: 'combat_resolved' }>
-export type ManeuverEntry = Extract<LogEntry, { kind: 'maneuver_contested' }>
+type KillEntry = Extract<LogEntry, { kind: 'units_killed' }>
 
-export type RollStep =
+/**
+ * One stop. Each carries the exchange it belongs to (v2 Phase 9b), which the step bar
+ * draws -- optional, because a roll-off, a Replanting or a spell cast between marches
+ * belongs to none.
+ */
+export type RollStep = (
   /** A roll nobody resists, drawn whole by `LogLine`. */
   | { readonly kind: 'roll'; readonly entry: LogEntry }
   | { readonly kind: 'attack'; readonly entry: CombatEntry }
-  /** The saves and what the exchange came to -- or the outcome alone, with no save roll. */
-  | { readonly kind: 'resist'; readonly entry: CombatEntry }
+  /**
+   * The saves and what the exchange came to -- or the outcome alone, with no save roll.
+   * `outcomeOnly` when the save roll was already shown live (9a finding 9): the strip
+   * was on screen a moment ago, so this card is the Result step and draws only that.
+   */
+  | { readonly kind: 'resist'; readonly entry: CombatEntry; readonly outcomeOnly?: true }
   | { readonly kind: 'maneuver'; readonly entry: ManeuverEntry }
   /** The opposing maneuver and who won. */
   | { readonly kind: 'counter_maneuver'; readonly entry: ManeuverEntry }
@@ -80,8 +105,33 @@ export type RollStep =
   | { readonly kind: 'sai'; readonly die: DieRoll; readonly resolved: readonly LogEntry[] }
   /** The enemy's spells resolving: each cast and the lines that say what it did. */
   | { readonly kind: 'spells'; readonly entries: readonly LogEntry[] }
+  /**
+   * What the enemy lost to an exchange's damage (9a finding 7). They choose who falls
+   * out of sight, after you continue past the saves, and the dice used to leave the
+   * board with no card at all. Yours are not a stop: you just chose them.
+   */
+  | { readonly kind: 'losses'; readonly entry: KillEntry }
   /** A roll still parked while somebody decides about it: shown as it landed. */
   | { readonly kind: 'live'; readonly roll: TableRoll }
+) & { readonly exchange?: Exchange }
+
+/** `exchange` only when there is one: `exactOptionalPropertyTypes` takes no `undefined`. */
+const inExchange = (exchange: Exchange | null): { exchange?: Exchange } =>
+  exchange === null ? {} : { exchange }
+
+/**
+ * Who maneuvered, read off whose dice rolled: `maneuver_contested` does not say, and a
+ * card has to ("you win", not "the marcher wins"). Undefined only when neither side
+ * rolled a die, which a contest never does.
+ */
+export function marcherOf(entry: ManeuverEntry, ownerOf: OwnerOf): PlayerId | undefined {
+  const marching = entry.marcherDice[0]
+  const owner = marching === undefined ? undefined : ownerOf(marching.unitId)
+  if (owner !== undefined) return owner
+  const opposing = entry.defenderDice[0]
+  const other = opposing === undefined ? undefined : ownerOf(opposing.unitId)
+  return other === undefined ? undefined : other === 'p1' ? 'p2' : 'p1'
+}
 
 /**
  * Which parked roll a `live` stop was. The maneuver pair is two, because only the
@@ -103,21 +153,6 @@ const WHOLE_ROLLS: ReadonlySet<LogEntry['kind']> = new Set<LogEntry['kind']>([
   'dragon_attack',
   'dragon_roll',
 ])
-
-/** SAI effects that leave something to resolve. The rest only change the numbers. */
-const RESOLVES: ReadonlySet<string> = new Set([
-  'target_enemy',
-  'sleep',
-  'galeforce',
-  'choke',
-  'confuse',
-  'wild_growth',
-  'free_move',
-  // Illusion (v2 Phase 8d): a shield on an army, which the board then draws.
-  'illusion',
-])
-
-const resolves = (die: DieRoll): boolean => (die.effects ?? []).some((effect) => RESOLVES.has(effect.kind))
 
 /** What an SAI resolved that its roller has not seen yet: dice thrown after the choice. */
 const NEWS: ReadonlySet<LogEntry['kind']> = new Set<LogEntry['kind']>(['sai_sub_roll', 'confused'])
@@ -202,53 +237,161 @@ export function rollSteps(
   human: PlayerId,
   ownerOf: OwnerOf,
 ): readonly RollStep[] {
-  return logSteps(entries, human, ownerOf, []).steps
+  return logSteps(entries, 0, human, ownerOf, [], null).steps
 }
 
 /**
- * `rollSteps`, skipping the parts of the next exchange already shown live. Also returns
- * the shown kinds whose entry is not logged yet: their exchange is still paused.
+ * Entries that begin something new. An exchange's SAIs, its Cantrip spells and its
+ * losses never reach past one, so the searches below stop there.
+ */
+const BOUNDARY: ReadonlySet<LogEntry['kind']> = new Set<LogEntry['kind']>([
+  'march_begin',
+  'march_skipped',
+  'action_chosen',
+  'action_skipped',
+  'maneuver_declared',
+  'counter_declined',
+  'turn_end',
+  'dragon_attack',
+])
+
+/** What may follow an exchange's damage before the enemy's losses are written. */
+const AFTERMATH: ReadonlySet<LogEntry['kind']> = new Set<LogEntry['kind']>([
+  'units_killed',
+  'units_buried',
+  'units_risen',
+  'replanting',
+  'units_regrown',
+])
+
+/**
+ * The exchange an entry belongs to, looking forward: the log writes an exchange down
+ * only when it is over, so its SAI resolutions and its Cantrip spells come first.
+ */
+function combatAhead(log: readonly LogEntry[], i: number): CombatEntry | null {
+  for (let j = i; j < log.length; j++) {
+    const entry = log[j] as LogEntry
+    if (entry.kind === 'combat_resolved') return entry
+    if (BOUNDARY.has(entry.kind) || entry.kind === 'magic_rolled') return null
+  }
+  return null
+}
+
+/** The newest entry of a kind before `i`, within the current exchange. */
+function behind<K extends LogEntry['kind']>(
+  log: readonly LogEntry[],
+  i: number,
+  kind: K,
+): Extract<LogEntry, { kind: K }> | null {
+  for (let j = i - 1; j >= 0; j--) {
+    const entry = log[j] as LogEntry
+    if (entry.kind === kind) return entry as Extract<LogEntry, { kind: K }>
+    if (BOUNDARY.has(entry.kind) || entry.kind === 'combat_resolved' || entry.kind === 'magic_rolled') return null
+  }
+  return null
+}
+
+/** The exchange whose damage a kill at `i` paid, or null when it paid something else. */
+function damageBehind(log: readonly LogEntry[], i: number): Exchange | null {
+  for (let j = i - 1; j >= 0; j--) {
+    const entry = log[j] as LogEntry
+    if (entry.kind === 'combat_resolved') return combatExchange(entry, 'result')
+    if (entry.kind === 'dragon_damage') return dragonExchange(entry.player, entry.slot, 'result')
+    if (!AFTERMATH.has(entry.kind)) return null
+  }
+  return null
+}
+
+/**
+ * `rollSteps` over `log` from `from`, skipping the parts of the next exchange already
+ * shown live. Also returns the shown kinds whose entry is not logged yet: their
+ * exchange is still paused. `live` is the state those entries led to, when there is
+ * one, for an exchange still paused that a stop belongs to.
+ *
+ * The whole log is passed, not a slice, because a stop may belong to an exchange
+ * written before the cursor: the enemy's losses are written after you continue past
+ * the saves.
  */
 function logSteps(
-  entries: readonly LogEntry[],
+  log: readonly LogEntry[],
+  from: number,
   human: PlayerId,
   ownerOf: OwnerOf,
   shown: readonly LiveKind[],
-): { readonly steps: readonly RollStep[]; readonly unlogged: readonly LiveKind[] } {
+  live: GameState | null,
+): {
+  readonly steps: readonly RollStep[]
+  /** SAIs that resolved while their exchange is still paused: see the end. */
+  readonly early: readonly RollStep[]
+  readonly unlogged: readonly LiveKind[]
+} {
   let unlogged = shown
   const seen = (kind: LiveKind): boolean => unlogged.includes(kind)
   const steps: RollStep[] = []
   // SAI resolutions logged ahead of the exchange that rolled them, waiting for it.
   let waiting: LogEntry[] = []
+  const paused = (): Exchange | null => (live === null ? null : liveExchange(live))
 
-  const saiSteps = (dice: readonly DieRoll[]): readonly RollStep[] =>
+  /**
+   * The SAI stops of a roll. `at` is the index of the exchange's own entry: an SAI that
+   * resolved before the cursor was shown then (see the end), and is not shown again
+   * now that the exchange is written down.
+   */
+  const saiSteps = (
+    dice: readonly DieRoll[],
+    exchangeOf: (die: DieRoll) => Exchange,
+    at: number | null,
+  ): readonly RollStep[] =>
     dice.filter(resolves).flatMap((die): readonly RollStep[] => {
       const name = die.face.icon === 'SAI' ? die.face.sai : null
+      if (name !== null && at !== null && resolvedBefore(log, at, from, name)) return []
       const resolved = waiting.filter((entry) => name !== null && resolutionOf(entry) === name)
       waiting = waiting.filter((entry) => !resolved.includes(entry))
+      const exchange = exchangeOf(die)
       // Your own, already answered: only what it rolled is news. See the header.
       if (ownerOf(die.unitId) === human) {
-        return resolved.filter((entry) => NEWS.has(entry.kind)).map((entry) => ({ kind: 'roll', entry }))
+        return resolved.filter((entry) => NEWS.has(entry.kind)).map((entry) => ({ kind: 'roll', entry, exchange }))
       }
-      return [{ kind: 'sai', die, resolved }]
+      return [{ kind: 'sai', die, resolved, exchange }]
     })
 
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i] as LogEntry
+  /**
+   * A run of spells: a magic action's, or a Cantrip window's inside an exchange. The
+   * window's exchange is ahead in the log, or still paused, and the Cantrip chip is lit
+   * on the step whose roll showed it -- the attacker's on SAIs, the saver's on Saves.
+   */
+  const spellsExchange = (i: number): Exchange | null => {
+    const cantrip = behind(log, i, 'cantrip')
+    if (cantrip !== null) {
+      const ahead = combatAhead(log, i)
+      if (ahead !== null) {
+        const at: BarStep = cantrip.player === ahead.attacker ? 'sais' : 'resist'
+        return exchangeAt(combatExchange(ahead, at), at, 'Cantrip')
+      }
+      const now = paused()
+      return now === null ? null : exchangeAt(now, cantrip.player === now.roller ? 'sais' : 'resist', 'Cantrip')
+    }
+    const magic = behind(log, i, 'magic_rolled')
+    return magic === null ? null : magicExchange(magic, 'result')
+  }
+
+  for (let i = from; i < log.length; i++) {
+    const entry = log[i] as LogEntry
 
     // Spells: a run of spell lines that names at least one spell. The consequences come
     // first in the log, so the run is found by looking ahead from its first line.
     if (SPELL_RUN.has(entry.kind)) {
       let end = i
-      while (end < entries.length && SPELL_RUN.has((entries[end] as LogEntry).kind)) end++
-      const run = entries.slice(i, end)
+      while (end < log.length && SPELL_RUN.has((log[end] as LogEntry).kind)) end++
+      const run = log.slice(i, end)
       const named = run.find(namesSpell)
       if (named !== undefined) {
+        const exchange = inExchange(spellsExchange(i))
         if (named.player !== human) {
-          steps.push({ kind: 'spells', entries: spellBySpell(run) })
+          steps.push({ kind: 'spells', entries: spellBySpell(run), ...exchange })
         } else {
           // Your own: no stop for the casting, but a roll inside it still is one.
-          for (const inner of run) if (WHOLE_ROLLS.has(inner.kind)) steps.push({ kind: 'roll', entry: inner })
+          for (const inner of run) if (WHOLE_ROLLS.has(inner.kind)) steps.push({ kind: 'roll', entry: inner, ...exchange })
         }
         i = end - 1
         continue
@@ -263,24 +406,56 @@ function logSteps(
     switch (entry.kind) {
       // The first of these after a live stop is the exchange that stop was parked in:
       // nothing else can be written down while it is paused.
-      case 'combat_resolved':
-        if (!seen('attack')) steps.push({ kind: 'attack', entry })
-        steps.push(...saiSteps(entry.attackDice), { kind: 'resist', entry })
+      case 'combat_resolved': {
+        if (!seen('attack')) steps.push({ kind: 'attack', entry, exchange: combatExchange(entry, 'roll') })
+        // Saves shown live means the step-4 SAIs were shown just before them.
+        const attackSais = seen('save') ? entry.attackDice.filter((die) => stepOfDie(die) !== 'sais') : entry.attackDice
+        steps.push(...saiSteps(attackSais, (die) => combatExchange(entry, stepOfDie(die), die), i))
+        // A save roll shown live is not drawn twice: this is its Result (9a finding 9).
+        // Unless a Flashfire rerolled it after it was shown -- found in a browser, a
+        // Firewalking that came back a Cantrip -- and then the dice are news again.
+        const rerolled = log
+          .slice(from, i)
+          .some((earlier) => earlier.kind === 'flashfire' && earlier.player === entry.defender)
+        steps.push(
+          seen('save') && !rerolled
+            ? { kind: 'resist', entry, outcomeOnly: true, exchange: combatExchange(entry, 'result') }
+            : { kind: 'resist', entry, exchange: combatExchange(entry, 'resist') },
+        )
         unlogged = unlogged.filter((kind) => kind !== 'attack' && kind !== 'save')
         break
-      case 'maneuver_contested':
-        if (!seen('maneuver')) steps.push({ kind: 'maneuver', entry })
-        steps.push(...saiSteps(entry.marcherDice), { kind: 'counter_maneuver', entry })
+      }
+      case 'maneuver_contested': {
+        const marcher = marcherOf(entry, ownerOf)
+        const at = (step: BarStep) => inExchange(marcher === undefined ? null : maneuverExchange(entry, marcher, step))
+        if (!seen('maneuver')) steps.push({ kind: 'maneuver', entry, ...at('roll') })
+        steps.push(...saiSteps(entry.marcherDice, () => maneuverExchange(entry, marcher ?? 'p1', 'sais'), i))
+        // Shown live already, at Rapid Growth: this is what the contest came to.
+        steps.push({ kind: 'counter_maneuver', entry, ...at(seen('counter_maneuver') ? 'result' : 'resist') })
         unlogged = unlogged.filter((kind) => kind !== 'maneuver' && kind !== 'counter_maneuver')
         break
+      }
       case 'magic_rolled':
-        if (!seen('attack')) steps.push({ kind: 'roll', entry })
-        steps.push(...saiSteps(entry.dice))
+        if (!seen('attack')) steps.push({ kind: 'roll', entry, exchange: magicExchange(entry, 'roll') })
+        steps.push(...saiSteps(entry.dice, (die) => magicExchange(entry, 'sais', die), i))
         unlogged = unlogged.filter((kind) => kind !== 'attack')
         break
       // A Rise from the Ashes that rolled nothing -- no Phoenix died -- is not a roll.
       case 'units_risen':
         if ((entry.dice?.length ?? 0) > 0) steps.push({ kind: 'roll', entry })
+        break
+      case 'units_killed': {
+        // The enemy's dead from an exchange's damage. Yours you chose; a spell's or an
+        // SAI's are on their own cards already.
+        const paid = entry.player === human ? null : damageBehind(log, i)
+        if (paid !== null) steps.push({ kind: 'losses', entry, exchange: paid })
+        break
+      }
+      case 'dragon_attack':
+        steps.push({ kind: 'roll', entry, exchange: dragonExchange(entry.defender, entry.slot, 'roll') })
+        break
+      case 'dragon_roll':
+        steps.push({ kind: 'roll', entry, exchange: dragonExchange(entry.player, entry.slot, 'resist') })
         break
       default:
         if (WHOLE_ROLLS.has(entry.kind)) steps.push({ kind: 'roll', entry })
@@ -288,10 +463,49 @@ function logSteps(
   }
 
   // Resolutions whose exchange is not in the log yet -- it is paused on a decision --
-  // are shown where they are rather than held back past it. Only the rolls among them
-  // are stops; the rest are on the board.
-  for (const entry of waiting) if (entry.kind === 'sai_sub_roll') steps.push({ kind: 'roll', entry })
-  return { steps, unlogged }
+  // are shown where they are rather than held back past it. Found in a browser: the
+  // enemy's Firewalking moved its dice, the exchange paused again on your Cantrip, and
+  // its card came only once the exchange was written -- after the saves, and without
+  // the move, which was behind the cursor by then. So an SAI whose resolution is here
+  // is shown now, off the attack still parked, and `saiSteps` skips it later.
+  //
+  // And once the save dice are on the table every step-4 SAI has been answered, even
+  // one that logged nothing -- a Firewalking that stayed put -- so the first time the
+  // saves are shown, those go just before them, and the written exchange skips them.
+  const now = paused()
+  const parkedRolls = live === null ? [] : rollsOnTheTable(live)
+  const parkedAttack = parkedRolls.find((roll) => roll.kind === 'attack')
+  const savesNow = parkedRolls.some((roll) => roll.kind === 'save') && !seen('save')
+  const named = (die: DieRoll): string | null => (die.face.icon === 'SAI' ? die.face.sai : null)
+  const early =
+    parkedAttack === undefined || now === null
+      ? []
+      : saiSteps(
+          parkedAttack.roll.dice.filter(
+            (die) =>
+              waiting.some((entry) => resolutionOf(entry) === named(die)) || (savesNow && stepOfDie(die) === 'sais'),
+          ),
+          (die) => exchangeAt(now, stepOfDie(die), named(die) ?? undefined),
+          log.length,
+        )
+  // What is left is a sub-roll with no parked attack to hang it on: shown where it is.
+  for (const entry of waiting) {
+    if (entry.kind === 'sai_sub_roll') steps.push({ kind: 'roll', entry, ...inExchange(now && exchangeAt(now, 'sais')) })
+  }
+  return { steps, early, unlogged }
+}
+
+/**
+ * Whether an SAI of this name resolved in this exchange before `from` -- and so was
+ * shown then, as it resolved, while the exchange was paused (`logSteps`' end).
+ */
+function resolvedBefore(log: readonly LogEntry[], at: number, from: number, name: string): boolean {
+  for (let j = at - 1; j >= 0; j--) {
+    const entry = log[j] as LogEntry
+    if (BOUNDARY.has(entry.kind) || entry.kind === 'combat_resolved' || entry.kind === 'magic_rolled') return false
+    if (j < from && resolutionOf(entry) === name) return true
+  }
+  return false
 }
 
 /** The rolls parked mid-decision that a live stop can show, by kind. A dragon roll
@@ -310,16 +524,32 @@ function parked(state: GameState): readonly { readonly kind: LiveKind; readonly 
   })
 }
 
+/** The step a parked roll is, in its exchange's bar. */
+const LIVE_STEP: Readonly<Record<LiveKind, BarStep>> = {
+  attack: 'roll',
+  save: 'resist',
+  maneuver: 'roll',
+  counter_maneuver: 'resist',
+}
+
 /**
  * Every stop from the cursor on: the log's, then any roll still parked that has not
  * been shown. This is what `useGame` walks.
  */
 export function rollStops(state: GameState, cursor: RollCursor, human: PlayerId): readonly RollStep[] {
-  const { steps, unlogged } = logSteps(state.log.slice(cursor.log), human, ownerIn(state), cursor.shown ?? [])
+  const { steps, early, unlogged } = logSteps(state.log, cursor.log, human, ownerIn(state), cursor.shown ?? [], state)
+  const exchange = liveExchange(state)
   const live = parked(state)
     .filter(({ kind }) => !unlogged.includes(kind))
-    .map(({ roll }): RollStep => ({ kind: 'live', roll }))
-  return [...steps, ...live]
+    .map(({ kind, roll }): { readonly kind: LiveKind; readonly step: RollStep } => ({
+      kind,
+      step: { kind: 'live', roll, ...inExchange(exchange && exchangeAt(exchange, LIVE_STEP[kind])) },
+    }))
+  // The rules' order: the attack, then the SAIs it showed that have resolved, then the
+  // saves -- whichever of them have not been shown yet.
+  const attack = live.filter(({ kind }) => kind === 'attack').map(({ step }) => step)
+  const rest = live.filter(({ kind }) => kind !== 'attack').map(({ step }) => step)
+  return [...steps, ...attack, ...early, ...rest]
 }
 
 /**
