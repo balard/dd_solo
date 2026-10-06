@@ -10,8 +10,8 @@ Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
 of work*. **Phases 0 to 8 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c, Phase 5
 as 5a to 5g, Phase 6 as 6a to 6h, Phase 7 as 7a to 7f, Phase 8 as 8a to 8g), each with its findings
-below. **Phase 9 (the roll dialog) is planned** as slices 9a to 9e, and it includes the decision on
-who orders the SAIs.
+below. **Phase 9 (the roll dialog) is under way** as slices 9a to 9e, and it includes the decision on
+who orders the SAIs. 9a (the mockups) has landed.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
 collection, win dice, dragons and terrains, and raise the force cap to 24 and then 36 at set
@@ -3354,7 +3354,7 @@ the house rule stays, and 9e's findings say why in `RULES-V0.md` §11.
 
 ### Slices
 
-**9a — Mockups, no code.** The 3a pattern: `docs/mockups/phase-9a.html`, laptop and phone, both
+**9a — Mockups, no code — landed.** The 3a pattern: `docs/mockups/phase-9a.html`, laptop and phone, both
 boards. Lay out one card: a heading with whose roll and where, the total and its arithmetic on
 every card, every die readable at a glance (count and icon, zero-result dice included), SAI dice
 labelled with what they do, and a step bar for the exchange: attack → SAIs → saves → result, the
@@ -3392,6 +3392,115 @@ write-up. If it lands, it brings the `RuleSet` flag, `sai_order`, the AI answers
 named tests for insurance retargeting (three Sleeps, then three Swallows on one unit) and for a
 held reroll joining a queue that is partway through, and a `SAVE_VERSION` decision recorded with
 its true reason.
+
+### What 9a found
+
+The mockups are one page, `docs/mockups/phase-9a.html`. It draws the four exchanges frame by frame
+on a laptop (1366×680), a phone held sideways (844×390) and a phone upright (390×844), on both
+boards. Each frame can be switched to *Today*, which draws the same moment as `RollCard.tsx` does
+now, with today's board and ticker beside it. A table on the page measures the tallest dialog of
+every exchange on every screen. The view is kept in the address, so
+`phase-9a.html#D/sideways/landscape/proposed/1` links to one frame.
+
+Before drawing, about forty cards of the Genie mirror (`?forces=firewalkers_genie&seed=5`) were
+played through by a script that recorded each card's text. That confirmed the review's seven points
+and found an eighth (finding 9).
+
+**1. The step bar belongs to the exchange, not to one card.** It sits on every card *and* every
+decision sheet in the exchange: the attack card, the Flame's target sheet, the saves card and your
+damage sheet all share it. That is what lets it replace "roll 1 of 2".
+- **Its steps are named by the action.** Melee, Missile or Counter, then SAIs, Saves and Result.
+  A maneuver is Maneuver, SAIs, Contest and Result. Magic is Magic, SAIs and Spells, and a dragon
+  attack is Dragons, Army and Result.
+- **An empty step is struck through, not hidden**, so the bar has the same shape every time for
+  one action. That is how the bar teaches the structure.
+- **An SAI is a chip on the step whose roll showed it.** The attack's SAIs sit on *SAIs*. A save
+  roll's Cantrip, Choke or Confuse sits on *Saves*, and Rapid Growth sits on *Contest*. A chip is
+  waiting, current or done.
+
+**2. A chip is too small to tap, so the bar shows the order but does not take it.** A chip is
+16px tall and the tap floor is 44px. If 9e lands, its `sai_order` question is a sheet with two
+ordinary buttons ("Sleep first", "Smother first"), and the bar's chips reorder to match the answer.
+That answers this phase's own question ("if the step bar makes tapping the order cheap"): the bar
+makes the order cheap to *see*, and choosing it costs one sheet, asked only when the order can
+matter. 9e's count of how often that happens still decides.
+
+**3. Sleep and Smother on one army are the case where the order matters.** A sleeping die cannot
+be rolled, so it fails a sub-roll and dies (`RULES-V0.md` §11). With Sleep first, Smother kills a
+Gorgon for certain; with Smother first, the Gorgon makes a maneuver roll that six of its ten faces
+pass. Under the fixed order, roll order decides which happens, without asking. The mockup's fourth
+exchange draws it, and the second target sheet gets a *so far* line ("Sleep put Gorgon to sleep")
+that the insurance case needs: the earlier result, shown before the next task is aimed.
+
+**4. Phone upright: yes, the bar fits.** At 374px the four steps take one line in every frame. In
+the first draft two chips pushed *Result* onto a second line, so on a narrow screen the chips get a
+row of their own under the steps (about 20px). The tallest upright frame is the Cantrip window, at
+44% of the screen; the rest are 33-37%.
+
+**5. On a phone sideways the new card is shorter than today's, but only with three rules.** The
+first draft took 53-66% of a 390px screen, and today's cards already take 48-53%. Three rules
+bring it down to 34-43%:
+- the bar folds onto the heading's line, showing its dots, the current step's name and its chips;
+- Continue sits beside the content rather than under it;
+- a spell takes one line, and the spells flow into columns.
+
+On a laptop the new card is 34-40% against today's 30-32%. The bar and the SAI lines cost 30-55px
+there, and there is room for them.
+
+**6. The heading says whose roll and where; the total sits to its right, on every card.** "The
+enemy rolls melee at Your home", then **9** melee. That includes a live card, whose bare "4"
+becomes a total with its `mathPhrase` line under it. Strip labels ("MANEUVER", "SAVES") go,
+because the heading says it. Outcomes say "you" and "the enemy": "5 against their 7: you are
+losing (they win a tie)". The opposing maneuver card becomes "You roll to stop them at the
+Frontier".
+
+**7. Result is a step, and when the enemy takes the damage it needs a new stop.** When you take
+the damage, the Result step is your damage sheet, carrying the arithmetic ("9 melee − 5 saves").
+When the enemy takes it, their losses pass with no card today: in the mockup's *Today* frames the
+Explorer is gone from the board while the saves card is still up. 9b adds a card for the kill that
+follows a `combat_resolved`, and 9c marks the dice on it.
+
+**8. 9c: mark, don't rewind, and the mark waits too.** The log already says where a die was before
+it moved: `units_killed` and `sai_resolved` carry their `slot`, `units_moved` its `from`, and
+`units_promoted` its pairs. So the board can be drawn from today's state plus the entries past the
+cursor, undone kind by kind, and nothing needs per-entry state. The plan's wording, "marked 'about
+to fall'", would still leak: a die marked before its card gives the outcome away early, which is
+the leak itself. So a die stays as if nothing happened until its card. On that card it is marked
+*falls* on the board as well, so the card and the board point at one die. After the card it is
+gone. The health tallies and the effect chips are drawn from the same view, and the ticker reads
+the entry at the cursor.
+- **On the landscape board held sideways, the dialog covers the exchange's own row** whenever that
+  row is the second or third. The page is already padded by the dialog's height (3c), so 9c
+  scrolls the exchange's terrain above the dialog when a card opens.
+
+**9. A save roll shown live is shown again.** Found by playing: when a save roll is parked (by a
+Cantrip, a Firewalking, a Choke), it is a live stop. When the exchange is logged, the resist stop
+draws the same strip a second time with the outcome (cards 13 and 15, and 23 and 26, of the
+session). `logSteps` skips the log's copy of a live *attack*, but pushes the resist step whatever
+was seen. With the new card the saves are not drawn twice: the second stop draws only the
+arithmetic and the outcome, which is the Result step.
+
+**10. A die is readable without a hover (9d).** Every die shows its count and its icon. A die that
+scored nothing is dashed and muted, never faded to a blank. The save glyph gains a cross, so it
+stops reading as an empty face. An SAI die has the SAI's name under it, in the SAI colour, and the
+card gives it one line: "★ Flame 2 · Gorgon — kills and buries up to 2 health-worth of your army
+before you save. *next*". Other dice carry their unit's name under them on a laptop or a phone
+upright, and not on a phone sideways, where the line costs too much.
+
+**11. The Cantrip window says what it is.** "Cantrip window: Eldar Dryad's 4 magic", then "Water
+or earth, cantrip spells only. The enemy's melee attack resumes when you are done: 9 melee against
+your 5 saves." Its chip is on the step whose roll showed the Cantrip.
+
+**Deliberately not done.**
+- **No code.** Nothing in `src/` moved. The page has its own renderer, and nothing in it is meant
+  to be lifted into the app.
+- **Four exchanges, not seven.** Missile, magic, the counter-attack and the dragon attack are not
+  drawn. Their bars are named in finding 1, and the exit criterion still plays each in a browser.
+- **The *Today* frames are redrawn, not screenshots.** They follow the cards recorded in play, in
+  the page's own renderer, and the board tiles are the no-art class shapes, as in 3a (invariant 8
+  holds for `docs/` too).
+- **9e is not decided here.** The fourth exchange draws the question as it would be asked. Whether
+  it is asked at all is still 9e's measurement.
 
 ### Exit criterion
 

@@ -1,0 +1,1010 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roll Dialog Mockups</title>
+<style>
+/*
+ * v2 Phase 9a: static mockups before code, the 3a pattern. The tokens are the app's own
+ * (src/ui/index.css), so the frames look like the dialog they are testing. Nothing here
+ * is meant to be lifted into src/: the page has its own renderer.
+ */
+:root {
+  --fs-2xs: .66rem; --fs-xs: .72rem; --fs-sm: .8rem; --fs-md: .86rem;
+  --fs-lg: .92rem; --fs-xl: 1.05rem; --fs-2xl: 1.15rem; --fs-3xl: 1.4rem;
+
+  --bg: #fbfaf8; --panel: #ffffff; --sunk: #f2efea; --fg: #1d1c1a; --muted: #6b6762;
+  --line: #e2ded8; --accent: #2f6f4f; --accent-fg: #ffffff; --bezel: #2b2a2e;
+
+  --melee: #b4401f; --missile: #1f6f4a; --magic: #5b3fa8; --save: #2a5c8f;
+  --maneuver: #8a6a15; --id: #46423c; --sai: #a03c72;
+
+  --el-air: #5b8dd6; --el-water: #2f9c77; --el-earth: #c9a227; --el-fire: #d1552f; --el-death: #5a5560;
+
+  --ok: #2f6f4f; --warn: #9a6a00; --bad: #b4401f;
+  --ok-bg: #e5f1ea; --warn-bg: #f8eed6; --bad-bg: #f7e3dc;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16151a; --panel: #201e26; --sunk: #1a181f; --fg: #ece9e4; --muted: #9b958c;
+    --line: #322f3a; --accent: #4f9d74; --accent-fg: #0d1a13; --bezel: #050507;
+    --melee: #f0866a; --missile: #6fc99a; --magic: #b39ef0; --save: #7bb3e8; --maneuver: #d9b955;
+    --id: #b8b2a8; --sai: #ef92c4;
+    --el-air: #7fb0f0; --el-water: #54c69c; --el-earth: #e0c04c; --el-fire: #f0805a; --el-death: #8b8496;
+    --ok: #6fc99a; --warn: #e0b64c; --bad: #f0866a;
+    --ok-bg: #1d3328; --warn-bg: #3a3018; --bad-bg: #3d231c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #16151a; --panel: #201e26; --sunk: #1a181f; --fg: #ece9e4; --muted: #9b958c;
+  --line: #322f3a; --accent: #4f9d74; --accent-fg: #0d1a13; --bezel: #050507;
+  --melee: #f0866a; --missile: #6fc99a; --magic: #b39ef0; --save: #7bb3e8; --maneuver: #d9b955;
+  --id: #b8b2a8; --sai: #ef92c4;
+  --el-air: #7fb0f0; --el-water: #54c69c; --el-earth: #e0c04c; --el-fire: #f0805a; --el-death: #8b8496;
+  --ok: #6fc99a; --warn: #e0b64c; --bad: #f0866a;
+  --ok-bg: #1d3328; --warn-bg: #3a3018; --bad-bg: #3d231c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.wrap { max-width: 1400px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: 1.35rem; margin: 0 0 4px; text-wrap: balance; }
+h2 { font-size: 1.02rem; margin: 26px 0 8px; text-wrap: balance; }
+.lede { margin: 0 0 18px; color: var(--muted); max-width: 76ch; font-size: .92rem; }
+.muted { color: var(--muted); }
+
+/* --- page controls (3a's) -------------------------------------------------- */
+.controls {
+  display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: flex-end;
+  padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  margin-bottom: 14px;
+}
+.control { display: grid; gap: 4px; justify-items: start; }
+.control > span { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label {
+  padding: 5px 10px; font-size: .82rem; cursor: pointer; border-right: 1px solid var(--line);
+  background: var(--panel); white-space: nowrap;
+}
+.seg label:last-of-type { border-right: none; }
+.seg input:checked + label { background: var(--accent); color: var(--accent-fg); }
+.seg input:disabled + label { opacity: .4; cursor: not-allowed; }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -3px; }
+
+.frames-nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; }
+.frames-nav button {
+  font: inherit; font-size: .8rem; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+}
+.frames-nav button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.frames-nav .what { font-size: .85rem; color: var(--muted); margin-left: 6px; }
+
+.verdict { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin: 0 0 8px; font-size: .88rem; }
+.pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-weight: 600; font-size: .8rem; font-variant-numeric: tabular-nums; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+
+/* --- device frame (3a's) --------------------------------------------------- */
+.stage { position: relative; overflow: hidden; margin-bottom: 10px; }
+.device {
+  position: absolute; top: 0; left: 0; transform-origin: top left;
+  border: 10px solid var(--bezel); border-radius: 14px; background: var(--bg);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 14%);
+}
+.device.phone { border-radius: 26px; border-width: 12px; }
+.screen { position: relative; overflow: hidden; background: var(--bg); display: flex; flex-direction: column; }
+
+/* ===========================================================================
+ * The app, schematically: header, board, the floating dock.
+ * ======================================================================== */
+.app-head {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-bottom: 1px solid var(--line); background: var(--panel); font-size: var(--fs-sm); min-width: 0;
+}
+.app-head b { white-space: nowrap; }
+.ticker {
+  flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  color: var(--muted); padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk);
+}
+.ticker::before { content: 'Log · '; font-weight: 600; }
+.app-head .btn { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
+.area { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.board { padding: 10px; display: grid; gap: 10px; align-content: start; }
+.board.cols { grid-template-columns: repeat(3, 1fr); }
+
+/* A terrain card (the cards board). */
+.tcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.tcard.focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.thead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: var(--fs-sm); }
+.thead b { font-size: var(--fs-md); }
+.tdie {
+  width: 30px; height: 30px; border: 1.5px solid var(--fg); border-radius: 6px; display: grid;
+  place-items: center; font-weight: 700; font-size: var(--fs-sm); flex: none; position: relative;
+}
+.tdie svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.side-label { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 2px 0 3px; }
+.dice { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-end; min-height: 20px; }
+
+/* The landscape board: yours | die | theirs, a row per terrain. */
+.lrow {
+  display: grid; grid-template-columns: 1fr 74px 1fr; align-items: center; gap: 8px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px;
+}
+.lrow.focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.lrow .mid { display: grid; justify-items: center; gap: 2px; font-size: var(--fs-2xs); color: var(--muted); text-align: center; }
+.lrow .dice.them { justify-content: flex-end; }
+
+/* A unit tile: the die, no art (the class shape), health digit, species band. */
+.tile {
+  position: relative; display: grid; place-items: center; flex: none;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg);
+}
+.tile svg.shape { fill: none; stroke: currentColor; stroke-width: 1.6; }
+.tile .hp { position: absolute; right: 3px; bottom: 5px; font-size: 10px; font-weight: 700; color: var(--muted); }
+.tile .cls { position: absolute; left: 3px; top: 2px; font-size: 9px; font-weight: 700; color: var(--muted); }
+.tile .band { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 0 0 7px 7px; overflow: hidden; display: flex; }
+.tile .band i { flex: 1; }
+.tile .mo { position: absolute; font-size: 9px; font-weight: 700; }
+/* 9c: a die whose fall is the card on screen right now. Never earlier: a mark ahead of
+   its card is the same leak as the die vanishing. */
+.tile.falls { border: 2px solid var(--bad); background: var(--bad-bg); }
+.tile.falls::after {
+  content: 'falls'; position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+  background: var(--bad); color: #fff; font-size: 9px; font-weight: 700; padding: 0 4px; border-radius: 4px;
+}
+.tile.asleep { border-style: dashed; opacity: .55; }
+.tile.pickable { border: 1.5px dashed var(--accent); }
+.tile.picked { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.tile.picked .hp, .tile.picked .cls { color: var(--accent-fg); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.fx { font-size: 10px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+
+/* --- the floating dock (3c's .float-dock) ---------------------------------- */
+.dock {
+  position: absolute; z-index: 20; left: 50%; bottom: 10px; transform: translateX(-50%);
+  width: min(760px, calc(100% - 16px)); max-height: calc(100% - 20px); overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 14px 40px rgb(0 0 0 / 20%);
+}
+.measure .dock { position: static; transform: none; max-height: none; box-shadow: none; }
+
+/* --- the step bar: the exchange, not the card ------------------------------ */
+.xbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 4px; padding: 7px 14px;
+  border-bottom: 1px solid var(--line); background: var(--sunk); border-radius: 12px 12px 0 0;
+  font-size: var(--fs-xs);
+}
+.xstep { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); white-space: nowrap; }
+.xstep .dot {
+  width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid currentColor; flex: none;
+  display: grid; place-items: center; font-size: 9px; line-height: 1;
+}
+.xstep.done .dot { background: var(--muted); border-color: var(--muted); color: var(--panel); }
+.xstep.now { color: var(--accent); font-weight: 700; }
+.xstep.now .dot { background: var(--accent); border-color: var(--accent); }
+.xstep.none { opacity: .5; }
+.xstep.none .lbl { text-decoration: line-through; }
+.xsep { width: 12px; height: 1.5px; background: var(--line); flex: none; }
+.chip {
+  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  border: 1px solid var(--sai); color: var(--sai); border-radius: 999px; padding: 0 6px;
+  font-size: var(--fs-2xs); font-weight: 600; line-height: 16px;
+}
+.chip.now { background: var(--sai); color: var(--panel); }
+.chip.done { opacity: .55; text-decoration: line-through; }
+/* Phone upright: the four steps keep one line, and the chips take a row of their own
+   under it rather than pushing Result onto a second line. */
+.xbreak { display: none; }
+.narrow .xbar .chip { order: 2; }
+.narrow .xbar .xbreak { display: block; order: 1; flex-basis: 100%; height: 0; }
+
+/* --- a card ---------------------------------------------------------------- */
+.card { padding: 10px 14px 12px; }
+.ch { display: flex; align-items: baseline; gap: 10px; margin: 0 0 6px; }
+.ch h3 { margin: 0; font-size: var(--fs-lg); font-weight: 600; flex: 1; min-width: 0; text-wrap: balance; }
+.tot { font-size: var(--fs-md); color: var(--muted); white-space: nowrap; }
+.tot b { font-size: var(--fs-2xl); color: var(--fg); font-variant-numeric: tabular-nums; }
+.math { margin: 4px 0 0; font-size: var(--fs-sm); }
+.outcome { margin: 6px 0 0; font-weight: 600; font-size: var(--fs-md); }
+.outcome.bad { color: var(--bad); }
+.outcome.ok { color: var(--ok); }
+.sai-line { margin: 4px 0 0; font-size: var(--fs-sm); display: flex; gap: 6px; align-items: baseline; }
+.sai-line .star { color: var(--sai); }
+.sai-line em { font-style: normal; color: var(--sai); font-weight: 600; white-space: nowrap; }
+.foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.foot .left { margin-right: auto; font-size: var(--fs-xs); color: var(--muted); }
+.btn-p, .btn-s {
+  min-height: 44px; min-width: 96px; padding: 9px 14px; border-radius: 7px; font: inherit; font-weight: 600;
+  border: 1px solid transparent; cursor: default;
+}
+.btn-p { background: var(--accent); color: var(--accent-fg); min-width: 140px; }
+.btn-p[aria-disabled="true"] { opacity: .5; }
+.btn-s { background: var(--panel); color: var(--fg); border-color: var(--line); }
+.btn-s.minor { min-height: 34px; min-width: 0; padding: 5px 10px; font-size: var(--fs-md); font-weight: 500; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.btn-row .btn-p, .btn-row .btn-s { flex: 1 1 auto; text-align: left; }
+.btn-p small, .btn-s small { display: block; font-weight: 400; font-size: var(--fs-xs); opacity: .85; }
+.sheet-q { margin: 0 0 4px; font-weight: 600; font-size: var(--fs-lg); text-wrap: balance; }
+.sheet-sub { margin: 0; font-size: var(--fs-sm); color: var(--muted); }
+.sofar { margin: 6px 0 0; font-size: var(--fs-sm); padding: 4px 8px; border-left: 3px solid var(--sai); background: var(--sunk); border-radius: 0 6px 6px 0; }
+.spell { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; margin-top: 6px; font-size: var(--fs-sm); }
+.spell b { font-size: var(--fs-md); }
+.spell .cost { margin-left: auto; white-space: nowrap; color: var(--muted); }
+.spell.staged { border-color: var(--accent); background: var(--ok-bg); }
+.el { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; vertical-align: 1px; }
+
+/* --- a die in a roll strip: count and icon, always -------------------------- */
+.strip { display: flex; flex-wrap: wrap; gap: 5px; align-items: flex-start; }
+.rd {
+  display: inline-grid; justify-items: center; gap: 0; min-width: 38px; padding: 3px 4px 2px;
+  border: 1px solid var(--line); border-radius: 7px; background: var(--panel);
+}
+.rd .face { display: inline-flex; align-items: center; gap: 2px; font-size: var(--fs-md); font-weight: 700; font-variant-numeric: tabular-nums; }
+.rd svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.rd .who { font-size: 9.5px; color: var(--muted); line-height: 1.15; max-width: 64px; text-align: center; }
+.rd.i-MELEE .face { color: var(--melee); }
+.rd.i-MISSILE .face { color: var(--missile); }
+.rd.i-MAGIC .face { color: var(--magic); }
+.rd.i-SAVE .face { color: var(--save); }
+.rd.i-MANEUVER .face { color: var(--maneuver); }
+.rd.i-ID .face { color: var(--id); }
+.rd.i-SAI .face { color: var(--sai); }
+/* 9d: a die that scored nothing keeps its count and its icon, quieter, never blank. */
+.rd.idle { border-style: dashed; background: transparent; }
+.rd.idle .face { color: var(--muted); font-weight: 500; }
+.rd.idle .face svg { opacity: .7; }
+.rd.sai { border: 1.5px solid var(--sai); }
+.rd.sai .who { color: var(--sai); font-weight: 600; }
+.rd .gives { font-size: 9.5px; font-weight: 700; line-height: 1.1; }
+.rd.picked { background: var(--accent); border-color: var(--accent); }
+.rd.picked .face, .rd.picked .who { color: var(--accent-fg); }
+.rd.pickable { border: 1.5px dashed var(--accent); }
+.rd.gone { opacity: .45; }
+.rd.gone .face { text-decoration: line-through; }
+.chain { display: inline-flex; align-items: center; gap: 2px; padding: 1px 3px; border-radius: 9px; background: var(--line); }
+.arrow { color: var(--muted); font-size: var(--fs-sm); }
+
+/* --- today's card, for comparison (RollCard.tsx as it is) ------------------- */
+.t-card { padding: 12px 14px 12px; }
+.t-title { margin: 0 0 6px; font-size: var(--fs-lg); font-weight: 600; }
+.t-roll { background: var(--sunk); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; }
+.t-head { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 3px; }
+.t-strip { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+.t-rd { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font-size: var(--fs-xs); }
+.t-rd svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.t-rd.blank { opacity: .4; }
+.t-rd.effect { border-color: var(--accent); }
+.t-line { margin: 3px 0; font-size: var(--fs-md); }
+
+/* --- the short and narrow screens ------------------------------------------- */
+/* Phone sideways: 390px tall. The bar and the heading share one line, and the card
+   tightens; every line of chrome is a line of board (3a finding 10). */
+.short .dock { position: absolute; }
+.measure .short .dock, .film .short .dock { position: relative; left: 0; transform: none; }
+/* The bar folds into the heading's line: dots, the current step's name, its chips. */
+.short .xbar {
+  position: absolute; top: 7px; right: 12px; z-index: 1; padding: 0; gap: 3px;
+  background: none; border: none; border-radius: 0;
+}
+.short .xstep:not(.now) .lbl { display: none; }
+.short .xsep { width: 6px; }
+.short .card { padding: 7px 12px 8px; }
+.short .ch, .short .sheet-q { padding-right: var(--bar-room, 200px); }
+.short .ch { margin-bottom: 4px; }
+/* Continue sits beside the content rather than under it: a row of chrome is a row of board. */
+.short .card.is-card { display: grid; grid-template-columns: 1fr auto; column-gap: 14px; }
+.short .card.is-card > * { grid-column: 1; }
+.short .card.is-card > .foot { grid-column: 2; grid-row: 2 / span 8; align-self: end; margin: 0; }
+.short .card.is-card > .ch { grid-column: 1 / -1; }
+.short .btn-p { min-height: 40px; }
+.short .btn-row { margin-top: 6px; }
+.short .rd .who { display: none; }
+.short .rd.sai .who { display: block; }
+.short .spells { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0 6px; }
+.short .sheet-sub { font-size: var(--fs-xs); }
+.short .spell .desc { display: none; }
+
+/* --- the filmstrip and the tables ------------------------------------------- */
+.film { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.film figure { margin: 0; }
+.film figcaption { font-size: .8rem; color: var(--muted); margin: 0 0 4px; max-width: 420px; }
+.film .dock { position: static; transform: none; max-height: none; box-shadow: 0 2px 10px rgb(0 0 0 / 8%); }
+.matrix-wrap { overflow-x: auto; }
+table.matrix { border-collapse: collapse; font-size: .82rem; }
+.matrix th, .matrix td { border: 1px solid var(--line); padding: 5px 8px; text-align: center; font-variant-numeric: tabular-nums; }
+.matrix th { background: var(--sunk); font-weight: 600; }
+.matrix th.row { text-align: left; white-space: nowrap; }
+.matrix td { background: var(--panel); line-height: 1.25; }
+.matrix td small { display: block; font-size: .7rem; opacity: .8; }
+.matrix td.ok { color: var(--ok); background: var(--ok-bg); }
+.matrix td.warn { color: var(--warn); background: var(--warn-bg); }
+.matrix td.bad { color: var(--bad); background: var(--bad-bg); }
+
+.notes { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.notes section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.notes h3 { margin: 0 0 6px; font-size: .95rem; }
+.notes p, .notes li { font-size: .86rem; margin: 0 0 6px; }
+.notes ul { margin: 0; padding-left: 18px; }
+.measure { position: absolute; left: -10000px; top: 0; visibility: hidden; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Roll dialog mockups</h1>
+  <p class="lede">
+    v2 Phase 9a. Four exchanges, frame by frame, drawn the way 9b–9d would build them: a step bar
+    for the exchange, a heading that says whose roll and where, the total and its arithmetic on every
+    card, and every die readable without a hover. The board behind the dialog is drawn at the cursor
+    (9c), so nothing falls before its card says so. Switch <b>Card</b> to <i>Today</i> to see the
+    same frame as <code>RollCard.tsx</code> draws it now. Decisions are in <code>PLAN-V2.md</code>,
+    under <i>What 9a found</i>.
+  </p>
+
+  <div class="controls" id="controls"></div>
+  <div class="frames-nav" id="nav"></div>
+  <div class="verdict" id="verdict"></div>
+  <div class="stage" id="stage"></div>
+
+  <h2>The whole exchange, card by card</h2>
+  <p class="lede" id="film-lede"></p>
+  <div class="film" id="film"></div>
+
+  <h2>Measured: the tallest dialog in each exchange</h2>
+  <p class="lede">
+    The dialog floats over the terrains, so its height is board you cannot see. Measured from the
+    rendered frames: the tallest frame of each exchange, as a share of the screen's height.
+    Green is under 45%, amber under 60%. <b>Bar</b> is how many lines the step bar takes at that
+    width.
+  </p>
+  <div class="matrix-wrap" id="matrix"></div>
+
+  <h2>What the frames decide</h2>
+  <div class="notes">
+    <section>
+      <h3>A card, top to bottom</h3>
+      <ul>
+        <li><b>Step bar</b>: the exchange, not the card. It sits on every card <i>and</i> every decision sheet of one exchange, so a Flame's target sheet and the saves card after it share one bar.</li>
+        <li><b>Heading</b>: whose roll, what for, where. "The enemy rolls melee at Your home". The total sits at the right of it, on every card, live or logged.</li>
+        <li><b>Strip</b>: every die with its count and icon. A die that scored nothing is dashed and quiet, never blank. An SAI die has the SAI's name under it.</li>
+        <li><b>Arithmetic</b>: <code>mathPhrase</code>, on its own line, and the outcome in "you" and "the enemy".</li>
+        <li><b>One line per SAI</b> that resolves: the die, what it does in <code>effectSummary</code>'s words, and when ("next", "after Sleep").</li>
+        <li><b>Foot</b>: Continue. "roll 1 of 2" is gone: the bar says where you are.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>The step bar</h3>
+      <ul>
+        <li>Four steps, named by the action: <b>Melee/Missile/Counter → SAIs → Saves → Result</b>; <b>Maneuver → SAIs → Contest → Result</b>; <b>Magic → SAIs → Spells</b>.</li>
+        <li>A step with nothing in it is drawn struck through, not hidden, so the bar's shape is fixed per action.</li>
+        <li>SAIs are chips on the step whose roll showed them: the attack's on <i>SAIs</i>, a save roll's Cantrip, Choke or Confuse on <i>Saves</i>, Rapid Growth on <i>Contest</i>.</li>
+        <li>A chip is 16px tall, under the 44px tap floor. It shows the order. It is not where the order is chosen.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>The board waits (9c)</h3>
+      <ul>
+        <li><b>Mark, don't rewind.</b> A die killed, moved or put to sleep in an entry past the cursor is drawn where it was, as if nothing happened.</li>
+        <li>On the card that resolves it, it is marked on the board as well (<span style="color:var(--bad);font-weight:600">falls</span>), so the card and the board point at one die.</li>
+        <li>After that card it is gone. The ticker reads the entry at the cursor, never the newest.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>Phone upright</h3>
+      <p id="upright-note">Measured below once the page has drawn.</p>
+    </section>
+  </div>
+  <div class="measure" id="measure"></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Glyphs: ours, from src/ui/game/Glyph.tsx (24x24, stroked in currentColor).
+// ---------------------------------------------------------------------------
+const G = {
+  ID: '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>',
+  MELEE: '<path d="M12 3.5 L12 16"/><path d="M8 8.5 L16 8.5"/><path d="M9.5 16 L14.5 16 L12 20.5 Z"/>',
+  MISSILE: '<path d="M4.5 19.5 L19 5"/><path d="M13 5 L19 5 L19 11"/><path d="M4.5 19.5 L9 18 L6 15 Z"/>',
+  MAGIC: '<path d="M12 2.5 L12 21.5"/><path d="M4 7 L20 17"/><path d="M20 7 L4 17"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>',
+  // 9d: the shield gains a boss, so it stops reading as an empty face.
+  SAVE: '<path d="M12 3 L19.5 6 V12 C19.5 16.5 16 19.8 12 21 C8 19.8 4.5 16.5 4.5 12 V6 Z"/><path d="M12 7.5 V16.5"/><path d="M8 11 H16"/>',
+  SAVE_TODAY: '<path d="M12 3 L19.5 6 V12 C19.5 16.5 16 19.8 12 21 C8 19.8 4.5 16.5 4.5 12 V6 Z"/>',
+  MANEUVER: '<path d="M5 14.5 L12 7.5 L19 14.5"/><path d="M5 19 L12 12 L19 19"/>',
+  SAI: '<path d="M12 3 L14.4 9.3 L21 9.8 L16 14.1 L17.6 20.5 L12 17 L6.4 20.5 L8 14.1 L3 9.8 L9.6 9.3 Z"/>',
+}
+const svg = (inner, cls = '') => `<svg viewBox="0 0 24 24" class="${cls}">${inner}</svg>`
+const SHAPES = {
+  HM: '<rect x="5" y="5" width="14" height="14" rx="1.5"/>',
+  LM: '<polygon points="12,3 21,12 12,21 3,12"/>',
+  MI: '<polygon points="12,3.5 21,19.5 3,19.5"/>',
+  CA: '<polygon points="4,5 14,5 20.5,12 14,19 4,19 10,12"/>',
+  MA: '<circle cx="12" cy="12" r="8.2"/>',
+  MO: '<polygon points="12,2.5 20.5,7.2 20.5,16.8 12,21.5 3.5,16.8 3.5,7.2"/>',
+}
+const TILE = [0, 48, 54, 60, 70]
+const MARK = [0, 30, 34, 38, 46]
+const EL = { T: ['water', 'earth'], F: ['air', 'fire'] }
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+
+// ---------------------------------------------------------------------------
+// Units: real dice from data/raw (Treefolk are yours, Firewalkers the enemy's).
+// ---------------------------------------------------------------------------
+const U = {}
+function unit(id, name, cls, size, sp) { U[id] = { id, name, cls, size, sp }; return id }
+// Treefolk
+unit('oaklord', 'Oak Lord', 'HM', 3, 'T'); unit('oak', 'Oak', 'HM', 2, 'T'); unit('oakling', 'Oakling', 'HM', 1, 'T')
+unit('willow', 'Willow', 'LM', 2, 'T'); unit('willowling', 'Willowling', 'LM', 1, 'T')
+unit('pine', 'Pine', 'MI', 2, 'T'); unit('pineling', 'Pineling', 'MI', 1, 'T')
+unit('naiad', 'Naiad', 'CA', 2, 'T'); unit('nymph', 'Nymph', 'CA', 1, 'T')
+unit('eldar', 'Eldar Dryad', 'MA', 3, 'T'); unit('dryad', 'Dryad', 'MA', 2, 'T'); unit('hamadryad', 'Hamadryad', 'MA', 1, 'T')
+unit('satyr', 'Satyr', 'MO', 4, 'T'); unit('darktree', 'Darktree', 'MO', 4, 'T')
+// Firewalkers
+unit('gorgon', 'Gorgon', 'MO', 4, 'F'); unit('genie', 'Genie', 'MO', 4, 'F')
+unit('sentinel', 'Sentinel', 'HM', 3, 'F'); unit('watcher', 'Watcher', 'HM', 2, 'F'); unit('guardian', 'Guardian', 'HM', 1, 'F')
+unit('expeditioner', 'Expeditioner', 'LM', 3, 'F'); unit('adventurer', 'Adventurer', 'LM', 2, 'F'); unit('explorer', 'Explorer', 'LM', 1, 'F')
+unit('firemaster', 'Firemaster', 'MI', 2, 'F'); unit('firestarter', 'Firestarter', 'MI', 1, 'F')
+unit('shadowchaser', 'Shadowchaser', 'CA', 1, 'F')
+unit('sunflare', 'Sunflare', 'MA', 2, 'F'); unit('sunburst', 'Sunburst', 'MA', 1, 'F')
+
+/** A die as rolled. `n` is the face's count, `got` what the roll counted from it. */
+function d(id, icon, n, got, extra = {}) { return { id, icon, n, got, ...extra } }
+
+// ---------------------------------------------------------------------------
+// The boards. Slots: yh (your home), fr (Frontier), eh (enemy home).
+// ---------------------------------------------------------------------------
+const TERRAIN = {
+  yh: { name: 'Your home', type: 'Swampland', face: 5, icon: 'MELEE' },
+  fr: { name: 'Frontier', type: 'Highland', face: 4, icon: 'MISSILE' },
+  eh: { name: 'Enemy home', type: 'Wasteland', face: 6, icon: 'MELEE' },
+}
+const BOARDS = {
+  A: {
+    yh: { you: ['oaklord', 'pine', 'willow', 'nymph', 'hamadryad'], them: ['gorgon', 'sentinel', 'watcher', 'explorer', 'firestarter'], themFx: ['Fiery Weapon +2 melee, +2 missile'] },
+    fr: { you: ['oak', 'naiad', 'pineling'], them: ['genie', 'adventurer', 'sunburst'] },
+    eh: { you: ['willowling', 'oakling', 'dryad'], them: ['guardian', 'firemaster', 'sunflare'] },
+  },
+  B: {
+    yh: { you: ['oaklord', 'willow', 'nymph', 'hamadryad'], them: ['sentinel', 'watcher', 'firestarter'] },
+    fr: { you: ['eldar', 'naiad', 'oak', 'pineling'], them: ['genie', 'adventurer', 'expeditioner', 'sunburst'] },
+    eh: { you: ['willowling', 'oakling'], them: ['guardian', 'firemaster', 'sunflare'] },
+  },
+  C: {
+    yh: { you: ['oaklord', 'pine', 'hamadryad'], them: ['sentinel', 'watcher'] },
+    fr: { you: ['naiad', 'willow', 'oak', 'nymph'], them: ['genie', 'adventurer', 'shadowchaser'] },
+    eh: { you: ['willowling', 'oakling', 'dryad'], them: ['guardian', 'firemaster', 'sunflare'] },
+  },
+  D: {
+    yh: { you: ['pine', 'nymph', 'hamadryad'], them: ['watcher', 'firestarter'] },
+    fr: { you: ['oak', 'naiad', 'pineling'], them: ['genie', 'adventurer', 'sunburst'] },
+    eh: { you: ['satyr', 'darktree', 'oaklord', 'willow', 'oakling'], them: ['gorgon', 'explorer'] },
+  },
+}
+
+// ---------------------------------------------------------------------------
+// The step bar. `steps` is a list of [label, state, chips]; state is
+// done | now | todo | none, a chip is [label, state].
+// ---------------------------------------------------------------------------
+function bar(steps) {
+  return '<div class="xbar">' + steps.map(([label, state, chips = []], i) =>
+    (i > 0 ? '<span class="xsep"></span>' : '') +
+    `<span class="xstep ${state}"><span class="dot">${state === 'done' ? '✓' : ''}</span><span class="lbl">${label}</span></span>` +
+    chips.map(([c, s]) => `<span class="chip ${s}">★ ${c}</span>`).join('')
+  ).join('') + (steps.some(([, , chips = []]) => chips.length > 0) ? '<span class="xbreak"></span>' : '') + '</div>'
+}
+
+// ---------------------------------------------------------------------------
+// A strip: proposed (count + icon always, SAI named) and today's.
+// ---------------------------------------------------------------------------
+function rd(die, opts = {}) {
+  const u = U[die.id]
+  const idle = die.got === 0 && die.icon !== 'SAI' && !die.gives
+  const cls = ['rd', 'i-' + die.icon, idle ? 'idle' : '', die.icon === 'SAI' ? 'sai' : '', die.state || ''].join(' ')
+  const glyph = svg(G[die.icon])
+  const who = die.icon === 'SAI' ? die.sai : u.name
+  const gives = die.gives ? `<span class="gives" style="color:var(--${die.gives[1]})">${die.gives[0]}</span>` : ''
+  const title = `${u.name}: ${die.n} ${die.icon === 'SAI' ? die.sai : die.icon.toLowerCase()}` +
+    (idle ? ' — counts for nothing in this roll' : '')
+  return `<span class="${cls}" title="${esc(title)}"><span class="face">${glyph}${die.n}</span><span class="who">${esc(who)}</span>${gives}</span>`
+}
+function strip(dice) {
+  return '<div class="strip">' + dice.map((die) =>
+    die.then ? `<span class="chain">${rd(die)}<span class="arrow">→</span>${rd(die.then)}</span>` : rd(die)
+  ).join('') + '</div>'
+}
+function todayStrip(dice) {
+  return '<div class="t-strip">' + dice.map((die) => {
+    const one = (x) => {
+      const blank = x.got === 0 && x.icon !== 'SAI' && !x.gives
+      const icon = x.icon === 'SAVE' ? 'SAVE_TODAY' : x.icon
+      return `<span class="t-rd ${blank ? 'blank' : ''} ${x.icon === 'SAI' ? 'effect' : ''}">${svg(G[icon])}${x.got > 0 ? `<b>${x.got}</b>` : ''}</span>`
+    }
+    return die.then ? `${one(die)}<span class="arrow">→</span>${one(die.then)}` : one(die)
+  }).join('') + '</div>'
+}
+
+// ---------------------------------------------------------------------------
+// Docks: a card or a sheet, each with its step bar; and today's version.
+// ---------------------------------------------------------------------------
+function card(f) {
+  return `<div class="card is-card">
+    <div class="ch"><h3>${f.heading}</h3>${f.total ? `<span class="tot"><b>${f.total[0]}</b> ${f.total[1]}</span>` : ''}</div>
+    ${f.dice ? strip(f.dice) : ''}
+    ${f.body || ''}
+    ${f.math ? `<p class="math">${f.math}</p>` : ''}
+    ${(f.sais || []).map(([name, who, what, when]) => `<p class="sai-line"><span class="star">★</span><span><b>${name}</b> · ${who} — ${what}</span>${when ? `<em>${when}</em>` : ''}</p>`).join('')}
+    ${f.outcome ? `<p class="outcome ${f.outcome[1]}">${f.outcome[0]}</p>` : ''}
+    <div class="foot">${f.skip ? `<span class="left"></span><span class="btn-s minor">${f.skip}</span>` : ''}<span class="btn-p">Continue</span></div>
+  </div>`
+}
+function sheet(f) {
+  return `<div class="card">
+    <p class="sheet-q">${f.q}</p>
+    ${f.sub ? `<p class="sheet-sub">${f.sub}</p>` : ''}
+    ${f.sofar ? `<p class="sofar">${f.sofar}</p>` : ''}
+    ${f.dice ? `<div style="margin-top:8px">${strip(f.dice)}</div>` : ''}
+    ${f.body || ''}
+    <div class="btn-row">${(f.buttons || []).map(([label, kind, small]) => `<span class="${kind === 'p' ? 'btn-p' : kind === 'off' ? 'btn-p' : 'btn-s' + (kind === 'minor' ? ' minor' : '')}" ${kind === 'off' ? 'aria-disabled="true"' : ''}>${label}${small ? `<small>${small}</small>` : ''}</span>`).join('')}</div>
+  </div>`
+}
+function dockHtml(f, mode) {
+  if (mode === 'today') return '<div class="dock">' + todayDock(f) + '</div>'
+  return '<div class="dock">' + bar(f.bar) + (f.kind === 'card' ? card(f) : sheet(f)) + '</div>'
+}
+function todayDock(f) {
+  const t = f.today
+  if (t === null) return `<div class="t-card"><p class="t-title muted">No stop today</p><p class="t-line muted">${f.todayNote}</p></div>`
+  if (f.kind === 'sheet') {
+    return `<div class="card">${t.behind ? `<div class="t-roll" style="margin-bottom:8px">${t.behind}</div>` : ''}<p class="sheet-q">${t.q || f.q}</p>${t.sub !== undefined ? (t.sub ? `<p class="sheet-sub">${t.sub}</p>` : '') : f.sub ? `<p class="sheet-sub">${f.sub}</p>` : ''}${t.dice ? `<div style="margin-top:8px">${todayStrip(t.dice)}</div>` : ''}${t.body !== undefined ? t.body : (f.body || '')}<div class="btn-row">${(t.buttons || f.buttons || []).map(([label, kind]) => `<span class="${kind === 'p' || kind === 'off' ? 'btn-p' : 'btn-s' + (kind === 'minor' ? ' minor' : '')}" ${kind === 'off' ? 'aria-disabled="true"' : ''}>${label}</span>`).join('')}</div></div>`
+  }
+  return `<div class="t-card">
+    <p class="t-title">${t.title}</p>
+    ${t.pre || ''}
+    ${t.dice || t.label || t.lines ? `<div class="t-roll">${t.label ? `<div class="t-head">${t.label}</div>` : ''}${t.dice ? todayStrip(t.dice) : ''}${(t.lines || []).map((l) => `<p class="t-line">${l}</p>`).join('')}</div>` : ''}
+    <div class="foot"><span class="left">roll ${t.n} of ${t.of}</span>${t.of - t.n > 0 ? `<span class="btn-s minor">Skip ${t.of - t.n} more</span>` : ''}<span class="btn-p">Continue</span></div>
+  </div>`
+}
+
+// ---------------------------------------------------------------------------
+// The four exchanges.
+// ---------------------------------------------------------------------------
+const S = { done: 'done', now: 'now', todo: 'todo', none: 'none' }
+
+// A. The enemy's melee at Your home, with a Flame (the Gorgon prints 2 Flame).
+const A_ATTACK = [
+  d('gorgon', 'SAI', 2, 0, { sai: 'Flame' }),
+  d('sentinel', 'MELEE', 3, 3), d('watcher', 'MELEE', 3, 3),
+  d('explorer', 'SAVE', 1, 0), d('firestarter', 'ID', 1, 1),
+]
+const A_SAVES = [
+  d('oaklord', 'SAVE', 4, 4), d('willow', 'MELEE', 3, 0), d('nymph', 'SAVE', 1, 1), d('hamadryad', 'MAGIC', 1, 0),
+]
+const A = {
+  name: 'Melee with a Flame', slot: 'yh',
+  blurb: 'The enemy attacks Your home with melee. Their Gorgon rolls 2 Flame, which kills and buries before your save roll.',
+  frames: [
+    {
+      kind: 'card', label: 'Attack', ticker: 'The enemy marches at Your home and attacks with melee',
+      bar: [['Melee', S.now], ['SAIs', S.todo, [['Flame 2', 'todo']]], ['Saves', S.todo], ['Result', S.todo]],
+      heading: 'The enemy rolls melee at Your home', total: [9, 'melee'], dice: A_ATTACK,
+      math: '7 on the dice + 2 Fiery Weapon = <b>9 melee</b>',
+      sais: [['Flame 2', 'Gorgon', 'kills and buries up to 2 health-worth of your army before you save.', 'next']],
+      today: { title: 'The enemy’s melee attack', dice: A_ATTACK, lines: ['<b>9</b>'], n: 1, of: 3 },
+    },
+    {
+      kind: 'card', label: 'Flame', ticker: 'The enemy marches at Your home and attacks with melee', marks: { pine: 'falls' },
+      todayGone: ['pine'], todayTicker: '9 melee − 5 saves = 4 damage',
+      bar: [['Melee', S.done], ['SAIs', S.now, [['Flame 2', 'now']]], ['Saves', S.todo], ['Result', S.todo]],
+      heading: 'The enemy’s Flame at Your home', dice: [A_ATTACK[0]],
+      sais: [['Flame 2', 'Gorgon', 'the enemy picked Pine (2 health). Pine is killed and buried.', '']],
+      outcome: ['You lose Pine — buried, so it can never come back.', 'bad'],
+      today: { title: 'The enemy’s Gorgon', pre: `<div style="display:flex;gap:10px;align-items:center">${todayStrip([A_ATTACK[0]])}<span><b>Flame</b>: kills and buries 2 health-worth</span></div>`, lines: ['Flame targets Pine at Your home', 'You lose Pine'], n: 2, of: 3 },
+    },
+    {
+      kind: 'card', label: 'Saves', ticker: 'The enemy’s Flame kills and buries Pine', gone: ['pine'],
+      todayTicker: '9 melee − 5 saves = 4 damage',
+      bar: [['Melee', S.done], ['SAIs', S.done, [['Flame 2', 'done']]], ['Saves', S.now], ['Result', S.todo]],
+      heading: 'You save at Your home', total: [5, 'saves'], dice: A_SAVES,
+      math: '9 melee − 5 saves = <b>4 damage</b>',
+      outcome: ['4 damage to your army at Your home — you choose who falls.', 'bad'],
+      today: { title: 'Your saves', label: 'Saves', dice: A_SAVES, lines: ['9 melee − 5 saves = 4 damage'], n: 3, of: 3 },
+    },
+    {
+      kind: 'sheet', label: 'Result (yours)', ticker: '9 melee − 5 saves = 4 damage', gone: ['pine'],
+      marks: { willow: 'picked', nymph: 'picked', oaklord: 'pickable', hamadryad: 'pickable' },
+      bar: [['Melee', S.done], ['SAIs', S.done, [['Flame 2', 'done']]], ['Saves', S.done], ['Result', S.now]],
+      q: 'Who falls at Your home? 4 damage',
+      sub: '9 melee − 5 saves. Tap your units on the board: as much health as fits in 4.',
+      buttons: [['Willow, Nymph — 3 of 4', 'off', 'one more: Hamadryad fits']],
+      today: { q: 'Assign 4 damage at Your home — tap units below', sub: '', buttons: [['Confirm (3 of 4)', 'off']] },
+    },
+  ],
+}
+
+// B. The enemy's melee at the Frontier; your save roll shows a Cantrip (Eldar Dryad, 4 Cantrip).
+const B_ATTACK = [
+  d('genie', 'MELEE', 4, 4), d('adventurer', 'MELEE', 2, 2), d('expeditioner', 'MELEE', 3, 3), d('sunburst', 'MANEUVER', 1, 0),
+]
+const B_SAVES = [
+  d('eldar', 'SAI', 4, 0, { sai: 'Cantrip' }), d('naiad', 'SAVE', 3, 3), d('oak', 'ID', 2, 2), d('pineling', 'MISSILE', 1, 0),
+]
+const B = {
+  name: 'A save roll with a Cantrip', slot: 'fr',
+  blurb: 'The enemy attacks the Frontier with melee. Your Eldar Dryad saves with 4 Cantrip, which opens a casting window in the middle of the exchange.',
+  frames: [
+    {
+      kind: 'card', label: 'Attack', ticker: 'The enemy marches at the Frontier and attacks with melee',
+      bar: [['Melee', S.now], ['SAIs', S.none], ['Saves', S.todo], ['Result', S.todo]],
+      heading: 'The enemy rolls melee at the Frontier', total: [9, 'melee'], dice: B_ATTACK,
+      math: '9 on the dice = <b>9 melee</b>',
+      today: { title: 'The enemy’s melee attack', dice: B_ATTACK, lines: ['<b>9</b>'], n: 1, of: 2 },
+    },
+    {
+      kind: 'card', label: 'Saves', ticker: 'The enemy marches at the Frontier and attacks with melee',
+      bar: [['Melee', S.done], ['SAIs', S.none], ['Saves', S.now, [['Cantrip 4', 'todo']]], ['Result', S.todo]],
+      heading: 'You save at the Frontier', total: [5, 'saves so far'], dice: B_SAVES,
+      math: '5 on the dice = <b>5 saves</b>, before the Cantrip',
+      sais: [['Cantrip 4', 'Eldar Dryad', 'cast cantrip spells with 4 magic, now, before the damage.', 'next']],
+      today: { title: 'Your saves', dice: B_SAVES, lines: ['<b>5</b>'], n: 2, of: 2 },
+    },
+    {
+      kind: 'sheet', label: 'Cantrip window', ticker: 'The enemy marches at the Frontier and attacks with melee',
+      bar: [['Melee', S.done], ['SAIs', S.none], ['Saves', S.now, [['Cantrip 4', 'now']]], ['Result', S.todo]],
+      q: 'Cantrip window: Eldar Dryad’s 4 magic',
+      sub: 'Water or earth, cantrip spells only. The enemy’s melee attack resumes when you are done: 9 melee against your 5 saves.',
+      body: `<div class="spells">
+        <div class="spell"><span><span class="el" style="background:var(--el-earth)"></span><b>Stone Skin</b><span class="desc"> · +1 save to an army of yours</span></span><span class="cost">2 earth</span></div>
+        <div class="spell"><span><span class="el" style="background:var(--el-water)"></span><b>Watery Double</b><span class="desc"> · +1 save to an army of yours</span></span><span class="cost">2 water</span></div>
+        <div class="spell staged"><span><span class="el" style="background:var(--el-water)"></span><b>Accelerated Growth</b> ×1<span class="desc"> → your DUA</span></span><span class="cost">3 water · 1 left</span></div></div>`,
+      buttons: [['Cast Accelerated Growth', 'p'], ['Cast nothing', 'minor']],
+      today: { q: '4 magic (water or earth, cantrip spells only) — pick a spell', sub: '' },
+    },
+    {
+      kind: 'sheet', label: 'Result (yours)', ticker: 'You cast Accelerated Growth',
+      marks: { naiad: 'pickable', oak: 'pickable', eldar: 'picked', pineling: 'pickable' },
+      bar: [['Melee', S.done], ['SAIs', S.none], ['Saves', S.done, [['Cantrip 4', 'done']]], ['Result', S.now]],
+      q: 'Who falls at the Frontier? 4 damage',
+      sub: '9 melee − 5 saves. Accelerated Growth will offer an exchange for a 2-health or larger Treefolk.',
+      buttons: [['Eldar Dryad — 3 of 4', 'off', 'one more: Pineling fits']],
+      today: { title: '', q: 'Assign 4 damage at the Frontier — tap units below', sub: '', buttons: [['Confirm (3 of 4)', 'off']], behind: `<div class="t-head">Your saves</div>${todayStrip(B_SAVES)}<p class="t-line">9 melee − 5 saves = 4 damage</p>` },
+    },
+  ],
+}
+
+// C. The enemy maneuvers the Frontier; you contest and are losing, so Rapid Growth asks.
+const C_MARCH = [
+  d('genie', 'SAI', 4, 4, { sai: 'Firewalking', gives: ['+4', 'maneuver'] }), d('adventurer', 'MANEUVER', 3, 3), d('shadowchaser', 'MELEE', 1, 0),
+]
+const C_CONTEST = [
+  d('naiad', 'MANEUVER', 3, 3), d('willow', 'MELEE', 3, 0), d('oak', 'MELEE', 2, 0), d('nymph', 'MANEUVER', 2, 2),
+]
+const C_AFTER = [
+  d('naiad', 'MANEUVER', 3, 3),
+  { ...d('willow', 'MELEE', 3, 0, { state: 'gone' }), then: d('willow', 'MANEUVER', 2, 2) },
+  { ...d('oak', 'MELEE', 2, 0, { state: 'gone' }), then: d('oak', 'ID', 2, 2) },
+  d('nymph', 'MANEUVER', 2, 2),
+]
+const C = {
+  name: 'A contested maneuver', slot: 'fr',
+  blurb: 'The enemy tries to turn the Frontier; you contest. Your Treefolk stand on earth and are losing, so Rapid Growth asks before the totals are compared.',
+  frames: [
+    {
+      kind: 'card', label: 'Maneuver', ticker: 'The enemy marches at the Frontier and maneuvers',
+      bar: [['Maneuver', S.now], ['SAIs', S.none], ['Contest', S.todo], ['Result', S.todo]],
+      heading: 'The enemy rolls to turn the Frontier', total: [7, 'maneuver'], dice: C_MARCH,
+      math: '3 on the dice + 4 Firewalking = <b>7 maneuver</b>',
+      today: { title: 'The maneuver roll', label: 'Maneuver', dice: C_MARCH, n: 1, of: 2 },
+    },
+    {
+      kind: 'card', label: 'Contest', ticker: 'The enemy marches at the Frontier and maneuvers',
+      bar: [['Maneuver', S.done], ['SAIs', S.none], ['Contest', S.now, [['Rapid Growth', 'todo']]], ['Result', S.todo]],
+      heading: 'You roll to stop them at the Frontier', total: [5, 'maneuver'], dice: C_CONTEST,
+      outcome: ['5 against their 7: you are losing (they win a tie).', 'bad'],
+      sais: [['Rapid Growth', 'your Treefolk on earth', 'reroll the dice that rolled no SAI, together, once.', 'next']],
+      today: { title: 'The opposing maneuver roll', dice: C_CONTEST, lines: ['<b>5</b>'], n: 2, of: 2 },
+    },
+    {
+      kind: 'sheet', label: 'Rapid Growth', ticker: 'The enemy marches at the Frontier and maneuvers',
+      bar: [['Maneuver', S.done], ['SAIs', S.none], ['Contest', S.now, [['Rapid Growth', 'now']]], ['Result', S.todo]],
+      q: 'Rapid Growth: reroll which Treefolk?',
+      sub: '5 against their 7. The dice you pick roll again together, and their old faces are ignored. Tap them here or on the board.',
+      dice: [d('naiad', 'MANEUVER', 3, 3, { state: 'pickable' }), d('willow', 'MELEE', 3, 0, { state: 'picked' }), d('oak', 'MELEE', 2, 0, { state: 'picked' }), d('nymph', 'MANEUVER', 2, 2, { state: 'pickable' })],
+      marks: { willow: 'picked', oak: 'picked', naiad: 'pickable', nymph: 'pickable' },
+      buttons: [['Reroll Willow, Oak', 'p'], ['Keep the roll', 'minor']],
+      today: { q: 'Rapid Growth: reroll Treefolk that rolled no SAI?', sub: '', dice: C_CONTEST, buttons: [['Reroll 2', 'p'], ['Keep the roll', 'minor']] },
+    },
+    {
+      kind: 'card', label: 'Result', ticker: 'Rapid Growth rerolls Willow and Oak',
+      bar: [['Maneuver', S.done], ['SAIs', S.none], ['Contest', S.done, [['Rapid Growth', 'done']]], ['Result', S.now]],
+      heading: 'Your reroll at the Frontier', total: [9, 'maneuver'], dice: C_AFTER,
+      outcome: ['9 against their 7: you stop them. The Frontier stays at face 4.', 'ok'],
+      today: { title: 'The opposing maneuver roll', label: 'Opposing maneuver', dice: C_AFTER, lines: ['7 vs 9 maneuver; the marcher loses'], n: 1, of: 1 },
+    },
+  ],
+}
+
+// D. Your melee at the Enemy home with two SAIs that can interact: Sleep and Smother.
+const D_ATTACK = [
+  d('satyr', 'SAI', 4, 0, { sai: 'Sleep' }), d('darktree', 'SAI', 4, 0, { sai: 'Smother' }),
+  d('oaklord', 'MELEE', 3, 3), d('willow', 'MELEE', 3, 3), d('oakling', 'ID', 1, 1),
+]
+const D_SAVES = [d('explorer', 'SAVE', 1, 1)]
+const D = {
+  name: 'Two SAIs, your order', slot: 'eh',
+  blurb: 'You attack the Enemy home with melee: a Gorgon and an Explorer. Your Satyr rolls Sleep and your Darktree Smother 4. A sleeping die cannot be rolled, so Sleep first makes the Smother certain; Smother first gives the Gorgon its maneuver roll. This is 9e’s question, drawn as it would be asked.',
+  frames: [
+    {
+      kind: 'card', label: 'Attack', ticker: 'You march at the Enemy home and attack with melee',
+      bar: [['Melee', S.now], ['SAIs', S.todo, [['Sleep', 'todo'], ['Smother 4', 'todo']]], ['Saves', S.todo], ['Result', S.todo]],
+      heading: 'You roll melee at the Enemy home', total: [7, 'melee'], dice: D_ATTACK,
+      math: '7 on the dice = <b>7 melee</b>',
+      sais: [
+        ['Sleep', 'Satyr', 'one unit cannot be rolled or leave until your next turn.', 'you aim'],
+        ['Smother 4', 'Darktree', 'up to 4 health-worth roll a maneuver or die.', 'you aim'],
+      ],
+      today: { title: 'Your melee attack', dice: D_ATTACK, lines: ['<b>7</b>'], n: 1, of: 1 },
+    },
+    {
+      kind: 'sheet', label: 'Order (9e)', ticker: 'You march at the Enemy home and attack with melee',
+      bar: [['Melee', S.done], ['SAIs', S.now, [['Sleep', 'todo'], ['Smother 4', 'todo']]], ['Saves', S.todo], ['Result', S.todo]],
+      q: 'Sleep and Smother both aim at the enemy at their home. Which first?',
+      sub: 'The second is aimed after the first has happened.',
+      buttons: [['Sleep first', 'p', 'Satyr: one unit cannot be rolled'], ['Smother first', 'p', 'Darktree: 4 health-worth roll or die']],
+      today: null, todayNote: 'Today the engine resolves them in roll order (Satyr, then Darktree) without asking. Under <code>saiOrder: &#39;fixed&#39;</code> this frame does not exist.',
+    },
+    {
+      kind: 'sheet', label: 'Sleep', ticker: 'You march at the Enemy home and attack with melee',
+      marks: { gorgon: 'picked', explorer: 'pickable' },
+      bar: [['Melee', S.done], ['SAIs', S.now, [['Sleep', 'now'], ['Smother 4', 'todo']]], ['Saves', S.todo], ['Result', S.todo]],
+      q: 'Sleep (Satyr): which unit?',
+      sub: 'One unit in the enemy’s army at their home. Tap it on the board.',
+      buttons: [['Sleep Gorgon', 'p']],
+      today: { q: 'Sleep — target one unit at Enemy home', sub: '' , buttons: [['Confirm', 'p']] },
+    },
+    {
+      kind: 'sheet', label: 'Smother', ticker: 'Sleep: Gorgon is asleep',
+      marks: { gorgon: 'asleep picked', explorer: 'pickable' },
+      bar: [['Melee', S.done], ['SAIs', S.now, [['Sleep', 'done'], ['Smother 4', 'now']]], ['Saves', S.todo], ['Result', S.todo]],
+      q: 'Smother 4 (Darktree): which units?',
+      sub: 'Up to 4 health-worth, as many as fit. Each rolls a maneuver or dies.',
+      sofar: '<b>So far:</b> Sleep put Gorgon to sleep. It cannot be rolled until your next turn.',
+      buttons: [['Smother Gorgon', 'p']],
+      today: { q: 'Smother — target up to 4 health-worth at Enemy home', sub: '', buttons: [['Confirm', 'p']] },
+    },
+    {
+      kind: 'card', label: 'Sub-roll', ticker: 'Smother targets Gorgon at Enemy home', marks: { gorgon: 'asleep falls' },
+      todayGone: ['gorgon'], todayTicker: '7 melee − 1 save = 6 damage',
+      bar: [['Melee', S.done], ['SAIs', S.now, [['Sleep', 'done'], ['Smother 4', 'now']]], ['Saves', S.todo], ['Result', S.todo]],
+      heading: 'Gorgon rolls to survive Smother', body: '<p class="math">Gorgon is asleep and cannot be rolled, so it rolls no maneuver.</p>',
+      outcome: ['The enemy loses Gorgon.', 'ok'],
+      today: { title: 'Rolling to survive', label: 'Smother · a maneuver or die · Enemy home', lines: ['none get away'], n: 1, of: 3 },
+    },
+    {
+      kind: 'card', label: 'Saves', ticker: 'The enemy loses Gorgon', gone: ['gorgon'],
+      todayTicker: '7 melee − 1 save = 6 damage',
+      bar: [['Melee', S.done], ['SAIs', S.done, [['Sleep', 'done'], ['Smother 4', 'done']]], ['Saves', S.now], ['Result', S.todo]],
+      heading: 'The enemy saves at their home', total: [1, 'save'], dice: D_SAVES,
+      math: '7 melee − 1 save = <b>6 damage</b>',
+      outcome: ['6 damage to the enemy’s army at their home.', 'ok'],
+      today: { title: 'The enemy’s saves', label: 'Saves', dice: D_SAVES, lines: ['7 melee − 1 saves = 6 damage'], n: 2, of: 3 },
+    },
+    {
+      kind: 'card', label: 'Result', ticker: '7 melee − 1 save = 6 damage', gone: ['gorgon'], marks: { explorer: 'falls' },
+      todayGone: ['gorgon', 'explorer'], todayTicker: 'The enemy loses Explorer',
+      bar: [['Melee', S.done], ['SAIs', S.done, [['Sleep', 'done'], ['Smother 4', 'done']]], ['Saves', S.done], ['Result', S.now]],
+      heading: 'The enemy loses Explorer',
+      body: '<p class="math">6 damage, and 1 health left to take it. The other 5 are lost.</p>',
+      outcome: ['The Enemy home has no enemy army left.', 'ok'],
+      today: null, todayNote: 'Today the enemy’s losses are not a stop: Explorer is already gone from the board, and the ticker says so, while the saves card is still up.',
+    },
+  ],
+}
+const EXCHANGES = { A, B, C, D }
+
+// ---------------------------------------------------------------------------
+// The board, at the cursor: `gone` dice are past their card, `marks` are this card's.
+// ---------------------------------------------------------------------------
+function tile(id, mark, compact) {
+  const u = U[id]
+  const size = (compact ? [0, 44, 46, 50, 56] : TILE)[u.size]
+  const m = (compact ? [0, 26, 28, 31, 36] : MARK)[u.size]
+  const band = EL[u.sp].map((e) => `<i style="background:var(--el-${e})"></i>`).join('')
+  return `<span class="tile ${mark || ''}" style="width:${size}px;height:${size}px" title="${esc(u.name)}">
+    <svg class="shape" viewBox="0 0 24 24" width="${m}" height="${m}">${SHAPES[u.cls]}</svg>
+    ${u.cls === 'MO' ? `<span class="mo">${u.name.slice(0, 2)}</span>` : `<span class="cls">${u.cls}</span>`}
+    <span class="hp">${u.size}</span><span class="band">${band}</span></span>`
+}
+function boardHtml(ex, f, layout, scr, mode) {
+  const b = BOARDS[ex]
+  // Today the board is the state as it is now, ahead of the card; proposed, it waits.
+  const today = mode === 'today'
+  const gone = new Set((today ? f.todayGone : undefined) ?? f.gone ?? [])
+  const marks = today ? Object.fromEntries(Object.entries(f.marks || {}).filter(([, m]) => !m.includes('falls'))) : f.marks || {}
+  const compact = scr.phone && layout === 'landscape'
+  const dice = (ids) => ids.filter((id) => !gone.has(id)).map((id) => tile(id, marks[id], compact)).join('')
+  const fx = (list) => list && !f.noFx ? `<div class="chips">${list.map((x) => `<span class="fx">${x}</span>`).join('')}</div>` : ''
+  const focus = EXCHANGES[ex].slot
+  const tdie = (slot) => { const t = TERRAIN[slot]; return `<span class="tdie" title="${t.type}">${svg(G[t.icon])}</span>` }
+  if (layout === 'landscape') {
+    return '<div class="board">' + ['yh', 'fr', 'eh'].map((slot) => {
+      const t = TERRAIN[slot]; const a = b[slot]
+      return `<div class="lrow ${slot === focus ? 'focus' : ''}">
+        <div><div class="dice">${dice(a.you)}</div>${fx(a.youFx)}</div>
+        <div class="mid">${tdie(slot)}<span>${t.name}<br>face ${t.face}</span></div>
+        <div><div class="dice them">${dice(a.them)}</div>${fx(a.themFx)}</div></div>`
+    }).join('') + `<div class="lrow"><div class="dice muted" style="font-size:12px">Reserves · DUA 2 · Pool 1</div><div class="mid">reserves</div><div class="dice them muted" style="font-size:12px">Reserves · DUA 3 · Pool 1</div></div></div>`
+  }
+  const cols = scr.w >= 900
+  return `<div class="board ${cols ? 'cols' : ''}">` + ['yh', 'fr', 'eh'].map((slot) => {
+    const t = TERRAIN[slot]; const a = b[slot]
+    return `<div class="tcard ${slot === focus ? 'focus' : ''}">
+      <div class="thead">${tdie(slot)}<b>${t.name}</b><span class="muted">${t.type} · face ${t.face}</span></div>
+      <div class="side-label">The enemy</div><div class="dice">${dice(a.them)}</div>${fx(a.themFx)}
+      <div class="side-label">You</div><div class="dice">${dice(a.you)}</div>${fx(a.youFx)}
+    </div>`
+  }).join('') + '</div>'
+}
+
+// ---------------------------------------------------------------------------
+// Screens (3a's), and the page.
+// ---------------------------------------------------------------------------
+const SCREENS = {
+  laptop: { label: 'Laptop 1366×680', w: 1366, h: 680, phone: false },
+  sideways: { label: 'Phone sideways 844×390', w: 844, h: 390, phone: true },
+  upright: { label: 'Phone upright 390×844', w: 390, h: 844, phone: true },
+}
+const st = { ex: 'A', screen: 'laptop', layout: 'cards', mode: 'proposed', frame: 0 }
+// The view is the hash, so a frame can be linked: #D/sideways/landscape/proposed/2.
+function readHash() {
+  const [ex, screen, layout, mode, frame] = location.hash.slice(1).split('/')
+  if (ex in EXCHANGES) st.ex = ex
+  if (screen in SCREENS) st.screen = screen
+  if (layout === 'cards' || layout === 'landscape') st.layout = layout
+  if (mode === 'proposed' || mode === 'today') st.mode = mode
+  const n = Number(frame)
+  if (Number.isInteger(n) && n >= 0 && n < EXCHANGES[st.ex].frames.length) st.frame = n
+}
+function writeHash() {
+  history.replaceState(null, '', `#${st.ex}/${st.screen}/${st.layout}/${st.mode}/${st.frame}`)
+}
+
+function seg(name, label, options, value) {
+  return `<div class="control"><span>${label}</span><div class="seg" role="radiogroup">` +
+    options.map(([v, l, disabled]) => `<input type="radio" name="${name}" id="${name}-${v}" value="${v}" ${v === value ? 'checked' : ''} ${disabled ? 'disabled' : ''}><label for="${name}-${v}">${l}</label>`).join('') +
+    '</div></div>'
+}
+function renderControls() {
+  const upright = st.screen === 'upright'
+  document.getElementById('controls').innerHTML =
+    seg('ex', 'Exchange', Object.entries(EXCHANGES).map(([k, e]) => [k, e.name]), st.ex) +
+    seg('screen', 'Screen', Object.entries(SCREENS).map(([k, s]) => [k, s.label]), st.screen) +
+    seg('layout', 'Board', [['cards', 'Cards'], ['landscape', 'Landscape', upright]], upright ? 'cards' : st.layout) +
+    seg('mode', 'Card', [['proposed', 'Proposed'], ['today', 'Today']], st.mode)
+  document.querySelectorAll('#controls input').forEach((input) => input.addEventListener('change', () => {
+    st[input.name] = input.value
+    if (input.name === 'ex') st.frame = 0
+    // A phone held sideways opens on the landscape board (3d), so the frame does too.
+    if (input.name === 'screen') st.layout = input.value === 'sideways' ? 'landscape' : 'cards'
+    render()
+  }))
+}
+function screenClasses(scr) { return (scr.h < 500 ? ' short' : '') + (scr.w < 600 ? ' narrow' : '') }
+function appHead(ex, f, scr, mode) {
+  const ticker = mode === 'today' ? f.todayTicker ?? f.ticker : f.ticker
+  return `<div class="app-head"><b>${scr.w < 600 ? 'T3' : 'Turn 3 · march'}</b><span class="ticker">${ticker}</span>${scr.w < 600 ? '' : '<span class="btn">Cards</span><span class="btn">Concede</span>'}</div>`
+}
+function render() {
+  writeHash()
+  renderControls()
+  const ex = EXCHANGES[st.ex]
+  const scr = SCREENS[st.screen]
+  const layout = st.screen === 'upright' ? 'cards' : st.layout
+  const f = ex.frames[st.frame]
+  document.getElementById('nav').innerHTML =
+    ex.frames.map((fr, i) => `<button type="button" data-i="${i}" aria-pressed="${i === st.frame}">${i + 1}. ${fr.label}</button>`).join('') +
+    `<span class="what">${ex.blurb}</span>`
+  document.querySelectorAll('#nav button').forEach((b) => b.addEventListener('click', () => { st.frame = Number(b.dataset.i); render() }))
+
+  const stage = document.getElementById('stage')
+  const avail = stage.clientWidth
+  const bezel = scr.phone ? 24 : 20
+  const scale = Math.min(1, avail / (scr.w + bezel))
+  stage.style.height = Math.ceil((scr.h + bezel) * scale) + 'px'
+  stage.innerHTML = `<div class="device ${scr.phone ? 'phone' : ''}" style="transform:scale(${scale})">
+    <div class="screen${screenClasses(scr)}" style="width:${scr.w}px;height:${scr.h}px">
+      ${appHead(st.ex, f, scr, st.mode)}
+      <div class="area">${boardHtml(st.ex, f, layout, scr, st.mode)}${dockHtml(f, st.mode)}</div>
+    </div></div>`
+  fitBar(stage)
+  // Next frame on Continue, the way the app steps.
+  stage.querySelectorAll('.btn-p').forEach((b) => b.addEventListener('click', () => { if (st.frame < ex.frames.length - 1) { st.frame++; render() } }))
+
+  const dock = stage.querySelector('.dock')
+  const areaH = stage.querySelector('.area').clientHeight
+  const share = dock.offsetHeight / scr.h
+  document.getElementById('verdict').innerHTML =
+    `<span class="pill ${share < .45 ? 'ok' : share < .6 ? 'warn' : 'bad'}">dialog ${dock.offsetHeight}px · ${Math.round(share * 100)}% of the screen</span>` +
+    (st.mode === 'proposed' ? `<span class="muted">step bar: ${barLines(dock)} line${barLines(dock) > 1 ? 's' : ''} at ${dock.clientWidth}px</span>` : '') +
+    `<span class="muted">${dock.scrollHeight > dock.clientHeight + 1 ? 'the dialog scrolls inside itself' : 'no scroll inside the dialog'} · board area ${areaH}px</span>`
+
+  // The filmstrip: every frame of this exchange at this screen's dialog width.
+  const width = Math.min(760, scr.w - 16)
+  document.getElementById('film-lede').textContent =
+    `${ex.name}, ${st.mode === 'today' ? 'as the app draws it today' : 'proposed'}, at the ${scr.label.toLowerCase()}'s dialog width (${width}px). Tap a card's Continue above to step the frame.`
+  document.getElementById('film').innerHTML = ex.frames.map((fr, i) =>
+    `<figure><figcaption>${i + 1}. ${fr.label} · board: ${fr.gone ? 'without ' + fr.gone.map((id) => U[id].name).join(', ') : 'unchanged'}${fr.marks && Object.values(fr.marks).some((m) => m.includes('falls')) ? ' · marks the die that falls' : ''}</figcaption>
+      <div class="screen${screenClasses(scr)}" style="width:${width}px;background:none">${dockHtml(fr, st.mode)}</div></figure>`).join('')
+  fitBar(document.getElementById('film'))
+}
+/** On a short screen the bar sits on the heading's line: leave the heading its room. */
+function fitBar(root) {
+  root.querySelectorAll('.short .dock').forEach((dock) => {
+    const xbar = dock.querySelector('.xbar')
+    if (xbar) dock.style.setProperty('--bar-room', xbar.offsetWidth + 14 + 'px')
+  })
+}
+function barLines(dock, only = '.xstep, .chip') {
+  const xbar = dock.querySelector('.xbar')
+  if (!xbar) return 0
+  // Rows by vertical centre: a chip and a step on one line differ by a pixel or two.
+  const centres = [...xbar.querySelectorAll(only)].map((c) => c.offsetTop + c.offsetHeight / 2).sort((a, b) => a - b)
+  let rows = 0; let last = -Infinity
+  for (const y of centres) { if (y - last > 8) rows++; last = y }
+  return rows
+}
+
+// The matrix: every exchange x screen, measured offscreen at the real dialog width.
+function measureAll() {
+  const host = document.getElementById('measure')
+  const rows = []
+  let uprightBar = 1; let uprightSteps = 1; let uprightShare = 0
+  for (const [k, ex] of Object.entries(EXCHANGES)) {
+    const cells = []
+    for (const [sk, scr] of Object.entries(SCREENS)) {
+      const width = Math.min(760, scr.w - 16)
+      let worst = { h: 0, label: '' }; let lines = 0; let stepLines = 0; let todayWorst = 0
+      for (const f of ex.frames) {
+        for (const mode of ['proposed', 'today']) {
+          host.innerHTML = `<div class="screen${screenClasses(scr)}" style="width:${width}px">${dockHtml(f, mode)}</div>`
+          fitBar(host)
+          const dock = host.querySelector('.dock')
+          if (mode === 'proposed') {
+            if (dock.offsetHeight > worst.h) worst = { h: dock.offsetHeight, label: f.label }
+            lines = Math.max(lines, barLines(dock))
+            stepLines = Math.max(stepLines, barLines(dock, '.xstep'))
+          } else todayWorst = Math.max(todayWorst, dock.offsetHeight)
+        }
+      }
+      if (sk === 'upright') uprightBar = Math.max(uprightBar, lines)
+      if (sk === 'upright') uprightSteps = Math.max(uprightSteps, stepLines)
+      if (sk === 'upright') uprightShare = Math.max(uprightShare, worst.h / scr.h)
+      const share = worst.h / scr.h
+      cells.push(`<td class="${share < .45 ? 'ok' : share < .6 ? 'warn' : 'bad'}">${worst.h}px · ${Math.round(share * 100)}%<small>${worst.label} · steps ${stepLines} line${stepLines > 1 ? 's' : ''}, bar ${lines} · today ${todayWorst}px</small></td>`)
+    }
+    rows.push(`<tr><th class="row">${ex.name}</th>${cells.join('')}</tr>`)
+  }
+  host.innerHTML = ''
+  document.getElementById('matrix').innerHTML =
+    `<table class="matrix"><tr><th></th>${Object.values(SCREENS).map((s) => `<th>${s.label}</th>`).join('')}</tr>${rows.join('')}</table>`
+  document.getElementById('upright-note').innerHTML =
+    `<b>Yes, it fits.</b> At 374px the four steps take ${uprightSteps === 1 ? 'one line in every frame' : uprightSteps + ' lines in the worst frame'}. ` +
+    `SAI chips take a row of their own under the steps there (${uprightBar} lines at most, about 20px for the chip row), so a chip never pushes Result off the line. ` +
+    `Upright keeps the cards board (3d), and the tallest frame covers ${Math.round(uprightShare * 100)}% of the screen.`
+}
+
+readHash()
+render()
+measureAll()
+addEventListener('resize', render)
+</script>
+</body>
+</html>
