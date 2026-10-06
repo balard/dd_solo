@@ -8,9 +8,10 @@ landscape board to try.
 
 Read `PLAN-V1.md` for how the basic game got here, and its per-phase *Where this section was
 wrong* write-ups before starting anything that touches the same seam. This document is the *order
-of work*. **Phases 0 to 7 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c, Phase 5
-as 5a to 5g, Phase 6 as 6a to 6h, Phase 7 as 7a to 7f), each with its findings below. **Phase 8
-(Lava Elves) is planned** as slices 8a to 8g, with predictions where the landed phases have findings.
+of work*. **Phases 0 to 8 have landed** (Phase 3 as slices 3a to 3e, Phase 4 as 4a to 4c, Phase 5
+as 5a to 5g, Phase 6 as 6a to 6h, Phase 7 as 7a to 7f, Phase 8 as 8a to 8g), each with its findings
+below. **Phase 9 (the roll dialog) is planned** as slices 9a to 9e, and it includes the decision on
+who orders the SAIs.
 
 **Why v2 is this and not the roguelike.** v3 is meant to be a roguelike run: start with a 12-health
 collection, win dice, dragons and terrains, and raise the force cap to 24 and then 36 at set
@@ -75,7 +76,9 @@ start.
                                |
                                7  Goblins (Death magic inside)   [landed]
                                |
-                               8  Lava Elves
+                               8  Lava Elves [landed]
+
+9  The roll dialog                    the cards, the board waiting for them, and the SAI order
 ```
 
 **The two tracks interleave.** The UI track (3, 4) and the race track (5-8) share no seam after
@@ -3258,6 +3261,158 @@ over 60 seeds in both seats, and all three fire types (Feyland, Highland, Wastel
 
 ---
 
+## Phase 9 — The roll dialog
+
+The roll cards from 3c are the game's core interaction. They are where the player learns what was
+rolled, what still has to resolve, and what a save or a counter is answering. The log is the
+backup. A bug-hunting session before this phase (commit `9826f69`) found two of the
+cards' gaps by playing: a Cantrip window opened on rolls nobody had been shown, and its spell
+picker drew no roll at all. Both are fixed. Reviewing the dialogs found the rest, below. The later
+art pass hangs its animation and sound on these cards, so their structure has to be settled first.
+
+**Two things in one phase, because they share a screen.** The review is presentation only. The
+second thing is a rules question, whether the player chooses the order SAIs resolve in. Its answer
+needs a place on the card to make the choice, and that place is the step bar this phase builds
+anyway. Answering the rules question first would design a sheet the step bar then replaces.
+
+### What the review found
+
+Played in a browser on a Genie mirror (`?forces=firewalkers_genie&seed=5`):
+
+1. **The board and the ticker run ahead of the cards.** While a Firecloud card was still up, its
+   victim had already gone from the board, and the ticker read "4 melee − 0 saves = 4 damage"
+   before the saves card. 3c listed the board half under *deliberately not done*. Playing showed
+   that it gives away the outcome, so it is no longer acceptable.
+2. **A card does not say whose roll it is, or where.** "The maneuver roll" and "The opposing
+   maneuver roll" name neither player nor terrain. Strip labels are the raw kind ("MANEUVER",
+   "SAVES"). An outcome reads "the marcher loses" rather than "you" or "the enemy". The roll-off
+   labels your die "HORDE ROLL OFF" and the enemy's "THE ENEMY'S HORDE".
+3. **The first card of a resisted roll has no total.** A maneuver card shows dice with no number,
+   and the sum appears only on card 2. A roll still parked on a decision shows a bare "4", where
+   the logged card shows "4 melee − 0 saves = 4 damage".
+4. **A die that scored nothing cannot be read.** A save or magic face in a missile roll is a greyed
+   glyph with no count, and the save glyph is easy to mistake for a blank. Learning what was
+   rolled takes a hover.
+5. **An SAI die is only an accent border.** Nothing on the card says "Cantrip: 4 magic for cantrip
+   spells", or that Firecloud resolves next. The tooltip knows; the card does not.
+6. **"roll 1 of 2" counts cards rather than showing the exchange.** Nothing shows where the
+   exchange stands (attack, SAIs, saves, result) or what can still fire.
+7. **A Cantrip window does not say it is one.** "4 magic (air or fire, cantrip spells only) —
+   pick a spell" names neither the die nor the fact that the attack resumes afterwards.
+
+### The SAI order
+
+**By the rules as written (RAW) the roller chooses.** Step 4 of the roll (p. 27): "apply their
+effects one by one in whatever order you choose". `targeting.ts` fixes the order instead: roll
+order, unit order, then step-3 rerolls. That is a house rule from v1 Phase 4b, and its header says
+why: the order is a real choice only when one SAI shrinks an army that a later one must then pick
+from maximally. In play the owner has never felt the fixed order, which is evidence it costs little.
+It is not evidence that it costs nothing.
+
+**Where the order is a real choice:**
+- **Two targeting SAIs on one army.** A Sleep first takes a die out of the save roll, and a Flame
+  after it must still pick maximally. In the other order, the Flame may have killed the die the
+  Sleep wanted.
+- **A Cantrip window against a targeting SAI.** A Hailstorm cast before the Flame changes what the
+  Flame can reach. Today the window opens wherever the Cantrip face sits in roll order.
+- **Insurance on an individual unit** (the owner's point). p. 32 resolves SAIs that "target an
+  individual unit" one by one, never combined. So each one may name the same unit: three Sleeps
+  can go on the enemy's last die, and three Swallows give three rolls it must survive. The engine
+  already *allows* it, since a survivor is still in the army and is offered again. What it does
+  not do is show the earlier result before the next task is aimed, which is what turns aiming at
+  the same unit again into an informed choice. It matters most when you hold several SAIs and the
+  enemy has one unit left.
+- **Not the rerolls.** Step 3 ("attackers apply their reroll effects before defenders", one at a
+  time) and the delayed step 2 keep their engine order. Only step 4 is the roller's to order.
+
+**Combining stays automatic.** p. 32 lets combinable SAIs be combined *or* resolved one by one. v1
+always combines, and keeps doing so. Each combinable SAI is health-worth or a budget, and
+the combined one can do anything the split ones can (two Flames of 2 cannot kill a 3-health die,
+one of 4 can; one of 4 can still take two 2s). The owner's reading agrees: all of one type resolve
+together. So the order question is between *different* SAIs, plus repeats of the
+individual-target ones, which never combine anyway.
+
+**What a player-chosen order would cost:**
+- **A `RuleSet` flag**, `saiOrder: 'fixed' | 'choice'`, never a change to the default. The v1
+  corpus replays its recorded `ruleSet` as given, and `golden.test.ts` fails when the key sets
+  differ. So the flag's absence has to *mean* `'fixed'`, decided before any regeneration (the
+  CLAUDE.md procedure). `V0_RULES` gains the key as `'fixed'`.
+- **One new pending**, `sai_order`: "which of these resolves next", raised only when the step-4
+  queue holds two tasks whose order can matter. A queue of Smite-like effects never asks. Asking
+  every time would put a tap on every roll in the game, and that tap must be earned.
+- **An answer in every AI.** `PassiveAI` and `GreedyAI` take the engine's order, which is today's
+  game exactly. `RandomAI` shuffles, or the fuzz never leaves today's order (CLAUDE.md, "a decision
+  that gains a dimension has to reach the fuzz opponent too").
+- **The reroll seam gets touched again.** A held Bullseye or Double Strike resolves at step 3,
+  before any step-4 choice. `joinTasks` (`9826f69`) combines what its reroll shows into the waiting
+  queue. With the order chosen, a rerolled SAI joins a queue the player may already be partway
+  through, and that interaction needs a test before anything else.
+
+**The decision is deferred to 9e**, after the step bar exists. If the step bar makes tapping the
+order cheap, the flag goes in with `'fixed'` as the default and the app offers `'choice'`. If not,
+the house rule stays, and 9e's findings say why in `RULES-V0.md` §11.
+
+### Slices
+
+**9a — Mockups, no code.** The 3a pattern: `docs/mockups/phase-9a.html`, laptop and phone, both
+boards. Lay out one card: a heading with whose roll and where, the total and its arithmetic on
+every card, every die readable at a glance (count and icon, zero-result dice included), SAI dice
+labelled with what they do, and a step bar for the exchange: attack → SAIs → saves → result, the
+current step lit, waiting SAIs as chips on it. Mock four exchanges: a melee with a Flame, a save
+roll with a Cantrip, a contested maneuver, and a two-SAI roll where the order is the player's.
+Answer in the mockup whether the step bar fits a phone held upright.
+
+**9b — The card frame.** UI only. The heading names whose roll and which terrain, totals
+and `math` appear on every card including live ones, and outcomes say "you" and "the enemy".
+The roll-off's two labels match. `presentation.ts` gains the exchange each stop belongs to, which
+the step bar reads. The cards still draw with `CombatPart`, `ManeuverPart` and `LogLine`, so a
+card and the log still cannot show one roll two ways.
+
+**9c — The board waits for the card.** The ticker shows only entries up to the cursor. That part is
+easy, since the cursor is already a log index. The board is the hard part: it renders the state as
+it is now, and the cursor sits partway through one action's log. Two candidate shapes, to choose in
+9a:
+- **Mark the dice instead of rewinding.** A die killed, moved or put to sleep in an entry past the
+  cursor stays on the board, marked "about to fall", until its card passes.
+- **Draw the board from a reconstructed state.** `replayTo` exists, but only at action boundaries,
+  and a single action holds several stops. So this needs per-entry state, which the engine does
+  not keep.
+
+The first shape is the predicted answer. Either way, `GameState` and the goldens do not move.
+
+**9d — Readable dice.** Zero-result dice keep their count and icon, quieter rather than blank. The
+save glyph stops resembling an empty face. SAI dice say what they do inline, in the words
+`effectSummary` already has. The Cantrip window names the die it came from and says the exchange
+resumes after it.
+
+**9e — The SAI order (decision, then possibly code).** The step bar from 9b, with the waiting SAIs
+as chips, is the ordering interface. Measure first: a fuzz counter for how often a step-4 queue
+holds two tasks whose order matters. If it is rare, the house rule stays and the slice is a
+write-up. If it lands, it brings the `RuleSet` flag, `sai_order`, the AI answers, a fuzz counter,
+named tests for insurance retargeting (three Sleeps, then three Swallows on one unit) and for a
+held reroll joining a queue that is partway through, and a `SAVE_VERSION` decision recorded with
+its true reason.
+
+### Exit criterion
+
+- Every exchange kind (melee, missile, magic, contested maneuver, counter-attack, a Cantrip window
+  from either roll, a dragon attack) played in a browser, each card naming whose roll and where,
+  with its total.
+- No outcome is visible on the board or in the ticker before its card.
+- 9e's decision recorded in `RULES-V0.md` §11 either way.
+- Both golden corpora unmoved, unless 9e lands. If it does, the v1 corpus still replays unchanged
+  under `saiOrder` absent.
+
+### Deliberately out of this phase
+
+- **Animation and sound.** This phase settles the structure they attach to (the exchange and its
+  steps); the art pass adds them.
+- **Auto-advance and hold-to-skip** (3c's "faster path"). Whether the cards still need them is
+  easier to judge once each card says more.
+- **Choosing to split a combinable SAI.** RAW allows it; it never helps the roller, as above.
+
+---
+
 ## Risks
 
 **The data is the long pole again.** About 560 faces, eleven spells and eight abilities, all read by
@@ -3300,6 +3455,7 @@ a little rather than shrinking its tiles under the tap target.
   Dragonkin, Eldarim, equipment and other items.
 - **Hybrid, Ivory, Ivory Hybrid and White dragons.** The dragon-targeting rule from v1 Phase 6 is
   still the simplification for elemental dragons only.
-- **Art, animation and effects.** 3c builds the event queue an animation pass would consume; the
-  unit art and the final look wait until the landscape board has been lived with.
+- **Art, animation and effects.** 3c builds the event queue an animation pass would consume, and
+  Phase 9 the exchange structure it attaches to; the unit art and the final look wait until the
+  landscape board has been lived with.
 - **Automated game-length measurement.** Pacing is tested live.
