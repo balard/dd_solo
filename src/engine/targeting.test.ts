@@ -6,7 +6,7 @@ import { armyRoll, expireEffects, isAsleep, pruneEffects, type Effect } from './
 import type { RollEffect } from './pipeline'
 import { advance } from './reduce'
 import { rollDice, type RngState } from './rng'
-import { targetTasks } from './targeting'
+import { joinTasks, targetTasks, type TargetTask } from './targeting'
 import { applyAction, rollsOnTheTable } from './turn'
 import {
   IllegalActionError,
@@ -183,6 +183,36 @@ describe('targetTasks', () => {
 })
 
 // --- Flame, end to end --------------------------------------------------------
+
+/**
+ * A Bullseye or Double Strike die thrown again mid-queue: its new face joins the roll,
+ * so a second Cantrip is more magic in the one window, not a window of its own.
+ */
+describe('joinTasks', () => {
+  const cantrip = (points: number): TargetTask => ({ kind: 'cantrip', sai: 'Cantrip', points })
+
+  it('adds a rerolled Cantrip to the one waiting: two of 4 are one window of 8', () => {
+    expect(joinTasks([cantrip(4)], [cantrip(4)])).toEqual([cantrip(8)])
+  })
+
+  it('combines by SAI name, and appends what has nothing to join', () => {
+    const flame: TargetTask = { kind: 'enemy', sai: 'Flame', health: 2, escape: 'none', fate: 'bury' }
+    const smother: TargetTask = { kind: 'enemy', sai: 'Smother', health: 4, escape: 'maneuver', fate: 'kill' }
+    expect(joinTasks([flame, cantrip(4)], [smother, { ...flame }])).toEqual([
+      { ...flame, health: 4 },
+      cantrip(4),
+      smother,
+    ])
+  })
+
+  it('never joins what p. 32 resolves one by one, nor a step-3 task', () => {
+    const sleep: TargetTask = { kind: 'sleep', sai: 'Sleep' }
+    const held: TargetTask = { kind: 'enemy', sai: 'Bullseye', health: 4, escape: 'save', fate: 'kill', rerollAfter: 'p1:x' }
+    const bullseye: TargetTask = { kind: 'enemy', sai: 'Bullseye', health: 4, escape: 'save', fate: 'kill' }
+    expect(joinTasks([sleep], [sleep])).toEqual([sleep, sleep])
+    expect(joinTasks([held], [bullseye])).toEqual([held, bullseye])
+  })
+})
 
 describe('Flame', () => {
   /**

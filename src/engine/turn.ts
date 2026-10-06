@@ -98,7 +98,7 @@ import {
 import { ignoreIdsModifiers, type Modifier } from './pipeline'
 import { CHARGE_ROLL_KINDS, DRAGON_ROLL_KINDS, type RollContext } from './sai'
 import { duaCap, terrainHas, unitHasAbility } from './species'
-import { targetTasks, type TargetTask } from './targeting'
+import { joinTasks, targetTasks, type TargetTask } from './targeting'
 import { unitType } from '../data/load'
 import { spell } from '../data/spells'
 import {
@@ -1333,8 +1333,9 @@ function saveOrBury(
  *
  * Step 3's "apply these effects one at a time until all re-rolls have been made": the
  * new die joins the roll, a Bullseye or Double Strike on it queues behind the step-3
- * tasks still waiting, anything else it targets joins step 4 at the back, and a Choke
- * or Confuse waits with the delayed ones.
+ * tasks still waiting, anything else it targets joins step 4 -- combined into a waiting
+ * task of the same SAI, at the back otherwise (`joinTasks`) -- and a Choke or Confuse
+ * waits with the delayed ones, combined the same way.
  */
 function rollHeldAgain(state: GameState, spec: AttackSpec, unitId: UnitId): GameState {
   const combat = requireCombat(state)
@@ -1344,8 +1345,8 @@ function rollHeldAgain(state: GameState, spec: AttackSpec, unitId: UnitId): Game
   const queue = attack.targets ?? []
   const stepThree = queue.filter((task) => task.kind === 'enemy' && task.rerollAfter !== undefined)
   const stepFour = queue.filter((task) => !stepThree.includes(task))
-  const targets = [...stepThree, ...tasks.stepThree, ...stepFour, ...tasks.stepFour]
-  const delayedTasks = [...(attack.delayed ?? []), ...tasks.delayed]
+  const targets = [...stepThree, ...tasks.stepThree, ...joinTasks(stepFour, tasks.stepFour)]
+  const delayedTasks = joinTasks(attack.delayed ?? [], tasks.delayed)
 
   return withTurn(
     { ...state, rng },
@@ -3090,7 +3091,15 @@ export function rollsOnTheTable(state: GameState): readonly TableRoll[] {
     ]
   }
 
-  const one = rollOnTheTable(state)
+  // A Cantrip window (Phase 7f) is a pause inside an exchange, and the rolls that
+  // opened it are still parked: the attack, and on a save roll's Cantrip the saves too.
+  // Read them as at the step the window goes back to. Missing this, a player cast
+  // Cantrip spells off a roll they had never been shown -- their own attack, or the
+  // enemy's attack they were saving against.
+  const returnTo = state.turn.magic?.returnTo
+  const at = returnTo === undefined ? state : { ...state, turn: { ...state.turn, marchStep: returnTo } }
+
+  const one = rollOnTheTable(at)
   if (one?.kind === 'dragon') {
     const attack = state.turn.dragonAttack
     return attack === undefined ? [] : [{ player: attack.defender, kind: 'dragon', roll: { dice: one.dice } }]
@@ -3099,13 +3108,13 @@ export function rollsOnTheTable(state: GameState): readonly TableRoll[] {
   const combat = state.turn.combat
   if (one === null || combat === null || combat.attack === undefined) return []
 
-  const step = state.turn.marchStep
+  const step = at.turn.marchStep
   const isCounter =
     step === 'sai_target_counter' ||
     step === 'sai_delayed_counter' ||
     step === 'flashfire_counter' ||
     step === 'flashfire_counter_saves'
-  const spec = exchangeSpec(state, isCounter)
+  const spec = exchangeSpec(at, isCounter)
   const attackRoll: TableRoll = {
     player: spec.attacker,
     kind: 'attack',

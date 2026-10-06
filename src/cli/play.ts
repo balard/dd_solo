@@ -33,7 +33,7 @@ import { begin, reduce } from '../engine/reduce'
 import { rngFrom, type RngState } from '../engine/rng'
 import { cursedPhrase, mathPhrase, saiPhrase, spellSavedPhrase, type DieRoll, type RollMath } from '../engine/roll'
 import { CHARGE_ROLL_KINDS, DRAGON_ROLL_KINDS, SAI_TEXT, heldWord } from '../engine/sai'
-import { rollOnTheTable } from '../engine/turn'
+import { rollOnTheTable, rollsOnTheTable } from '../engine/turn'
 import { OWN_ARMY_NOTE, poolSplit, spellPlan, spellTargetLabel, stageCast, targetsFor } from '../engine/magic'
 
 
@@ -945,6 +945,15 @@ async function askSpells(
   pending: Extract<Pending, { kind: 'announce_spells' }>,
 ): Promise<GameAction> {
   let casts: readonly AnnouncedSpell[] = []
+
+  // A Cantrip window is a pause inside an exchange: show the rolls it interrupted --
+  // the attack, and on a save roll's Cantrip the saves -- before asking what to cast.
+  if (state.turn.magic?.returnTo !== undefined) {
+    for (const roll of rollsOnTheTable(state)) {
+      const total = roll.roll.total === undefined ? '' : ` = ${roll.roll.total}`
+      console.log(dim(`  ${roll.player} ${roll.kind}: ${roll.roll.dice.map(shown).join('  ')}${total}`))
+    }
+  }
 
   for (;;) {
     const plan = spellPlan(pending.castable, pending.pool, casts)

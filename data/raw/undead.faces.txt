@@ -65,11 +65,10 @@ light-medium
 2 Maneuver
 
 # Skeleton -- small, 1 health
-# TODO: the source lists 6 faces besides the ID, a d6 has 5; one of them is extra
+# Corrected by the owner 2026-10-06 (the source had listed six faces besides the ID).
 light-small
 1 ID
 1 Save
-2 Melee
 2 Melee
 1 Melee
 1 Save
@@ -119,14 +118,14 @@ lightmagic-large
 3 Convert
 
 # Ghast -- medium, 2 health
-# TODO: the source lists 4 faces besides the ID, a d6 needs 5; the missing face is 'TODO'
+# Corrected by the owner 2026-10-06 (the source had listed four faces besides the ID).
 lightmagic-medium
 2 ID
 3 Save
 3 Melee
 2 Melee
+2 Save
 2 Magic
-TODO
 
 # Ghoul -- small, 1 health
 lightmagic-small

@@ -222,3 +222,55 @@ function combined(existing: TargetTask, effect: RollEffect): TargetTask {
   }
   return existing
 }
+
+/**
+ * `more` added to a queue that is still waiting, each task joining a waiting one of
+ * the same SAI where the two combine (p. 27) and going to the back otherwise.
+ *
+ * For a die thrown again mid-queue -- the second half of a Bullseye or Double Strike.
+ * Its new face is part of the same roll, and "multiples of one SAI always combine":
+ * a Cantrip it shows is more magic in the window the roll's first Cantrip will open,
+ * not a second window of its own. Appending it opened two windows of 4 where the
+ * rules give one of 8.
+ */
+export function joinTasks(queue: readonly TargetTask[], more: readonly TargetTask[]): readonly TargetTask[] {
+  const out = [...queue]
+  for (const task of more) {
+    const at = out.findIndex((existing) => existing.sai === task.sai && joinable(existing) && joinable(task))
+    const joined = at === -1 ? null : joinPair(out[at] as TargetTask, task)
+    if (joined === null) out.push(task)
+    else out[at] = joined
+  }
+  return out
+}
+
+/** Whether a task may absorb another of its SAI: the exceptions `build` makes, and a
+ *  step-3 task, which "applies one at a time". */
+function joinable(task: TargetTask): boolean {
+  switch (task.kind) {
+    case 'enemy':
+      return task.one !== true && task.rerollAfter === undefined
+    case 'choke':
+    case 'confuse':
+    case 'promote':
+    case 'regenerate':
+    case 'cantrip':
+    case 'glare':
+      return true
+    default:
+      return false
+  }
+}
+
+function joinPair(existing: TargetTask, task: TargetTask): TargetTask | null {
+  if (existing.kind === 'enemy' && task.kind === 'enemy') return { ...existing, health: existing.health + task.health }
+  if (existing.kind === 'choke' && task.kind === 'choke') return { ...existing, health: existing.health + task.health }
+  if (existing.kind === 'confuse' && task.kind === 'confuse') return { ...existing, health: existing.health + task.health }
+  if (existing.kind === 'promote' && task.kind === 'promote') return { ...existing, budget: existing.budget + task.budget }
+  if (existing.kind === 'regenerate' && task.kind === 'regenerate') return { ...existing, budget: existing.budget + task.budget }
+  if (existing.kind === 'cantrip' && task.kind === 'cantrip') return { ...existing, points: existing.points + task.points }
+  if (existing.kind === 'glare' && task.kind === 'glare') {
+    return { ...existing, sources: [...existing.sources, ...task.sources.filter((s) => !existing.sources.includes(s))] }
+  }
+  return null
+}

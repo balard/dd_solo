@@ -27,12 +27,12 @@ heavy-large
 2 Save
 
 # Scorcher -- medium, 2 health
-# TODO: a face was listed as 'e Melee'; its count is unreadable
+# Corrected by the owner 2026-10-06 (a face had read 'e Melee').
 heavy-medium
 2 ID
 1 Melee
 2 Maneuver
-TODO
+3 Melee
 4 Melee
 2 Save
 

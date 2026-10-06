@@ -378,7 +378,10 @@ These are the things that break the project if violated:
     `attack.rerollDue`. The *next* machine step throws the die again (`rollHeldAgain`), after
     `stepGame` has asked about anything the kills triggered -- an Accelerated Growth offer. The
     new face joins the roll: another Bullseye or Double Strike queues behind the step-3 tasks
-    still waiting, a step-4 SAI goes to the back, and Choke or Confuse to the delayed list.
+    still waiting, a step-4 SAI goes to the back, and Choke or Confuse to the delayed list --
+    each **combined into a waiting task of the same SAI** where p. 27 allows (`joinTasks`). It
+    used to append, so a Cantrip the reroll showed opened a second window of 4 beside the
+    roll's first, where the rules give one window of 8.
   - A `V0_RULES` roll never holds a die, since nothing targets there, which is why the goldens
     did not move.
 - **Choke and Confuse are *delayed*: they are chosen after the defender's dice land** (v1 Phase 4e).
@@ -1174,6 +1177,13 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     human)` is the log's stops plus the parked ones; `RollCursor.shown` remembers which
     parked rolls were shown, so the log's copy (the attack, a magic roll, the marching
     maneuver) is skipped when the exchange is written. Dragon rolls stay in the sheet.
+  - **A Cantrip window is parked too.** It is a pause inside an exchange, at
+    `announce_spells` with `turn.magic.returnTo` set, and `rollsOnTheTable` reads the rolls as
+    at the step it returns to: the attack, and on a save roll's Cantrip the saves as well.
+    Until that, the window opened on dice nobody had been shown -- your own attack, or the
+    enemy's attack you were saving against -- because only the targeting steps counted as
+    "asking". `rollOnTheTable` (singular) still answers null there: a spell announcement
+    picks among no dice.
   - **The log writes some causes after their consequences**: an exchange's SAI resolution before
     `combat_resolved`, a spell's effects before its `spell_cast`. `rollSteps` carries the first onto
     the SAI's card and reorders the second so each spell is named first. `spell_cast` carries no

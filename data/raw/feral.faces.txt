@@ -47,14 +47,14 @@ heavy-small
 # ---- Light Melee ----
 
 # Wolf-Folk -- large, 3 health
-# TODO: the source lists 4 faces besides the ID, a d6 needs 5; the missing face is 'TODO'
+# Corrected by the owner 2026-10-06 (the source had listed four faces besides the ID).
 light-large
 3 ID
 3 Rend
 2 Melee
-2 Save
+3 Melee
+3 Save
 4 Maneuver
-TODO
 
 # Fox-Folk -- medium, 2 health
 light-medium

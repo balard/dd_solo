@@ -4,7 +4,8 @@ import { unitType } from '../../data/load'
 import { advance, reduce } from '../../engine/reduce'
 import { rollDice, type RngState } from '../../engine/rng'
 import type { DieRoll } from '../../engine/roll'
-import { FULL_RULES, type GameState, type LogEntry, type PlayerId, type TerrainSlot } from '../../engine/types'
+import { rollsOnTheTable } from '../../engine/turn'
+import { FULL_RULES, SPELL_RULES, type GameState, type LogEntry, type PlayerId, type TerrainSlot } from '../../engine/types'
 
 import {
   advanceCursor,
@@ -17,6 +18,7 @@ import {
   type ManeuverEntry,
   type OwnerOf,
 } from './presentation'
+import { rollsBehind } from './prompts'
 
 /** A die showing face `faceIndex` of `typeId`, as a roll records it. */
 function rolled(typeId: string, faceIndex: number, results: number, effects?: DieRoll['effects']): DieRoll {
@@ -341,5 +343,101 @@ describe('a roll paused on a decision', () => {
     const asked = swallowing()
     expect(pastEverything(asked)).toEqual({ log: asked.log.length, step: 0, shown: ['attack'] })
     expect(rollStops(asked, pastEverything(asked), 'p1')).toEqual([])
+  })
+})
+
+/**
+ * Reported from a browser: a Cantrip window opened before either roll of the exchange
+ * had been shown -- your own attack, or the enemy's attack you were saving against --
+ * so the spells were picked off dice nobody had seen. The window is a pause inside the
+ * exchange, and the rolls that opened it are still parked there.
+ */
+describe('a Cantrip window', () => {
+  /** Genie face 3 is `4 SAI:Cantrip`, face 6 `4 MELEE`; Oak face 1 is `2 MELEE`. */
+  const GENIE = 'firewalkers.genie'
+  const OAK = 'treefolk.oak'
+
+  function rngShowing(typeIds: readonly string[], faces: readonly number[]): RngState {
+    const counts = typeIds.map((id) => unitType(id).faces.length)
+    for (let counter = 0; counter < 5_000_000; counter += 1) {
+      const [indices] = rollDice({ seed: 1, counter }, counts)
+      if (faces.every((face, i) => indices[i] === face)) return { seed: 1, counter }
+    }
+    throw new Error('no counter shows those faces')
+  }
+
+  /** `marching` melees the other side at the Frontier; dice roll attack then saves. */
+  function exchange(
+    marching: PlayerId,
+    units: readonly (readonly [string, string, PlayerId])[],
+    rng: RngState,
+  ): GameState {
+    const terrain = (slot: TerrainSlot) => ({ slot, dieId: 'highland_tower', face: 6 as const, capturedBy: null })
+    return advance({
+      ruleSet: SPELL_RULES,
+      rng,
+      units: Object.fromEntries(
+        units.map(([id, typeId, owner]) => [id, { id, typeId, owner, location: { kind: 'terrain', slot: 'frontier' } }]),
+      ),
+      effects: [],
+      dragons: {},
+      terrains: { p1_home: terrain('p1_home'), frontier: terrain('frontier'), p2_home: terrain('p2_home') },
+      turn: {
+        marching,
+        phase: 'march',
+        marchIndex: 0,
+        marchStep: 'resolve_attack',
+        marchingArmy: 'frontier',
+        armiesMarched: ['frontier'],
+        combat: { action: 'melee', targetSlot: 'frontier', damage: 0 },
+      },
+      pending: null,
+      log: [],
+      winner: null,
+    } as GameState)
+  }
+
+  it('shows your attack before you pick spells with its Cantrips -- one pool of their sum', () => {
+    const state = exchange(
+      'p1',
+      [
+        ['p1:genie1', GENIE, 'p1'],
+        ['p1:genie2', GENIE, 'p1'],
+        ['p1:genie3', GENIE, 'p1'],
+        ['p2:oak', OAK, 'p2'],
+      ],
+      rngShowing([GENIE, GENIE, GENIE], [3, 3, 6]),
+    )
+    expect(state.pending).toMatchObject({ kind: 'announce_spells', player: 'p1', pool: { points: 8, cantripOnly: true } })
+    expect(state.turn.magic?.returnTo).toBe('sai_target_attack')
+
+    expect(rollsOnTheTable(state).map((roll) => [roll.player, roll.kind])).toEqual([['p1', 'attack']])
+    expect(rollStops(state, { log: 0, step: 0 }, 'p1').map((stop) => stop.kind)).toEqual(['live'])
+    // And the sheet draws the same roll behind the spell picker.
+    expect(rollsBehind(state, state.pending)).toMatchObject({ kind: 'live', rolls: [{ kind: 'attack' }] })
+  })
+
+  it('shows the enemy’s attack and your saves before you pick spells with a save roll’s Cantrips', () => {
+    const state = exchange(
+      'p2',
+      [
+        ['p2:oak', OAK, 'p2'],
+        ['p1:genie1', GENIE, 'p1'],
+        ['p1:genie2', GENIE, 'p1'],
+      ],
+      rngShowing([OAK, GENIE, GENIE], [1, 3, 3]),
+    )
+    expect(state.pending).toMatchObject({ kind: 'announce_spells', player: 'p1', pool: { points: 8 } })
+    expect(state.turn.magic?.returnTo).toBe('sai_delayed_attack')
+
+    expect(rollsOnTheTable(state).map((roll) => [roll.player, roll.kind])).toEqual([
+      ['p2', 'attack'],
+      ['p1', 'save'],
+    ])
+    expect(rollStops(state, { log: 0, step: 0 }, 'p1').map((stop) => stop.kind)).toEqual(['live', 'live'])
+    expect(rollsBehind(state, state.pending)).toMatchObject({
+      kind: 'live',
+      rolls: [{ kind: 'attack', action: 'melee' }, { kind: 'save' }],
+    })
   })
 })

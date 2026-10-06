@@ -178,7 +178,7 @@ monster-centaur
 4 Trample
 
 # Chimera -- monster, 4 health
-# TODO: Flame written as 4; the Gorgon prints '2 Flame', so check this die
+# Flame is 2, confirmed by the owner 2026-10-06; the die's other SAIs are still unconfirmed 4s.
 monster-chimera
 4 ID
 4 Melee
@@ -186,7 +186,7 @@ monster-chimera
 4 Rend
 4 Melee
 4 Save
-4 Flame
+2 Flame
 4 Save
 4 Fly
 4 Melee
