@@ -485,6 +485,20 @@ Three, and the first two are about what the rulebook leaves to the roller.
   roll-derived list in the engine uses. The choice is only ever real when one SAI shrinks an army
   that a later one must then pick maximally from, and a "choose the order" decision would be a
   question `PassiveAI` could hold no opinion about.
+  - **Kept after measuring it (v2 Phase 9e).** `npm run sai-order` counts, over self-play, the
+    attack rolls whose step-4 queue holds two different SAIs that both reach the defending army
+    (a targeting SAI with something to take, or a Cantrip, whose spells can change what a later
+    SAI picks from), or one unit-targeting SAI twice -- a ceiling, since two such SAIs do not
+    always interfere. Greedy self-play on rolled forces: 5 in 4000 exchanges (1 in 800). On the
+    bestiary: 1 in 210. In a Genie mirror, the worst board there is: 1 in 71, every one a
+    Firecloud beside a Cantrip. Random self-play: 1 in 1838, and never in 100 mixed games.
+  - **The insurance case never arose** -- two Sleeps or two Swallows on one roll, in 650 games.
+    It is still legal: a target that survives stays in the army and is offered again, so
+    repeating a unit-targeting SAI on the same die is a choice the player already has.
+  - So a "which resolves first" question would be asked about once in several hundred
+    exchanges, and is not worth a `RuleSet` flag, a pending, an answer in every AI and a
+    `SAVE_VERSION` bump. **Revisit when a species adds a targeting SAI or a Cantrip-like
+    window**: a new pairing is what could raise the number, and the script is there to say so.
 - **Multiples of the same SAI always combine.** "Multiples of the same SAI may be combined to
   create a single larger effect" (p. 27) — *may*, and v1 always does. Combining is never worse for
   the roller: two Flames of two health-worth take nothing from a 3-health die where one Flame of

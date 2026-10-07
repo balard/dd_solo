@@ -263,13 +263,19 @@ the dice and the opponent.
 > what rolled it; one that scored nothing is dashed and quiet, never a blank; the save glyph has
 > a cross; each SAI die gets a line on its card with where it stands ("next"); and a Cantrip
 > window names its die and the exchange it holds up. UI only.
+>
+> **9e has landed, and with it all of Phase 9: the SAI order stays fixed.** `npm run sai-order`
+> measured how often the order a roll's SAIs resolve in could matter: about 1 exchange in 800 on
+> rolled forces, 1 in 71 at worst (a Genie mirror, always a Firecloud beside a Cantrip), and the
+> "insurance" case never. The house rule stays, recorded in `RULES-V0.md` section 11 with when
+> to revisit it. No engine change.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 8 landed, Lava Elves the last; Phase 9, the roll dialog, under way: 9a to 9d landed). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 9 landed: Lava Elves the last species, the roll dialog the last phase). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
@@ -300,6 +306,7 @@ npm run play        # play a game in the terminal (--seed N, --ai greedy|passive
                     #   --forces starter|bestiary|mixed|built:<file>, --p1-ai <ai> to watch)
 npm run fuzz        # the live-rules fuzz at 1000 games instead of 200 (about a minute)
 npm run goldens -- v1   # re-record one golden corpus (v0 or v1) -- see below before you do
+npm run sai-order   # how often the SAI resolution order could matter, over self-play (~20s)
 ```
 
 **`npm test` is slow on purpose** — tens of seconds, most of it the fuzzes (1000 `V0_RULES` games,
@@ -1200,6 +1207,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     Confuse, Wild Growth, a free move). Smite, Counter, Surprise and Cantrip ride on the roll's
     card. **Your own SAI gets no card**, since you just answered it in a sheet with the same
     rule; what it rolled (a sub-roll, Confuse's reroll) is a roll stop of its own.
+  - **Resolution order is still the roll's** (v2 Phase 9e kept the house rule after measuring
+    it): the step bar's chips show the order and 9d's SAI lines say which is next, but nothing
+    lets the player choose it. Re-run `npm run sai-order` when a species adds a targeting SAI
+    or a Cantrip-like window.
   - **A roll parked mid-decision is a stop before the decision** (`live`, from
     `rollsOnTheTable`). The engine logs an exchange only when it is over, so the log alone
     put a Swallow's question ahead of the attack that rolled it. `rollStops(state, cursor,

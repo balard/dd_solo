@@ -3261,7 +3261,7 @@ over 60 seeds in both seats, and all three fire types (Feyland, Highland, Wastel
 
 ---
 
-## Phase 9 — The roll dialog
+## Phase 9 — The roll dialog — **landed**
 
 The roll cards from 3c are the game's core interaction. They are where the player learns what was
 rolled, what still has to resolve, and what a save or a counter is answering. The log is the
@@ -3385,7 +3385,7 @@ save glyph stops resembling an empty face. SAI dice say what they do inline, in 
 `effectSummary` already has. The Cantrip window names the die it came from and says the exchange
 resumes after it.
 
-**9e — The SAI order (decision, then possibly code).** The step bar from 9b, with the waiting SAIs
+**9e — The SAI order (decision, then possibly code) — landed: the house rule stays.** The step bar from 9b, with the waiting SAIs
 as chips, is the ordering interface. Measure first: a fuzz counter for how often a step-4 queue
 holds two tasks whose order matters. If it is rare, the house rule stays and the slice is a
 write-up. If it lands, it brings the `RuleSet` flag, `sai_order`, the AI answers, a fuzz counter,
@@ -3676,6 +3676,56 @@ there; the SAI's name and its line stay.
   is the insurance case, and that belongs with 9e's order question.
 - **A die's own conversion is not drawn on it.** The mockup's `gives` ("→ melee") would say on
   the die what the math line says under the roll; one place is enough until the art pass.
+
+### What 9e found
+
+**The house rule stays, and the slice is a write-up plus the measurement.** `src/ai/saiOrder.ts`
+counts, at each action boundary of a self-play game, the attack rolls whose step-4 queue holds
+either two different SAIs that both reach the defending army -- a targeting SAI with something to
+take, or a Cantrip, whose spells can change what a later SAI picks from -- or one unit-targeting
+SAI twice. It reads `combat.attack.targets` from outside the engine, so it needed no counter in
+the engine and no field in `GameState`. `npm run sai-order` prints it, in about twenty seconds:
+
+| Games | Exchanges | Order could matter |
+|---|---|---|
+| Greedy self-play, rolled forces, 200 | 4000 | 5 (1 in 800) |
+| Greedy self-play, bestiary, 100 | 1888 | 9 (1 in 210) |
+| Greedy self-play, Genie mirror, 50 | 640 | 9 (1 in 71) |
+| Random self-play, rolled forces, 200 | 12,865 | 7 (1 in 1838) |
+| Random self-play, mixed forces, 100 | 6758 | 0 |
+
+**1. It is a ceiling, and it is still rare.** Two SAIs that reach one army do not always interfere
+(a Smother and a Sleep against six dice rarely want the same die), so the true number is lower.
+On the boards a player will see, a "which resolves first" sheet would come up about once in
+several hundred exchanges. That does not earn a `RuleSet` flag, a pending, an answer in three
+AIs, a fuzz dimension and a `SAVE_VERSION` bump.
+
+**2. The insurance case never arose.** Two Sleeps or two Swallows on one roll: none in 650 games.
+It needs two faces of one unit-targeting SAI in one roll, and no die carries two. The choice it
+was about is already the player's: a survivor stays in the army and is offered again, so aiming a
+second Sleep at the same die is legal today.
+
+**3. Most of what is left is a Cantrip.** 9 of the Genie mirror's 9, and half elsewhere: a Cantrip
+window opens where the Cantrip face sits in roll order, so a Hailstorm cannot go before a
+Firecloud that rolled ahead of it. If one ordering is ever given back, this is the one -- a
+Cantrip window first or last -- and it would be one question, not an ordering sheet.
+
+**4. 9a's ordering sheet stays unbuilt, and the step bar still shows the order.** The chips are the
+queue's order, and 9d's SAI lines say which is next, so a player can see the fixed order before
+the first decision, which was half of what 9e was for.
+
+`RULES-V0.md` section 11 records the decision under the resolution-order house rule, with the
+trigger to revisit it: a species that adds a targeting SAI or a Cantrip-like window. The
+measurement has a test (`saiOrder.test.ts`, a few Genie mirror games must find the Cantrip
+queue) so the script cannot rot unnoticed. Both golden corpora and `SAVE_VERSION` did not move.
+
+**The exit check, played in a browser** (a bestiary game, seed 3, on the card board): melee,
+missile, magic from a terrain and from Reserves, a contested maneuver, a counter-attack, the
+enemy's Cantrip spells inside a counter, a dragon attack and the army's answer, and the enemy's
+losses -- each card naming whose roll and where, on the right step of its bar. A Cantrip window
+from your own save roll was played in 9d. One card has no number beside its heading: the army's
+answer to the dragons, whose roll has three totals (melee, missile, saves) and lists them in its
+body. A defensive volley did not come up; it is a counter with another label.
 
 ### Exit criterion
 
