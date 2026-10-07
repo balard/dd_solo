@@ -22,7 +22,7 @@ import {
   marcherOf,
 } from './presentation'
 import { barSteps, combatExchange, liveExchange, stepState } from './exchange'
-import { rollsBehind } from './prompts'
+import { cantripWindow, rollsBehind, tableRollHeading } from './prompts'
 
 /** A die showing face `faceIndex` of `typeId`, as a roll records it. */
 function rolled(typeId: string, faceIndex: number, results: number, effects?: DieRoll['effects']): DieRoll {
@@ -472,6 +472,41 @@ describe('a Cantrip window', () => {
   })
 
   /**
+   * v2 Phase 9d (9a finding 11): the sheet names the die that opened the window and
+   * says what resumes after it. It read "8 magic (air or fire, cantrip spells only)".
+   */
+  it('names the window’s dice and the exchange it holds up', () => {
+    const attacking = exchange(
+      'p1',
+      [
+        ['p1:genie1', GENIE, 'p1'],
+        ['p1:genie2', GENIE, 'p1'],
+        ['p1:genie3', GENIE, 'p1'],
+        ['p2:oak', OAK, 'p2'],
+      ],
+      rngShowing([GENIE, GENIE, GENIE], [3, 3, 6]),
+    )
+    const mine = cantripWindow(attacking, attacking.pending, 'p1')
+    expect(mine?.title).toBe('Cantrip window: 8 magic from Genie ×2')
+    expect(mine?.resumes).toMatch(/^Air or fire, cantrip spells only\. Your melee attack resumes when you are done: \d+ melee\.$/)
+
+    const saving = exchange(
+      'p2',
+      [
+        ['p2:oak', OAK, 'p2'],
+        ['p1:genie1', GENIE, 'p1'],
+      ],
+      rngShowing([OAK, GENIE], [1, 3]),
+    )
+    const theirs = cantripWindow(saving, saving.pending, 'p1')
+    expect(theirs?.title).toBe('Cantrip window: Genie’s 4 magic')
+    expect(theirs?.resumes).toMatch(/The enemy’s melee attack resumes when you are done: 2 melee against your \d+ saves\.$/)
+    // A magic action's announcement is not a window.
+    const { magic: _window, ...turn } = saving.turn
+    expect(cantripWindow({ ...saving, turn }, saving.pending, 'p1')).toBeNull()
+  })
+
+  /**
    * Found in a browser (v2 Phase 9b), where the step bar made it visible by going
    * backwards: the enemy's SAI resolved, the exchange paused again on your save roll's
    * Cantrip, and the SAI's card came only once the exchange was written -- after the
@@ -762,5 +797,15 @@ describe('the exchange a stop belongs to', () => {
       dice: { p1: [plain], p2: [plain] },
     } as unknown as LogEntry
     expect(rollSteps([rollOff], 'p1')).toEqual([{ kind: 'roll', entry: rollOff, at: 0 }])
+  })
+})
+
+describe('the strip labels behind a decision sheet', () => {
+  /** 9b left "The enemy's melee attack" over a counter's dice; 9d's readable pass. */
+  it('names a counter as one', () => {
+    const roll = { player: 'p2' as const, kind: 'attack' as const, action: 'melee' as const, roll: { dice: [] } }
+    expect(tableRollHeading(roll, 'p1')).toBe("The enemy's melee attack")
+    expect(tableRollHeading(roll, 'p1', 'counter')).toBe("The enemy's counter-attack")
+    expect(tableRollHeading({ ...roll, action: 'missile' }, 'p1', 'volley')).toBe("The enemy's defensive volley")
   })
 })

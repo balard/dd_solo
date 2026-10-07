@@ -62,8 +62,14 @@ const PATHS: Record<GlyphName, JSX.Element> = {
       <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" />
     </>
   ),
-  // A shield.
-  SAVE: <path d="M12 3 L19.5 6 V12 C19.5 16.5 16 19.8 12 21 C8 19.8 4.5 16.5 4.5 12 V6 Z" />,
+  // A shield with a cross on it (v2 Phase 9d): the bare outline read as an empty face.
+  SAVE: (
+    <>
+      <path d="M12 3 L19.5 6 V12 C19.5 16.5 16 19.8 12 21 C8 19.8 4.5 16.5 4.5 12 V6 Z" />
+      <path d="M12 7.5 V16.5" />
+      <path d="M8 11 H16" />
+    </>
+  ),
   // Chevrons: moving the terrain.
   MANEUVER: (
     <>
@@ -232,12 +238,12 @@ export function ClassShape({
 }
 
 /** A rolled face: its glyph plus how many icons it carries. */
-export function FaceGlyph({ face, size = 20 }: { face: Face; size?: number }) {
+export function FaceGlyph({ face, size = 20, count = true }: { face: Face; size?: number; count?: boolean }) {
   const ruleSet = useRuleSet()
   return (
     <span className={`face-glyph i-${face.icon}`} title={faceLabel(face, ruleSet)}>
       <Glyph name={face.icon} size={size} />
-      {face.count > 1 && <span className="face-count">{face.count}</span>}
+      {count && face.count > 1 && <span className="face-count">{face.count}</span>}
     </span>
   )
 }

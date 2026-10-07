@@ -13,9 +13,11 @@
  * own labels ("MANEUVER", "SAVES") are left off here, because the heading says it.
  */
 import { unitType } from '../../data/load'
+import type { DieRoll } from '../../engine/roll'
 import type { ArmyRef, GameState, LogEntry, PlayerId } from '../../engine/types'
 
 import { RollStrip, effectSummary, saiName } from './DiceGrid'
+import type { Exchange } from './exchange'
 import { CombatPart, LogLine, ManeuverPart } from './LogPanel'
 import { marcherOf, ownerIn, type RollStep } from './presentation'
 import { slotLabel } from './prompts'
@@ -49,6 +51,7 @@ export function RollCard({
       </div>
       <div className="roll-card-body">
         <StepBody step={step} state={state} human={human} onInspect={onInspect} />
+        <SaiLines lines={saiLines(step)} />
       </div>
       <div className="roll-card-foot">
         {more > 0 && (
@@ -311,6 +314,94 @@ function StepBody({
     case 'losses':
       return <LogLine entry={step.entry} state={state} human={human} />
   }
+}
+
+/**
+ * One line for each SAI die on a card (v2 Phase 9d): "★ Flame 2 · Gorgon — 2
+ * health-worth killed and buried · next". The die in the strip was only a border; the
+ * tooltip knew what it did and the card did not. The words are `effectSummary`'s, the
+ * roll strip's own, and the tag is the exchange's chip for that SAI: what resolves next,
+ * what is waiting behind it, what is done. An SAI that only changes the numbers --
+ * Smite, Counter -- has no chip and no tag: it is already in the total.
+ */
+export interface SaiLine {
+  readonly sai: string
+  readonly count: number
+  readonly unit: string
+  readonly does: string
+  readonly when?: 'next' | 'waiting' | 'now' | 'done'
+}
+
+/** The dice a card draws as its own roll, whose SAIs it owes a line each. */
+function cardDice(step: RollStep): readonly DieRoll[] {
+  switch (step.kind) {
+    case 'attack':
+      return step.entry.attackDice
+    case 'resist':
+      return step.outcomeOnly === true ? [] : (step.entry.saveDice ?? [])
+    case 'maneuver':
+      return step.entry.marcherDice
+    case 'counter_maneuver':
+      return step.entry.defenderDice
+    case 'live':
+      return step.roll.roll.dice
+    case 'roll':
+      return step.entry.kind === 'magic_rolled' ? step.entry.dice : []
+    // The SAI's own card says it already; the rest roll no SAI worth a line.
+    default:
+      return []
+  }
+}
+
+/** Where an SAI stands in its exchange, read off the bar's chips. */
+function whenOf(exchange: Exchange | undefined, sai: string): SaiLine['when'] {
+  const chips = exchange?.chips ?? []
+  const chip = chips.find((one) => one.name === sai)
+  if (chip === undefined) return undefined
+  if (chip.state !== 'waiting') return chip.state
+  return chips.find((one) => one.state === 'waiting') === chip && !chips.some((one) => one.state === 'now')
+    ? 'next'
+    : 'waiting'
+}
+
+export function saiLines(step: RollStep): readonly SaiLine[] {
+  return cardDice(step).flatMap((die): SaiLine[] => {
+    if (die.face.icon !== 'SAI') return []
+    const does = effectSummary(die.effects ?? [], saiName(die.face))
+    if (does === null) return []
+    const when = whenOf(step.exchange, die.face.sai)
+    return [
+      {
+        sai: die.face.sai,
+        count: die.face.count,
+        unit: unitType(die.typeId).name,
+        does,
+        ...(when === undefined ? {} : { when }),
+      },
+    ]
+  })
+}
+
+function SaiLines({ lines }: { lines: readonly SaiLine[] }) {
+  if (lines.length === 0) return null
+  return (
+    <>
+      {lines.map((line, i) => (
+        <p className="sai-line" key={i}>
+          <span className="sai-star" aria-hidden="true">
+            ★
+          </span>
+          <span>
+            <b>
+              {line.sai} {line.count}
+            </b>{' '}
+            · {line.unit} — {line.does}
+          </span>
+          {line.when !== undefined && <em className={`sai-when is-${line.when}`}>{line.when}</em>}
+        </p>
+      ))}
+    </>
+  )
 }
 
 /** `marcher` only when known: `exactOptionalPropertyTypes` takes no `undefined`. */

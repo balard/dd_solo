@@ -477,6 +477,26 @@ body {
   flex-wrap: wrap;
 }
 .roll-card-sai .roll-strip { margin: 0; }
+/* The line under a sheet's question: a Cantrip window's terms, and what resumes. */
+.sheet-sub { margin: 2px 0 6px; font-size: var(--fs-sm); }
+/* One line per SAI die on a card (v2 Phase 9d): what it does, and when. */
+.sai-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+}
+.sai-star { color: var(--sai); }
+.sai-when {
+  margin-left: auto;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--sai);
+  white-space: nowrap;
+}
+.sai-when.is-waiting,
+.sai-when.is-done { color: var(--muted); font-weight: 500; }
 
 .army { margin-bottom: 12px; }
 .army h3 {
@@ -725,21 +745,43 @@ body {
 .confused-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .confused-pair .roll-strip { margin-bottom: 0; }
 .rolled {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 4px;
+  display: inline-grid;
+  justify-items: center;
+  padding: 2px 4px 1px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel);
   font-size: var(--fs-xs);
 }
+/* The face and the count printed on it, in the icon's colour (v2 Phase 9d). */
+.rolled-face { display: inline-flex; align-items: center; gap: 2px; }
 .rolled b { font-variant-numeric: tabular-nums; }
-.rolled-blank { opacity: .4; }
+.rolled-count { font-size: var(--fs-md); }
+.rolled-gives { font-size: var(--fs-2xs); font-weight: 700; color: var(--fg); }
+/* What rolled it: the unit, or the SAI on an SAI face. */
+.rolled-who {
+  max-width: 64px;
+  overflow: hidden;
+  font-size: var(--fs-2xs);
+  line-height: 1.15;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rolled.i-SAI .rolled-who { color: var(--sai); font-weight: 600; }
+/* A die that scored nothing: its count and icon stay, quieter, never a blank. */
+.rolled-idle { border-style: dashed; background: transparent; }
+.rolled-idle .rolled-count { color: var(--muted); font-weight: 500; }
+.rolled-idle .face-art,
+.rolled-idle .face-glyph { opacity: .6; }
 /* A die whose whole contribution was an effect -- Smite, Counter, Surprise -- rather
    than results. It generates no results, so without this it rendered as a blank. */
-.rolled-effect { border-color: var(--accent); }
-.rolled-effect .effect-damage { color: var(--accent); }
+.rolled-effect { border: 1.5px solid var(--sai); }
+.rolled-effect .effect-damage { color: var(--sai); }
+/* Dense places keep only the SAI's name: the log, and a phone held sideways, where a
+   line under every die costs a line of board (9a finding 10). */
+.log .rolled:not(.i-SAI) .rolled-who,
+.app.is-short .rolled:not(.i-SAI) .rolled-who { display: none; }
 
 /* "10 -> 9": what the army's modifiers did to a roll nothing on the dice shows.
    Sits at the end of the strip, in the muted voice, because it is arithmetic about
@@ -792,6 +834,9 @@ body {
 /* The unit art is black line work; on the accent it has to flip, the same trick
    `.choice-face` plays on a prompt button. */
 .rolled-chosen .face-art { filter: brightness(0) invert(1); }
+.rolled-chosen .rolled-count,
+.rolled-chosen .rolled-who,
+.rolled-chosen .rolled-gives { color: var(--accent-fg) !important; }
 
 /* A heading inside a run of choice buttons: which army the targets below stand in.
    Full-width so the flex row breaks before it. */

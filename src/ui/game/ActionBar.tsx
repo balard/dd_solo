@@ -37,6 +37,7 @@ const nameOf = (state: GameState, id: UnitId): string => {
 
 import {
   breathSelection,
+  cantripWindow,
   damageSelection,
   moveDraft,
   cityAnswer,
@@ -194,6 +195,7 @@ function RollsBehindBlock({
   onInspect: (unitId: string) => void
 }) {
   const behind = rollsBehind(state, pending)
+  const exchangeKind = liveExchange(state)?.kind
   // A roll already in the log was just shown, one step at a time, before this decision
   // was offered (v2 Phase 3c), so it is not drawn a second time. A roll still on the
   // table is: it is not in the log yet, and its dice may be the answer.
@@ -203,7 +205,7 @@ function RollsBehindBlock({
     <div className="rolls-behind">
       {behind.rolls.map((roll, i) => (
         <div className="sai-roll" key={i}>
-          <div className="roll-head">{tableRollHeading(roll, human)}</div>
+          <div className="roll-head">{tableRollHeading(roll, human, exchangeKind)}</div>
           <RollStrip
             dice={roll.roll.dice}
             {...(roll.roll.total === undefined ? {} : { total: roll.roll.total })}
@@ -992,10 +994,13 @@ function SaiHeader({
     const aimedAim: SpellAim = { spell: aiming?.spell ?? '', count: castings }
     const unitOffers = spellUnitOffers(pending, aiming)
 
+    // Inside an exchange, the sheet names the die that opened it and what resumes after.
+    const cantrip = cantripWindow(state, pending, human)
+
     return (
       <div className="action-bar">
         <p className="question">
-          {prompt.question}
+          {cantrip?.title ?? prompt.question}
           <span className="muted">
             {aimed === undefined
               ? plan.spent > 0
@@ -1006,6 +1011,7 @@ function SaiHeader({
                 : ` — aim ${aimed.castable.spell.name} where?`}
           </span>
         </p>
+        {cantrip !== null && <p className="sheet-sub muted">{cantrip.resumes}</p>}
 
         {plan.casts.length > 0 && (
           <p className="staged muted">

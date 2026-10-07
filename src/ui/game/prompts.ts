@@ -13,6 +13,7 @@ import { damageOptions } from '../../engine/damage'
 import {
   castingsFor,
   magicRolled,
+  poolTerms,
   spellTargetLabel as engineSpellTargetLabel,
   targetsFor,
   type SpellAim,
@@ -23,6 +24,8 @@ import { ALL_RESULT_TYPES, type Modifier } from '../../engine/pipeline'
 import { isAsleep, isGlaring, isHypnotized, isStunned, type Effect } from '../../engine/effects'
 import { heldWord } from '../../engine/sai'
 import { legalDirections, rollsOnTheTable, type TableRoll } from '../../engine/turn'
+
+import { liveExchange, type ExchangeKind } from './exchange'
 import {
   TERRAIN_SLOTS,
   armyAt,
@@ -1559,17 +1562,78 @@ export function rollsBehind(state: GameState, pending: Pending | null): RollsBeh
 }
 
 /** "Your melee attack", "the enemy's saves" -- a live strip's heading. */
-export function tableRollHeading(roll: TableRoll, human: PlayerId): string {
+export function tableRollHeading(roll: TableRoll, human: PlayerId, exchange?: ExchangeKind): string {
   const whose = roll.player === human ? 'Your' : "The enemy's"
   switch (roll.kind) {
+    // A counter is named as one (v2 Phase 9d): the table roll carries only the action,
+    // and "The enemy's melee attack" over a counter's dice was 9b's leftover.
     case 'attack':
-      return `${whose} ${roll.action ?? ''} attack`.replace('  ', ' ')
+      return exchange === 'counter'
+        ? `${whose} counter-attack`
+        : exchange === 'volley'
+          ? `${whose} defensive volley`
+          : `${whose} ${roll.action ?? ''} attack`.replace('  ', ' ')
     case 'save':
       return `${whose} saves`
     case 'maneuver':
       return `${whose} maneuver roll`
     case 'dragon':
       return `${whose} roll against the dragons`
+  }
+}
+
+/**
+ * What a Cantrip window says it is (v2 Phase 9d, 9a finding 11): "Cantrip window: Eldar
+ * Dryad's 4 magic", then "Water or earth, cantrip spells only. The enemy's melee attack
+ * resumes when you are done: 9 melee against your 5 saves." The sheet used to read
+ * "4 magic (water or earth, cantrip spells only) — pick a spell", which named neither
+ * the die nor the fact that an exchange was waiting on the answer.
+ *
+ * Null for any other spell announcement: a magic action is not a window.
+ */
+export function cantripWindow(
+  state: GameState,
+  pending: Pending | null,
+  human: PlayerId,
+): { readonly title: string; readonly resumes: string } | null {
+  if (pending?.kind !== 'announce_spells' || state.turn.magic?.returnTo === undefined) return null
+  const rolls = rollsOnTheTable(state)
+  const dice = rolls
+    .filter((roll) => roll.player === pending.player)
+    .flatMap((roll) => roll.roll.dice)
+    .filter((die) => die.face.icon === 'SAI' && die.face.sai === 'Cantrip')
+  const names = new Map<string, number>()
+  for (const die of dice) {
+    const name = unitType(die.typeId).name
+    names.set(name, (names.get(name) ?? 0) + 1)
+  }
+  const points = `${pending.pool.points} magic`
+  const [only] = dice
+  const title =
+    only === undefined
+      ? `Cantrip window: ${points}`
+      : dice.length === 1
+        ? `Cantrip window: ${unitType(only.typeId).name}’s ${points}`
+        : `Cantrip window: ${points} from ${[...names].map(([name, n]) => (n > 1 ? `${name} ×${n}` : name)).join(', ')}`
+
+  const terms = poolTerms(pending.pool)
+  const first = `${terms.charAt(0).toUpperCase()}${terms.slice(1)}.`
+  const attack = rolls.find((roll) => roll.kind === 'attack')
+  if (attack === undefined) return { title, resumes: first }
+  const kind = liveExchange(state)?.kind
+  const what =
+    kind === 'counter' ? 'counter-attack' : kind === 'volley' ? 'defensive volley' : `${attack.action ?? ''} attack`.trim()
+  const yours = attack.player === human
+  const saves = rolls.find((roll) => roll.kind === 'save')?.roll.total
+  const attackTotal = attack.roll.total
+  const numbers =
+    attackTotal === undefined
+      ? ''
+      : `: ${attackTotal} ${attack.action ?? ''}`.trimEnd() +
+        (saves === undefined ? '' : ` against ${yours ? 'their' : 'your'} ${saves} saves`)
+  return {
+    title,
+    resumes: `${first} ${yours ? 'Your' : 'The enemy’s'} ${what} resumes when you are done${numbers}.`,
   }
 }
 

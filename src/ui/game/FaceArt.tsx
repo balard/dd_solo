@@ -18,18 +18,21 @@ export function FaceArt({
   faceIndex,
   face,
   size = 40,
+  count = true,
 }: {
   typeId: string
   faceIndex: number
   face: Face
   size?: number
+  /** False where the caller prints the count itself, as a roll strip does (9d). */
+  count?: boolean
 }) {
   const art = useFaceArt()
   const ruleSet = useRuleSet()
   const url = art.unitFace(typeId, faceIndex)
   const label = faceLabel(face, ruleSet)
 
-  if (url === null) return <FaceGlyph face={face} size={Math.min(size, 22)} />
+  if (url === null) return <FaceGlyph face={face} size={Math.min(size, 22)} count={count} />
 
   return (
     <img

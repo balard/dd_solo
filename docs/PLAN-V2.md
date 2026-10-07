@@ -3380,7 +3380,7 @@ it is now, and the cursor sits partway through one action's log. Two candidate s
 
 The first shape is the predicted answer. Either way, `GameState` and the goldens do not move.
 
-**9d — Readable dice.** Zero-result dice keep their count and icon, quieter rather than blank. The
+**9d — Readable dice — landed.** Zero-result dice keep their count and icon, quieter rather than blank. The
 save glyph stops resembling an empty face. SAI dice say what they do inline, in the words
 `effectSummary` already has. The Cantrip window names the die it came from and says the exchange
 resumes after it.
@@ -3631,6 +3631,51 @@ instant: the card has just changed in one frame anyway.
   no card of its own (9b's note). They are revealed by the roll before them.
 - **Accelerated Growth's dying dice still leave with no card** once the cards are done. For you,
   the offer itself is the decision sheet that shows them; the enemy's leave silently, as in 9b.
+
+### What 9d found
+
+UI only, save one display helper: `poolTerms` split out of `magicRolled` in `magic.ts`, so the
+Cantrip window can say the pool's terms on their own. Both golden corpora and `SAVE_VERSION` did
+not move. Played in a browser on the Genie mirror on a laptop and a phone held sideways, in light
+and dark, with the face art and without it.
+
+**1. The strip printed what a die scored, not what it showed.** That is why a zero-result die was
+a faded blank: there was no number to print. A die now prints the count on its face, always, in
+its icon's colour, and the name of what rolled it underneath -- the SAI on an SAI face, in the
+SAI colour, else the unit. Where the roll counted a different number, it says so beside the count
+(`→8`, IDs doubled by an eighth face). A die that counted nothing is dashed and muted.
+
+**2. Flaming Shields reads as itself.** In play an attack strip of three save faces totalled 12
+melee, and the dice were drawn as saves with a full-strength 4 each. That is right: Flaming
+Shields converted them, and the roll's math line names the conversion. It read at first like a
+glyph mix-up, which is worth knowing before the art pass touches either.
+
+**3. The glyph fallback would have printed every count twice.** `FaceGlyph` prints a count of its
+own, so `FaceArt` takes `count={false}` from the strip. Checked by moving
+`public/faces/manifest.json` aside.
+
+**4. The SAI lines are 9a's, with `effectSummary`'s words.** "★ Firecloud 4 · Genie — 4
+health-worth must maneuver or die · next". The tag is the exchange's chip: an SAI with no chip
+(Smite, Counter) is already in the total and gets none. 9a's mockup wording ("of your army before
+you save") would have been a second description of each SAI beside the one the strip's tooltip
+and the log already use.
+
+**5. The Cantrip window.** "Cantrip window: Genie's 4 magic — pick a spell", then "Air or fire,
+cantrip spells only. The enemy's melee attack resumes when you are done: 12 melee against your 0
+saves." Several Cantrips read "8 magic from Genie ×2".
+
+**6. 9b's leftover label.** The strip behind a sheet named a counter "The enemy's melee attack";
+it says counter-attack or defensive volley now, from the exchange.
+
+**7. What it costs on a phone held sideways.** The attack card with a Firecloud line is 132px of
+390 (34%), against 9b's 108px, at the bottom of 9a's 34-43%. The unit names are what is left off
+there; the SAI's name and its line stay.
+
+**Deliberately not done.**
+- **No "so far" line** (9a finding 3: the earlier result shown before the next target sheet). It
+  is the insurance case, and that belongs with 9e's order question.
+- **A die's own conversion is not drawn on it.** The mockup's `gives` ("→ melee") would say on
+  the die what the math line says under the roll; one place is enough until the art pass.
 
 ### Exit criterion
 

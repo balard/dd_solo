@@ -696,6 +696,12 @@ export function castableSpells(
  * map that exists as a place to hang one later.
  */
 export function magicRolled(pool: MagicPool): string {
+  return `${pool.points} magic (${poolTerms(pool)})`
+}
+
+/** What a pool may be spent as, and on: "air or fire, cantrip spells only". The words
+ *  inside `magicRolled`'s brackets, which the Cantrip window's sheet says on its own. */
+export function poolTerms(pool: MagicPool): string {
   const which = poolSplit(pool.suppliers) ?? elementList(pool.elements)
 
   const limit =
@@ -705,7 +711,7 @@ export function magicRolled(pool: MagicPool): string {
         ? ', reserve spells only'
         : ''
 
-  return `${pool.points} magic (${which}${limit})`
+  return `${which}${limit}`
 }
 
 /** "water or earth", or "no element". */

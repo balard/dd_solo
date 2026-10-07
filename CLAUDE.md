@@ -258,13 +258,18 @@ the dice and the opponent.
 > ticker and the log are drawn from the state as far as the cards have got (`boardView.ts`),
 > and the dice the card on screen changes stay where they stood, marked "falls", "Flame",
 > "to reserves". UI only again.
+>
+> **9d has landed: readable dice.** Every die in a strip shows the count printed on its face and
+> what rolled it; one that scored nothing is dashed and quiet, never a blank; the save glyph has
+> a cross; each SAI die gets a line on its card with where it stands ("next"); and a Cantrip
+> window names its die and the exchange it holds up. UI only.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 8 landed, Lava Elves the last; Phase 9, the roll dialog, under way: 9a, 9b and 9c landed). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 8 landed, Lava Elves the last; Phase 9, the roll dialog, under way: 9a to 9d landed). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
@@ -1091,6 +1096,13 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   right that leaves a Rend at the front of the strip and its second face near the back joined by
   nothing. `chainRerolls` groups them for display only -- never reordering *within* a chain, since
   the arrow means "and then this".
+- **A die in a strip is readable without a hover** (v2 Phase 9d, `RolledBody` in
+  `DiceGrid.tsx`): the face, the count *printed on it* -- not the results, which is why a
+  die that scored nothing used to draw as a faded blank -- and under it the SAI's name (in
+  the SAI colour) or the unit's. A die that counted something else says so beside the count
+  (`→8` for doubled IDs); one that counted nothing is `rolled-idle`, dashed and muted. The
+  unit's name is hidden in the log and on a phone held sideways; the SAI's never is.
+  `FaceArt`'s `count={false}` keeps the glyph fallback from printing the count twice.
 - **A die that produced an *effect* is not a blank, and the log names the SAI behind it.** The strip
   greys out anything that contributed nothing, keyed on `results` -- and an effect is not a result,
   so a Fireshadow that Smote for 4 rendered greyed and empty beside a log line reporting damage
@@ -1240,6 +1252,13 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     points at.
   - **Nothing on the board is selectable while a card is up**: it is a view, not the state a
     decision would answer.
+  - **A card gives each SAI die a line** (v2 Phase 9d, `saiLines` in `RollCard.tsx`): the
+    SAI, its count and unit, `effectSummary`'s words, and a tag from the exchange's chip --
+    `next`, `waiting`, `now`, `done`. An SAI with no chip (Smite, Counter) gets no tag: it is
+    in the total already.
+  - **A Cantrip window says it is one** (`cantripWindow` in `prompts.ts`): the die, its
+    points, the pool's terms (`poolTerms`, split out of `magicRolled`) and which attack
+    resumes after it, with both totals when the saves are on the table.
   - **A card scrolls its terrain out from under the dialog** (`data-slot` on both boards), on
     a new card and again when the dialog's height lands -- the page is padded by it, so before
     the ResizeObserver reports there is nothing below to scroll into.

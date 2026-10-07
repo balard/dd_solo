@@ -6,7 +6,7 @@ import type { GameState, LogEntry } from '../../engine/types'
 
 import { combatExchange } from './exchange'
 import type { CombatEntry, ManeuverEntry, RollStep } from './presentation'
-import { atPlace, headingOf } from './RollCard'
+import { atPlace, headingOf, saiLines } from './RollCard'
 
 /**
  * v2 Phase 9b: a card names whose roll it is and where, with the number it came to
@@ -125,5 +125,32 @@ describe('atPlace', () => {
       'at the Enemy home',
       'in Reserves',
     ])
+  })
+})
+
+/**
+ * v2 Phase 9d: an SAI die on a card was only a border, and what it did lived in the
+ * tooltip. Now each gets a line in the strip's own words, with where it stands.
+ */
+describe('a card’s SAI lines', () => {
+  const flame: DieRoll = {
+    ...die('theirs', 'firewalkers.gorgon', 1, 0),
+    effects: [{ kind: 'target_enemy', health: 2, escape: 'none', fate: 'bury' }] as NonNullable<DieRoll['effects']>,
+  }
+  const attack = { ...melee, attackDice: [die('theirs'), flame] }
+
+  it('says what the SAI does, and that it resolves next', () => {
+    expect(saiLines({ kind: 'attack', entry: attack, exchange: combatExchange(attack, 'roll') })).toEqual([
+      { sai: 'Flame', count: 2, unit: 'Gorgon', does: '2 health-worth killed and buried', when: 'next' },
+    ])
+  })
+
+  it('draws no line for a die with no SAI, or one whose SAI did nothing here', () => {
+    const idle = die('theirs', 'firewalkers.gorgon', 1, 0)
+    expect(saiLines({ kind: 'attack', entry: { ...melee, attackDice: [die('theirs'), idle] } })).toEqual([])
+  })
+
+  it('leaves the saves card’s lines to the save dice', () => {
+    expect(saiLines({ kind: 'resist', entry: attack, exchange: combatExchange(attack, 'resist') })).toEqual([])
   })
 })

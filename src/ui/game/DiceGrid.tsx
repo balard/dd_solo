@@ -451,6 +451,35 @@ const effectOf = (die: StripDie): string | null => effectSummary(die.effects ?? 
 /** The SAI a face shows, for a sentence that names it; empty for a normal face. */
 export const saiName = (face: Face): string => (face.icon === 'SAI' ? face.sai : '')
 
+/**
+ * One die in a strip, readable without a hover (v2 Phase 9d): the face and the count
+ * printed on it, always, then the name of what rolled it -- the SAI on an SAI face, in
+ * the SAI's colour, else the unit. A die that scored nothing keeps all of that and is
+ * drawn quiet (`rolled-idle`, dashed and muted) rather than faded to a blank: a save
+ * face in a missile roll is something the player wants to read, not a hole.
+ *
+ * The count is the face's. Where the roll counted something else -- IDs doubled by an
+ * eighth face, or nothing at all -- the difference is said beside it: `→8`, or the
+ * quiet look.
+ */
+function RolledBody({ die }: { die: StripDie }) {
+  const { face } = die
+  const damage = effectDamage(die.effects ?? [])
+  return (
+    <>
+      <span className="rolled-face">
+        <FaceArt typeId={die.typeId} faceIndex={die.faceIndex} face={face} size={30} count={false} />
+        <b className="rolled-count">{face.count}</b>
+        {die.results > 0 && die.results !== face.count && <span className="rolled-gives">&rarr;{die.results}</span>}
+        {/* The effect's damage, marked apart from the count beside it: 4 unsavable
+            damage is not 4 melee results, and the two can appear on the same die. */}
+        {damage !== null && <b className="effect-damage">+{damage}</b>}
+      </span>
+      <span className="rolled-who">{face.icon === 'SAI' ? face.sai : unitType(die.typeId).name}</span>
+    </>
+  )
+}
+
 /** The number to print on a die that generated an effect rather than results. */
 
 function effectDamage(effects: readonly RollEffectBody[]): number | null {
@@ -562,12 +591,13 @@ export function RollStrip({
               {(() => {
                 const pickable = pick !== undefined && pick.options.has(die.unitId)
                 const chosen = pickable && pick.selected.has(die.unitId)
+                // Quiet only when the die really did nothing. An effect is not a result
+                // and never shows in `results`, so keying this on `results` alone hid
+                // Smite, Counter and Surprise completely.
+                const idle = die.results === 0 && effectOf(die) === null
                 const className = [
                   `rolled i-${die.face.icon}`,
-                  // Blank only when the die really did nothing. An effect is not a
-                  // result and never shows in `results`, so keying the grey-out on
-                  // `results` alone hid Smite, Counter and Surprise completely.
-                  die.results === 0 && effectOf(die) === null ? 'rolled-blank' : '',
+                  idle ? 'rolled-idle' : '',
                   effectOf(die) === null ? '' : 'rolled-effect',
                   pickable ? 'rolled-pickable' : '',
                   chosen ? 'rolled-chosen' : '',
@@ -577,24 +607,9 @@ export function RollStrip({
                 const title =
                   `${unitType(die.typeId).name}: ${faceLabel(die.face, ruleSet)}` +
                   (effectOf(die) === null ? '' : ` — ${effectOf(die)}`) +
+                  (idle ? ' — counts for nothing in this roll' : '') +
                   (i > 0 ? ' (rerolled)' : '')
-                const body = (
-                  <>
-                    <FaceArt
-                      typeId={die.typeId}
-                      faceIndex={die.faceIndex}
-                      face={die.face}
-                      size={30}
-                    />
-                    {die.results > 0 && <b>{die.results}</b>}
-                    {/* The effect's damage, marked apart from the result count beside
-                        it: 4 unsavable damage is not 4 melee results, and the two can
-                        appear on the same die. */}
-                    {effectDamage(die.effects ?? []) !== null && (
-                      <b className="effect-damage">+{effectDamage(die.effects ?? [])}</b>
-                    )}
-                  </>
-                )
+                const body = <RolledBody die={die} />
 
                 return pickable ? (
                   <button
