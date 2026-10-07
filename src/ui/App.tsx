@@ -52,6 +52,7 @@ import { isPhoneSideways } from './game/layout'
 import { NewGameScreen } from './game/NewGameScreen'
 import { useGame, type PlayingGame } from './game/useGame'
 import { useLayout } from './game/useLayout'
+import { MarksProvider } from './game/useMarks'
 import { RuleSetProvider } from './game/useRuleSet'
 
 export function App() {
@@ -64,13 +65,15 @@ export function App() {
     // label, which has to say whether that face does anything in *this* game -- see
     // `useRuleSet` for why it is not a prop.
     <RuleSetProvider ruleSet={game.state.ruleSet}>
-      <GameView game={game} />
+      <MarksProvider marks={game.marks}>
+        <GameView game={game} />
+      </MarksProvider>
     </RuleSetProvider>
   )
 }
 
 function GameView({ game }: { readonly game: PlayingGame }) {
-  const { state, human, seed, opponent, origin, dispatch, newGame, opponentThinking, rollShown } = game
+  const { state, board, human, seed, opponent, origin, dispatch, newGame, opponentThinking, rollShown } = game
   // The playtest clock (v2 Phase 3e): client-side, stopped by the action that ends the game.
   const elapsed = useClock(game.startedAt, game.endedAt)
   const enemy: PlayerId = human === 'p1' ? 'p2' : 'p1'
@@ -128,6 +131,31 @@ function GameView({ game }: { readonly game: PlayingGame }) {
     observer.observe(dock)
     return () => observer.disconnect()
   }, [])
+  // A card's terrain is brought out from under the dialog when the card opens (9a
+  // finding 8): on a phone held sideways the dialog covers the second and third rows,
+  // which is where most exchanges happen. Only when it is covered, and only when a card
+  // opens or the dialog changes height, so the page does not move under a player who
+  // scrolled it themselves.
+  const pageRef = useRef<HTMLElement>(null)
+  const cardSlot = rollShown?.step.exchange?.slot
+  const cardKey = rollShown === null ? null : `${state.log.length}:${rollShown.number}`
+  useEffect(() => {
+    const page = pageRef.current
+    const dock = dockRef.current
+    if (cardKey === null || cardSlot === undefined || cardSlot === 'reserve' || page === null || dock === null) return
+    const row = page.querySelector(`[data-slot="${cardSlot}"]`)
+    if (row === null) return
+    const rect = row.getBoundingClientRect()
+    const covered = rect.bottom - dock.getBoundingClientRect().top
+    // Never past the row's own top: a row taller than the gap shows its head.
+    const room = rect.top - page.getBoundingClientRect().top
+    const by = Math.min(covered + 8, room)
+    // Instant, not smooth: the card itself has just changed in one frame, and a smooth
+    // scroll in the browser pane never moved at all.
+    if (covered > 0 && by > 0) page.scrollBy({ top: by })
+    // And again once the dialog's height lands: the page is padded by it, so until the
+    // ResizeObserver reports a taller card there is nothing below to scroll into.
+  }, [cardKey, cardSlot, dockHeight])
   // The log is a one-line ticker until it is asked for (v2 Phase 3b), and stays the way
   // this viewer last left it. Reading a preference has no side effect, so the initializer
   // may do it even though StrictMode runs it twice.
@@ -251,7 +279,9 @@ function GameView({ game }: { readonly game: PlayingGame }) {
     [state, pending, human, selection, pairs, aiming],
   )
   // Looking suspends selecting everywhere: every tile becomes a way to open its faces.
-  const selectMode = looking ? null : asked
+  // So does a roll card: the decision is not offered until it has been seen, and the
+  // board is drawn as the cards have got, not as the decision sees it (v2 Phase 9c).
+  const selectMode = looking || rollShown !== null ? null : asked
 
   // Read off the dice rather than the setup: a force may have been rolled, in which
   // case there is no preset id to look up, and the units know anyway. A list, since
@@ -261,7 +291,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   const mySpecies = speciesOfForce(human)
   const theirSpecies = speciesOfForce(enemy)
 
-  const reserve = livingUnits(state, human).filter((u) => u.location.kind === 'reserve')
+  const reserve = livingUnits(board, human).filter((u) => u.location.kind === 'reserve')
   // Mid-reinforce the grid offers only the dice still without a destination, so a
   // die cannot be staged twice and the count reads as "still to place".
   const plan =
@@ -281,24 +311,24 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   // Reserve Army, which nothing before Tower ever needed to show at all.
   const theirReserveSelectable =
     selectMode?.side === 'any' || (selectMode?.side === 'theirs' && selectMode.slot === 'reserve')
-  const theirReserve = livingUnits(state, enemy).filter((u) => u.location.kind === 'reserve')
+  const theirReserve = livingUnits(board, enemy).filter((u) => u.location.kind === 'reserve')
   // Dragons waiting in each Summoning Pool (Phase 9e). Only a `Summon Dragon` brings one
   // out, so which colours are still in a pool is what the spell is choosing among.
-  const myPool = pooledDragons(state, human)
-  const theirPool = pooledDragons(state, enemy)
+  const myPool = pooledDragons(board, human)
+  const theirPool = pooledDragons(board, enemy)
 
-  const myFallen = deadUnits(state, human)
-  const theirFallen = deadUnits(state, enemy)
+  const myFallen = deadUnits(board, human)
+  const theirFallen = deadUnits(board, enemy)
   // Shown in the same disclosure as the fallen, and labelled apart from them: the
   // DUA is a resource units come back out of, the BUA is where they stop. Nothing
   // buries until Phase 4, so these two are empty in every game today.
-  const myBuried = buriedUnits(state, human)
-  const theirBuried = buriedUnits(state, enemy)
+  const myBuried = buriedUnits(board, human)
+  const theirBuried = buriedUnits(board, enemy)
   const anyBuried = myBuried.length > 0 || theirBuried.length > 0
   // Accelerated Growth sits on a player's DUA, and is live whether or not anybody is
   // in it yet -- so it opens the section on its own, and stays outside the collapse.
-  const myDuaEffects = effectsOnPlayer(state, human, human)
-  const theirDuaEffects = effectsOnPlayer(state, enemy, human)
+  const myDuaEffects = effectsOnPlayer(board, human, human)
+  const theirDuaEffects = effectsOnPlayer(board, enemy, human)
   const anyDuaEffect = myDuaEffects.length > 0 || theirDuaEffects.length > 0
 
   // Accelerated Growth's question (Phase 9b) is about dice already in your DUA, so the
@@ -320,7 +350,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
   const health = (units: readonly { typeId: string }[]) =>
     units.reduce((n, u) => n + unitType(u.typeId).health, 0)
 
-  const turn = turnNumber(state)
+  const turn = turnNumber(board)
   const started = state.log.some((e) => e.kind === 'march_begin')
   const summary = gameSummary(state, human, elapsed)
 
@@ -354,7 +384,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
     </>
   )
 
-  const ticker = <LogTicker state={state} human={human} open={logOpen} onToggle={toggleLog} />
+  const ticker = <LogTicker state={board} human={human} open={logOpen} onToggle={toggleLog} />
 
   return (
     <div className={short ? 'app is-short' : 'app'}>
@@ -363,7 +393,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
           <h1>dd_solo</h1>
           <p className="sub">
             Turn {turn} ·{' '}
-            {state.winner !== null
+            {board.winner !== null
               ? 'game over'
               : state.turn.phase === 'setup'
                 ? 'roll-off'
@@ -396,7 +426,8 @@ function GameView({ game }: { readonly game: PlayingGame }) {
           {/* Legal only on a decision addressed to you (v2 Phase 3e): the action carries
               no player, so the open pending is who concedes. Waiting on the enemy, it is
               greyed with the reason on hover rather than hidden, so it does not jump. */}
-          {state.winner === null && (
+          {/* The board's winner, not the state's: the button going is an outcome too. */}
+          {board.winner === null && (
             <button
               type="button"
               className="choice secondary"
@@ -463,10 +494,10 @@ function GameView({ game }: { readonly game: PlayingGame }) {
       {/* The page and the dialog share one box: the dialog floats over the terrains
           (v2 Phase 3c), inside it. */}
       <div className="page-wrap">
-      <main className="page" style={{ paddingBottom: dockHeight + 16 }}>
+      <main className="page" ref={pageRef} style={{ paddingBottom: dockHeight + 16 }}>
         {landscape ? (
           <LandscapeBoard
-            state={state}
+            state={board}
             human={human}
             focused={focused}
             onInspectTerrain={(slot) => setInspect({ kind: 'terrain', slot })}
@@ -495,7 +526,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
         ) : (
           <>
         <Board
-          state={state}
+          state={board}
           human={human}
           focused={focused}
           openTerrain={openTerrain}
@@ -643,7 +674,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
 
         {logOpen && (
           <div ref={logRef}>
-            <LogPanel state={state} human={human} />
+            <LogPanel state={board} human={human} />
           </div>
         )}
       </main>
@@ -694,7 +725,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
 
       {!oneLine && ticker}
 
-      {inspect !== null && <Inspector target={inspect} state={state} human={human} onClose={closeInspector} />}
+      {inspect !== null && <Inspector target={inspect} state={board} human={human} onClose={closeInspector} />}
 
     </div>
   )

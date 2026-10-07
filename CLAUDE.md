@@ -253,13 +253,18 @@ the dice and the opponent.
 > one step bar (`exchange.ts`, `StepBar.tsx`); a card names whose roll and where, with its total
 > beside it; the enemy's losses to an exchange are a card of their own; and an SAI resolved while
 > its exchange is paused is shown then, not after the saves. UI only.
+>
+> **9c has landed: the board waits for the card.** While a roll card is up, the board, the
+> ticker and the log are drawn from the state as far as the cards have got (`boardView.ts`),
+> and the dice the card on screen changes stay where they stood, marked "falls", "Flame",
+> "to reserves". UI only again.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 8 landed, Lava Elves the last; Phase 9, the roll dialog, under way: 9a and 9b landed). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 8 landed, Lava Elves the last; Phase 9, the roll dialog, under way: 9a, 9b and 9c landed). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
@@ -1214,6 +1219,30 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
     live, every step-4 SAI goes just before it, including one that logged nothing.
   - **A save roll shown live is drawn once**: the logged stop is the Result (`outcomeOnly`),
     unless a Flashfire rerolled it since.
+  - **The board waits for the card** (v2 Phase 9c). `PlayingGame.board` is what the boards,
+    the reserves, the DUA, the ticker, the log and the header draw; every decision still reads
+    `state`. While a card is up it is `boardAt(state, before, from)`: the state rebuilt
+    *forwards* from `Session.before`, the state the last action started from, through the
+    entries already seen. Sound because nothing acts while a card is up, so every unseen entry
+    belongs to the last action. Forwards on purpose: a change the log never names
+    (Accelerated Growth's dying dice, in the DUA from the offer on) stays unshown rather than
+    showing early. `boardView.test.ts` rebuilds every action of real games and must land on
+    the state after it -- **a new board-changing entry kind fails there until `rebuild`
+    learns it.**
+  - **Each stop carries `at`, the first entry it reveals**, and `heldBack(steps, current)`
+    turns that into what is held: everything from the earliest `at` still ahead. An entry with
+    no card of its own (the Firecloud's kill, a terrain turned after a contest) waits on the
+    card before it in the log. The attack card and the marching maneuver have no `at`: their
+    entry is written with the stop after them.
+  - **The card on screen marks its dice** (`marksIn`, read by every `DiceGrid` through
+    `useMarks`, the second context, for `useRuleSet`'s reason). A marked die never stacks. A
+    terrain turning or an effect landing shows only after its card: the dice are what the card
+    points at.
+  - **Nothing on the board is selectable while a card is up**: it is a view, not the state a
+    decision would answer.
+  - **A card scrolls its terrain out from under the dialog** (`data-slot` on both boards), on
+    a new card and again when the dialog's height lands -- the page is padded by it, so before
+    the ResizeObserver reports there is nothing below to scroll into.
   - The cards draw with `CombatPart`, `ManeuverPart` and `LogLine`, the log's own pieces.
 - **A decision shows the roll still on the table, above the sheet** (`RollsBehindBlock` in
   `ActionBar`, v1 Phase 9d). **The same block shows while the enemy is deciding**, which is when a

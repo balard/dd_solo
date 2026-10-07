@@ -501,6 +501,7 @@ export function Board({
               (slot === focused ? ' is-focused' : '') +
               (captured ? ' is-captured' : '')
             }
+            data-slot={slot}
           >
             <button
               type="button"

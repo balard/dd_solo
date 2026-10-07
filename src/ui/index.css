@@ -1298,6 +1298,43 @@ body {
   pointer-events: none;
 }
 
+/*
+ * Marked by the roll card on screen (v2 Phase 9c): the die the card is about to kill,
+ * move or put to sleep stays where it stood until the card has been seen, and says so
+ * underneath. A loss in the melee colour, anything else in the SAI colour.
+ */
+.die-wrap.is-marked {
+  position: relative;
+  display: grid;
+  flex: none;
+}
+.die-wrap.is-marked > .die { position: relative; }
+.die-marked {
+  border: 2px solid var(--sai);
+  background: color-mix(in srgb, var(--sai) 10%, var(--panel));
+}
+.die-marked.is-loss {
+  border-color: var(--melee);
+  background: color-mix(in srgb, var(--melee) 12%, var(--panel));
+}
+.die-mark {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: -7px;
+  transform: translateX(-50%);
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--sai);
+  color: var(--panel);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.die-mark.is-loss { background: var(--melee); }
+
 /* --- the header, both layouts ---------------------------------------------- */
 
 .app-title { min-width: 0; }

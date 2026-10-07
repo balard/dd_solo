@@ -223,6 +223,8 @@ export function LandscapeBoard({
             key={slot}
             className={'ls-row' + (slot === focused ? ' is-focused' : '') + (held ? ' is-captured' : '')}
             aria-label={label}
+            // Found by a roll card, to bring its terrain out from under the dialog (9c).
+            data-slot={slot}
           >
             {/* A terrain effect sits on the place, on neither army: across the row. */}
             <div className="ls-place">

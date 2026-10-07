@@ -29,9 +29,10 @@ import {
   type ForceSpec,
   type SetupOptions,
 } from '../../engine/setup'
-import { V1_RULES, type GameAction, type GameState, type PlayerId } from '../../engine/types'
+import { V1_RULES, type GameAction, type GameState, type PlayerId, type UnitId } from '../../engine/types'
 
-import { advanceCursor, pastEverything, rollStops, type RollCursor, type RollStep } from './presentation'
+import { boardAt, marksIn } from './boardView'
+import { advanceCursor, heldBack, pastEverything, rollStops, type RollCursor, type RollStep } from './presentation'
 import { clearSave } from './storage'
 
 /** How long to let the player read the opponent's move before the next one. */
@@ -52,6 +53,14 @@ export interface ChoosingGame {
 export interface PlayingGame {
   readonly phase: 'playing'
   readonly state: GameState
+  /**
+   * What the board, the ticker and the log draw (v2 Phase 9c): `state` itself, or --
+   * while a roll card is up -- the state as far as the cards have got, so no outcome
+   * shows before its card. Every decision still reads `state`.
+   */
+  readonly board: GameState
+  /** The dice the card on screen is about to change, and how: "falls", "Flame". */
+  readonly marks: ReadonlyMap<UnitId, string>
   readonly human: PlayerId
   readonly seed: number
   /** Who is answering the other side's decisions. */
@@ -89,6 +98,8 @@ export interface RollShown {
   /** Past every roll still waiting. */
   readonly skip: () => void
 }
+
+const NO_MARKS: ReadonlyMap<UnitId, string> = new Map()
 
 export const newSeed = () => Math.floor(Math.random() * 100_000)
 
@@ -184,6 +195,12 @@ function clearUrlRequest(): void {
 
 interface Session {
   readonly state: GameState
+  /**
+   * The state the last action started from (v2 Phase 9c). Every entry the cards have
+   * not shown yet was written since it -- nothing acts while a card is up -- so the
+   * board on screen is rebuilt forwards from here (`boardView.ts`).
+   */
+  readonly before: GameState
   readonly setup: SetupOptions
   /** Chosen with the forces, and fixed for the game: the record replays without it,
    *  since it stores the actions the opponent produced and never asks it again. */
@@ -202,8 +219,10 @@ interface Session {
 }
 
 function sessionFrom(setup: SetupOptions, opponent: OpponentName, origin: GameOrigin): Session {
+  const set = setupGame(setup)
   return {
-    state: begin(setupGame(setup)),
+    state: begin(set),
+    before: set,
     setup,
     opponent,
     actions: [],
@@ -264,6 +283,7 @@ export function useGame(): Game {
       return {
         ...current,
         state,
+        before: current.state,
         actions: [...current.actions, action],
         endedAt: current.endedAt ?? (state.winner !== null ? Date.now() : null),
       }
@@ -319,9 +339,14 @@ export function useGame(): Game {
   const record: GameRecord = { setup: session.setup, actions: session.actions }
   lastRecord = record
 
+  // The board waits for the card (v2 Phase 9c).
+  const held = waiting > 0 ? heldBack(steps, session.rolls.step) : null
+
   return {
     phase: 'playing',
     state: session.state,
+    board: held === null ? session.state : boardAt(session.state, session.before, held.from),
+    marks: held === null ? NO_MARKS : marksIn(session.state.log.slice(held.marking[0], held.marking[1])),
     human,
     seed,
     opponent: session.opponent,

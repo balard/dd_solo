@@ -7,8 +7,10 @@ import type { DieRoll } from '../../engine/roll'
 import { rollsOnTheTable } from '../../engine/turn'
 import { FULL_RULES, SPELL_RULES, type GameState, type LogEntry, type PlayerId, type TerrainSlot } from '../../engine/types'
 
+import { boardAt, marksIn } from './boardView'
 import {
   advanceCursor,
+  heldBack,
   pastEverything,
   rollStops,
   type RollCursor,
@@ -209,14 +211,14 @@ describe('spells', () => {
    */
   it('makes the enemy’s spells one stop, each named first and then what it did', () => {
     const steps = rollSteps([settled('p2'), cast('p2'), { kind: 'turn_end', player: 'p2' }], 'p1')
-    expect(steps).toEqual([{ kind: 'spells', entries: [cast('p2'), settled('p2')] }])
+    expect(steps).toEqual([{ kind: 'spells', entries: [cast('p2'), settled('p2')], at: 0 }])
   })
 
   it('keeps each spell’s lines with its own name', () => {
     const flood: LogEntry = { kind: 'flash_flood', player: 'p2', slot: 'frontier', needed: 3, resisted: 1, moved: true }
     const floodCast: LogEntry = { kind: 'spell_cast', player: 'p2', spell: 'flash_flood', element: 'water', count: 1 }
     const steps = rollSteps([settled('p2'), cast('p2'), flood, floodCast], 'p1')
-    expect(steps).toEqual([{ kind: 'spells', entries: [cast('p2'), settled('p2'), floodCast, flood] }])
+    expect(steps).toEqual([{ kind: 'spells', entries: [cast('p2'), settled('p2'), floodCast, flood], at: 0 }])
   })
 
   it('does not stop for your own casting, but does for a roll inside it', () => {
@@ -510,6 +512,41 @@ describe('a Cantrip window', () => {
     expect(rollStops(done, cursor, 'p1').map((stop) => stop.kind)).not.toContain('sai')
   })
 
+  /**
+   * v2 Phase 9c, the review's first finding: while the Firecloud's card was up its
+   * victim had already gone from the board. Now the board is rebuilt to the card, and
+   * the victim stands there marked until it has been seen.
+   */
+  it('keeps the Firecloud’s victim on the board, marked, until its card has been seen', () => {
+    const asked = exchange(
+      'p2',
+      [
+        ['p2:genie', GENIE, 'p2'],
+        ['p2:oak', OAK, 'p2'],
+        ['p1:genie1', GENIE, 'p1'],
+        ['p1:genie2', GENIE, 'p1'],
+        ['p1:genie3', GENIE, 'p1'],
+      ],
+      rngShowing([GENIE, OAK, GENIE, GENIE, GENIE], [4, 1, 2, 3, 3]),
+    )
+    const shownAttack = pastEverything(asked)
+    const windowed = advance(reduce(asked, { kind: 'sai_target', unitIds: ['p1:genie1'] }))
+    expect(windowed.units['p1:genie1']?.location.kind).toBe('dua')
+
+    const stops = rollStops(windowed, shownAttack, 'p1')
+    expect(stops.map((stop) => stop.kind)).toEqual(['sai', 'live'])
+    const onCard = heldBack(stops, 0)
+    expect(onCard).not.toBeNull()
+    const board = boardAt(windowed, asked, onCard?.from ?? 0)
+    expect(board.units['p1:genie1']?.location).toEqual({ kind: 'terrain', slot: 'frontier' })
+    expect(board.log.some((entry) => entry.kind === 'sai_resolved')).toBe(false)
+    const [from, to] = onCard?.marking ?? [0, 0]
+    expect(marksIn(windowed.log.slice(from, to)).get('p1:genie1')).toBe('falls')
+
+    // Past its card, the board is the state again.
+    expect(heldBack(stops, 1)).toBeNull()
+  })
+
   /** The same, for an SAI that logged nothing: a Firewalking that stayed put. */
   it('shows the enemy’s step-4 SAIs before the saves even when they logged nothing', () => {
     // Genie face 7 is `4 SAI:Firewalking`; Oak face 1 is `2 MELEE`.
@@ -665,6 +702,29 @@ describe('the exchange a stop belongs to', () => {
     )
   })
 
+  /**
+   * v2 Phase 9c: a stop reveals its entries and everything up to the next stop's, so a
+   * kill with no card of its own waits on the card before it.
+   */
+  it('holds each card’s outcome back until that card, and marks it on that card', () => {
+    const steps = rollSteps([flamed, killed('p1'), combat({ attackDice: [plain, flame] })], 'p1')
+    expect(steps.map((s) => [s.kind, s.at])).toEqual([
+      ['attack', undefined],
+      ['sai', 0],
+      ['resist', 2],
+    ])
+    // The attack card: everything held back, nothing of it marked yet.
+    expect(heldBack(steps, 0)).toEqual({ from: 0, marking: [0, 0] })
+    // The Flame's card: its kill is still held back, and marked.
+    expect(heldBack(steps, 1)).toEqual({ from: 0, marking: [0, 2] })
+    // The saves: the kill is on the board now, the damage it came to is not.
+    expect(heldBack(steps, 2)).toEqual({ from: 2, marking: [2, Infinity] })
+
+    const attack = combat({ attacker: 'p1', defender: 'p2', defenderSlot: 'p2_home' })
+    const state = { log: [attack, killed('p2')], units: {}, turn: { combat: null } } as unknown as GameState
+    expect(heldBack(rollStops(state, { log: 1, step: 0 }, 'p1'), 0)).toEqual({ from: 1, marking: [1, Infinity] })
+  })
+
   it('puts the enemy’s Cantrip spells on the step whose roll showed the Cantrip', () => {
     const cast: LogEntry = { kind: 'spell_cast', player: 'p2', spell: 'ash_storm', element: 'fire', count: 2 }
     const opened: LogEntry = { kind: 'cantrip', player: 'p2', slot: 'p1_home', points: 4 }
@@ -701,6 +761,6 @@ describe('the exchange a stop belongs to', () => {
       rolls: { p1: 4, p2: 2 },
       dice: { p1: [plain], p2: [plain] },
     } as unknown as LogEntry
-    expect(rollSteps([rollOff], 'p1')).toEqual([{ kind: 'roll', entry: rollOff }])
+    expect(rollSteps([rollOff], 'p1')).toEqual([{ kind: 'roll', entry: rollOff, at: 0 }])
   })
 })

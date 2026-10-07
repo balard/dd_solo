@@ -3368,7 +3368,7 @@ The roll-off's two labels match. `presentation.ts` gains the exchange each stop 
 the step bar reads. The cards still draw with `CombatPart`, `ManeuverPart` and `LogLine`, so a
 card and the log still cannot show one roll two ways.
 
-**9c — The board waits for the card.** The ticker shows only entries up to the cursor. That part is
+**9c — The board waits for the card — landed.** The ticker shows only entries up to the cursor. That part is
 easy, since the cursor is already a log index. The board is the hard part: it renders the state as
 it is now, and the cursor sits partway through one action's log. Two candidate shapes, to choose in
 9a:
@@ -3577,6 +3577,60 @@ horde" and "the enemy's horde". `headingOf` is a pure function, tested without a
   pane running, `greedy.test.ts`'s and `species.test.ts`'s self-play passed their limits. With
   nothing else running the whole suite passed, 1343 of 1343 in about 230s. Nothing outside `src/ui`
   changed.
+
+### What 9c found
+
+UI only. The engine, both golden corpora and `SAVE_VERSION` did not move, and no test outside
+`src/ui` changed. Played in a browser on the Genie mirror (`?forces=firewalkers_genie&seed=5`) on a
+laptop and on a phone held sideways on the landscape board, in light and dark.
+
+**1. Marked, as 9a decided, but rebuilt forwards rather than undone.** 9a's finding 8 said "today's
+state plus the entries past the cursor, undone kind by kind". It is the other way round:
+`boardView.ts` starts from the state the last action began with (`Session.before`) and replays the
+entries already seen. That is sound because nothing acts while a card is up -- the AI waits and your
+decision is not offered -- so every unseen entry belongs to the last action. Forwards was chosen for
+its failure mode. A change the log never names shows *late* rather than early, and one exists:
+Accelerated Growth moves the dying dice to the DUA when it raises the offer, and names them only
+when the offer is answered. Undone backwards, those dice would have vanished before their card.
+
+**2. A property test is what makes the rebuild trustworthy, and it found two wrong guesses.**
+`boardView.test.ts` rebuilds every action of about forty games (greedy and random, every preset
+and monster mirror, rolled and mixed forces) from the state before it, and must land on the
+state after it. Those games write every kind of entry that moves a die, a dragon, a terrain or an
+effect. Its first run found:
+- **A die that takes root goes to Reserves.** It was written as "never killed, so it stays".
+- **Accelerated Growth's exchange is not a swap.** The dying die is already in the DUA, so swapping
+  it with its partner left both there. The partner's place is the one the offer remembers.
+
+**3. Each stop says which entries it reveals** (`RollStep.at`), and `heldBack` holds everything
+from the earliest one still ahead. An entry with no card waits on the card before it in the log:
+the kill a Firecloud's sub-roll led to waits on the Firecloud's card, a terrain turned after a
+contest on the contest's result. The attack card and the marching maneuver reveal nothing of their
+own: their entry is written with the stop after them, and "4 melee − 0 saves = 4 damage" is the
+saves card's to say.
+
+**4. Effects are matched by name, not by entry.** A Hypnotic Glare writes several effects under one
+`sai_resolved`, and a breath writes one under its element's name. So an effect new in the action
+shows once a seen entry names its source, and one removed shows until an expiry names it; then
+`pruneEffects` drops whatever the rebuilt board left without an army.
+
+**5. Three outcomes the plan did not list.** The header said "game over" and the Concede button
+disappeared before the winning roll's card; both read the rebuilt board's winner now. And a die
+on the rebuilt board was still selectable while a card was up, against a state it is not in:
+nothing selects until the card has gone.
+
+**6. The scroll above the dialog needed two tries in a browser.** The effect ran before the page's
+bottom padding caught up with the taller card, so there was nothing below to scroll into; it runs
+again when the dialog's height lands. A smooth scroll never moved in the browser pane, so it is
+instant: the card has just changed in one frame anyway.
+
+**Deliberately not done.**
+- **Only dice are marked.** A terrain turning, an effect landing or a dragon going home shows after
+  its card, unmarked during it. The dice are what a card points at, and the card says the rest.
+- **A dragon attack's kills are marked on the army's roll card**, since `dragon_damage` still has
+  no card of its own (9b's note). They are revealed by the roll before them.
+- **Accelerated Growth's dying dice still leave with no card** once the cards are done. For you,
+  the offer itself is the decision sheet that shows them; the enemy's leave silently, as in 9b.
 
 ### Exit criterion
 

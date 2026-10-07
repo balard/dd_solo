@@ -26,6 +26,7 @@ import { ClassShape, faceLabel, type ClassCode } from './Glyph'
 import { orderedForDisplay, type DieStatus } from './prompts'
 import { portraitSize, stackIdentical, tileSize } from './stacks'
 import { useFaceArt } from './useFaceArt'
+import { useMarks } from './useMarks'
 import { useRuleSet } from './useRuleSet'
 
 /**
@@ -157,6 +158,8 @@ export function DiceGrid({
   /** Dice under an effect aimed at them alone, which never share a tile. */
   singled?: ReadonlySet<UnitId>
 }) {
+  // Read here, for every grid, rather than passed: see `useMarks`.
+  const marks = useMarks()
   if (units.length === 0) return <p className="empty">no units here</p>
 
   const canSelect = (id: UnitId) =>
@@ -165,7 +168,9 @@ export function DiceGrid({
   // being picked from: `selectableAt`, `pickModeFor` and `tapMeaning` never learn
   // about stacks, and must not have to.
   const grouped = stacked && !units.some((unit) => canSelect(unit.id))
-  const apart = new Set([...(singled ?? []), ...(asleep ?? []), ...(glare?.keys() ?? [])])
+  // A marked die is the one the card points at, so it never hides in a stack.
+  const marked = units.filter((unit) => marks.has(unit.id)).map((unit) => unit.id)
+  const apart = new Set([...(singled ?? []), ...(asleep ?? []), ...(glare?.keys() ?? []), ...marked])
   const tiles = grouped
     ? stackIdentical(units, apart)
     : orderedForDisplay(units).map((unit) => [unit])
@@ -186,7 +191,8 @@ export function DiceGrid({
         const tileSide = tileSize(unit.typeId, compact)
         const what = count > 1 ? `${count} × ${describe(type)}` : describe(type)
         const status = glare?.get(unit.id)
-        const label = isAsleep
+        const mark = count === 1 ? marks.get(unit.id) : undefined
+        const plain = isAsleep
           ? `${what} — ${status === 'netted' || status === 'webbed' ? status : 'asleep'}`
           : status === 'stunned'
             ? `${what} — stunned, sits out its army's rolls`
@@ -195,11 +201,12 @@ export function DiceGrid({
             : status === 'glaring'
               ? `${what} — glaring, sits out its army's rolls`
               : what
+        const label = mark === undefined ? plain : `${plain} — ${mark} on this roll`
 
         return (
           <div
             key={unit.id}
-            className={`die-wrap ${isOpen ? 'is-open' : ''} ${count > 1 ? 'die-stack' : ''}`}
+            className={`die-wrap ${isOpen ? 'is-open' : ''} ${count > 1 ? 'die-stack' : ''} ${mark === undefined ? '' : 'is-marked'}`}
           >
             <button
               type="button"
@@ -211,6 +218,7 @@ export function DiceGrid({
                 (status === 'hypnotized' || status === 'stunned' ? ' die-hypnotized' : '') +
                 (status === 'glaring' ? ' die-glaring' : '') +
                 (isOpen ? ' die-open' : '') +
+                (mark === undefined ? '' : mark === 'falls' || mark === 'buried' ? ' die-marked is-loss' : ' die-marked') +
                 ' die-squared'
               }
               style={{ width: tileSide, height: tileSide }}
@@ -231,6 +239,13 @@ export function DiceGrid({
             {count > 1 && (
               <span className="die-count" aria-hidden="true">
                 &times;{count}
+              </span>
+            )}
+            {/* What the card on screen does to this die (v2 Phase 9c): it is still here,
+                and the card and the board point at the same one. */}
+            {mark !== undefined && (
+              <span className={mark === 'falls' || mark === 'buried' ? 'die-mark is-loss' : 'die-mark'} aria-hidden="true">
+                {mark}
               </span>
             )}
           </div>

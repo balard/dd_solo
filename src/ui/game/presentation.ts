@@ -113,11 +113,23 @@ export type RollStep = (
   | { readonly kind: 'losses'; readonly entry: KillEntry }
   /** A roll still parked while somebody decides about it: shown as it landed. */
   | { readonly kind: 'live'; readonly roll: TableRoll }
-) & { readonly exchange?: Exchange }
+) & {
+  readonly exchange?: Exchange
+  /**
+   * The first log entry this stop shows for the first time (v2 Phase 9c): the board,
+   * the ticker and the log hold everything from here back until the stop has been seen.
+   * Absent on a stop that only shows a roll again -- the attack's dice, the marching
+   * maneuver, a parked roll -- since its entry is written with the stop that follows it.
+   */
+  readonly at?: number
+}
 
 /** `exchange` only when there is one: `exactOptionalPropertyTypes` takes no `undefined`. */
 const inExchange = (exchange: Exchange | null): { exchange?: Exchange } =>
   exchange === null ? {} : { exchange }
+
+/** `at` only when there is one. */
+const atIndex = (at: number | undefined): { at?: number } => (at === undefined ? {} : { at })
 
 /**
  * Who maneuvered, read off whose dice rolled: `maneuver_contested` does not say, and a
@@ -328,8 +340,10 @@ function logSteps(
   let unlogged = shown
   const seen = (kind: LiveKind): boolean => unlogged.includes(kind)
   const steps: RollStep[] = []
-  // SAI resolutions logged ahead of the exchange that rolled them, waiting for it.
+  // SAI resolutions logged ahead of the exchange that rolled them, waiting for it,
+  // and where each was written.
   let waiting: LogEntry[] = []
+  const indexOf = new Map<LogEntry, number>()
   const paused = (): Exchange | null => (live === null ? null : liveExchange(live))
 
   /**
@@ -350,9 +364,12 @@ function logSteps(
       const exchange = exchangeOf(die)
       // Your own, already answered: only what it rolled is news. See the header.
       if (ownerOf(die.unitId) === human) {
-        return resolved.filter((entry) => NEWS.has(entry.kind)).map((entry) => ({ kind: 'roll', entry, exchange }))
+        return resolved
+          .filter((entry) => NEWS.has(entry.kind))
+          .map((entry) => ({ kind: 'roll', entry, exchange, ...atIndex(indexOf.get(entry)) }))
       }
-      return [{ kind: 'sai', die, resolved, exchange }]
+      const first = resolved.flatMap((entry) => indexOf.get(entry) ?? [])
+      return [{ kind: 'sai', die, resolved, exchange, ...atIndex(first.length === 0 ? undefined : Math.min(...first)) }]
     })
 
   /**
@@ -388,10 +405,12 @@ function logSteps(
       if (named !== undefined) {
         const exchange = inExchange(spellsExchange(i))
         if (named.player !== human) {
-          steps.push({ kind: 'spells', entries: spellBySpell(run), ...exchange })
+          steps.push({ kind: 'spells', entries: spellBySpell(run), ...exchange, at: i })
         } else {
           // Your own: no stop for the casting, but a roll inside it still is one.
-          for (const inner of run) if (WHOLE_ROLLS.has(inner.kind)) steps.push({ kind: 'roll', entry: inner, ...exchange })
+          run.forEach((inner, k) => {
+            if (WHOLE_ROLLS.has(inner.kind)) steps.push({ kind: 'roll', entry: inner, ...exchange, at: i + k })
+          })
         }
         i = end - 1
         continue
@@ -400,6 +419,7 @@ function logSteps(
 
     if (resolutionOf(entry) !== null) {
       waiting.push(entry)
+      indexOf.set(entry, i)
       continue
     }
 
@@ -419,8 +439,8 @@ function logSteps(
           .some((earlier) => earlier.kind === 'flashfire' && earlier.player === entry.defender)
         steps.push(
           seen('save') && !rerolled
-            ? { kind: 'resist', entry, outcomeOnly: true, exchange: combatExchange(entry, 'result') }
-            : { kind: 'resist', entry, exchange: combatExchange(entry, 'resist') },
+            ? { kind: 'resist', entry, outcomeOnly: true, exchange: combatExchange(entry, 'result'), at: i }
+            : { kind: 'resist', entry, exchange: combatExchange(entry, 'resist'), at: i },
         )
         unlogged = unlogged.filter((kind) => kind !== 'attack' && kind !== 'save')
         break
@@ -431,34 +451,34 @@ function logSteps(
         if (!seen('maneuver')) steps.push({ kind: 'maneuver', entry, ...at('roll') })
         steps.push(...saiSteps(entry.marcherDice, () => maneuverExchange(entry, marcher ?? 'p1', 'sais'), i))
         // Shown live already, at Rapid Growth: this is what the contest came to.
-        steps.push({ kind: 'counter_maneuver', entry, ...at(seen('counter_maneuver') ? 'result' : 'resist') })
+        steps.push({ kind: 'counter_maneuver', entry, ...at(seen('counter_maneuver') ? 'result' : 'resist'), at: i })
         unlogged = unlogged.filter((kind) => kind !== 'maneuver' && kind !== 'counter_maneuver')
         break
       }
       case 'magic_rolled':
-        if (!seen('attack')) steps.push({ kind: 'roll', entry, exchange: magicExchange(entry, 'roll') })
+        if (!seen('attack')) steps.push({ kind: 'roll', entry, exchange: magicExchange(entry, 'roll'), at: i })
         steps.push(...saiSteps(entry.dice, (die) => magicExchange(entry, 'sais', die), i))
         unlogged = unlogged.filter((kind) => kind !== 'attack')
         break
       // A Rise from the Ashes that rolled nothing -- no Phoenix died -- is not a roll.
       case 'units_risen':
-        if ((entry.dice?.length ?? 0) > 0) steps.push({ kind: 'roll', entry })
+        if ((entry.dice?.length ?? 0) > 0) steps.push({ kind: 'roll', entry, at: i })
         break
       case 'units_killed': {
         // The enemy's dead from an exchange's damage. Yours you chose; a spell's or an
         // SAI's are on their own cards already.
         const paid = entry.player === human ? null : damageBehind(log, i)
-        if (paid !== null) steps.push({ kind: 'losses', entry, exchange: paid })
+        if (paid !== null) steps.push({ kind: 'losses', entry, exchange: paid, at: i })
         break
       }
       case 'dragon_attack':
-        steps.push({ kind: 'roll', entry, exchange: dragonExchange(entry.defender, entry.slot, 'roll') })
+        steps.push({ kind: 'roll', entry, exchange: dragonExchange(entry.defender, entry.slot, 'roll'), at: i })
         break
       case 'dragon_roll':
-        steps.push({ kind: 'roll', entry, exchange: dragonExchange(entry.player, entry.slot, 'resist') })
+        steps.push({ kind: 'roll', entry, exchange: dragonExchange(entry.player, entry.slot, 'resist'), at: i })
         break
       default:
-        if (WHOLE_ROLLS.has(entry.kind)) steps.push({ kind: 'roll', entry })
+        if (WHOLE_ROLLS.has(entry.kind)) steps.push({ kind: 'roll', entry, at: i })
     }
   }
 
@@ -490,7 +510,9 @@ function logSteps(
         )
   // What is left is a sub-roll with no parked attack to hang it on: shown where it is.
   for (const entry of waiting) {
-    if (entry.kind === 'sai_sub_roll') steps.push({ kind: 'roll', entry, ...inExchange(now && exchangeAt(now, 'sais')) })
+    if (entry.kind === 'sai_sub_roll') {
+      steps.push({ kind: 'roll', entry, ...inExchange(now && exchangeAt(now, 'sais')), ...atIndex(indexOf.get(entry)) })
+    }
   }
   return { steps, early, unlogged }
 }
@@ -587,3 +609,32 @@ export const ownerIn =
   (state: GameState): OwnerOf =>
   (unitId) =>
     state.units[unitId]?.owner
+
+/**
+ * What the board must not show yet, while stop `current` of `steps` is on screen
+ * (v2 Phase 9c): every log entry from `from` on. Null when nothing is held back.
+ *
+ * A stop reveals the entries from its own `at` up to the next stop's, so an entry with
+ * no stop of its own -- a kill a Firecloud's sub-roll led to, a terrain turned after a
+ * contest -- belongs to the stop before it and waits for that one. An entry ahead of
+ * every stop (a march begun, an action chosen) has nothing to wait for.
+ *
+ * `marking` is the part this stop reveals (9a finding 8): held back like the rest, so
+ * the die is still where it stood, but the board marks it, and the card and the board
+ * point at one die. Empty when this stop reveals nothing, or shares its entry with a
+ * stop after it -- the attack and the saves are one `combat_resolved`, and it is the
+ * saves' card that says what it came to.
+ */
+export function heldBack(
+  steps: readonly RollStep[],
+  current: number,
+): { readonly from: number; readonly marking: readonly [number, number] } | null {
+  const ats = (fromStep: number): readonly number[] =>
+    steps.slice(fromStep).flatMap((step) => (step.at === undefined ? [] : [step.at]))
+  const ahead = ats(current)
+  if (ahead.length === 0) return null
+  const from = Math.min(...ahead)
+  if (steps[current]?.at !== from) return { from, marking: [from, from] }
+  const after = ats(current + 1)
+  return { from, marking: [from, after.length === 0 ? Infinity : Math.min(...after)] }
+}
