@@ -7,7 +7,7 @@ acts whose enemies grow from 12 to 24 to 36 health. A loss ends the run.
 
 Read `PLAN-V2.md` Phase 4 (the collection and the builder) before anything here: v3 is that phase's
 `Collection` and `forceProblems` with a game around them. This document is the *order of work*.
-**Phases 0 to 3 have landed** (the run model, the encounters, a run in the terminal, run saves), and **4a-4b** (the run screens' mockups, and the run shell); 4c-4d have not.
+**Phases 0 to 3 have landed** (the run model, the encounters, a run in the terminal, run saves), and **4a-4c** (the run screens' mockups, the run shell, and the force between encounters); 4d has not.
 
 **Scope decisions this plan is built on** (agreed 2026-10-07):
 - **A mode in this repo, not a fork.** The single game stays exactly what it is. The run is a
@@ -726,6 +726,64 @@ The engine did not move. `RUN_VERSION` is 2.
 (44s against `testTimeout`'s 30s) while the dev server and the browser were busy. Alone it takes
 10s, and nothing in `src/ai/` or the engine changed. It is the machine-dependence `CLAUDE.md`
 warns about, recorded here rather than answered by raising the limit.
+
+
+### What 4c found
+
+Landed as `ForceEditor` in `src/ui/game/ArmyBuilder.tsx`, the run's force screen in
+`src/ui/run/RunScreen.tsx` on top of it, and `freshDice` in `runView.ts`. The engine, `src/run/`
+and `RUN_VERSION` did not move.
+
+**"`ArmyBuilder` over the run's collection" is the builder's middle, not the builder.** The
+page around it does not belong in a run:
+- the collection picker, since a run's pool is its collection;
+- the cap picker, since the act sets the cap;
+- the name;
+- the kept forces.
+
+So the middle came out as `ForceEditor`: the total, the three armies, the palette with Look at
+dice, the terrains, the dragons, every problem beside its section, and the inspector. It takes
+the collection, the cap, the force and `onChange`. The builder renders it between its settings
+and its kept forces, and behaves as it did; its tests are untouched and green. Three props are
+the run's:
+- `dragons` passes `'at_most'` to `forceProblems`, where the builder keeps `'exactly'`. The
+  dragon line reads "up to 1 for 12 health".
+- `fresh` lights the dice won since the last battle. That is `freshDice(run)`, read from the
+  history: the last battle's reward and what every event since produced. Dragons are lit too. A
+  terrain reward cannot be, because terrains are chosen from a select and an `<option>` has no
+  badge.
+- `foldExtras` / `foldedAtFirst` put the terrains and dragons in a fold, `<details>` with a
+  one-line summary. It starts shut on a short screen, as 4a measured. The enemy's dice fold the
+  same way.
+
+The builder's four rules scoped under `.builder` (headings, selects, focus, `.is-over`) now
+cover `.force-editor` as well. Without that, the editor lost them outside the builder page.
+
+**The draft is the run's own `force`.** Every edit is a `set_force`, and the reducer took any
+number of them from Phase 0. So the screen keeps no draft, every edit is saved as it is made,
+and a reload comes back to the force as it was left. Checked: three edits, a reload, and
+Continue showed 12 of 12, as edited.
+
+**Checked in the browser**, on a run the autopilot saved in node, standing at a force screen
+after a reward and an upgrade:
+- The Naiad (that battle's reward) and the Eldar Dryad (the event's) were lit in the palette, and
+  dice with no copies left were disabled.
+- Adding the Naiad took the force from 10 to 12, ready.
+- Adding the Eldar Dryad made it 15: two problems beside their sections, the first beside a
+  disabled Fight. Taking it back made Fight live again.
+- On a phone held sideways, both folds started shut, with the one-act strip and the fixed footer.
+- The single-game builder still drew every section and its settings, with no fold and
+  "exactly" dragons.
+
+**Measured against 4a:** the sideways force screen is about 2 screens of page, not the mockup's
+1.3. The mockup's palette was the spare dice; the builder's palette is every die the pool
+owns, by species, with "×0" tiles kept in place. That is the builder's own rule, so a tile never
+moves under the thumb. Fight never scrolls away, so this costs scrolling, not reach. A run-only
+palette of spare dice is the lever if the playtest asks for one.
+
+**Kept from 4b:** "Fill from your pool" (`suggestForce`) sits beside "Your force". It is the
+quickest way to field a reward, and a pool that has grown past the cap still has to be cut by
+hand.
 
 ---
 

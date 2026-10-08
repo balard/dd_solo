@@ -104,6 +104,27 @@ export function outcomeText(entry: HistoryEntry): string {
   }
 }
 
+/**
+ * The dice won since the last battle (v3 Phase 4c), for the force screen to light: that
+ * battle's reward, and what every event since turned a die into. Walking back from the
+ * newest entry, the first battle won is where it stops; a run's opening has nothing new.
+ */
+export function freshDice(run: RunState): { readonly units: ReadonlySet<string>; readonly dragons: ReadonlySet<string> } {
+  const units = new Set<string>()
+  const dragons = new Set<string>()
+  for (const entry of [...run.history].reverse()) {
+    const outcome = entry.outcome
+    if (outcome.kind === 'upgrade' || outcome.kind === 'transform') units.add(outcome.to)
+    if (outcome.kind === 'won') {
+      if (outcome.took?.kind === 'unit') units.add(outcome.took.id)
+      if (outcome.took?.kind === 'dragon') dragons.add(outcome.took.id)
+      break
+    }
+    if (outcome.kind === 'lost') break
+  }
+  return { units, dragons }
+}
+
 /** "II · 5": where an entry stood, for a list. */
 export const entryWhere = (entry: HistoryEntry): string => `${ROMAN[entry.act]} · ${entry.encounter + 1}`
 

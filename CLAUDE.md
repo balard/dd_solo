@@ -322,13 +322,19 @@ the dice and the opponent.
 > screen is a stand-in until 4c, and Leave run in battle is 4d's. `RunState.history` is new
 > (`RUN_VERSION` 2), and `eventEffect` is the one statement of what an event does to the force.
 > `readRun` never deletes, because of StrictMode. *What 4b found* in `PLAN-V3.md`.
+>
+> **Phase 4c has landed: the force between encounters is the army builder.** Its middle came out
+> of `ArmyBuilder` as `ForceEditor` (collection, cap, force, `onChange`). The builder keeps
+> `'exactly'` dragons; a run passes `'at_most'`, the dice won since the last battle
+> (`freshDice`), and folds for short screens. The run's `force` is the draft: each edit is a
+> `set_force`, saved as it is made. *What 4c found* in `PLAN-V3.md`.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V3.md` | **The order of work now** (Phases 0-3 and 4a-4b landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
+| `docs/PLAN-V3.md` | **The order of work now** (Phases 0-3 and 4a-4c landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
 | `docs/PLAN-V2.md` | How v2 got here: Phases 0 to 9 all landed. Mixed-species armies, built forces and the army builder, a schematic and landscape UI, the roll dialog, and Coral Elves, Dwarves, Goblins and Lava Elves. Phase 4 (the collection and the builder) is what v3 builds on; read its findings first. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
@@ -1244,6 +1250,9 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - **Device emulation in the browser pane fires no `resize`, and `ResizeObserver` waits for a
     painted frame**, so a resized frame can show the old layout until something renders. That is
     the harness; dispatch a `resize` or take a screenshot before believing it.
+- **The army builder's middle is `ForceEditor`** (v3 Phase 4c), shared with a run's force screen:
+  armies, palette, terrains, dragons and inspector over any collection and cap, with the dragon
+  rule, the fresh dice and the folds as props. The builder page is its settings and kept forces.
 - **The army builder draws with the board's own components** (v2 Phase 4b): `UnitTileBody`,
   `DragonTileBody`, `InspectorPanel`, and `TerrainDetail` / `DragonDetail` taking a die id, so a die
   on no board and a die in play cannot look different. It edits a `BuiltForce` directly -- no

@@ -30,6 +30,7 @@ import { dragonCount, type BuiltForce } from '../../engine/force'
 import {
   forceHealth,
   forceProblems,
+  type DragonRule,
   type ForceProblem,
   type ProblemPlace,
   type TerrainField,
@@ -101,6 +102,7 @@ function UnitButton({
   compact = false,
   left = null,
   disabled = false,
+  isNew = false,
   onClick,
   action,
 }: {
@@ -108,14 +110,16 @@ function UnitButton({
   compact?: boolean
   left?: string | null
   disabled?: boolean
+  /** Won since the last battle, in a run (v3 Phase 4c): lit in the palette. */
+  isNew?: boolean
   onClick: () => void
   /** What a tap does, for the tooltip and the screen reader: "add", "take back", "look". */
   action: string
 }) {
   const side = tileSize(typeId, compact)
-  const label = `${describe(unitType(typeId))} — ${action}`
+  const label = `${describe(unitType(typeId))}${isNew ? ', new' : ''} — ${action}`
   return (
-    <div className={`die-wrap builder-die ${left !== null ? 'has-left' : ''}`}>
+    <div className={`die-wrap builder-die ${left !== null ? 'has-left' : ''} ${isNew ? 'is-new' : ''}`}>
       <button
         type="button"
         className="die die-squared die-selectable"
@@ -140,18 +144,20 @@ function DragonButton({
   dieId,
   left = null,
   disabled = false,
+  isNew = false,
   onClick,
   action,
 }: {
   dieId: string
   left?: string | null
   disabled?: boolean
+  isNew?: boolean
   onClick: () => void
   action: string
 }) {
-  const label = `${dragonName(dieId)} — ${action}`
+  const label = `${dragonName(dieId)}${isNew ? ', new' : ''} — ${action}`
   return (
-    <div className="die-wrap builder-die">
+    <div className={`die-wrap builder-die ${isNew ? 'is-new' : ''}`}>
       <button
         type="button"
         className={`dragon-tile dragon-el-${dragonDie(dieId).element}`}
@@ -233,114 +239,136 @@ function terrainDieExists(id: string): boolean {
   }
 }
 
-export function ArmyBuilder({
-  onClose,
+/** The dice a run won since its last battle (v3 Phase 4c), lit wherever they are offered. */
+export interface FreshDice {
+  readonly units: ReadonlySet<string>
+  readonly dragons: ReadonlySet<string>
+}
+
+const NOTHING_FRESH: FreshDice = { units: new Set(), dragons: new Set() }
+
+/**
+ * The force being built, from a collection under a cap (v3 Phase 4c: out of `ArmyBuilder`,
+ * so a run's force screen is the same builder). Everything below the builder's settings
+ * and above its kept forces: the total, the three armies, the dice the collection can
+ * still give, the terrains and the dragons, each problem beside its section, and the
+ * inspector. It holds only the drafts a tap needs -- which army is being filled, and
+ * whether a tap looks rather than edits -- and hands every edit to `onChange`.
+ *
+ * - `dragons` is `forceProblems`' rule: exactly the count in the builder, at most it in a run.
+ * - `fresh` lights what a run won since its last battle.
+ * - `foldExtras` puts the terrains and dragons in a fold with a one-line summary, open
+ *   unless `foldedAtFirst` -- a run on a short screen, where they are the least likely
+ *   thing to change between battles (4a).
+ */
+export function ForceEditor({
+  collection,
+  cap,
+  force,
+  onChange,
+  dragons: dragonRule = 'exactly',
+  fresh = NOTHING_FRESH,
+  foldExtras = false,
+  foldedAtFirst = false,
 }: {
-  /** Back to the start screen, with the id of a kept force to play, or null. */
-  onClose: (play: string | null) => void
+  collection: Collection
+  cap: number
+  force: BuiltForce
+  onChange: (force: BuiltForce) => void
+  dragons?: DragonRule
+  fresh?: FreshDice
+  foldExtras?: boolean
+  foldedAtFirst?: boolean
 }) {
-  const [saved, setSaved] = useState<readonly SavedForce[]>(() => readSavedForces())
-  const [editing, setEditing] = useState<string | null>(null)
-  const [collectionId, setCollectionId] = useState(FULL_COLLECTION.id)
-  const collection = collectionNamed(collectionId) ?? FULL_COLLECTION
-  const [cap, setCap] = useState(() => defaultCap(collection))
-  const [name, setName] = useState('')
-  const [force, setForce] = useState<BuiltForce>(EMPTY_FORCE)
+  const setForce = onChange
   const [active, setActive] = useState<PresetArmyName>('home')
   const [looking, setLooking] = useState(false)
   const [inspect, setInspect] = useState<Looking | null>(null)
   const closeInspector = useCallback(() => setInspect(null), [])
 
-  const problems = useMemo(() => forceProblems(collection, cap, force), [collection, cap, force])
+  const problems = useMemo(() => forceProblems(collection, cap, force, dragonRule), [collection, cap, force, dragonRule])
   const health = forceHealth(force)
   const lines = armyLines(force)
   const units = unitPalette(collection, force)
   const dragonsOwned = palette(collection, force, 'dragons')
   const wanted = dragonCount(health)
-  const title = name.trim() === '' ? defaultForceName(force) : name.trim()
-
-  const store = (next: readonly SavedForce[]) => {
-    setSaved(next)
-    writeSavedForces(next)
-  }
-
-  const save = (asNew: boolean): string => {
-    const id = editing !== null && !asNew ? editing : newForceId(saved, Date.now())
-    store(upsertForce(saved, { id, name: title, collection: collection.id, cap, force }))
-    setEditing(id)
-    setName(title)
-    return id
-  }
-
-  const load = (entry: SavedForce) => {
-    const from = collectionNamed(entry.collection) ?? FULL_COLLECTION
-    setEditing(entry.id)
-    setCollectionId(from.id)
-    setCap(entry.cap)
-    setName(entry.name)
-    setForce(entry.force)
-    setActive('home')
-  }
-
-  const startOver = () => {
-    setEditing(null)
-    setName('')
-    setForce(EMPTY_FORCE)
-    setActive('home')
-  }
-
-  const chooseCollection = (id: string) => {
-    const next = collectionNamed(id) ?? FULL_COLLECTION
-    setCollectionId(next.id)
-    setCap(defaultCap(next))
-  }
 
   const unitTap = (typeId: string, act: () => void) => (looking ? setInspect({ kind: 'unit', typeId }) : act())
   const dragonTap = (dieId: string, act: () => void) => (looking ? setInspect({ kind: 'dragon', dieId }) : act())
 
+  const extrasProblems = problems.filter((p) => ['homeTerrain', 'frontierProposal', 'terrains', 'dragons'].includes(p.where)).length
+  const extrasSummary = [
+    `Home ${force.homeTerrain === undefined ? 'none' : terrainDieName(force.homeTerrain)}`,
+    `Frontier ${force.frontierProposal === undefined ? 'none' : terrainDieName(force.frontierProposal)}`,
+    (force.dragons ?? []).map(dragonName).join(', ') || 'no dragon',
+  ].join(' · ')
+
+  // The terrains and the dragons, once: folded in a run, open in the builder.
+  const extrasBlock = (
+    <>
+          <section className="builder-section" aria-label="Terrain">
+            <h2>Terrain</h2>
+            <div className="builder-terrains">
+              {(['homeTerrain', 'frontierProposal'] as const).map((field) => (
+                <TerrainField
+                  key={field}
+                  field={field}
+                  force={force}
+                  collection={collection}
+                  problems={problems}
+                  onChange={(dieId) => setForce(setTerrain(force, field, dieId))}
+                />
+              ))}
+            </div>
+            <Problems problems={problems} where="terrains" />
+          </section>
+
+          <section className="builder-section" aria-label="Dragons">
+            <h2>
+              Dragons{' '}
+              <span className="muted">
+                · {dragonRule === 'exactly' ? wanted : `up to ${wanted}`} for {health} health, one per 24 or part of it
+              </span>
+            </h2>
+            <div className="dragon-row">
+              {(force.dragons ?? []).map((dieId, index) => (
+                <DragonButton
+                  key={`${dieId}#${index}`}
+                  dieId={dieId}
+                  action={looking ? 'look' : 'take back'}
+                  onClick={() => dragonTap(dieId, () => setForce(removeDragon(force, index)))}
+                />
+              ))}
+              {force.dragons === undefined && (
+                <p className="empty">
+                  {ownsEveryDie(collection, 'dragons')
+                    ? 'None chosen: setup draws them.'
+                    : 'None chosen yet. Tap one below.'}
+                </p>
+              )}
+            </div>
+            <p className="builder-species-name">From the collection</p>
+            <div className="dragon-row">
+              {dragonsOwned.map((die) => (
+                <DragonButton
+                  key={die.id}
+                  dieId={die.id}
+                  left={leftLabel(die.left)}
+                  disabled={!looking && die.left <= 0}
+                  isNew={die.left > 0 && fresh.dragons.has(die.id)}
+                  action={looking ? 'look' : 'add'}
+                  onClick={() => dragonTap(die.id, () => setForce(addDragon(force, die.id)))}
+                />
+              ))}
+            </div>
+            <Problems problems={problems} where="dragons" />
+          </section>
+
+    </>
+  )
+
   return (
-    <RuleSetProvider ruleSet={V1_RULES}>
-      <div className="app">
-        <div className="builder">
-          <div className="builder-head">
-            <h1>Army builder</h1>
-            <button type="button" className="choice secondary" onClick={() => onClose(null)}>
-              Back
-            </button>
-          </div>
-
-          <div className="builder-settings">
-            <label className="new-game-field">
-              <span className="new-game-label">Build from</span>
-              <select value={collection.id} onChange={(e) => chooseCollection(e.target.value)}>
-                {COLLECTIONS.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="new-game-field">
-              <span className="new-game-label">Force size</span>
-              <select value={cap} onChange={(e) => setCap(Number(e.target.value))}>
-                {FORCE_CAPS.map((c) => (
-                  <option key={c} value={c}>
-                    up to {c} health
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="new-game-field builder-name">
-              <span className="new-game-label">Name</span>
-              <input
-                type="text"
-                value={name}
-                placeholder={defaultForceName(force)}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </label>
-          </div>
-
+    <div className="force-editor">
           <p className={`builder-total ${health > cap ? 'is-over' : ''}`}>
             <b>
               {health} / {cap}
@@ -428,6 +456,7 @@ export function ArmyBuilder({
                         compact
                         left={leftLabel(die.left)}
                         disabled={!looking && die.left <= 0}
+                        isNew={die.left > 0 && fresh.units.has(die.id)}
                         action={looking ? 'look' : `add to ${ARMY_TEXT[active].name}`}
                         onClick={() => unitTap(die.id, () => setForce(addUnit(force, active, die.id)))}
                       />
@@ -438,59 +467,126 @@ export function ArmyBuilder({
             })}
           </section>
 
-          <section className="builder-section" aria-label="Terrain">
-            <h2>Terrain</h2>
-            <div className="builder-terrains">
-              {(['homeTerrain', 'frontierProposal'] as const).map((field) => (
-                <TerrainField
-                  key={field}
-                  field={field}
-                  force={force}
-                  collection={collection}
-                  problems={problems}
-                  onChange={(dieId) => setForce(setTerrain(force, field, dieId))}
-                />
-              ))}
-            </div>
-            <Problems problems={problems} where="terrains" />
-          </section>
+      {foldExtras ? (
+        <details className="builder-fold" open={!foldedAtFirst}>
+          <summary>
+            <b>Terrain and dragons</b> <span className="muted">{extrasSummary}</span>
+            {extrasProblems > 0 && <span className="is-over"> · {extrasProblems} to fix</span>}
+          </summary>
+          {extrasBlock}
+        </details>
+      ) : (
+        extrasBlock
+      )}
+      {inspect !== null && (
+        <InspectorPanel onClose={closeInspector}>
+          {inspect.kind === 'unit' ? (
+            <UnitDetail typeId={inspect.typeId} />
+          ) : (
+            <DragonDetail dieId={inspect.dieId} whose={null} />
+          )}
+        </InspectorPanel>
+      )}
+    </div>
+  )
+}
 
-          <section className="builder-section" aria-label="Dragons">
-            <h2>
-              Dragons <span className="muted">· {wanted} for {health} health, one per 24 or part of it</span>
-            </h2>
-            <div className="dragon-row">
-              {(force.dragons ?? []).map((dieId, index) => (
-                <DragonButton
-                  key={`${dieId}#${index}`}
-                  dieId={dieId}
-                  action={looking ? 'look' : 'take back'}
-                  onClick={() => dragonTap(dieId, () => setForce(removeDragon(force, index)))}
-                />
-              ))}
-              {force.dragons === undefined && (
-                <p className="empty">
-                  {ownsEveryDie(collection, 'dragons')
-                    ? 'None chosen: setup draws them.'
-                    : 'None chosen yet. Tap one below.'}
-                </p>
-              )}
-            </div>
-            <p className="builder-species-name">From the collection</p>
-            <div className="dragon-row">
-              {dragonsOwned.map((die) => (
-                <DragonButton
-                  key={die.id}
-                  dieId={die.id}
-                  left={leftLabel(die.left)}
-                  disabled={!looking && die.left <= 0}
-                  action={looking ? 'look' : 'add'}
-                  onClick={() => dragonTap(die.id, () => setForce(addDragon(force, die.id)))}
-                />
-              ))}
-            </div>
-            <Problems problems={problems} where="dragons" />
-          </section>
+export function ArmyBuilder({
+  onClose,
+}: {
+  /** Back to the start screen, with the id of a kept force to play, or null. */
+  onClose: (play: string | null) => void
+}) {
+  const [saved, setSaved] = useState<readonly SavedForce[]>(() => readSavedForces())
+  const [editing, setEditing] = useState<string | null>(null)
+  const [collectionId, setCollectionId] = useState(FULL_COLLECTION.id)
+  const collection = collectionNamed(collectionId) ?? FULL_COLLECTION
+  const [cap, setCap] = useState(() => defaultCap(collection))
+  const [name, setName] = useState('')
+  const [force, setForce] = useState<BuiltForce>(EMPTY_FORCE)
+
+  const problems = useMemo(() => forceProblems(collection, cap, force), [collection, cap, force])
+  const title = name.trim() === '' ? defaultForceName(force) : name.trim()
+
+  const store = (next: readonly SavedForce[]) => {
+    setSaved(next)
+    writeSavedForces(next)
+  }
+
+  const save = (asNew: boolean): string => {
+    const id = editing !== null && !asNew ? editing : newForceId(saved, Date.now())
+    store(upsertForce(saved, { id, name: title, collection: collection.id, cap, force }))
+    setEditing(id)
+    setName(title)
+    return id
+  }
+
+  const load = (entry: SavedForce) => {
+    const from = collectionNamed(entry.collection) ?? FULL_COLLECTION
+    setEditing(entry.id)
+    setCollectionId(from.id)
+    setCap(entry.cap)
+    setName(entry.name)
+    setForce(entry.force)
+  }
+
+  const startOver = () => {
+    setEditing(null)
+    setName('')
+    setForce(EMPTY_FORCE)
+  }
+
+  const chooseCollection = (id: string) => {
+    const next = collectionNamed(id) ?? FULL_COLLECTION
+    setCollectionId(next.id)
+    setCap(defaultCap(next))
+  }
+
+
+  return (
+    <RuleSetProvider ruleSet={V1_RULES}>
+      <div className="app">
+        <div className="builder">
+          <div className="builder-head">
+            <h1>Army builder</h1>
+            <button type="button" className="choice secondary" onClick={() => onClose(null)}>
+              Back
+            </button>
+          </div>
+
+          <div className="builder-settings">
+            <label className="new-game-field">
+              <span className="new-game-label">Build from</span>
+              <select value={collection.id} onChange={(e) => chooseCollection(e.target.value)}>
+                {COLLECTIONS.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="new-game-field">
+              <span className="new-game-label">Force size</span>
+              <select value={cap} onChange={(e) => setCap(Number(e.target.value))}>
+                {FORCE_CAPS.map((c) => (
+                  <option key={c} value={c}>
+                    up to {c} health
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="new-game-field builder-name">
+              <span className="new-game-label">Name</span>
+              <input
+                type="text"
+                value={name}
+                placeholder={defaultForceName(force)}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+          </div>
+
+          <ForceEditor collection={collection} cap={cap} force={force} onChange={setForce} />
 
           <section className="builder-section" aria-label="Kept forces">
             <div className="choices">
@@ -558,15 +654,6 @@ export function ArmyBuilder({
           </section>
         </div>
 
-        {inspect !== null && (
-          <InspectorPanel onClose={closeInspector}>
-            {inspect.kind === 'unit' ? (
-              <UnitDetail typeId={inspect.typeId} />
-            ) : (
-              <DragonDetail dieId={inspect.dieId} whose={null} />
-            )}
-          </InspectorPanel>
-        )}
       </div>
     </RuleSetProvider>
   )

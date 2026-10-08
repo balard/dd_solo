@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { newRun, reduceRun } from '../../run/reduce'
 import type { RunAction, RunState } from '../../run/types'
 
-import { actStrip, offerText, outcomeText, runStats, runWhere, savedRunView, savedWhen } from './runView'
+import { actStrip, freshDice, offerText, outcomeText, runStats, runWhere, savedRunView, savedWhen } from './runView'
 
 /** A run played on rails: every battle won but one, every reward the first offer, every event skipped. */
 function playTo(seed: number, until: (run: RunState) => boolean, loseAt: string | null = null): RunState {
@@ -81,6 +81,34 @@ describe('the words', () => {
     expect(stats.battlesWon + stats.events).toBe(12)
     expect(stats.poolHealth).toBeGreaterThanOrEqual(12)
     expect(stats.dragons).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('freshDice', () => {
+  const at = { act: 1 as const, id: 'x', name: 'X' }
+  const run = (outcomes: RunState['history'][number]['outcome'][]): RunState => ({
+    ...newRun(1),
+    history: outcomes.map((outcome, encounter) => ({ ...at, encounter, outcome })),
+  })
+
+  it('lights the last reward and every event since, and nothing before that battle', () => {
+    const fresh = freshDice(
+      run([
+        { kind: 'won', took: { kind: 'unit', id: 'treefolk.oak' } },
+        { kind: 'upgrade', from: 'treefolk.oakling', to: 'treefolk.oak' },
+        { kind: 'won', took: { kind: 'dragon', id: 'earth_wyrm' } },
+        { kind: 'transform', from: 'treefolk.pine', to: 'treefolk.willow' },
+        { kind: 'skip' },
+      ]),
+    )
+    expect([...fresh.units]).toEqual(['treefolk.willow'])
+    expect([...fresh.dragons]).toEqual(['earth_wyrm'])
+  })
+
+  it('has nothing new at the opening, or after a terrain reward', () => {
+    expect(freshDice(run([])).units.size).toBe(0)
+    const terrain = freshDice(run([{ kind: 'won', took: { kind: 'terrain', id: 'swampland_city' } }]))
+    expect(terrain.units.size + terrain.dragons.size).toBe(0)
   })
 })
 

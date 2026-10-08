@@ -4,15 +4,15 @@
  * end. Laid out by `docs/mockups/v3-phase-4a.html`; every rule they show is `src/run/`'s
  * or `runView.ts`'s, and every die is drawn with the board's own components.
  *
- * The force before a battle is a stand-in until 4c gives it the army builder: the next
- * enemy, the force as it stands, and the autopilot's force a tap away.
+ * The force before a battle is the army builder over the run's pool (4c), under the next
+ * enemy.
  */
 import { useCallback, useState, type ReactNode } from 'react'
 
 import { dragonDie, ownTerrainType, speciesElements, unitType } from '../../data/load'
-import { PRESET_ARMY_NAMES, maxArmyHealth, type PresetArmyName } from '../../data/presets'
+import { PRESET_ARMY_NAMES, type PresetArmyName } from '../../data/presets'
 import type { BuiltForce } from '../../engine/force'
-import { forceHealth, forceProblems, healthOf, used } from '../../engine/forceProblems'
+import { forceHealth, forceProblems, used } from '../../engine/forceProblems'
 import { PLAYABLE_SPECIES, PLAYABLE_UNITS } from '../../engine/playable'
 import { ABILITY_TEXT, SPECIES_ABILITIES } from '../../engine/species'
 import { V1_RULES } from '../../engine/types'
@@ -22,6 +22,7 @@ import { transformsOf } from '../../run/draws'
 import { upgradePreview } from '../../run/reduce'
 import { ACT_SIZE, type Offer, type RunState } from '../../run/types'
 
+import { ForceEditor } from '../game/ArmyBuilder'
 import { DragonDetail, DragonTileBody, TerrainDetail } from '../game/Board'
 import { FaceSheet, UnitDetail, UnitTileBody, describe } from '../game/DiceGrid'
 import { ElementDots } from '../game/Elements'
@@ -37,6 +38,7 @@ import {
   actStrip,
   dragonNote,
   entryWhere,
+  freshDice,
   offerText,
   outcomeText,
   runName,
@@ -219,9 +221,21 @@ function sampleDie(species: string, size: string): string | null {
   return [...PLAYABLE_UNITS].filter((u) => u.species === species && u.size === size).sort(compareForDisplay)[0]?.id ?? null
 }
 
-// --- the force before a battle (4c makes this the builder) ------------------------------
+// --- the force before a battle -------------------------------------------------------------
 
+/** A phone held sideways, or any screen too short to spare the lines (4a): the folds start shut. */
+const isShort = (): boolean =>
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-height: 499px)').matches
+
+/**
+ * The force before a battle (v3 Phase 4c): the next enemy, then the army builder over the
+ * run's pool and the act's cap. The run's own `force` is the draft -- every edit is a
+ * `set_force` -- so there is no second copy to fall out of step, and a reload comes back to
+ * the force as it was left. Fight is refused while `forceProblems` finds anything, under the
+ * run's dragon rule; each problem sits beside its section, and the first beside Fight.
+ */
 function ArrangeScreen({ api, run, onFight }: { api: RunApi; run: RunState; onFight: () => void }) {
+  const [short] = useState(isShort)
   const [looking, setLooking] = useState<Looking | null>(null)
   if (run.pending.kind !== 'arrange_force' || run.current?.kind !== 'battle') return null
   const cap = run.pending.cap
@@ -254,48 +268,37 @@ function ArrangeScreen({ api, run, onFight }: { api: RunApi; run: RunState; onFi
           They field {speciesList(enemy)}, {forceHealth(enemy)} health in {allDice(enemy).length} dice, played by{' '}
           {run.current.opponent}. You field {total} of {cap}.
         </p>
-        <div className="dice-grid run-dice">
-          {[...allDice(enemy)].sort((a, b) => compareForDisplay(unitType(a), unitType(b))).map((id, i) => (
-            <UnitButton key={i} typeId={id} label="look" onClick={() => setLooking({ kind: 'unit', typeId: id })} />
-          ))}
-        </div>
+        <details className="run-enemy" open={!short}>
+          <summary>Their dice</summary>
+          <div className="dice-grid run-dice">
+            {[...allDice(enemy)].sort((a, b) => compareForDisplay(unitType(a), unitType(b))).map((id, i) => (
+              <UnitButton key={i} typeId={id} label="look" onClick={() => setLooking({ kind: 'unit', typeId: id })} />
+            ))}
+          </div>
+        </details>
       </section>
-      <section>
-        <p className="run-label">Your force · {total} / {cap} health</p>
-        <div className="run-armies">
-          {PRESET_ARMY_NAMES.map((army) => (
-            <div key={army} className="run-army">
-              <div className="run-army-head">
-                <b>{ARMY_NAME[army]}</b>
-                <span className="muted">
-                  {healthOf(run.force.armies[army])}/{maxArmyHealth(total)}
-                </span>
-              </div>
-              <div className="dice-grid run-dice">
-                {run.force.armies[army].map((id, i) => (
-                  <UnitButton key={i} typeId={id} label="look" onClick={() => setLooking({ kind: 'unit', typeId: id })} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-        {problems.map((p) => (
-          <p key={p.text} className="run-problem">
-            {p.text}
-          </p>
-        ))}
-        <div className="choices">
-          <button
-            type="button"
-            className="choice secondary"
-            disabled={!better}
-            onClick={() => suggested !== null && api.dispatch({ kind: 'set_force', force: suggested })}
-            title="As much of your pool as fits under the cap, split legally, with your terrains and dragons"
-          >
-            Fill the force from your pool
-          </button>
-        </div>
-      </section>
+      <div className="run-force-head">
+        <p className="run-label">Your force</p>
+        <button
+          type="button"
+          className="choice secondary"
+          disabled={!better}
+          onClick={() => suggested !== null && api.dispatch({ kind: 'set_force', force: suggested })}
+          title="As much of your pool as fits under the cap, split legally, with your terrains and dragons"
+        >
+          Fill from your pool
+        </button>
+      </div>
+      <ForceEditor
+        collection={run.collection}
+        cap={cap}
+        force={run.force}
+        onChange={(force) => api.dispatch({ kind: 'set_force', force })}
+        dragons="at_most"
+        fresh={freshDice(run)}
+        foldExtras
+        foldedAtFirst={short}
+      />
       {looking !== null && <Inspect looking={looking} onClose={() => setLooking(null)} />}
     </Frame>
   )
