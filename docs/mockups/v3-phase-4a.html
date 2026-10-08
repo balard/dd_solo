@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run Screen Mockups</title>
+<style>
+/*
+ * v3 Phase 4a: static mockups before code, the v2 3a and 9a pattern. The tokens are the
+ * app's own (src/ui/index.css), so the frames look like the screens they are testing.
+ * Nothing here is meant to be lifted into src/: the page has its own renderer.
+ */
+:root {
+  --fs-2xs: .66rem; --fs-xs: .72rem; --fs-sm: .8rem; --fs-md: .86rem;
+  --fs-lg: .92rem; --fs-xl: 1.05rem; --fs-2xl: 1.15rem; --fs-3xl: 1.4rem;
+
+  --bg: #fbfaf8; --panel: #ffffff; --sunk: #f2efea; --fg: #1d1c1a; --muted: #6b6762;
+  --line: #e2ded8; --accent: #2f6f4f; --accent-fg: #ffffff; --bezel: #2b2a2e;
+
+  --melee: #b4401f; --missile: #1f6f4a; --magic: #5b3fa8; --save: #2a5c8f;
+  --maneuver: #8a6a15; --id: #46423c; --sai: #a03c72;
+
+  --el-air: #5b8dd6; --el-water: #2f9c77; --el-earth: #c9a227; --el-fire: #d1552f; --el-death: #5a5560;
+
+  --ok: #2f6f4f; --warn: #9a6a00; --bad: #b4401f;
+  --ok-bg: #e5f1ea; --warn-bg: #f8eed6; --bad-bg: #f7e3dc;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16151a; --panel: #201e26; --sunk: #1a181f; --fg: #ece9e4; --muted: #9b958c;
+    --line: #322f3a; --accent: #4f9d74; --accent-fg: #0d1a13; --bezel: #050507;
+    --melee: #f0866a; --missile: #6fc99a; --magic: #b39ef0; --save: #7bb3e8; --maneuver: #d9b955;
+    --id: #b8b2a8; --sai: #ef92c4;
+    --el-air: #7fb0f0; --el-water: #54c69c; --el-earth: #e0c04c; --el-fire: #f0805a; --el-death: #8b8496;
+    --ok: #6fc99a; --warn: #e0b64c; --bad: #f0866a;
+    --ok-bg: #1d3328; --warn-bg: #3a3018; --bad-bg: #3d231c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #16151a; --panel: #201e26; --sunk: #1a181f; --fg: #ece9e4; --muted: #9b958c;
+  --line: #322f3a; --accent: #4f9d74; --accent-fg: #0d1a13; --bezel: #050507;
+  --melee: #f0866a; --missile: #6fc99a; --magic: #b39ef0; --save: #7bb3e8; --maneuver: #d9b955;
+  --id: #b8b2a8; --sai: #ef92c4;
+  --el-air: #7fb0f0; --el-water: #54c69c; --el-earth: #e0c04c; --el-fire: #f0805a; --el-death: #8b8496;
+  --ok: #6fc99a; --warn: #e0b64c; --bad: #f0866a;
+  --ok-bg: #1d3328; --warn-bg: #3a3018; --bad-bg: #3d231c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.wrap { max-width: 1400px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: 1.35rem; margin: 0 0 4px; text-wrap: balance; }
+h2 { font-size: 1.02rem; margin: 26px 0 8px; text-wrap: balance; }
+.lede { margin: 0 0 18px; color: var(--muted); max-width: 76ch; font-size: .92rem; }
+.muted { color: var(--muted); }
+
+/* --- page controls (3a's) -------------------------------------------------- */
+.controls {
+  display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: flex-end;
+  padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  margin-bottom: 14px;
+}
+.control { display: grid; gap: 4px; justify-items: start; }
+.control > span { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label {
+  padding: 5px 10px; font-size: .82rem; cursor: pointer; border-right: 1px solid var(--line);
+  background: var(--panel); white-space: nowrap;
+}
+.seg label:last-of-type { border-right: none; }
+.seg input:checked + label { background: var(--accent); color: var(--accent-fg); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -3px; }
+.what { font-size: .88rem; color: var(--muted); margin: 0 0 10px; max-width: 90ch; }
+
+.verdict { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin: 0 0 8px; font-size: .88rem; }
+.pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-weight: 600; font-size: .8rem; font-variant-numeric: tabular-nums; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+
+/* --- device frame (3a's) --------------------------------------------------- */
+.stage { position: relative; overflow: hidden; margin-bottom: 10px; }
+.device {
+  position: absolute; top: 0; left: 0; transform-origin: top left;
+  border: 10px solid var(--bezel); border-radius: 14px; background: var(--bg);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 14%);
+}
+.device.phone { border-radius: 26px; border-width: 12px; }
+.screen { position: relative; overflow: hidden; background: var(--bg); display: flex; flex-direction: column; }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.page { max-width: 1040px; margin: 0 auto; padding: 14px 18px 18px; display: grid; gap: 14px; align-content: start; }
+.narrow .page { padding: 10px 12px 14px; gap: 12px; }
+.short .page { padding: 8px 14px 10px; gap: 8px; }
+
+/* --- the app's pieces, schematically ---------------------------------------- */
+.app-head {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-bottom: 1px solid var(--line); background: var(--panel); font-size: var(--fs-sm); min-width: 0;
+}
+.app-head b { white-space: nowrap; }
+.app-head .grow { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ticker {
+  flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  color: var(--muted); padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk);
+}
+.ticker::before { content: 'Log · '; font-weight: 600; }
+.hbtn { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; white-space: nowrap; background: var(--panel); }
+.hbtn.danger { color: var(--bad); }
+
+.btn-p, .btn-s {
+  min-height: 44px; min-width: 96px; padding: 9px 14px; border-radius: 7px; font: inherit; font-weight: 600;
+  border: 1px solid transparent; cursor: default; text-align: center;
+}
+.btn-p { background: var(--accent); color: var(--accent-fg); min-width: 140px; }
+.btn-p[aria-disabled="true"] { opacity: .5; }
+.btn-s { background: var(--panel); color: var(--fg); border-color: var(--line); }
+.btn-s.danger { color: var(--bad); }
+.btn-p small, .btn-s small { display: block; font-weight: 400; font-size: var(--fs-xs); opacity: .85; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.panel h3 { margin: 0 0 6px; font-size: var(--fs-lg); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.panel h3 .muted { font-weight: 400; font-size: var(--fs-sm); }
+.label { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+.problem { color: var(--bad); font-size: var(--fs-sm); margin: 4px 0 0; }
+.problem::before { content: '· '; }
+.note { font-size: var(--fs-sm); color: var(--muted); margin: 4px 0 0; }
+.note.ok { color: var(--ok); }
+.note.warn { color: var(--warn); }
+
+/* A unit tile (v2 3b): class shape, health digit, species band. */
+.dice { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-end; min-height: 20px; }
+.tile {
+  position: relative; display: grid; place-items: center; flex: none;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg);
+}
+.tile svg.shape { fill: none; stroke: currentColor; stroke-width: 1.6; }
+.tile .hp { position: absolute; right: 3px; bottom: 5px; font-size: 10px; font-weight: 700; color: var(--muted); }
+.tile .cls { position: absolute; left: 3px; top: 2px; font-size: 9px; font-weight: 700; color: var(--muted); }
+.tile .band { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 0 0 7px 7px; overflow: hidden; display: flex; }
+.tile .band i { flex: 1; }
+.tile .mo { position: absolute; font-size: 9px; font-weight: 700; }
+.tile.new::after {
+  content: 'new'; position: absolute; top: -7px; right: -5px; background: var(--accent); color: var(--accent-fg);
+  font-size: 9px; font-weight: 700; padding: 0 4px; border-radius: 4px;
+}
+.tile.picked { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.tile.picked .hp, .tile.picked .cls { color: var(--accent-fg); }
+.tile.fielded { box-shadow: inset 0 0 0 2px var(--sunk); }
+.tile.ghost { border-style: dashed; opacity: .55; }
+.tile.dragon { border-width: 2px; }
+.tile.dragon .cls { color: inherit; }
+
+/* --- the act strip: where the run is, what is left ---------------------------- */
+.acts { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+.act { display: grid; gap: 3px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); min-width: 0; }
+.act.now { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.act.done { color: var(--muted); }
+.act-name { font-size: var(--fs-sm); font-weight: 700; white-space: nowrap; display: flex; gap: 8px; align-items: baseline; }
+.act-name .muted { font-weight: 400; font-size: var(--fs-xs); }
+.slots { display: flex; gap: 4px; align-items: center; flex-wrap: nowrap; }
+.slot { width: 18px; height: 18px; flex: none; display: grid; place-items: center; font-size: 10px; font-weight: 700; border-radius: 50%; border: 1.5px solid var(--line); color: var(--muted); }
+.slot.won { background: var(--ok); border-color: var(--ok); color: var(--accent-fg); border-radius: 4px; }
+.slot.event { background: var(--sunk); border-color: var(--muted); color: var(--muted); transform: rotate(45deg) scale(.82); border-radius: 3px; }
+.slot.event span { transform: rotate(-45deg); }
+.slot.lost { background: var(--bad); border-color: var(--bad); color: #fff; border-radius: 4px; }
+.slot.here { border: 2.5px solid var(--accent); color: var(--accent); width: 22px; height: 22px; }
+.act.compact .slots { gap: 2px; }
+.act.compact .slot { width: 10px; height: 10px; font-size: 0; border-width: 1.5px; }
+.act.compact .slot.here { width: 13px; height: 13px; }
+/* Phone upright: one act, a line, a row of pips. */
+.acts.mini { grid-template-columns: 1fr; }
+.acts.mini .act { padding: 6px 10px; }
+
+/* --- the next battle ---------------------------------------------------------- */
+.next { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; align-items: center; }
+.next .who { font-size: var(--fs-md); }
+.next .who b { font-size: var(--fs-xl); }
+.vs { font-size: var(--fs-sm); color: var(--muted); }
+.narrow .next { grid-template-columns: 1fr; }
+
+/* --- the force, between encounters ------------------------------------------ */
+.armies { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.narrow .armies { grid-template-columns: 1fr; }
+.army { border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px; background: var(--panel); }
+.army.bad { border-color: var(--bad); }
+.army-head { display: flex; justify-content: space-between; font-size: var(--fs-sm); margin-bottom: 4px; }
+.army-head b { font-size: var(--fs-md); }
+.army.target { border: 1.5px dashed var(--accent); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.narrow .two, .short .two { grid-template-columns: 1fr; }
+.chooser { display: flex; flex-wrap: wrap; gap: 6px; }
+.tchip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; font-size: var(--fs-sm); background: var(--panel); }
+.tchip.on { border-color: var(--accent); background: var(--ok-bg); font-weight: 600; }
+.tchip .el { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.dock-foot {
+  flex: none; display: flex; gap: 8px; align-items: center; padding: 8px 12px;
+  border-top: 1px solid var(--line); background: var(--panel);
+}
+.dock-foot .why { flex: 1; min-width: 0; font-size: var(--fs-sm); color: var(--muted); }
+.dock-foot .why.bad { color: var(--bad); }
+.short .dock-foot { padding: 5px 12px; }
+.short .dock-foot .btn-p, .short .dock-foot .btn-s { min-height: 38px; padding: 6px 12px; }
+
+/* --- the offers --------------------------------------------------------------- */
+.offers { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.mid-w .offers { grid-template-columns: repeat(5, minmax(150px, 1fr)); overflow-x: auto; }
+.narrow .offers { grid-template-columns: 1fr; gap: 8px; }
+.offer {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 10px;
+  display: grid; gap: 6px; align-content: start; justify-items: start; min-width: 0;
+}
+.offer.picked { border: 2px solid var(--accent); box-shadow: 0 0 0 2px var(--ok-bg); }
+.offer .kind { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+.offer .nm { font-weight: 700; font-size: var(--fs-lg); }
+.offer .sub { font-size: var(--fs-xs); color: var(--muted); }
+.offer .why { font-size: var(--fs-xs); color: var(--ok); }
+.narrow .offer { grid-template-columns: auto 1fr; justify-items: stretch; column-gap: 10px; padding: 8px 10px; }
+.narrow .offer > :first-child { grid-row: span 4; align-self: start; }
+.short .offers { gap: 6px; }
+.short .offer { padding: 6px 8px; gap: 3px; }
+.short .offer .faces { display: none; }
+
+/* A face row: every face of the die, small, count and icon. */
+.faces { display: flex; flex-wrap: wrap; gap: 2px; }
+.fc {
+  display: inline-flex; align-items: center; gap: 1px; padding: 0 3px; border: 1px solid var(--line);
+  border-radius: 5px; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 16px;
+}
+.fc svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; }
+.fc.i-MELEE { color: var(--melee); } .fc.i-MISSILE { color: var(--missile); } .fc.i-MAGIC { color: var(--magic); }
+.fc.i-SAVE { color: var(--save); } .fc.i-MANEUVER { color: var(--maneuver); } .fc.i-ID { color: var(--id); }
+.fc.i-SAI { color: var(--sai); border-color: var(--sai); }
+.fc.eighth { border-style: dashed; }
+
+/* --- the event ----------------------------------------------------------------- */
+.choose { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.narrow .choose { grid-template-columns: 1fr; }
+.short .choose { gap: 6px; }
+.path { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.arrow { color: var(--muted); font-size: var(--fs-xl); }
+.or { font-size: var(--fs-xs); color: var(--muted); }
+
+/* --- the battle in a run: the board, schematically ------------------------------- */
+.board { padding: 10px; display: grid; gap: 10px; align-content: start; }
+.board.cols { grid-template-columns: repeat(3, 1fr); }
+.tcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.thead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: var(--fs-sm); }
+.thead b { font-size: var(--fs-md); }
+.side-label { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 2px 0 3px; }
+.area { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.dock {
+  position: absolute; z-index: 20; left: 50%; bottom: 10px; transform: translateX(-50%);
+  width: min(560px, calc(100% - 16px)); max-height: calc(100% - 20px); overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 14px 40px rgb(0 0 0 / 20%); padding: 12px 14px;
+}
+.dock .q { margin: 0 0 4px; font-weight: 600; font-size: var(--fs-xl); }
+.dock .sub { margin: 0 0 8px; font-size: var(--fs-sm); color: var(--muted); }
+.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin: 6px 0 10px; font-size: var(--fs-sm); }
+.facts b { font-size: var(--fs-xl); }
+.won-q { color: var(--ok); }
+.lost-q { color: var(--bad); }
+.scrim { position: absolute; inset: 0; background: rgb(0 0 0 / 28%); z-index: 15; }
+
+/* --- the run's end ---------------------------------------------------------------- */
+.end-title { font-size: var(--fs-3xl); margin: 0; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.narrow .stats { grid-template-columns: 1fr 1fr; }
+.stat { border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; background: var(--panel); }
+.stat b { display: block; font-size: var(--fs-2xl); font-variant-numeric: tabular-nums; }
+.stat span { font-size: var(--fs-xs); color: var(--muted); }
+.timeline { display: grid; gap: 2px; font-size: var(--fs-sm); }
+.timeline div { display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; padding: 2px 0; border-bottom: 1px dashed var(--line); }
+.timeline .w { color: var(--ok); font-weight: 600; } .timeline .l { color: var(--bad); font-weight: 600; }
+
+/* --- the start screen and the race pick -------------------------------------------- */
+.start-run { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center; }
+.narrow .start-run { grid-template-columns: 1fr; }
+.discarded { border: 1px solid var(--warn); background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 6px 10px; font-size: var(--fs-sm); }
+.field { display: grid; gap: 3px; }
+.input { border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; background: var(--panel); color: var(--muted); font-size: var(--fs-md); }
+.races { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.narrow .races { grid-template-columns: 1fr; gap: 8px; }
+.short .races { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.race { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 10px 12px; display: grid; gap: 4px; }
+.race.picked { border: 2px solid var(--accent); box-shadow: 0 0 0 2px var(--ok-bg); }
+.race .nm { font-weight: 700; font-size: var(--fs-xl); display: flex; gap: 8px; align-items: center; }
+.race .sub { font-size: var(--fs-sm); color: var(--muted); }
+.race .ab { font-size: var(--fs-sm); }
+.short .race { padding: 5px 8px; gap: 1px; }
+.short .race .ab, .short .race .dice { display: none; }
+.narrow .race .dice { display: none; }
+.els { display: inline-flex; gap: 3px; }
+.els i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* --- the notes and the matrix (9a's) ---------------------------------------------- */
+.matrix-wrap { overflow-x: auto; }
+table.matrix { border-collapse: collapse; font-size: .82rem; }
+.matrix th, .matrix td { border: 1px solid var(--line); padding: 5px 8px; text-align: center; font-variant-numeric: tabular-nums; }
+.matrix th { background: var(--sunk); font-weight: 600; }
+.matrix th.row { text-align: left; white-space: nowrap; }
+.matrix td { background: var(--panel); line-height: 1.25; }
+.matrix td small { display: block; font-size: .7rem; opacity: .8; }
+.matrix td.ok { color: var(--ok); background: var(--ok-bg); }
+.matrix td.warn { color: var(--warn); background: var(--warn-bg); }
+.matrix td.bad { color: var(--bad); background: var(--bad-bg); }
+.notes { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.notes section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.notes h3 { margin: 0 0 6px; font-size: .95rem; }
+.notes p, .notes li { font-size: .86rem; margin: 0 0 6px; }
+.notes ul { margin: 0; padding-left: 18px; }
+.measure { position: absolute; left: -10000px; top: 0; visibility: hidden; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Run screen mockups</h1>
+  <p class="lede">
+    v3 Phase 4a. Every screen a run adds, drawn at the three sizes v2 measured: the start screen
+    with a run on it, the race pick, the force between encounters with the next enemy in view, the
+    reward of five, an event, a battle inside a run, and the run's end. The run is one Treefolk run
+    in Act II, at encounter 5 of 12, against Coral Elves. Every die is a real die with its real
+    faces from <code>data/</code>. The decisions are in <code>PLAN-V3.md</code>, under
+    <i>What 4a found</i>.
+  </p>
+
+  <div class="controls" id="controls"></div>
+  <p class="what" id="what"></p>
+  <div class="verdict" id="verdict"></div>
+  <div class="stage" id="stage"></div>
+
+  <h2>Measured: does each screen fit, and is its answer in reach?</h2>
+  <p class="lede">
+    Every view and variant at every size, rendered offscreen. <b>Fits</b> means no scrolling at all;
+    otherwise the overflow is how far the page scrolls. The answer (Fight, Take, Upgrade, Start) sits
+    in a footer that never scrolls, so it is always in reach; the question is how much of the screen
+    above it the player has to scroll through to judge it.
+  </p>
+  <div class="matrix-wrap" id="matrix"></div>
+
+  <h2>What the frames decide</h2>
+  <div class="notes">
+    <section>
+      <h3>The act strip</h3>
+      <ul>
+        <li>Three acts, the current one wide. A slot per encounter: a green square won, a diamond an event, a ring where you are, a hollow dot ahead. Ahead is a dot and never a kind: encounters are drawn as they are reached, so the strip does not know.</li>
+        <li>The current act names its cap, which is the one number the force is built against.</li>
+        <li>Phone upright: the current act only, one line and a row of small pips. Done and coming acts are words.</li>
+        <li>On every run screen but the battle, where the header names the encounter instead.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>The force between encounters</h3>
+      <ul>
+        <li>The next enemy is at the top, dice and all: <code>enemyForce</code> answers at <code>arrange_force</code>, and you build against what you will meet.</li>
+        <li>Then the builder, over the run's pool and cap. Spare dice are the palette, and a die won since the last battle says <span class="pill ok">new</span>.</li>
+        <li>Fight is a footer that never scrolls. Disabled, it names the first problem beside it, and every problem also sits beside its section.</li>
+        <li>Leave run is in the footer too, never in the way of Fight.</li>
+        <li>On a short screen (a phone sideways) the enemy's dice start folded and terrain and dragons fold to one line with Change: 1.9 screens of scrolling became 1.3.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>Rewards and events</h3>
+      <ul>
+        <li>An offer is the die: its tile, its name, and every face in a row. A tap opens the inspector, as on the board.</li>
+        <li>Pick, then Take: the footer names the pick ("Take Eldar Dryad"). One tap never spends the reward.</li>
+        <li>An event picks a die from the pool first, then says what each choice does to it: Upgrade names the result <i>and</i> whether it stays fielded, Transform lists all four it might become.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>The battle, and the end</h3>
+      <ul>
+        <li>The game screen, unchanged, with the encounter in the header and two buttons: <b>Leave run</b> (comes back to this battle's start) and <b>Concede</b>, which asks and says it ends the run.</li>
+        <li>The game-over card leads on: "Pick your reward" after a win, "See the run" after a loss.</li>
+        <li>The run's end is a page of its own: how far, the encounters in order, the force that fell. Shown once, then the save is cleared.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>What the run does not know yet</h3>
+      <ul>
+        <li><b>Its history.</b> The act strip's past slots, the end page's encounter list, its counts and the <span class="pill ok">new</span> marks all need what happened at each encounter, and <code>RunState</code> keeps only this act's drawn ids. 4b adds a history, and with it the first <code>RUN_VERSION</code> bump.</li>
+        <li><b>What an upgrade would do</b> before it is chosen: stay in place, wait in the pool, or leave the force. That is <code>replaceDie</code>'s rule, so it is a query in <code>src/run/</code>, never a second copy in a component.</li>
+      </ul>
+    </section>
+  </div>
+  <div class="measure" id="measure"></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Glyphs: ours, from src/ui/game/Glyph.tsx (24x24, stroked in currentColor).
+// ---------------------------------------------------------------------------
+const G = {
+  ID: '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>',
+  MELEE: '<path d="M12 3.5 L12 16"/><path d="M8 8.5 L16 8.5"/><path d="M9.5 16 L14.5 16 L12 20.5 Z"/>',
+  MISSILE: '<path d="M4.5 19.5 L19 5"/><path d="M13 5 L19 5 L19 11"/><path d="M4.5 19.5 L9 18 L6 15 Z"/>',
+  MAGIC: '<path d="M12 2.5 L12 21.5"/><path d="M4 7 L20 17"/><path d="M20 7 L4 17"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>',
+  SAVE: '<path d="M12 3 L19.5 6 V12 C19.5 16.5 16 19.8 12 21 C8 19.8 4.5 16.5 4.5 12 V6 Z"/><path d="M12 7.5 V16.5"/><path d="M8 11 H16"/>',
+  MANEUVER: '<path d="M5 14.5 L12 7.5 L19 14.5"/><path d="M5 19 L12 12 L19 19"/>',
+  SAI: '<path d="M12 3 L14.4 9.3 L21 9.8 L16 14.1 L17.6 20.5 L12 17 L6.4 20.5 L8 14.1 L3 9.8 L9.6 9.3 Z"/>',
+  EIGHTH: '<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 12h6M12 9v6"/>',
+}
+const svg = (inner) => `<svg viewBox="0 0 24 24">${inner}</svg>`
+const SHAPES = {
+  heavy_melee: '<rect x="5" y="5" width="14" height="14" rx="1.5"/>',
+  light_melee: '<polygon points="12,3 21,12 12,21 3,12"/>',
+  missile: '<polygon points="12,3.5 21,19.5 3,19.5"/>',
+  cavalry: '<polygon points="4,5 14,5 20.5,12 14,19 4,19 10,12"/>',
+  magic: '<circle cx="12" cy="12" r="8.2"/>',
+  monster: '<polygon points="12,2.5 20.5,7.2 20.5,16.8 12,21.5 3.5,16.8 3.5,7.2"/>',
+}
+const CODE = { heavy_melee: 'HM', light_melee: 'LM', missile: 'MI', cavalry: 'CA', magic: 'MA' }
+const CLASS = { heavy_melee: 'heavy melee', light_melee: 'light melee', missile: 'missile', cavalry: 'cavalry', magic: 'magic' }
+const TILE = { small: 48, medium: 54, large: 60, monster: 70 }
+const MARK = { small: 30, medium: 34, large: 38, monster: 46 }
+const SPECIES = {
+  treefolk: { name: 'Treefolk', el: ['water', 'earth'], home: 'Swampland', ab: ['Rapid Growth', 'Replanting'] },
+  firewalkers: { name: 'Firewalkers', el: ['air', 'fire'], home: 'Wasteland', ab: ['Air Flight', 'Flaming Shields'] },
+  coral_elves: { name: 'Coral Elves', el: ['air', 'water'], home: 'Coastland', ab: ['Coastal Dodge', 'Defensive Volley'] },
+  dwarves: { name: 'Dwarves', el: ['fire', 'earth'], home: 'Highland', ab: ['Mountain Mastery', 'Dwarven Might'] },
+  goblins: { name: 'Goblins', el: ['death', 'earth'], home: 'any earth terrain', ab: ['Swamp Mastery', 'Foul Stench'] },
+  lava_elves: { name: 'Lava Elves', el: ['death', 'fire'], home: 'any fire terrain', ab: ['Volcanic Adaptation', 'Cursed Bullets'] },
+}
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+
+// The dice, from data/starter/units.json and terrains.json (generated into this file).
+const DATA = {"units":{"treefolk.oakling":{"id":"treefolk.oakling","name":"Oakling","species":"treefolk","class":"heavy_melee","size":"small","health":1,"faces":["1 ID","1 MELEE","1 MELEE","1 MELEE","1 MELEE","2 SAVE"]},"treefolk.oak":{"id":"treefolk.oak","name":"Oak","species":"treefolk","class":"heavy_melee","size":"medium","health":2,"faces":["2 ID","2 MELEE","2 MELEE","2 MELEE","2 MELEE","4 SAVE"]},"treefolk.oak_lord":{"id":"treefolk.oak_lord","name":"Oak Lord","species":"treefolk","class":"heavy_melee","size":"large","health":3,"faces":["3 ID","3 MELEE","3 SAI:Smite","3 SAI:Smite","3 MELEE","4 SAVE"]},"treefolk.darktree":{"id":"treefolk.darktree","name":"Darktree","species":"treefolk","class":"heavy_melee","size":"monster","health":4,"faces":["4 ID","4 SAVE","4 SAI:Surprise","4 MELEE","4 SAI:Smother","4 MELEE","4 SAVE","4 SAI:Surprise","4 SAVE","4 SAI:Smother"]},"treefolk.willowling":{"id":"treefolk.willowling","name":"Willowling","species":"treefolk","class":"light_melee","size":"small","health":1,"faces":["1 ID","1 MANEUVER","1 SAVE","1 SAVE","1 MANEUVER","2 MELEE"]},"treefolk.willow":{"id":"treefolk.willow","name":"Willow","species":"treefolk","class":"light_melee","size":"medium","health":2,"faces":["2 ID","3 SAVE","2 MANEUVER","2 MANEUVER","2 SAVE","3 MELEE"]},"treefolk.noble_willow":{"id":"treefolk.noble_willow","name":"Noble Willow","species":"treefolk","class":"light_melee","size":"large","health":3,"faces":["3 ID","4 MELEE","4 SAI:Wild Growth","2 MANEUVER","2 MELEE","4 SAVE"]},"treefolk.redwood":{"id":"treefolk.redwood","name":"Redwood","species":"treefolk","class":"light_melee","size":"monster","health":4,"faces":["4 ID","4 SAVE","4 MANEUVER","4 MELEE","4 SAI:Trample","4 MELEE","4 SAVE","4 MELEE","4 SAVE","4 SAI:Trample"]},"treefolk.nymph":{"id":"treefolk.nymph","name":"Nymph","species":"treefolk","class":"cavalry","size":"small","health":1,"faces":["1 ID","1 SAVE","1 MELEE","1 MELEE","1 MANEUVER","2 MANEUVER"]},"treefolk.naiad":{"id":"treefolk.naiad","name":"Naiad","species":"treefolk","class":"cavalry","size":"medium","health":2,"faces":["2 ID","2 MELEE","3 MANEUVER","2 MANEUVER","2 MELEE","3 SAVE"]},"treefolk.lady_nereid":{"id":"treefolk.lady_nereid","name":"Lady Nereid","species":"treefolk","class":"cavalry","size":"large","health":3,"faces":["3 ID","4 MANEUVER","4 SAI:Counter","2 MELEE","2 MANEUVER","4 SAVE"]},"treefolk.satyr":{"id":"treefolk.satyr","name":"Satyr","species":"treefolk","class":"cavalry","size":"monster","health":4,"faces":["4 ID","4 SAI:Sleep","4 SAI:Volley","4 SAI:Hoof","4 MAGIC","4 SAI:Volley","4 SAI:Confuse","4 MISSILE","4 SAI:Sleep","4 MAGIC"]},"treefolk.pineling":{"id":"treefolk.pineling","name":"Pineling","species":"treefolk","class":"missile","size":"small","health":1,"faces":["1 ID","1 SAVE","1 MISSILE","1 MISSILE","1 MANEUVER","2 MISSILE"]},"treefolk.pine":{"id":"treefolk.pine","name":"Pine","species":"treefolk","class":"missile","size":"medium","health":2,"faces":["2 ID","2 MANEUVER","3 MISSILE","2 MISSILE","2 MANEUVER","3 SAVE"]},"treefolk.pine_prince":{"id":"treefolk.pine_prince","name":"Pine Prince","species":"treefolk","class":"missile","size":"large","health":3,"faces":["3 ID","2 MISSILE","4 SAI:Volley","4 MISSILE","2 MISSILE","4 SAVE"]},"treefolk.strangle_vine":{"id":"treefolk.strangle_vine","name":"Strangle Vine","species":"treefolk","class":"missile","size":"monster","health":4,"faces":["4 ID","4 MELEE","4 SAI:Double Strike","4 MANEUVER","4 SAI:Choke","4 SAI:Choke","4 SAI:Smother","4 SAI:Wild Growth","4 SAI:Rend","4 MANEUVER"]},"treefolk.hamadryad":{"id":"treefolk.hamadryad","name":"Hamadryad","species":"treefolk","class":"magic","size":"small","health":1,"faces":["1 ID","1 SAVE","1 MAGIC","1 MAGIC","1 MELEE","2 MAGIC"]},"treefolk.dryad":{"id":"treefolk.dryad","name":"Dryad","species":"treefolk","class":"magic","size":"medium","health":2,"faces":["2 ID","2 MAGIC","2 MELEE","3 MAGIC","2 MAGIC","3 SAVE"]},"treefolk.eldar_dryad":{"id":"treefolk.eldar_dryad","name":"Eldar Dryad","species":"treefolk","class":"magic","size":"large","health":3,"faces":["3 ID","2 MAGIC","4 SAI:Cantrip","3 MAGIC","4 MAGIC","3 SAVE"]},"treefolk.unicorn":{"id":"treefolk.unicorn","name":"Unicorn","species":"treefolk","class":"magic","size":"monster","health":4,"faces":["4 ID","4 SAI:Trample","4 SAVE","4 SAI:Teleport","4 SAI:Dispel Magic","4 SAI:Dispel Magic","4 SAI:Counter","4 SAI:Trample","4 SAI:Teleport","4 SAVE"]},"firewalkers.guardian":{"id":"firewalkers.guardian","name":"Guardian","species":"firewalkers","class":"heavy_melee","size":"small","health":1,"faces":["1 ID","1 MELEE","1 SAVE","1 MISSILE","2 MELEE","1 MANEUVER"]},"firewalkers.watcher":{"id":"firewalkers.watcher","name":"Watcher","species":"firewalkers","class":"heavy_melee","size":"medium","health":2,"faces":["2 ID","3 MELEE","2 SAVE","2 MISSILE","3 MELEE","2 MANEUVER"]},"firewalkers.sentinel":{"id":"firewalkers.sentinel","name":"Sentinel","species":"firewalkers","class":"heavy_melee","size":"large","health":3,"faces":["3 ID","3 MELEE","3 MANEUVER","3 SAVE","4 SAI:Smite","3 MISSILE"]},"firewalkers.fireshadow":{"id":"firewalkers.fireshadow","name":"Fireshadow","species":"firewalkers","class":"heavy_melee","size":"monster","health":4,"faces":["4 ID","4 SAI:Fly","4 SAI:Create Fireminions","4 SAI:Smite","4 MELEE","4 MELEE","4 SAI:Cantrip","4 SAI:Create Fireminions","4 SAI:Counter","4 SAI:Fly"]},"firewalkers.explorer":{"id":"firewalkers.explorer","name":"Explorer","species":"firewalkers","class":"light_melee","size":"small","health":1,"faces":["1 ID","1 MELEE","1 SAVE","1 MISSILE","1 MELEE","2 MANEUVER"]},"firewalkers.adventurer":{"id":"firewalkers.adventurer","name":"Adventurer","species":"firewalkers","class":"light_melee","size":"medium","health":2,"faces":["2 ID","1 SAVE","2 MELEE","3 MELEE","3 MISSILE","3 MANEUVER"]},"firewalkers.expeditioner":{"id":"firewalkers.expeditioner","name":"Expeditioner","species":"firewalkers","class":"light_melee","size":"large","health":3,"faces":["3 ID","3 MISSILE","3 MELEE","3 MELEE","4 SAI:Counter","3 MANEUVER"]},"firewalkers.genie":{"id":"firewalkers.genie","name":"Genie","species":"firewalkers","class":"light_melee","size":"monster","health":4,"faces":["4 ID","4 SAI:Galeforce","4 SAVE","4 SAI:Cantrip","4 SAI:Firecloud","4 SAVE","4 MELEE","4 SAI:Firewalking","4 MELEE","4 MAGIC"]},"firewalkers.shadowchaser":{"id":"firewalkers.shadowchaser","name":"Shadowchaser","species":"firewalkers","class":"cavalry","size":"small","health":1,"faces":["1 ID","1 MANEUVER","2 MELEE","1 MISSILE","1 MANEUVER","1 SAVE"]},"firewalkers.nightsbane":{"id":"firewalkers.nightsbane","name":"Nightsbane","species":"firewalkers","class":"cavalry","size":"medium","health":2,"faces":["2 ID","3 MISSILE","2 MANEUVER","2 MANEUVER","3 MELEE","2 SAVE"]},"firewalkers.daybringer":{"id":"firewalkers.daybringer","name":"Daybringer","species":"firewalkers","class":"cavalry","size":"large","health":3,"faces":["3 ID","2 SAVE","4 MISSILE","4 MELEE","4 SAI:Fly","2 MANEUVER"]},"firewalkers.gorgon":{"id":"firewalkers.gorgon","name":"Gorgon","species":"firewalkers","class":"cavalry","size":"monster","health":4,"faces":["4 ID","2 SAI:Flame","4 MANEUVER","4 SAVE","4 MANEUVER","4 SAVE","4 MANEUVER","2 SAI:Flame","4 MANEUVER","4 MANEUVER"]},"firewalkers.firestarter":{"id":"firewalkers.firestarter","name":"Firestarter","species":"firewalkers","class":"missile","size":"small","health":1,"faces":["1 ID","1 MISSILE","1 SAVE","1 MELEE","2 MISSILE","1 MANEUVER"]},"firewalkers.firemaster":{"id":"firewalkers.firemaster","name":"Firemaster","species":"firewalkers","class":"missile","size":"medium","health":2,"faces":["2 ID","3 MISSILE","2 SAVE","2 MELEE","3 MISSILE","2 MANEUVER"]},"firewalkers.firestormer":{"id":"firewalkers.firestormer","name":"Firestormer","species":"firewalkers","class":"missile","size":"large","health":3,"faces":["3 ID","4 MISSILE","2 SAVE","3 MELEE","4 SAI:Bullseye","3 MANEUVER"]},"firewalkers.phoenix":{"id":"firewalkers.phoenix","name":"Phoenix","species":"firewalkers","class":"missile","size":"monster","health":4,"faces":["4 ID","4 SAI:Fly","4 SAI:Rise from the Ashes","4 SAI:Smite","4 SAI:Seize","4 SAVE","4 SAI:Fly","4 SAVE","4 SAI:Rise from the Ashes","4 SAI:Seize"]},"firewalkers.sunburst":{"id":"firewalkers.sunburst","name":"Sunburst","species":"firewalkers","class":"magic","size":"small","health":1,"faces":["1 ID","1 MAGIC","1 MAGIC","1 MAGIC","1 MAGIC","2 MANEUVER"]},"firewalkers.sunflare":{"id":"firewalkers.sunflare","name":"Sunflare","species":"firewalkers","class":"magic","size":"medium","health":2,"faces":["2 ID","2 MAGIC","2 MAGIC","3 MAGIC","2 MAGIC","3 MANEUVER"]},"firewalkers.ashbringer":{"id":"firewalkers.ashbringer","name":"Ashbringer","species":"firewalkers","class":"magic","size":"large","health":3,"faces":["3 ID","3 MAGIC","3 MAGIC","3 MAGIC","3 SAI:Cantrip","4 MANEUVER"]},"firewalkers.salamander":{"id":"firewalkers.salamander","name":"Salamander","species":"firewalkers","class":"magic","size":"monster","health":4,"faces":["4 ID","4 MELEE","4 MAGIC","4 SAVE","4 MELEE","4 MISSILE","4 SAI:Smite","4 SAVE","4 MELEE","4 SAI:Cantrip"]},"coral_elves.fighter":{"id":"coral_elves.fighter","name":"Fighter","species":"coral_elves","class":"heavy_melee","size":"small","health":1,"faces":["1 ID","1 MELEE","1 MISSILE","1 MANEUVER","1 MELEE","2 MELEE"]},"coral_elves.trooper":{"id":"coral_elves.trooper","name":"Trooper","species":"coral_elves","class":"heavy_melee","size":"medium","health":2,"faces":["2 ID","2 SAVE","3 MELEE","3 MELEE","2 MANEUVER","2 MISSILE"]},"coral_elves.protector":{"id":"coral_elves.protector","name":"Protector","species":"coral_elves","class":"heavy_melee","size":"large","health":3,"faces":["3 ID","2 MISSILE","4 MELEE","3 MELEE","3 SAVE","4 SAI:Smite"]},"coral_elves.coral_giant":{"id":"coral_elves.coral_giant","name":"Coral Giant","species":"coral_elves","class":"heavy_melee","size":"monster","health":4,"faces":["4 ID","4 SAVE","4 SAI:Smite","4 SAI:Trample","4 MELEE","4 SAI:Smite","4 SAVE","4 SAI:Counter","4 SAI:Trample","4 MANEUVER"]},"coral_elves.guard":{"id":"coral_elves.guard","name":"Guard","species":"coral_elves","class":"light_melee","size":"small","health":1,"faces":["1 ID","1 MELEE","1 MANEUVER","2 MANEUVER","1 MELEE","2 MISSILE"]},"coral_elves.courier":{"id":"coral_elves.courier","name":"Courier","species":"coral_elves","class":"light_melee","size":"medium","health":2,"faces":["2 ID","2 MELEE","3 MANEUVER","3 MANEUVER","3 MELEE","3 MISSILE"]},"coral_elves.herald":{"id":"coral_elves.herald","name":"Herald","species":"coral_elves","class":"light_melee","size":"large","health":3,"faces":["3 ID","3 MELEE","3 MANEUVER","3 MANEUVER","3 MELEE","4 SAI:Counter"]},"coral_elves.gryphon":{"id":"coral_elves.gryphon","name":"Gryphon","species":"coral_elves","class":"light_melee","size":"monster","health":4,"faces":["4 ID","4 MELEE","4 SAI:Rend","4 SAI:Fly","4 SAI:Ferry","4 SAI:Fly","4 MELEE","4 SAI:Ferry","4 SAI:Fly","4 MELEE"]},"coral_elves.horseman":{"id":"coral_elves.horseman","name":"Horseman","species":"coral_elves","class":"cavalry","size":"small","health":1,"faces":["1 ID","1 MISSILE","1 MELEE","1 MANEUVER","1 MISSILE","2 MISSILE"]},"coral_elves.knight":{"id":"coral_elves.knight","name":"Knight","species":"coral_elves","class":"cavalry","size":"medium","health":2,"faces":["2 ID","2 MELEE","3 MANEUVER","2 MANEUVER","2 MELEE","2 SAVE"]},"coral_elves.eagle_knight":{"id":"coral_elves.eagle_knight","name":"Eagle Knight","species":"coral_elves","class":"cavalry","size":"large","health":3,"faces":["3 ID","3 SAI:Fly","3 MELEE","3 SAI:Fly","4 MELEE","3 MISSILE"]},"coral_elves.leviathan":{"id":"coral_elves.leviathan","name":"Leviathan","species":"coral_elves","class":"cavalry","size":"monster","health":4,"faces":["4 ID","4 SAI:Swallow","4 MANEUVER","4 SAI:Tail","4 SAI:Fly","4 SAI:Wave","4 SAVE","4 SAI:Hypnotic Glare","4 SAI:Fly","4 SAI:Tail"]},"coral_elves.bowman":{"id":"coral_elves.bowman","name":"Bowman","species":"coral_elves","class":"missile","size":"small","health":1,"faces":["1 ID","1 MISSILE","1 MELEE","1 MANEUVER","1 MISSILE","2 MISSILE"]},"coral_elves.archer":{"id":"coral_elves.archer","name":"Archer","species":"coral_elves","class":"missile","size":"medium","health":2,"faces":["2 ID","2 MELEE","3 MISSILE","3 MISSILE","2 MANEUVER","2 MISSILE"]},"coral_elves.sharpshooter":{"id":"coral_elves.sharpshooter","name":"Sharpshooter","species":"coral_elves","class":"missile","size":"large","health":3,"faces":["3 ID","3 MANEUVER","4 MISSILE","3 MISSILE","2 MELEE","4 SAI:Bullseye"]},"coral_elves.sprite_swarm":{"id":"coral_elves.sprite_swarm","name":"Sprite Swarm","species":"coral_elves","class":"missile","size":"monster","health":4,"faces":["4 ID","4 MAGIC","4 SAI:Fly","4 MISSILE","4 MAGIC","4 SAI:Fly","4 MISSILE","4 MAGIC","4 MELEE","4 MISSILE"]},"coral_elves.evoker":{"id":"coral_elves.evoker","name":"Evoker","species":"coral_elves","class":"magic","size":"small","health":1,"faces":["1 ID","1 MAGIC","1 MELEE","1 MANEUVER","1 MAGIC","2 MAGIC"]},"coral_elves.conjurer":{"id":"coral_elves.conjurer","name":"Conjurer","species":"coral_elves","class":"magic","size":"medium","health":2,"faces":["2 ID","2 MELEE","3 MAGIC","3 MAGIC","2 MANEUVER","2 MAGIC"]},"coral_elves.enchanter":{"id":"coral_elves.enchanter","name":"Enchanter","species":"coral_elves","class":"magic","size":"large","health":3,"faces":["3 ID","3 SAVE","4 MAGIC","3 MAGIC","3 MELEE","4 SAI:Cantrip"]},"coral_elves.tako":{"id":"coral_elves.tako","name":"Tako","species":"coral_elves","class":"magic","size":"monster","health":4,"faces":["4 ID","4 SAI:Entangle","4 SAVE","4 MANEUVER","4 MELEE","4 SAVE","4 SAI:Entangle","4 MELEE","4 MANEUVER","4 MELEE"]},"dwarves.footman":{"id":"dwarves.footman","name":"Footman","species":"dwarves","class":"heavy_melee","size":"small","health":1,"faces":["1 ID","1 SAVE","1 MELEE","2 MELEE","1 SAVE","2 MELEE"]},"dwarves.sergeant":{"id":"dwarves.sergeant","name":"Sergeant","species":"dwarves","class":"heavy_melee","size":"medium","health":2,"faces":["2 ID","2 MANEUVER","2 MELEE","2 MELEE","3 SAVE","3 MELEE"]},"dwarves.warlord":{"id":"dwarves.warlord","name":"Warlord","species":"dwarves","class":"heavy_melee","size":"large","health":3,"faces":["3 ID","3 SAVE","3 MELEE","3 MELEE","4 SAI:Smite","3 MELEE"]},"dwarves.androsphinx":{"id":"dwarves.androsphinx","name":"Androsphinx","species":"dwarves","class":"heavy_melee","size":"monster","health":4,"faces":["4 ID","4 SAI:Roar","4 MAGIC","4 MELEE","4 SAVE","4 SAI:Rend","4 MELEE","4 MAGIC","4 SAI:Roar","4 SAVE"]},"dwarves.sentry":{"id":"dwarves.sentry","name":"Sentry","species":"dwarves","class":"light_melee","size":"small","health":1,"faces":["1 ID","1 MELEE","1 MANEUVER","1 MANEUVER","1 MELEE","1 MISSILE"]},"dwarves.patroller":{"id":"dwarves.patroller","name":"Patroller","species":"dwarves","class":"light_melee","size":"medium","health":2,"faces":["2 ID","3 MELEE","2 MANEUVER","3 MANEUVER","3 MELEE","2 SAVE"]},"dwarves.skirmisher":{"id":"dwarves.skirmisher","name":"Skirmisher","species":"dwarves","class":"light_melee","size":"large","health":3,"faces":["3 ID","4 MELEE","3 MANEUVER","2 MANEUVER","3 MELEE","4 SAI:Counter"]},"dwarves.behemoth":{"id":"dwarves.behemoth","name":"Behemoth","species":"dwarves","class":"light_melee","size":"monster","health":4,"faces":["4 ID","4 SAI:Stomp","4 SAI:Bash","4 MANEUVER","4 SAVE","4 SAI:Roar","4 SAI:Trample","4 SAI:Charge","4 SAVE","4 MELEE"]},"dwarves.pony_rider":{"id":"dwarves.pony_rider","name":"Pony Rider","species":"dwarves","class":"cavalry","size":"small","health":1,"faces":["1 ID","1 MELEE","1 MANEUVER","2 MANEUVER","1 MELEE","1 SAVE"]},"dwarves.lizard_rider":{"id":"dwarves.lizard_rider","name":"Lizard Rider","species":"dwarves","class":"cavalry","size":"medium","health":2,"faces":["2 ID","3 MELEE","3 MANEUVER","2 MANEUVER","2 MELEE","2 SAVE"]},"dwarves.mammoth_rider":{"id":"dwarves.mammoth_rider","name":"Mammoth Rider","species":"dwarves","class":"cavalry","size":"large","health":3,"faces":["3 ID","4 MELEE","3 SAI:Trample","3 SAI:Trample","3 MELEE","3 SAVE"]},"dwarves.gargoyle":{"id":"dwarves.gargoyle","name":"Gargoyle","species":"dwarves","class":"cavalry","size":"monster","health":4,"faces":["4 ID","4 MELEE","4 SAI:Smite","4 SAI:Fly","4 MANEUVER","4 SAI:Dispel Magic","4 SAI:Dispel Magic","4 SAI:Fly","4 SAVE","4 MELEE"]},"dwarves.crossbowman":{"id":"dwarves.crossbowman","name":"Crossbowman","species":"dwarves","class":"missile","size":"small","health":1,"faces":["1 ID","1 MELEE","1 MISSILE","1 MISSILE","1 SAVE","2 MISSILE"]},"dwarves.marksman":{"id":"dwarves.marksman","name":"Marksman","species":"dwarves","class":"missile","size":"medium","health":2,"faces":["2 ID","3 MELEE","2 MISSILE","2 MISSILE","2 SAVE","3 MISSILE"]},"dwarves.crack_shot":{"id":"dwarves.crack_shot","name":"Crack-Shot","species":"dwarves","class":"missile","size":"large","health":3,"faces":["3 ID","4 MELEE","3 MISSILE","3 MISSILE","4 SAI:Bullseye","2 MISSILE"]},"dwarves.roc":{"id":"dwarves.roc","name":"Roc","species":"dwarves","class":"missile","size":"monster","health":4,"faces":["4 ID","4 SAI:Fly","4 MELEE","4 SAI:Rend","4 SAI:Seize","4 SAVE","4 MELEE","4 MELEE","4 SAI:Fly","4 SAI:Seize"]},"dwarves.theurgist":{"id":"dwarves.theurgist","name":"Theurgist","species":"dwarves","class":"magic","size":"small","health":1,"faces":["1 ID","1 MELEE","1 MAGIC","1 MAGIC","1 SAVE","2 MAGIC"]},"dwarves.thaumaturgist":{"id":"dwarves.thaumaturgist","name":"Thaumaturgist","species":"dwarves","class":"magic","size":"medium","health":2,"faces":["2 ID","2 MELEE","3 MAGIC","3 MAGIC","2 SAVE","2 MAGIC"]},"dwarves.wizard":{"id":"dwarves.wizard","name":"Wizard","species":"dwarves","class":"magic","size":"large","health":3,"faces":["3 ID","3 SAVE","4 MAGIC","3 MAGIC","3 MELEE","4 SAI:Cantrip"]},"dwarves.umber_hulk":{"id":"dwarves.umber_hulk","name":"Umber Hulk","species":"dwarves","class":"magic","size":"monster","health":4,"faces":["4 ID","4 SAVE","4 SAI:Smite","4 MELEE","4 SAI:Confuse","4 MANEUVER","4 SAI:Confuse","4 MELEE","4 SAI:Smite","4 SAVE"]},"goblins.thug":{"id":"goblins.thug","name":"Thug","species":"goblins","class":"heavy_melee","size":"small","health":1,"faces":["1 ID","1 SAVE","1 MELEE","1 MELEE","1 MANEUVER","2 MELEE"]},"goblins.cutthroat":{"id":"goblins.cutthroat","name":"Cutthroat","species":"goblins","class":"heavy_melee","size":"medium","health":2,"faces":["2 ID","2 SAVE","2 MELEE","2 MELEE","3 MANEUVER","2 MELEE"]},"goblins.marauder":{"id":"goblins.marauder","name":"Marauder","species":"goblins","class":"heavy_melee","size":"large","health":3,"faces":["3 ID","2 MANEUVER","4 MELEE","3 MELEE","3 SAVE","4 SAI:Smite"]},"goblins.cannibal":{"id":"goblins.cannibal","name":"Cannibal","species":"goblins","class":"heavy_melee","size":"monster","health":4,"faces":["4 ID","4 SAI:Swallow","4 SAVE","4 SAI:Stun","4 MELEE","4 SAVE","4 MANEUVER","4 SAI:Net","4 SAI:Surprise","4 SAI:Sleep"]},"goblins.mugger":{"id":"goblins.mugger","name":"Mugger","species":"goblins","class":"light_melee","size":"small","health":1,"faces":["1 ID","1 MELEE","1 MANEUVER","1 MANEUVER","2 MELEE","1 SAVE"]},"goblins.ambusher":{"id":"goblins.ambusher","name":"Ambusher","species":"goblins","class":"light_melee","size":"medium","health":2,"faces":["2 ID","3 MELEE","3 MANEUVER","2 MANEUVER","2 SAVE","2 MISSILE"]},"goblins.filcher":{"id":"goblins.filcher","name":"Filcher","species":"goblins","class":"light_melee","size":"large","health":3,"faces":["3 ID","3 MANEUVER","3 MELEE","3 MELEE","3 SAVE","4 SAI:Counter"]},"goblins.death_naga":{"id":"goblins.death_naga","name":"Death Naga","species":"goblins","class":"light_melee","size":"monster","health":4,"faces":["4 ID","4 MANEUVER","4 MAGIC","4 SAI:Poison","4 MELEE","4 SAVE","4 SAI:Poison","4 MAGIC","4 MANEUVER","4 MELEE"]},"goblins.wardog_rider":{"id":"goblins.wardog_rider","name":"Wardog Rider","species":"goblins","class":"cavalry","size":"small","health":1,"faces":["1 ID","1 MELEE","2 MANEUVER","1 MANEUVER","1 MELEE","1 SAVE"]},"goblins.wolf_rider":{"id":"goblins.wolf_rider","name":"Wolf Rider","species":"goblins","class":"cavalry","size":"medium","health":2,"faces":["2 ID","2 MELEE","3 MANEUVER","3 MANEUVER","2 MELEE","2 SAVE"]},"goblins.leopard_rider":{"id":"goblins.leopard_rider","name":"Leopard Rider","species":"goblins","class":"cavalry","size":"large","health":3,"faces":["3 ID","3 MISSILE","3 SAI:Rend","3 SAI:Rend","3 SAVE","4 MELEE"]},"goblins.harpy":{"id":"goblins.harpy","name":"Harpy","species":"goblins","class":"cavalry","size":"monster","health":4,"faces":["4 ID","4 SAI:Fly","4 SAVE","4 MELEE","4 SAI:Fly","4 MELEE","4 SAI:Screech","4 MELEE","4 SAI:Screech","4 SAI:Fly"]},"goblins.pelter":{"id":"goblins.pelter","name":"Pelter","species":"goblins","class":"missile","size":"small","health":1,"faces":["1 ID","1 SAVE","1 MISSILE","2 MISSILE","1 SAVE","1 MANEUVER"]},"goblins.slingman":{"id":"goblins.slingman","name":"Slingman","species":"goblins","class":"missile","size":"medium","health":2,"faces":["2 ID","2 MELEE","3 MISSILE","3 MISSILE","2 MANEUVER","2 SAVE"]},"goblins.deadeye":{"id":"goblins.deadeye","name":"Deadeye","species":"goblins","class":"missile","size":"large","health":3,"faces":["3 ID","2 MELEE","4 MISSILE","3 MISSILE","3 SAVE","4 SAI:Bullseye"]},"goblins.shambler":{"id":"goblins.shambler","name":"Shambler","species":"goblins","class":"missile","size":"monster","health":4,"faces":["4 ID","4 SAVE","4 MELEE","4 SAVE","4 SAI:Smother","4 SAI:Smother","4 MELEE","4 SAVE","4 MELEE","4 SAI:Smite"]},"goblins.trickster":{"id":"goblins.trickster","name":"Trickster","species":"goblins","class":"magic","size":"small","health":1,"faces":["1 ID","1 MELEE","1 MAGIC","1 MAGIC","1 MANEUVER","2 MAGIC"]},"goblins.hedge_wizard":{"id":"goblins.hedge_wizard","name":"Hedge Wizard","species":"goblins","class":"magic","size":"medium","health":2,"faces":["2 ID","2 SAVE","3 MAGIC","3 MAGIC","2 MANEUVER","2 MAGIC"]},"goblins.death_mage":{"id":"goblins.death_mage","name":"Death Mage","species":"goblins","class":"magic","size":"large","health":3,"faces":["3 ID","2 SAVE","4 MAGIC","3 MAGIC","3 MANEUVER","4 SAI:Cantrip"]},"goblins.troll":{"id":"goblins.troll","name":"Troll","species":"goblins","class":"magic","size":"monster","health":4,"faces":["4 ID","4 SAI:Regenerate","4 MELEE","4 SAVE","4 SAI:Smite","4 SAVE","4 MELEE","4 SAI:Regenerate","4 MANEUVER","4 SAI:Smite"]},"lava_elves.bladesman":{"id":"lava_elves.bladesman","name":"Bladesman","species":"lava_elves","class":"heavy_melee","size":"small","health":1,"faces":["1 ID","1 SAVE","1 MELEE","1 MELEE","1 MISSILE","2 MELEE"]},"lava_elves.duelist":{"id":"lava_elves.duelist","name":"Duelist","species":"lava_elves","class":"heavy_melee","size":"medium","health":2,"faces":["2 ID","2 SAVE","4 MELEE","2 MELEE","2 MANEUVER","2 MISSILE"]},"lava_elves.conqueror":{"id":"lava_elves.conqueror","name":"Conqueror","species":"lava_elves","class":"heavy_melee","size":"large","health":3,"faces":["3 ID","2 MISSILE","5 MELEE","1 MELEE","3 SAVE","4 SAI:Smite"]},"lava_elves.beholder":{"id":"lava_elves.beholder","name":"Beholder","species":"lava_elves","class":"heavy_melee","size":"monster","health":4,"faces":["4 ID","4 MAGIC","2 SAI:Flame","4 SAVE","4 SAI:Charm","4 SAI:Stone","4 SAI:Confuse","4 MELEE","4 SAI:Illusion","4 SAVE"]},"lava_elves.scout":{"id":"lava_elves.scout","name":"Scout","species":"lava_elves","class":"light_melee","size":"small","health":1,"faces":["1 ID","2 MELEE","1 MANEUVER","1 MANEUVER","1 MELEE","1 MISSILE"]},"lava_elves.spy":{"id":"lava_elves.spy","name":"Spy","species":"lava_elves","class":"light_melee","size":"medium","health":2,"faces":["2 ID","4 MELEE","4 MANEUVER","1 MANEUVER","1 MELEE","2 MISSILE"]},"lava_elves.infiltrator":{"id":"lava_elves.infiltrator","name":"Infiltrator","species":"lava_elves","class":"light_melee","size":"large","health":3,"faces":["3 ID","5 MELEE","5 MANEUVER","1 MANEUVER","1 MELEE","4 SAI:Counter"]},"lava_elves.drider":{"id":"lava_elves.drider","name":"Drider","species":"lava_elves","class":"light_melee","size":"monster","health":4,"faces":["4 ID","4 SAI:Web","4 MANEUVER","4 SAVE","4 MELEE","4 MISSILE","4 MANEUVER","4 SAI:Web","4 SAVE","4 MELEE"]},"lava_elves.spider_rider":{"id":"lava_elves.spider_rider","name":"Spider Rider","species":"lava_elves","class":"cavalry","size":"small","health":1,"faces":["1 ID","1 MELEE","2 MANEUVER","1 MANEUVER","1 MELEE","1 MISSILE"]},"lava_elves.scorpion_knight":{"id":"lava_elves.scorpion_knight","name":"Scorpion Knight","species":"lava_elves","class":"cavalry","size":"medium","health":2,"faces":["2 ID","4 MELEE","3 MANEUVER","2 MELEE","1 MELEE","2 SAVE"]},"lava_elves.wyvern_rider":{"id":"lava_elves.wyvern_rider","name":"Wyvern Rider","species":"lava_elves","class":"cavalry","size":"large","health":3,"faces":["3 ID","4 MELEE","5 SAI:Fly","1 SAI:Fly","2 MELEE","4 MISSILE"]},"lava_elves.hell_hound":{"id":"lava_elves.hell_hound","name":"Hell Hound","species":"lava_elves","class":"cavalry","size":"monster","health":4,"faces":["4 ID","4 MANEUVER","4 MELEE","4 SAVE","2 SAI:Flame","2 SAI:Flame","4 MELEE","4 MANEUVER","4 SAVE","4 MELEE"]},"lava_elves.fusilier":{"id":"lava_elves.fusilier","name":"Fusilier","species":"lava_elves","class":"missile","size":"small","health":1,"faces":["1 ID","1 MELEE","2 MISSILE","1 MISSILE","1 MANEUVER","1 SAVE"]},"lava_elves.dead_shot":{"id":"lava_elves.dead_shot","name":"Dead Shot","species":"lava_elves","class":"missile","size":"medium","health":2,"faces":["2 ID","2 MELEE","2 MISSILE","2 MISSILE","2 MANEUVER","4 MISSILE"]},"lava_elves.assassin":{"id":"lava_elves.assassin","name":"Assassin","species":"lava_elves","class":"missile","size":"large","health":3,"faces":["3 ID","5 MISSILE","3 MISSILE","1 MISSILE","4 SAI:Bullseye","3 MELEE"]},"lava_elves.lurker_in_the_deep":{"id":"lava_elves.lurker_in_the_deep","name":"Lurker in the Deep","species":"lava_elves","class":"missile","size":"monster","health":4,"faces":["4 ID","4 SAI:Counter","4 MAGIC","4 MANEUVER","4 SAI:Cantrip","4 MAGIC","4 SAI:Volley","4 SAI:Cloak","4 SAI:Fly","4 MANEUVER"]},"lava_elves.adept":{"id":"lava_elves.adept","name":"Adept","species":"lava_elves","class":"magic","size":"small","health":1,"faces":["1 ID","1 SAVE","1 MAGIC","1 MAGIC","1 MANEUVER","2 MAGIC"]},"lava_elves.warlock":{"id":"lava_elves.warlock","name":"Warlock","species":"lava_elves","class":"magic","size":"medium","health":2,"faces":["2 ID","2 MELEE","2 MAGIC","2 MAGIC","2 MANEUVER","4 MAGIC"]},"lava_elves.necromancer":{"id":"lava_elves.necromancer","name":"Necromancer","species":"lava_elves","class":"magic","size":"large","health":3,"faces":["3 ID","2 SAVE","5 MAGIC","2 MAGIC","3 MELEE","4 SAI:Cantrip"]},"lava_elves.rakshasa":{"id":"lava_elves.rakshasa","name":"Rakshasa","species":"lava_elves","class":"magic","size":"monster","health":4,"faces":["4 ID","4 MANEUVER","4 SAI:Illusion","4 MELEE","4 MAGIC","4 SAI:Illusion","4 SAVE","4 SAI:Counter","4 MAGIC","4 MELEE"]}},"terrains":{"swampland":{"name":"Swampland","elements":["water","earth"],"faces":{"1":"MAGIC","2":"MAGIC","3":"MISSILE","4":"MISSILE","5":"MELEE","6":"MELEE","7":"MELEE"}},"highland":{"name":"Highland","elements":["fire","earth"],"faces":{"1":"MAGIC","2":"MAGIC","3":"MAGIC","4":"MISSILE","5":"MISSILE","6":"MELEE","7":"MELEE"}},"wasteland":{"name":"Wasteland","elements":["air","fire"],"faces":{"1":"MAGIC","2":"MISSILE","3":"MISSILE","4":"MELEE","5":"MELEE","6":"MELEE","7":"MELEE"}},"coastland":{"name":"Coastland","elements":["air","water"],"faces":{"1":"MAGIC","2":"MISSILE","3":"MISSILE","4":"MISSILE","5":"MISSILE","6":"MELEE","7":"MELEE"}},"feyland":{"name":"Feyland","elements":["water","fire"],"faces":{"1":"MAGIC","2":"MAGIC","3":"MAGIC","4":"MISSILE","5":"MELEE","6":"MELEE","7":"MELEE"}},"flatland":{"name":"Flatland","elements":["air","earth"],"faces":{"1":"MAGIC","2":"MISSILE","3":"MISSILE","4":"MISSILE","5":"MELEE","6":"MELEE","7":"MELEE"}}}}
+const U = (id) => DATA.units[id]
+
+function band(els) { return els.map((e) => `<i style="background:var(--el-${e})"></i>`).join('') }
+function tile(id, opts = {}) {
+  const u = U(id)
+  const scale = opts.small ? 0.8 : 1
+  const size = Math.round(TILE[u.size] * scale)
+  const m = Math.round(MARK[u.size] * scale)
+  const monster = u.size === 'monster'
+  return `<span class="tile ${opts.cls || ''}" style="width:${size}px;height:${size}px" title="${esc(u.name)}">
+    <svg class="shape" viewBox="0 0 24 24" width="${m}" height="${m}">${SHAPES[monster ? 'monster' : u.class]}</svg>
+    ${monster ? `<span class="mo">${u.name.slice(0, 2)}</span>` : `<span class="cls">${CODE[u.class]}</span>`}
+    <span class="hp">${u.health}</span><span class="band">${band(SPECIES[u.species].el)}</span></span>`
+}
+function dragonTile(el, form, opts = {}) {
+  const size = opts.small ? 48 : 60
+  return `<span class="tile dragon ${opts.cls || ''}" style="width:${size}px;height:${size}px;border-color:var(--el-${el});color:var(--el-${el})" title="${el} ${form}">
+    <span class="cls">${form === 'drake' ? 'DR' : 'WY'}</span><b style="font-size:11px">${el[0].toUpperCase() + el.slice(1)}</b>
+    <span class="band"><i style="background:var(--el-${el})"></i></span></span>`
+}
+const dragonName = (el, form) => `${el[0].toUpperCase() + el.slice(1)} ${form === 'drake' ? 'Drake' : 'Wyrm'}`
+function faceRow(id) {
+  return `<div class="faces">${U(id).faces.map((f) => {
+    const [n, icon] = f.split(' ')
+    const key = icon.startsWith('SAI') ? 'SAI' : icon
+    return `<span class="fc i-${key}" title="${esc(f)}">${n}${svg(G[key])}${key === 'SAI' ? f.slice(f.indexOf(':') + 1) : ''}</span>`
+  }).join('')}</div>`
+}
+function terrainFaces(type, eighth) {
+  const t = DATA.terrains[type]
+  return `<div class="faces">${[1, 2, 3, 4, 5, 6, 7].map((n) => `<span class="fc i-${t.faces[n]}">${n}${svg(G[t.faces[n]])}</span>`).join('')}<span class="fc eighth">8 ${eighth}</span></div>`
+}
+function terrainChip(type, eighth, on) {
+  const t = DATA.terrains[type]
+  return `<span class="tchip ${on ? 'on' : ''}">${t.elements.map((e) => `<i class="el" style="background:var(--el-${e})"></i>`).join('')}${t.name} · ${eighth}</span>`
+}
+
+// ---------------------------------------------------------------------------
+// The run in the frames: Treefolk, Act II, encounter 5 of 12.
+// ---------------------------------------------------------------------------
+const RUN = {
+  history: [
+    // Act I, all twelve
+    'won', 'won', 'event', 'won', 'won', 'event', 'won', 'won', 'won', 'event', 'won', 'won',
+    // Act II so far
+    'won', 'event', 'won', 'won',
+  ],
+  force: {
+    home: ['treefolk.oak_lord', 'treefolk.darktree', 'treefolk.hamadryad'],
+    campaign: ['treefolk.noble_willow', 'treefolk.pine', 'treefolk.nymph', 'treefolk.oakling'],
+    horde: ['treefolk.oak', 'treefolk.naiad', 'coral_elves.knight', 'treefolk.willowling', 'treefolk.pineling', 'treefolk.oakling'],
+  },
+  spare: [['treefolk.dryad', true], ['coral_elves.trooper', true], ['treefolk.oakling', false]],
+  enemy: ['coral_elves.leviathan', 'coral_elves.protector', 'coral_elves.herald', 'coral_elves.sharpshooter', 'coral_elves.knight', 'coral_elves.archer', 'coral_elves.conjurer', 'coral_elves.fighter', 'coral_elves.bowman', 'coral_elves.evoker', 'coral_elves.guard', 'coral_elves.horseman'],
+}
+const healthOf = (ids) => ids.reduce((n, id) => n + U(id).health, 0)
+
+/** The act strip. `compact` draws pips, `mini` the current act alone. */
+function actStrip(scr, current = 'here') {
+  // Phone upright, and any screen too short to spare a second line: the current act alone.
+  const narrow = scr.w < 600 || scr.h < 500
+  const slots = (act) => Array.from({ length: 12 }, (_, i) => {
+    const k = act * 12 + i
+    const h = RUN.history[k]
+    if (h === 'won') return '<span class="slot won">✓</span>'
+    if (h === 'event') return '<span class="slot event"><span>·</span></span>'
+    if (k === RUN.history.length) return `<span class="slot ${current}">${current === 'lost' ? '✗' : i + 1}</span>`
+    return '<span class="slot"></span>'
+  }).join('')
+  if (narrow) {
+    return `<div class="acts mini"><div class="act now compact">
+      <div class="act-name">Act II · 5 of 12 <span class="muted">cap 24 · Act I cleared · Act III 36 ahead</span></div>
+      <div class="slots">${slots(1)}</div></div></div>`
+  }
+  const small = scr.w < 1000
+  return `<div class="acts">
+    <div class="act done ${small ? 'compact' : 'compact'}"><div class="act-name">Act I <span class="muted">12 · cleared</span></div><div class="slots">${slots(0)}</div></div>
+    <div class="act now"><div class="act-name">Act II <span class="muted">cap 24 · encounter 5 of 12</span></div><div class="slots">${slots(1)}</div></div>
+    <div class="act compact"><div class="act-name">Act III <span class="muted">cap 36</span></div><div class="slots">${slots(2)}</div></div>
+  </div>`
+}
+
+// ---------------------------------------------------------------------------
+// The views. Each returns { body, foot?, head? } for a screen.
+// ---------------------------------------------------------------------------
+const VIEWS = {
+  start: {
+    name: 'Start screen',
+    variants: [['saved', 'A run saved'], ['discarded', 'A save discarded'], ['none', 'No run']],
+    what: '4b. The start screen gains a run section above the single game. Continue names where the run stands; New run over one asks first. A save the code could not read is said once, here.',
+    render(scr, v) {
+      const saved = v === 'saved'
+      return {
+        body: `
+          <div><h1 style="margin:0">dd_solo</h1><p class="note">A run: pick a race, start from 12 health, fight three acts.</p></div>
+          ${v === 'discarded' ? '<div class="discarded">A run saved by an older version (1, now 2) could not be continued, and was discarded.</div>' : ''}
+          <div class="panel start-run">
+            ${saved ? `<div><div class="label">Run in progress</div><b style="font-size:var(--fs-xl)">Treefolk · Act II · 5 of 12</b>
+              <p class="note">Next: Tidal legion · saved today at 14:02 · 24 health fielded of 24</p></div>
+              <div class="btn-row"><span class="btn-p">Continue run</span><span class="btn-s">New run</span></div>`
+            : `<div><div class="label">Runs</div><b style="font-size:var(--fs-xl)">No run in progress</b><p class="note">A run is saved between battles, in this browser.</p></div>
+              <div class="btn-row"><span class="btn-p">New run</span></div>`}
+          </div>
+          <div class="panel"><h3>A single game <span class="muted">as today</span></h3>
+            <div class="two"><div class="field"><span class="label">Your side</span><span class="input">Treefolk starter force</span></div>
+            <div class="field"><span class="label">Opponent's side</span><span class="input">Firewalkers starter force</span></div></div>
+            <div class="btn-row" style="margin-top:8px"><span class="btn-s">Start</span><span class="btn-s">Roll everything instead</span><span class="btn-s">Army builder</span></div>
+          </div>
+          ${saved ? `<div class="panel" style="border-color:var(--warn)"><b>New run, over the one in progress?</b><p class="note">This variant's second half: the question New run asks. "Your Treefolk run at Act II, 5 of 12 will be lost."</p><div class="btn-row" style="margin-top:6px"><span class="btn-s danger">Lose it and start over</span><span class="btn-s">Keep it</span></div></div>` : ''}`,
+      }
+    },
+  },
+
+  race: {
+    name: 'Race pick',
+    variants: [['picked', 'Treefolk picked']],
+    what: '4b. Six races, each with its elements, its Home terrain and its two abilities. The opening dice are drawn from the seed, so the card says what they will be made of rather than which dice. The seed is optional, as on the start screen.',
+    render(scr) {
+      const cards = Object.entries(SPECIES).map(([id, s]) => {
+        const sample = ['large', 'medium', 'small'].map((size) => Object.values(DATA.units).find((u) => u.species === id && u.size === size))
+        return `<div class="race ${id === 'treefolk' ? 'picked' : ''}">
+          <div class="nm"><span class="els">${s.el.map((e) => `<i style="background:var(--el-${e})"></i>`).join('')}</span>${s.name}</div>
+          <div class="sub">${s.el.join(' & ')} · home on ${s.home}</div>
+          <div class="ab">${s.ab.join(' · ')}</div>
+          <div class="dice">${sample.filter(Boolean).map((u) => tile(u.id, { small: true })).join('')}</div>
+        </div>`
+      }).join('')
+      return {
+        body: `<div><h1 style="margin:0">Pick a race</h1><p class="note">You start with one large die, a medium of its line and one more, its five small dice, a dragon and two terrains: 12 health.</p></div>
+          <div class="races">${cards}</div>
+          <div class="field" style="max-width:320px"><span class="label">Seed</span><span class="input">leave empty to roll one</span></div>`,
+        foot: `<span class="why">Treefolk · water & earth · a Swampland home</span><span class="btn-s">Back</span><span class="btn-p">Start a Treefolk run</span>`,
+      }
+    },
+  },
+
+  arrange: {
+    name: 'Force between encounters',
+    variants: [['ready', 'Ready to fight'], ['problem', 'An army empty'], ['enemy-closed', 'Enemy folded']],
+    what: '4c. The run\'s builder: the next enemy first, then your three armies, then what you hold and do not field. Two dice won since the last battle are marked new. Fight stays in reach in a footer; a problem sits beside its section and beside Fight.',
+    render(scr, v) {
+      const narrow = scr.w < 600
+      const short = scr.h < 500
+      const force = v === 'problem'
+        ? { ...RUN.force, campaign: [] }
+        : RUN.force
+      const total = healthOf([...force.home, ...force.campaign, ...force.horde])
+      const half = Math.floor(total / 2)
+      const army = (name, label, where) => {
+        const ids = force[name]
+        const h = healthOf(ids)
+        const bad = ids.length === 0
+        return `<div class="army ${bad ? 'bad' : ''}"><div class="army-head"><b>${label}</b><span class="muted">${h}/${half} · ${where}</span></div>
+          <div class="dice">${ids.map((id) => tile(id, { small: narrow || short })).join('') || '<span class="note">Tap a spare die to add it here.</span>'}</div>
+          ${bad ? '<p class="problem">the campaign army is empty; each army needs at least one die</p>' : ''}</div>`
+      }
+      const enemyOpen = v !== 'enemy-closed' && !short
+      const enemyHealth = healthOf(RUN.enemy)
+      const spare = v === 'problem'
+        ? [...RUN.spare, ...RUN.force.campaign.map((id) => [id, false])]
+        : RUN.spare
+      return {
+        body: `${actStrip(scr)}
+          <div class="panel next">
+            <div class="who"><div class="label">Next battle · Act II, 5 of 12</div><b>Tidal legion</b>
+              <div class="vs">They field Coral Elves, ${enemyHealth} health in ${RUN.enemy.length} dice, played by Greedy. You field ${total} of 24.</div></div>
+            <span class="btn-s" style="min-height:34px;padding:4px 10px">${enemyOpen ? 'Hide their dice' : 'Show their dice'}</span>
+            ${enemyOpen ? `<div class="dice" style="grid-column:1/-1">${RUN.enemy.map((id) => tile(id, { small: true })).join('')}</div>` : ''}
+          </div>
+          <div><div class="label" style="margin-bottom:4px">Your force · ${total} / 24 health</div>
+          <div class="armies">${army('home', 'Home', 'your Home Terrain')}${army('campaign', 'Campaign', 'the Frontier')}${army('horde', 'Horde', 'their home')}</div></div>
+          <div class="panel"><h3>Spare dice <span class="muted">in your pool, not fielded · tap one, then an army</span></h3>
+            <div class="dice">${spare.map(([id, isNew]) => tile(id, { small: narrow || short, cls: isNew ? 'new' : '' })).join('')}</div></div>
+          ${short ? `<div class="panel" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:var(--fs-sm)"><b>Terrain and dragons</b>
+            <span>Home ${terrainChip('swampland', 'city', true)}</span><span>Frontier ${terrainChip('flatland', 'tower', true)}</span><span class="tchip on">Water Drake</span>
+            <span class="btn-s" style="min-height:32px;padding:3px 10px;margin-left:auto">Change</span></div>` : `<div class="two">
+            <div class="panel"><h3>Terrain</h3>
+              <div class="label">Home Terrain</div><div class="chooser">${terrainChip('swampland', 'city', true)}${terrainChip('coastland', 'temple', false)}${terrainChip('flatland', 'tower', false)}</div>
+              <div class="label" style="margin-top:6px">Frontier proposal</div><div class="chooser">${terrainChip('swampland', 'city', false)}${terrainChip('coastland', 'temple', false)}${terrainChip('flatland', 'tower', true)}</div></div>
+            <div class="panel"><h3>Dragons <span class="muted">one for ${total} health · you own two</span></h3>
+              <div class="dice">${dragonTile('water', 'drake', { cls: 'picked', small: true })}${dragonTile('earth', 'wyrm', { small: true })}</div>
+              <p class="note">Owning two, you bring one until the force passes 24.</p></div>
+          </div>`}`,
+        foot: v === 'problem'
+          ? `<span class="why bad">The campaign army is empty.</span><span class="btn-s">Leave run</span><span class="btn-p" aria-disabled="true">Fight</span>`
+          : `<span class="why">${total} / 24 health · Water Drake</span><span class="btn-s">Leave run</span><span class="btn-p">Fight Tidal legion</span>`,
+      }
+    },
+  },
+
+  reward: {
+    name: 'Reward of five',
+    variants: [['picked', 'Eldar Dryad picked'], ['none', 'Nothing picked']],
+    what: '4b. Five offers, each the die itself with every face, so the pick is made on what the die does. A dragon says why it might matter now; a terrain shows its eight faces. Pick, then Take: the footer names it.',
+    render(scr, v) {
+      const narrow = scr.w < 600
+      const units = [['treefolk.eldar_dryad', 'Your race'], ['treefolk.satyr', 'Your race · a monster'], ['coral_elves.eagle_knight', 'Coral Elves']]
+      const offer = (inner, picked) => `<div class="offer ${picked ? 'picked' : ''}">${inner}</div>`
+      const cards =
+        units.map(([id, src], i) => {
+          const u = U(id)
+          return offer(`${tile(id)}<div><div class="kind">${src}</div><div class="nm">${u.name}</div>
+            <div class="sub">${SPECIES[u.species].name} · ${u.health} health · ${u.size === 'monster' ? 'monster' : CLASS[u.class]}</div></div>${faceRow(id)}`, v === 'picked' && i === 0)
+        }).join('') +
+        offer(`${dragonTile('earth', 'drake')}<div><div class="kind">Dragon</div><div class="nm">Earth Drake</div>
+          <div class="sub">earth · 12 faces</div><div class="why">A 36-health force brings two; you own two already.</div></div>`, false) +
+        offer(`<span class="tile" style="width:60px;height:60px;border-width:1.5px"><b style="font-size:10px;text-align:center">Swamp-<br>land</b><span class="band">${band(['water', 'earth'])}</span></span>
+          <div><div class="kind">Terrain</div><div class="nm">Swampland · standing stones</div><div class="sub">water & earth · your own type</div></div>${terrainFaces('swampland', 'stones')}`, false)
+      return {
+        body: `${actStrip(scr)}
+          <div><h2 style="margin:0;font-size:var(--fs-2xl)">Tidal legion is beaten. Pick a reward.</h2>
+          <p class="note">It goes to your pool; you field it before the next battle.${narrow ? '' : ' Tap a die to see it as the inspector shows it.'}</p></div>
+          <div class="offers">${cards}</div>`,
+        foot: v === 'picked'
+          ? `<span class="why">Eldar Dryad · 3 health · Treefolk magic</span><span class="btn-p">Take Eldar Dryad</span>`
+          : `<span class="why">Pick one of the five.</span><span class="btn-p" aria-disabled="true">Take</span>`,
+      }
+    },
+  },
+
+  event: {
+    name: 'Event',
+    variants: [['spare', 'A spare Oakling'], ['benched', 'A fielded Oak'], ['large', 'The Oak Lord']],
+    what: '4b. Pick a die from your pool, then what to do with it. Upgrade names the result and what happens to the force; Transform lists the four it may become; Walk on is always there. The force is at 24 of 24 here, so a fielded die upgraded is over the cap.',
+    render(scr, v) {
+      const narrow = scr.w < 600
+      const pool = [...RUN.force.home, ...RUN.force.campaign, ...RUN.force.horde]
+      const picked = { spare: 'treefolk.oakling', benched: 'treefolk.oak', large: 'treefolk.oak_lord' }[v]
+      const INTO = {
+        'treefolk.oakling': ['treefolk.willowling', 'treefolk.pineling', 'treefolk.nymph', 'treefolk.hamadryad'],
+        'treefolk.oak': ['treefolk.willow', 'treefolk.pine', 'treefolk.naiad', 'treefolk.dryad'],
+        'treefolk.oak_lord': ['treefolk.noble_willow', 'treefolk.pine_prince', 'treefolk.lady_nereid', 'treefolk.eldar_dryad'],
+      }
+      const UP = { 'treefolk.oakling': 'treefolk.oak', 'treefolk.oak': 'treefolk.oak_lord', 'treefolk.oak_lord': null }
+      const into = INTO[picked]
+      const up = UP[picked]
+      const upNote = {
+        spare: '<p class="note ok">The spare Oakling is not fielded, so your force does not change. The Oak waits in your pool.</p>',
+        benched: '<p class="note warn">Your force is at 24 of 24. An Oak Lord would be 25, so it leaves the force and waits in your pool; the Horde drops to 7. Field it again by benching 1 health somewhere.</p>',
+        large: '<p class="note">A large die is the top of its line.</p>',
+      }[v]
+      const transformNote = v === 'benched'
+        ? '<p class="note">One of these, at random: same species, same health. It takes the Oak’s place in the Horde.</p>'
+        : '<p class="note">One of these, at random: same species, same health.</p>'
+      const fielded = pool.map((id, i) => tile(id, { small: true, cls: id === picked && v !== 'spare' && pool.indexOf(id) === i ? 'picked' : '' })).join('')
+      const spare = RUN.spare.map(([id]) => tile(id, { small: true, cls: v === 'spare' && id === picked ? 'picked' : '' })).join('')
+      const tiles = `<div class="label">Fielded</div><div class="dice">${fielded}</div><div class="label" style="margin-top:6px">Spare</div><div class="dice">${spare}</div>`
+      return {
+        body: `${actStrip(scr)}
+          <div><h2 style="margin:0;font-size:var(--fs-2xl)">Wandering blacksmith</h2><p class="note">Change one die in your pool, or walk on.</p></div>
+          <div class="panel"><h3>Your pool <span class="muted">tap a die</span></h3>${tiles}</div>
+          <div class="choose">
+            <div class="panel"><h3>Upgrade</h3>${up === null ? `<div class="path">${tile(picked, { small: narrow })}<span class="arrow">→</span><span class="muted">nothing above it</span></div>` : `<div class="path">${tile(picked, { small: narrow })}<span class="arrow">→</span>${tile(up, { small: narrow })}<b>${U(up).name}</b></div>`}${upNote}</div>
+            <div class="panel"><h3>Transform</h3><div class="path">${tile(picked, { small: narrow })}<span class="arrow">→</span>${into.map((id) => tile(id, { small: true, cls: 'ghost' })).join('<span class="or">or</span>')}</div>${transformNote}</div>
+          </div>`,
+        foot: `<span class="why">${U(picked).name}${v === 'spare' ? ', spare' : ', fielded'}</span><span class="btn-s">Walk on</span><span class="btn-s">Transform</span><span class="btn-p" ${up === null ? 'aria-disabled="true"' : ''}>${up === null ? 'Upgrade' : `Upgrade to ${U(up).name}`}</span>`,
+      }
+    },
+  },
+
+  battle: {
+    name: 'Battle in a run',
+    variants: [['play', 'Playing'], ['concede', 'Concede asks'], ['won', 'Game over: won'], ['lost', 'Game over: lost']],
+    what: '4d. The game screen as it is, with the encounter in the header and Leave run beside Concede. Concede asks first and says it ends the run; the game-over card leads to the reward or the run\'s end.',
+    render(scr, v) {
+      const narrow = scr.w < 600
+      const cols = scr.w >= 900
+      const card = (name, them, you) => `<div class="tcard"><div class="thead"><b>${name}</b></div>
+        <div class="side-label">The enemy</div><div class="dice">${them.map((id) => tile(id, { small: true })).join('')}</div>
+        <div class="side-label">You</div><div class="dice">${you.map((id) => tile(id, { small: true })).join('')}</div></div>`
+      const board = `<div class="board ${cols ? 'cols' : ''}">${card('Your home · Swampland', RUN.enemy.slice(5, 8), RUN.force.home)}${card('Frontier · Flatland', RUN.enemy.slice(0, 3), RUN.force.campaign)}${card('Their home · Coastland', RUN.enemy.slice(3, 5), RUN.force.horde)}</div>`
+      const dock = {
+        play: '<p class="q">March: choose an action at the Frontier</p><div class="btn-row"><span class="btn-p">Melee<small>expect ≈6, they save ≈3</small></span><span class="btn-s">Maneuver</span><span class="btn-s">Pass</span></div>',
+        concede: '<p class="q">Concede Tidal legion?</p><p class="sub">A lost battle ends the run: your Treefolk run stops at Act II, 5 of 12. To stop for now and come back to this battle\'s start, use Leave run instead.</p><div class="btn-row"><span class="btn-s danger">Concede, and end the run</span><span class="btn-s">Leave run</span><span class="btn-p">Keep playing</span></div>',
+        won: '<p class="q won-q">You win.</p><p class="sub">You captured two terrains, on turn 9 · 11:40.</p><div class="facts"><div><b>17</b> <span class="muted">of 24 health left</span></div><div><b>6</b> <span class="muted">of 24 left to them</span></div></div><div class="btn-row"><span class="btn-p">Pick your reward</span></div>',
+        lost: '<p class="q lost-q">You lose.</p><p class="sub">They killed your last army, on turn 12 · 14:05. The run ends at Act II, 5 of 12.</p><div class="facts"><div><b>0</b> <span class="muted">of 24 health left</span></div><div><b>9</b> <span class="muted">of 24 left to them</span></div></div><div class="btn-row"><span class="btn-p">See the run</span></div>',
+      }[v]
+      return {
+        head: `<div class="app-head"><b>${narrow ? 'II·5' : 'Act II · 5 of 12'}</b><span class="grow">${narrow ? '' : 'Tidal legion · '}T9</span>${narrow ? '' : '<span class="ticker">You melee at Frontier: 7 − 3 = 4 damage</span>'}<span class="hbtn">Leave run</span><span class="hbtn danger">Concede</span></div>`,
+        area: `${board}${v === 'concede' ? '<div class="scrim"></div>' : ''}<div class="dock">${dock}</div>`,
+      }
+    },
+  },
+
+  end: {
+    name: 'The run\'s end',
+    variants: [['lost', 'Lost'], ['won', 'Won']],
+    what: '4d. A page of its own, shown once and then cleared: how far the run went, what each encounter was, and the force at the end. New run starts over from the race pick.',
+    render(scr, v) {
+      const won = v === 'won'
+      const lines = [
+        ['I · 1', 'Lava Elf outriders', 'won', 'w'], ['I · 2', 'Hermit\'s hut', 'upgraded Pineling to Pine', ''],
+        ['…', '', '', ''], ['II · 3', 'Mountain hold', 'won', 'w'], ['II · 4', 'Coral armada', 'won', 'w'],
+        won ? ['III · 12', 'Last alliance', 'won', 'w'] : ['II · 5', 'Tidal legion', 'lost', 'l'],
+      ]
+      return {
+        body: `${actStrip(scr, won ? 'won' : 'lost')}
+          <div><p class="end-title ${won ? 'won-q' : 'lost-q'}">${won ? 'The run is won.' : 'The run is lost.'}</p>
+          <p class="note">${won ? 'A Treefolk run, all three acts cleared · seed 4812' : 'A Treefolk run, lost at Act II, encounter 5 of 12, to Tidal legion · seed 4812'}</p></div>
+          <div class="stats"><div class="stat"><b>${won ? 26 : 13}</b><span>battles won</span></div><div class="stat"><b>${won ? 10 : 4}</b><span>events</span></div>
+            <div class="stat"><b>${won ? 41 : 26}</b><span>health in your pool</span></div><div class="stat"><b>${won ? 2 : 2}</b><span>dragons</span></div></div>
+          <div class="panel"><h3>The force at the end <span class="muted">${healthOf([...RUN.force.home, ...RUN.force.campaign, ...RUN.force.horde])} health</span></h3>
+            <div class="dice">${[...RUN.force.home, ...RUN.force.campaign, ...RUN.force.horde].map((id) => tile(id, { small: true })).join('')}</div></div>
+          <div class="panel"><h3>Encounter by encounter</h3><div class="timeline">${lines.map(([w, n, r, c]) => `<div><span class="muted">${w}</span><span>${n}</span><span class="${c}">${r}</span></div>`).join('')}</div></div>`,
+        foot: `<span class="why">The save is cleared once this has been seen.</span><span class="btn-s">Back to start</span><span class="btn-p">New run</span>`,
+      }
+    },
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Screens (3a's), and the page.
+// ---------------------------------------------------------------------------
+const SCREENS = {
+  laptop: { label: 'Laptop 1366×680', w: 1366, h: 680, phone: false },
+  sideways: { label: 'Phone sideways 844×390', w: 844, h: 390, phone: true },
+  upright: { label: 'Phone upright 390×844', w: 390, h: 844, phone: true },
+}
+const st = { view: 'arrange', variant: 'ready', screen: 'laptop' }
+function readHash() {
+  const [view, variant, screen] = location.hash.slice(1).split('/')
+  if (view in VIEWS) st.view = view
+  st.variant = VIEWS[st.view].variants.some(([k]) => k === variant) ? variant : VIEWS[st.view].variants[0][0]
+  if (screen in SCREENS) st.screen = screen
+}
+function writeHash() { history.replaceState(null, '', `#${st.view}/${st.variant}/${st.screen}`) }
+function seg(name, label, options, value) {
+  return `<div class="control"><span>${label}</span><div class="seg" role="radiogroup">` +
+    options.map(([v, l]) => `<input type="radio" name="${name}" id="${name}-${v}" value="${v}" ${v === value ? 'checked' : ''}><label for="${name}-${v}">${l}</label>`).join('') +
+    '</div></div>'
+}
+function renderControls() {
+  document.getElementById('controls').innerHTML =
+    seg('view', 'Screen', Object.entries(VIEWS).map(([k, v]) => [k, v.name]), st.view) +
+    seg('variant', 'Variant', VIEWS[st.view].variants, st.variant) +
+    seg('screen', 'Device', Object.entries(SCREENS).map(([k, s]) => [k, s.label]), st.screen)
+  document.querySelectorAll('#controls input').forEach((input) => input.addEventListener('change', () => {
+    st[input.name] = input.value
+    if (input.name === 'view') st.variant = VIEWS[st.view].variants[0][0]
+    render()
+  }))
+}
+const classes = (scr) => (scr.h < 500 ? ' short' : '') + (scr.w < 600 ? ' narrow' : '') + (scr.w < 1000 && scr.w >= 600 ? ' mid-w' : '')
+
+/** The screen's inside: a scrolling page and a footer that never scrolls, or the game. */
+function screenHtml(view, variant, scr) {
+  const out = VIEWS[view].render(scr, variant)
+  if (out.area !== undefined) {
+    return `<div class="screen${classes(scr)}" style="width:${scr.w}px;height:${scr.h}px">${out.head}<div class="area">${out.area}</div></div>`
+  }
+  return `<div class="screen${classes(scr)}" style="width:${scr.w}px;height:${scr.h}px">
+    <div class="scroll"><div class="page">${out.body}</div></div>
+    ${out.foot ? `<div class="dock-foot">${out.foot}</div>` : ''}</div>`
+}
+/** How far a screen's page scrolls, and whether its dialog fits. */
+function measureScreen(root) {
+  const scroll = root.querySelector('.scroll')
+  if (scroll) return { overflow: Math.max(0, scroll.scrollHeight - scroll.clientHeight), kind: 'page' }
+  const dock = root.querySelector('.dock')
+  return { overflow: Math.max(0, dock.scrollHeight - dock.clientHeight), kind: 'dialog', share: dock.offsetHeight / root.querySelector('.screen').clientHeight }
+}
+function verdictPill(m) {
+  if (m.overflow === 0) return `<span class="pill ok">fits${m.share ? ` · dialog ${Math.round(m.share * 100)}% of the screen` : ''}</span>`
+  return `<span class="pill ${m.overflow < 400 ? 'warn' : 'bad'}">${m.kind === 'page' ? 'the page scrolls' : 'the dialog scrolls'} ${m.overflow}px</span>`
+}
+function render() {
+  writeHash()
+  renderControls()
+  const scr = SCREENS[st.screen]
+  document.getElementById('what').textContent = VIEWS[st.view].what
+  const stage = document.getElementById('stage')
+  const bezel = scr.phone ? 24 : 20
+  const scale = Math.min(1, stage.clientWidth / (scr.w + bezel))
+  stage.style.height = Math.ceil((scr.h + bezel) * scale) + 'px'
+  stage.innerHTML = `<div class="device ${scr.phone ? 'phone' : ''}" style="transform:scale(${scale})">${screenHtml(st.view, st.variant, scr)}</div>`
+  const m = measureScreen(stage)
+  document.getElementById('verdict').innerHTML = verdictPill(m) + `<span class="muted">${scr.label}</span>`
+}
+function measureAll() {
+  const host = document.getElementById('measure')
+  const rows = []
+  for (const [vk, view] of Object.entries(VIEWS)) {
+    for (const [variant, vlabel] of view.variants) {
+      const cells = Object.values(SCREENS).map((scr) => {
+        host.innerHTML = screenHtml(vk, variant, scr)
+        const m = measureScreen(host)
+        const cls = m.overflow === 0 ? 'ok' : m.overflow < 400 ? 'warn' : 'bad'
+        return `<td class="${cls}">${m.overflow === 0 ? 'fits' : `scrolls ${m.overflow}px`}<small>${m.share ? `dialog ${Math.round(m.share * 100)}%` : `${Math.round((m.overflow + scr.h) / scr.h * 10) / 10} screens`}</small></td>`
+      })
+      rows.push(`<tr><th class="row">${view.name} · ${vlabel}</th>${cells.join('')}</tr>`)
+    }
+  }
+  host.innerHTML = ''
+  document.getElementById('matrix').innerHTML =
+    `<table class="matrix"><tr><th></th>${Object.values(SCREENS).map((s) => `<th>${s.label}</th>`).join('')}</tr>${rows.join('')}</table>`
+}
+
+readHash()
+render()
+measureAll()
+addEventListener('resize', render)
+</script>
+</body>
+</html>

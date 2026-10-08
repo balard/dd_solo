@@ -7,7 +7,7 @@ acts whose enemies grow from 12 to 24 to 36 health. A loss ends the run.
 
 Read `PLAN-V2.md` Phase 4 (the collection and the builder) before anything here: v3 is that phase's
 `Collection` and `forceProblems` with a game around them. This document is the *order of work*.
-**Phases 0 to 3 have landed** (the run model, the encounters, a run in the terminal, run saves); Phase 4 (the run screens) has not.
+**Phases 0 to 3 have landed** (the run model, the encounters, a run in the terminal, run saves), and **4a** (the run screens' mockups); 4b-4d have not.
 
 **Scope decisions this plan is built on** (agreed 2026-10-07):
 - **A mode in this repo, not a fork.** The single game stays exactly what it is. The run is a
@@ -573,6 +573,88 @@ checked now is checked twice:
   result. Transform lists the dice it might become, since the result is random.
 
 **Exit criterion.** A whole run in the browser, from race pick to won or lost, surviving a reload.
+
+### What 4a found
+
+`docs/mockups/v3-phase-4a.html` draws every screen a run adds, on the three frames v2 measured
+(laptop 1366×680, phone sideways 844×390, phone upright 390×844):
+- the start screen with a run on it;
+- the race pick;
+- the force between encounters;
+- the reward of five;
+- an event;
+- a battle inside a run;
+- the run's end.
+
+There are seventeen variants in all, and the page measures each, as 9a did. The scenario is one
+Treefolk run in Act II, at encounter 5 of 12, fielding 24 against a 24-health Coral Elf enemy.
+Every die is a real die with its real faces, read from `data/`. No code moved.
+
+**Measured.** Every screen's answer (Fight, Take, Upgrade, Start) sits in a footer that never
+scrolls, so the question is only how much the player scrolls to judge it:
+- **The reward, the race pick, the battle dialogs and the start screen fit** almost everywhere.
+  Five offers fit even upright, as a list. The battle's dialogs (Concede, both game-overs) take
+  41% of the screen at worst, sideways.
+- **The force between encounters is the one screen that always scrolls**: 1.1 screens on the
+  laptop, 1.4 upright, and 1.9 sideways. Folding two things on short screens brought sideways to
+  1.3: the enemy's dice start folded, and terrain and dragons become one line with Change. Both
+  rarely change between battles, and the armies and Fight are what the screen is for.
+- **The event and the run's end scroll sideways** (1.3 to 1.5 screens) and fit elsewhere.
+
+**Decisions for 4b-4d:**
+- **The act strip.** All three acts, the current one wide: a green square for a battle won, a
+  diamond for an event, a ring where the run is, a hollow dot ahead. Ahead is never a kind,
+  since encounters are drawn as they are reached. The current act names its cap. Upright and on
+  short screens it is the current act alone: a line and twelve pips. It sits on every run screen
+  but the battle, whose header names the encounter instead ("Act II · 5 of 12 · Tidal legion",
+  "II·5" upright).
+- **The force screen leads with the next enemy**, its species, health, dice and opponent, because
+  `enemyForce` answers at `arrange_force` and a force is built against what it will meet. Then
+  the three armies, then the spare dice as the palette. Dice won since the last battle are marked
+  *new*. Then terrain and dragons. Fight and Leave run go in the footer. A disabled Fight names
+  the first problem beside it, and each problem also sits beside its section.
+- **An offer is the die**: its tile, its name, species, health and class, and every face in a
+  row with SAI names whole. A tap opens the inspector. The dragon offer says whether it fills the
+  two Act III asks for. The terrain offer shows its eight faces. **Pick, then Take**: the footer
+  names the pick, so one tap never spends a reward.
+- **An event shows the pool as two rows, fielded and spare.** Shading the fielded dice was not
+  readable, and Phase 0's rule (an unfielded copy changes first) is only legible when the player
+  can see which copies are spare. Then Upgrade names the result **and what happens to the
+  force**, and Transform shows all four dice it might become.
+- **The battle is the game screen, unchanged**, with Leave run beside Concede in the header. A
+  concession opens a dialog: "A lost battle ends the run... to stop for now, use Leave run
+  instead", offering Concede and end the run, Leave run, or Keep playing. The game-over card
+  leads on, to "Pick your reward" after a win or "See the run" after a loss.
+- **The run's end is a page of its own**: how far the run went, battles won, events, the pool's
+  health, the force at the end, and every encounter in order. It is shown once, then the save is
+  cleared. It offers New run, or Back to start.
+- **The start screen** gains a run panel above the single game. Continue names the race, the act
+  and encounter, the next encounter, the time saved and the health fielded. New run over a run in
+  progress asks, naming what is lost. A save that was discarded is a banner, once.
+- **The race pick** is six cards: elements, Home terrain, the two abilities, and a large, a
+  medium and a small die of the race. The opening is drawn from the seed, so the card says what
+  it is made of rather than which dice. The seed field is optional, as on the start screen.
+
+**What the run does not know yet, and 4b builds first:**
+- **Its history.** The act strip's past slots, the end page's list and counts, and the *new*
+  marks all need what happened at each encounter. `RunState` keeps only this act's drawn ids, and
+  no outcomes at all. 4b adds `history`, one entry per encounter finished:
+  - the encounter's id, act and number;
+  - won, with the offer taken; lost; or an event's upgrade, transform or skip, with both dice.
+  That is a change of shape, so it is **the first `RUN_VERSION` bump**, which is the case the
+  start screen's discarded-save banner is drawn for.
+- **What an upgrade would do, before it is chosen**: change a spare copy, keep its place, or
+  leave the force. That is `replaceDie`'s rule. So it becomes a query in `src/run/`
+  (`upgradePreview(run, unit)`), which the reducer's own path calls too, never a second copy in a
+  component.
+
+**Found while drawing, for Phase 5:**
+- **At a full force, every upgrade of a fielded die benches it, in any act.** Phase 2 saw it in
+  Act I, but it is not about Act I. Any force at its cap has no room for a heavier die, and a run
+  fields up to its cap whenever the pool allows, which the autopilot always does. So an upgrade
+  pays only when the force is short of the cap, or when the player benches something for it. The
+  event screen says so before the choice; whether upgrades should behave this way is a playtest
+  question.
 
 ---
 

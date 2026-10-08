@@ -307,13 +307,19 @@ the dice and the opponent.
 > app's `localStorage` edge, waiting for Phase 4's screens; the terminal saves to `.run-save.json`
 > and `--run --continue` carries it on. The browser half of the exit criterion moves to Phase 4.
 > `storage.ts` and `SAVE_VERSION` stay off and untouched. *What 3 found* in `PLAN-V3.md`.
+>
+> **Phase 4a has landed: mockups, no code.** `docs/mockups/v3-phase-4a.html` draws every run screen
+> on the three frames and measures each. The force between encounters is the only screen that
+> always scrolls, and it leads with the next enemy. Offers and events show the dice themselves. 4b
+> must first give the run a `history`, which is the first `RUN_VERSION` bump, and an
+> `upgradePreview` query. *What 4a found* in `PLAN-V3.md`.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V3.md` | **The order of work now** (Phases 0-3 landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
+| `docs/PLAN-V3.md` | **The order of work now** (Phases 0-3 and 4a landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
 | `docs/PLAN-V2.md` | How v2 got here: Phases 0 to 9 all landed. Mixed-species armies, built forces and the army builder, a schematic and landscape UI, the roll dialog, and Coral Elves, Dwarves, Goblins and Lava Elves. Phase 4 (the collection and the builder) is what v3 builds on; read its findings first. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
