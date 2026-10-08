@@ -1,0 +1,62 @@
+{
+  "_comment": "The run's encounters (v3 Phase 1), one list per act: Act I meets 12-health enemies, Act II 24 and Act III 36. A run draws 12 from each list without replacement, a battle seven times in ten. A battle's enemy is a pool -- rolled at the act's size from the battle's seed -- or a built force named by its file in data/forces/enemies/. Its opponent is an OPPONENTS name (src/ai/opponents.ts), never random. An event offers an upgrade or a transform of one die, or skip. Hand-authored like presets.json; src/run/encounters.ts validates it at load.",
+  "acts": {
+    "1": [
+      {"id": "act1.treefolk-grove", "kind": "battle", "name": "Treefolk grove", "enemy": {"pool": {"kind": "species", "species": "treefolk"}}, "opponent": "greedy"},
+      {"id": "act1.firewalker-scouts", "kind": "battle", "name": "Firewalker scouts", "enemy": {"pool": {"kind": "species", "species": "firewalkers"}}, "opponent": "greedy"},
+      {"id": "act1.coral-skirmish", "kind": "battle", "name": "Coral skirmish", "enemy": {"pool": {"kind": "species", "species": "coral_elves"}}, "opponent": "greedy"},
+      {"id": "act1.dwarf-patrol", "kind": "battle", "name": "Dwarf patrol", "enemy": {"pool": {"kind": "species", "species": "dwarves"}}, "opponent": "greedy"},
+      {"id": "act1.goblin-raiders", "kind": "battle", "name": "Goblin raiders", "enemy": {"pool": {"kind": "species", "species": "goblins"}}, "opponent": "greedy"},
+      {"id": "act1.lava-elf-outriders", "kind": "battle", "name": "Lava Elf outriders", "enemy": {"pool": {"kind": "species", "species": "lava_elves"}}, "opponent": "greedy"},
+      {"id": "act1.ember-cult", "kind": "battle", "name": "Ember cult", "enemy": {"pool": {"kind": "species", "species": "firewalkers"}}, "opponent": "greedy"},
+      {"id": "act1.bog-lurkers", "kind": "battle", "name": "Bog lurkers", "enemy": {"pool": {"kind": "species", "species": "goblins"}}, "opponent": "greedy"},
+      {"id": "act1.mercenary-band", "kind": "battle", "name": "Mercenary band", "enemy": {"pool": {"kind": "mixed"}}, "opponent": "greedy"},
+      {"id": "act1.wild-hunt", "kind": "battle", "name": "Wild hunt", "enemy": {"pool": {"kind": "mixed"}}, "opponent": "greedy"},
+      {"id": "act1.border-watch", "kind": "battle", "name": "Border watch", "enemy": {"built": "act1-border-watch"}, "opponent": "greedy"},
+      {"id": "act1.reef-wardens", "kind": "battle", "name": "Reef wardens", "enemy": {"built": "act1-reef-wardens"}, "opponent": "greedy"},
+      {"id": "act1.wayside-shrine", "kind": "event", "name": "Wayside shrine"},
+      {"id": "act1.village-forge", "kind": "event", "name": "Village forge"},
+      {"id": "act1.hermit", "kind": "event", "name": "Hermit's hut"},
+      {"id": "act1.standing-stone", "kind": "event", "name": "Standing stone"},
+      {"id": "act1.crossroads-market", "kind": "event", "name": "Crossroads market"}
+    ],
+    "2": [
+      {"id": "act2.old-growth", "kind": "battle", "name": "Old growth", "enemy": {"pool": {"kind": "species", "species": "treefolk"}}, "opponent": "greedy"},
+      {"id": "act2.firewalker-host", "kind": "battle", "name": "Firewalker host", "enemy": {"pool": {"kind": "species", "species": "firewalkers"}}, "opponent": "greedy"},
+      {"id": "act2.tidal-legion", "kind": "battle", "name": "Tidal legion", "enemy": {"pool": {"kind": "species", "species": "coral_elves"}}, "opponent": "greedy"},
+      {"id": "act2.mountain-hold", "kind": "battle", "name": "Mountain hold", "enemy": {"pool": {"kind": "species", "species": "dwarves"}}, "opponent": "greedy"},
+      {"id": "act2.goblin-warband", "kind": "battle", "name": "Goblin warband", "enemy": {"pool": {"kind": "species", "species": "goblins"}}, "opponent": "greedy"},
+      {"id": "act2.lava-elf-cabal", "kind": "battle", "name": "Lava Elf cabal", "enemy": {"built": "act2-lava-elf-cabal"}, "opponent": "greedy"},
+      {"id": "act2.deep-delvers", "kind": "battle", "name": "Deep delvers", "enemy": {"pool": {"kind": "species", "species": "dwarves"}}, "opponent": "greedy"},
+      {"id": "act2.coral-armada", "kind": "battle", "name": "Coral armada", "enemy": {"pool": {"kind": "species", "species": "coral_elves"}}, "opponent": "greedy"},
+      {"id": "act2.ashen-pilgrims", "kind": "battle", "name": "Ashen pilgrims", "enemy": {"pool": {"kind": "species", "species": "lava_elves"}}, "opponent": "greedy"},
+      {"id": "act2.sellswords", "kind": "battle", "name": "Sellswords", "enemy": {"pool": {"kind": "mixed"}}, "opponent": "greedy"},
+      {"id": "act2.warlords-alliance", "kind": "battle", "name": "Warlords' alliance", "enemy": {"pool": {"kind": "mixed"}}, "opponent": "greedy"},
+      {"id": "act2.burning-wood", "kind": "battle", "name": "Burning wood", "enemy": {"pool": {"kind": "species", "species": "treefolk"}}, "opponent": "greedy"},
+      {"id": "act2.ruined-temple", "kind": "event", "name": "Ruined temple"},
+      {"id": "act2.dragon-bones", "kind": "event", "name": "Dragon bones"},
+      {"id": "act2.alchemist", "kind": "event", "name": "Alchemist's tower"},
+      {"id": "act2.sacred-grove", "kind": "event", "name": "Sacred grove"},
+      {"id": "act2.blacksmith", "kind": "event", "name": "Wandering blacksmith"}
+    ],
+    "3": [
+      {"id": "act3.elder-forest", "kind": "battle", "name": "Elder forest", "enemy": {"pool": {"kind": "species", "species": "treefolk"}}, "opponent": "greedy"},
+      {"id": "act3.firewalker-empire", "kind": "battle", "name": "Firewalker empire", "enemy": {"pool": {"kind": "species", "species": "firewalkers"}}, "opponent": "greedy"},
+      {"id": "act3.coral-throne", "kind": "battle", "name": "Coral throne", "enemy": {"pool": {"kind": "species", "species": "coral_elves"}}, "opponent": "greedy"},
+      {"id": "act3.dwarf-kingdom", "kind": "battle", "name": "Dwarf kingdom", "enemy": {"pool": {"kind": "species", "species": "dwarves"}}, "opponent": "greedy"},
+      {"id": "act3.goblin-horde", "kind": "battle", "name": "Goblin horde", "enemy": {"built": "act3-goblin-horde"}, "opponent": "greedy"},
+      {"id": "act3.lava-elf-dominion", "kind": "battle", "name": "Lava Elf dominion", "enemy": {"pool": {"kind": "species", "species": "lava_elves"}}, "opponent": "greedy"},
+      {"id": "act3.swamp-king", "kind": "battle", "name": "Swamp king", "enemy": {"pool": {"kind": "species", "species": "goblins"}}, "opponent": "greedy"},
+      {"id": "act3.volcano-court", "kind": "battle", "name": "Volcano court", "enemy": {"pool": {"kind": "species", "species": "lava_elves"}}, "opponent": "greedy"},
+      {"id": "act3.grand-army", "kind": "battle", "name": "Grand army", "enemy": {"pool": {"kind": "mixed"}}, "opponent": "greedy"},
+      {"id": "act3.last-alliance", "kind": "battle", "name": "Last alliance", "enemy": {"pool": {"kind": "mixed"}}, "opponent": "greedy"},
+      {"id": "act3.iron-legion", "kind": "battle", "name": "Iron legion", "enemy": {"pool": {"kind": "species", "species": "dwarves"}}, "opponent": "greedy"},
+      {"id": "act3.storm-riders", "kind": "battle", "name": "Storm riders", "enemy": {"pool": {"kind": "species", "species": "firewalkers"}}, "opponent": "greedy"},
+      {"id": "act3.oracle", "kind": "event", "name": "Oracle"},
+      {"id": "act3.fallen-titan", "kind": "event", "name": "Fallen titan"},
+      {"id": "act3.arcane-well", "kind": "event", "name": "Arcane well"},
+      {"id": "act3.war-camp", "kind": "event", "name": "War camp"},
+      {"id": "act3.ancient-altar", "kind": "event", "name": "Ancient altar"}
+    ]
+  }
+}

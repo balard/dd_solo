@@ -285,13 +285,21 @@ the dice and the opponent.
 > `forceProblems` moved to `src/engine/forceProblems.ts` and gained `'at_most'`, and
 > `builtForceProblem` accepts one dragon up to the count -- the engine seam. `src/run/` is in
 > `purity.test.ts` and may not import `src/ai/`. Findings under *What 0 found* in `PLAN-V3.md`.
+>
+> **Phase 1 has landed: the encounters.** `data/encounters.json` holds 17 encounters an act (12
+> battles, 5 events); a battle's enemy is a pool rolled at the act's size or a single-force file in
+> `data/forces/enemies/`, read by `import.meta.glob`. `src/run/encounters.ts` validates both at
+> load (`RUN_CONTENT`, now `reduceRun`'s default). `src/run/battle.ts` turns the battle in hand into
+> `SetupOptions`: `V1_RULES`, the player as p1, and a seed taken from the run seed at a counter
+> naming the act and encounter, so a restart is the same game. Opponent names are checked against
+> `OPPONENTS` by a test, since `src/run/` cannot import the registry. *What 1 found* in `PLAN-V3.md`.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V3.md` | **The order of work now** (Phase 0 landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
+| `docs/PLAN-V3.md` | **The order of work now** (Phases 0 and 1 landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
 | `docs/PLAN-V2.md` | How v2 got here: Phases 0 to 9 all landed. Mixed-species armies, built forces and the army builder, a schematic and landscape UI, the roll dialog, and Coral Elves, Dwarves, Goblins and Lava Elves. Phase 4 (the collection and the builder) is what v3 builds on; read its findings first. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
@@ -349,7 +357,7 @@ src/engine/    pure TS rules engine — no React, no DOM, no I/O, no Math.random
 src/ai/        pure TS opponents — depends on engine types only
 src/run/       pure TS roguelike run (v3) — depends on engine and data, never on ui or ai
 src/ui/        React — depends on engine; engine must never depend on this
-data/          die-face JSON + schemas (content, not code)
+data/          die-face JSON + schemas (content, not code); encounters.json and forces/enemies/ for runs
 docs/          specs and rulebooks
 tools/         data pipeline (import, validate, fetch reference art)
 ```

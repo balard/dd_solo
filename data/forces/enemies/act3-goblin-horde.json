@@ -1,0 +1,8 @@
+{
+  "_comment": "A run enemy (v3 Phase 1): 36 health of Goblins, met in Act III as act3.goblin-horde. Setup draws its two dragons.",
+  "armies": {
+    "home": ["goblins.troll", "goblins.death_mage", "goblins.hedge_wizard", "goblins.trickster", "goblins.marauder"],
+    "campaign": ["goblins.cannibal", "goblins.deadeye", "goblins.slingman", "goblins.pelter", "goblins.cutthroat"],
+    "horde": ["goblins.harpy", "goblins.leopard_rider", "goblins.wolf_rider", "goblins.wardog_rider", "goblins.mugger"]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "_comment": "A run enemy (v3 Phase 1): one built force, 12 health of Dwarves, met in Act I as act1.border-watch. Terrains and dragons are left to setup's draw. Hand-authored; src/run/encounters.ts loads every file here and checks it is legal and its act's size.",
+  "armies": {
+    "home": ["dwarves.warlord", "dwarves.footman"],
+    "campaign": ["dwarves.sergeant", "dwarves.crossbowman", "dwarves.theurgist"],
+    "horde": ["dwarves.patroller", "dwarves.sentry", "dwarves.pony_rider"]
+  }
+}

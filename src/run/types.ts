@@ -10,7 +10,7 @@
  * (`purity.test.ts`). The engine does not know runs exist.
  */
 import type { Collection } from '../data/collections'
-import type { BuiltForce } from '../engine/force'
+import type { BuiltForce, ForcePool } from '../engine/force'
 import type { RngState } from '../engine/rng'
 import type { PlayerId } from '../engine/types'
 
@@ -37,20 +37,41 @@ export const RUN_PLAYER: PlayerId = 'p1'
 export type EncounterKind = 'battle' | 'event'
 
 /**
- * One encounter of an act's pool. Phase 0 knows only what the run itself reads: what
- * kind it is and how to name it. Phase 1 adds the enemy and the opponent, from
- * `data/encounters.json`.
+ * Who a battle is fought against: a force rolled at the act's size from a pool, or a
+ * hand-built one, named by its file in `data/forces/enemies/`. Named rather than held
+ * whole, so a run in hand picks up an edit to the file.
  */
-export interface Encounter {
+export type EnemySpec = { readonly pool: ForcePool } | { readonly built: string }
+
+interface EncounterBase {
   readonly id: string
   readonly act: Act
-  readonly kind: EncounterKind
   readonly name: string
 }
 
-/** Every encounter a run can draw, by act: the reducer's one input that is not state. */
+/**
+ * A battle: one game against `enemy`, played by `opponent` -- an `OPPONENTS` name, held
+ * as a string because `src/run/` may not import `src/ai/`; the client resolves it.
+ */
+export interface BattleEncounter extends EncounterBase {
+  readonly kind: 'battle'
+  readonly enemy: EnemySpec
+  readonly opponent: string
+}
+
+/** An event: upgrade or transform one die of the pool, or skip. */
+export interface EventEncounter extends EncounterBase {
+  readonly kind: 'event'
+}
+
+/** One encounter of an act's pool, from `data/encounters.json`. */
+export type Encounter = BattleEncounter | EventEncounter
+
+/** Every encounter a run can draw, by act, and the hand-built enemy forces by name:
+ *  the reducer's one input that is not state. */
 export interface RunContent {
   readonly acts: Readonly<Record<Act, readonly Encounter[]>>
+  readonly forces: Readonly<Record<string, BuiltForce>>
 }
 
 /** One of a reward's five offers. */
@@ -64,12 +85,12 @@ export type RunPending =
   /** Build the force for the battle in hand, under `cap`: `set_force` any number of
    *  times, then `ready`. The first step of every battle encounter, and nowhere else. */
   | { readonly kind: 'arrange_force'; readonly cap: number }
-  | { readonly kind: 'battle'; readonly encounter: Encounter }
+  | { readonly kind: 'battle'; readonly encounter: BattleEncounter }
   | { readonly kind: 'reward'; readonly offers: readonly Offer[] }
   /** `upgradable` and `transformable` are the unit dice in the pool each may act on. */
   | {
       readonly kind: 'event'
-      readonly encounter: Encounter
+      readonly encounter: EventEncounter
       readonly upgradable: readonly string[]
       readonly transformable: readonly string[]
     }

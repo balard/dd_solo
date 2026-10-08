@@ -1,0 +1,8 @@
+{
+  "_comment": "A run enemy (v3 Phase 1): 24 health of Lava Elves, met in Act II as act2.lava-elf-cabal.",
+  "armies": {
+    "home": ["lava_elves.necromancer", "lava_elves.warlock", "lava_elves.adept", "lava_elves.duelist"],
+    "campaign": ["lava_elves.assassin", "lava_elves.dead_shot", "lava_elves.fusilier", "lava_elves.scout"],
+    "horde": ["lava_elves.wyvern_rider", "lava_elves.scorpion_knight", "lava_elves.spider_rider", "lava_elves.bladesman", "lava_elves.spy"]
+  }
+}

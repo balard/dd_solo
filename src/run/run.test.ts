@@ -34,10 +34,17 @@ import {
  *  both halves deep enough that the 7-in-10 draw rarely has to fall back. */
 function content(battles = 11, events = 5): RunContent {
   const act = (n: Act): readonly Encounter[] => [
-    ...Array.from({ length: battles }, (_, i) => ({ id: `act${n}.battle-${i}`, act: n, kind: 'battle' as const, name: `Battle ${i}` })),
+    ...Array.from({ length: battles }, (_, i) => ({
+      id: `act${n}.battle-${i}`,
+      act: n,
+      kind: 'battle' as const,
+      name: `Battle ${i}`,
+      enemy: { pool: { kind: 'mixed' as const } },
+      opponent: 'greedy',
+    })),
     ...Array.from({ length: events }, (_, i) => ({ id: `act${n}.event-${i}`, act: n, kind: 'event' as const, name: `Event ${i}` })),
   ]
-  return { acts: { 1: act(1), 2: act(2), 3: act(3) } }
+  return { acts: { 1: act(1), 2: act(2), 3: act(3) }, forces: {} }
 }
 
 const CONTENT = content()
@@ -548,7 +555,7 @@ function playRun(
       seen.actions[action.kind]++
       const before = run
       try {
-        run = reduceRun(run, action, CONTENT)
+        run = reduceRun(run, action) // the real encounters, from data/encounters.json
       } catch (error) {
         // The only refusal the random player provokes on purpose is an illegal ready.
         expect(error, `${action.kind} at ${before.pending.kind}`).toBeInstanceOf(IllegalRunAction)
@@ -629,7 +636,7 @@ describe('the run fuzz', () => {
     for (const seed of [4, 8, 15]) {
       const first = playRun(seed, 1, seen)
       let replay = newRun(seed)
-      for (const action of first.actions) replay = reduceRun(replay, action, CONTENT)
+      for (const action of first.actions) replay = reduceRun(replay, action)
       expect(replay).toEqual(first.run)
       expect(replay.status).toBe('won')
     }

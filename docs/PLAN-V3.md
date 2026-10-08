@@ -7,7 +7,7 @@ acts whose enemies grow from 12 to 24 to 36 health. A loss ends the run.
 
 Read `PLAN-V2.md` Phase 4 (the collection and the builder) before anything here: v3 is that phase's
 `Collection` and `forceProblems` with a game around them. This document is the *order of work*.
-**Phase 0 has landed** (the run model); nothing after it has.
+**Phases 0 and 1 have landed** (the run model, and the encounters); nothing after them has.
 
 **Scope decisions this plan is built on** (agreed 2026-10-07):
 - **A mode in this repo, not a fork.** The single game stays exactly what it is. The run is a
@@ -353,6 +353,59 @@ because in a run it is always meant.
 
 **Exit criterion.** Every encounter in the data produces a setup that `setupGame` accepts, for
 every playable race, in a test.
+
+### What 1 found
+
+Landed as `data/encounters.json`, four enemy forces in `data/forces/enemies/`,
+`src/run/encounters.ts` (the loader and validator, `RUN_CONTENT`), `src/run/battle.ts`
+(`battleSeed`, `enemyForce`, `battleSetup`) and `src/run/encounters.test.ts`. The engine did
+not move. Both golden corpora are byte-identical and unregenerated.
+
+**The pools, as first filled:** 17 encounters an act, 12 battles and 5 events, all against
+`greedy`. Each act meets every playable species from a rolled pool, plus two `mixed` pools.
+There are four built enemies: a Dwarf and a Coral Elf force in Act I, Lava Elves in Act II and
+the Goblin horde in Act III. A built enemy names only its armies, and setup draws its terrains
+and dragons, since the AI owns every die. The events differ only in name.
+
+**What the plan said that the code could not do as written:**
+- **The loader cannot check an opponent against `OPPONENTS`.** `src/run/` may not import
+  `src/ai/`, which was Phase 0's own rule. So the loader refuses `random` by name, and
+  `encounters.test.ts` checks every name against the registry. A typo fails the suite, not the
+  load. The client already has to resolve the name through `opponentNamed`, which is where a
+  bad one would surface in play.
+- **"The same 'unequal on purpose' path `newGame.ts` uses" does not exist below the UI.** That
+  path is a start-screen rule; `setupGame` has not cared about parity since v2 Phase 2. So
+  `battleSetup` passes nothing, and a 12-health force against a 36-health enemy simply sets up.
+  The exit test checks both sizes.
+- **An enemy force is one file, in `data/forces/enemies/`, not `data/forces/`.** That
+  directory holds pairs, which is what the terminal's `built:<file>` reads, and a single force
+  there would be a file the flag cannot play. The directory is read by `import.meta.glob`, the
+  first glob in the project, so a new enemy is a data edit. It works under vitest and
+  `vite-node` alike; checked for both.
+- **One list per act, and no `act` on the entries.** The plan's example carried both. Since the
+  list says the act, the field could only disagree with it, so the loader derives it.
+
+**Decided while building:**
+- **A built enemy is held by name** (`{ built: 'act3-goblin-horde' }`) and resolved when the
+  battle is set up, through `RunContent.forces`. A run saved in Phase 3 then picks up an edit to
+  the file, as the plan wants for odds and pools.
+- **The battle seed is the RNG at a counter**, `(act - 1) × 12 + encounter`, of the run's seed
+  salted. The RNG is a pure function of `{ seed, counter }`, so no draw is needed to reach a
+  battle's seed, and nothing the run's own stream did can move it. A test bumps the run's counter
+  by 1234 and gets the same game. The enemy is rolled from the battle seed salted again, onto its
+  own stream, as `newGame.ts` does for a random opponent.
+- **`enemyForce(run)` is apart from `battleSetup`** and answers whenever a battle is in hand, at
+  `arrange_force` included. Phase 4 can show the enemy while the player arranges their own force.
+- **The validator is stricter than the plan in one place:** an enemy file no encounter meets is a
+  problem. A force nobody meets is a misspelt name in waiting.
+- **The run fuzz now plays the real data** rather than Phase 0's fixture, which stays for the
+  tests that pin draws.
+
+**Would have shipped green:**
+- **Five events against twelve battles runs the event half dry in about one act in eight.**
+  Drawing six or more events in twelve, at three in ten, is about 12%. Phase 0's fallback then
+  draws a battle, so those acts meet exactly five events. That is a property of the pool's
+  contents, not a bug, and it is Phase 5's number to tune.
 
 ---
 

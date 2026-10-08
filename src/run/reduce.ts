@@ -18,8 +18,8 @@
  * an event followed by a battle reaches it next, and one followed by an event does not
  * need it.
  *
- * `content` is the encounter pools: Phase 1 reads them from `data/encounters.json`, and
- * a test passes its own.
+ * `content` is the encounter pools, `RUN_CONTENT` from `data/encounters.json` unless a
+ * test passes its own.
  */
 import type { Collection, CollectionKind } from '../data/collections'
 import { PRESET_ARMY_NAMES, maxArmyHealth, type PresetArmyName } from '../data/presets'
@@ -28,6 +28,7 @@ import { forceHealth, forceProblems, healthOf, used } from '../engine/forceProbl
 import { PLAYABLE_SPECIES } from '../engine/playable'
 import { rngFrom } from '../engine/rng'
 
+import { RUN_CONTENT } from './encounters'
 import { drawEncounter, drawReward, drawTransform, rollStart, transformsOf, upgradeOf } from './draws'
 import {
   ACT_SIZE,
@@ -165,7 +166,7 @@ function refuse(run: RunState, action: RunAction): never {
   throw new IllegalRunAction(`${action.kind} does not answer the run's ${run.pending.kind}`)
 }
 
-export function reduceRun(run: RunState, action: RunAction, content: RunContent): RunState {
+export function reduceRun(run: RunState, action: RunAction, content: RunContent = RUN_CONTENT): RunState {
   const pending = run.pending
   switch (pending.kind) {
     case 'choose_race': {
@@ -189,7 +190,7 @@ export function reduceRun(run: RunState, action: RunAction, content: RunContent)
         throw new IllegalRunAction(`the force cannot fight: ${problems.map((p) => p.text).join('; ')}`)
       }
       const encounter = run.current
-      if (encounter === null) throw new Error('arranging a force with no encounter in hand')
+      if (encounter?.kind !== 'battle') throw new Error('arranging a force with no battle in hand')
       return { ...run, pending: { kind: 'battle', encounter } }
     }
 

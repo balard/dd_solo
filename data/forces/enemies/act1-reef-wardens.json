@@ -1,0 +1,8 @@
+{
+  "_comment": "A run enemy (v3 Phase 1): 12 health of Coral Elves, met in Act I as act1.reef-wardens.",
+  "armies": {
+    "home": ["coral_elves.protector", "coral_elves.evoker"],
+    "campaign": ["coral_elves.archer", "coral_elves.bowman", "coral_elves.guard"],
+    "horde": ["coral_elves.knight", "coral_elves.horseman", "coral_elves.fighter"]
+  }
+}
