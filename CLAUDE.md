@@ -170,7 +170,7 @@ the dice and the opponent.
 >
 > **v2 Phase 4 (the army builder) landed in three slices. 4a: the model, no screen.** A `Collection` is what a player owns (`src/data/collections.ts`): the full one counts
 > every die at `Infinity`, and `data/collections/sorry-12.json` is the first limited one.
-> `forceProblems(collection, cap, force)` in `builder.ts` lists everything wrong with a draft, each
+> `forceProblems(collection, cap, force)` (in `builder.ts` then, `src/engine/forceProblems.ts` since v3 Phase 0) lists everything wrong with a draft, each
 > tagged with where it belongs, and `rollForce(budget, pool, rng)` in `force.ts` rolls the AI's
 > side at any size. **4b has landed too: the builder screen** (`ArmyBuilder.tsx`, from the start
 > screen's "Army builder"): full or limited, three armies, terrains and dragons, each problem beside
@@ -270,7 +270,7 @@ the dice and the opponent.
 > "insurance" case never. The house rule stays, recorded in `RULES-V0.md` section 11 with when
 > to revisit it. No engine change.
 
-> **v3 is planned, nothing has landed: the roguelike run** (`docs/PLAN-V3.md`). Pick a race,
+> **v3 is under way: the roguelike run** (`docs/PLAN-V3.md`). Pick a race,
 > start from a 12-health collection with one dragon and two terrains, fight three acts of
 > 12/24/36-health enemies (12 encounters each, drawn from a larger pool, about 70% battles and 30%
 > upgrade/transform events), and pick one of five rewards after each win. A loss ends the run.
@@ -278,13 +278,20 @@ the dice and the opponent.
 > back only the winner, so the goldens and `SAVE_VERSION` stay put. It is saved as a snapshot at
 > the start of each encounter. The one engine seam it plans is a force naming fewer dragons than
 > its size asks for.
+>
+> **Phase 0 has landed: the run model, no screen and no battle.** `src/run/` holds the state, the
+> actions, `reduceRun(run, action, content)` and every draw (`draws.ts`, in an order
+> `run.test.ts` pins), with battles answered directly by the tests and a 300-run fuzz.
+> `forceProblems` moved to `src/engine/forceProblems.ts` and gained `'at_most'`, and
+> `builtForceProblem` accepts one dragon up to the count -- the engine seam. `src/run/` is in
+> `purity.test.ts` and may not import `src/ai/`. Findings under *What 0 found* in `PLAN-V3.md`.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V3.md` | **The order of work now** (nothing landed yet). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
+| `docs/PLAN-V3.md` | **The order of work now** (Phase 0 landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
 | `docs/PLAN-V2.md` | How v2 got here: Phases 0 to 9 all landed. Mixed-species armies, built forces and the army builder, a schematic and landscape UI, the roll dialog, and Coral Elves, Dwarves, Goblins and Lava Elves. Phase 4 (the collection and the builder) is what v3 builds on; read its findings first. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
@@ -340,6 +347,7 @@ makes vitest install a nested copy of vite, and the two `Plugin` types then conf
 ```
 src/engine/    pure TS rules engine — no React, no DOM, no I/O, no Math.random
 src/ai/        pure TS opponents — depends on engine types only
+src/run/       pure TS roguelike run (v3) — depends on engine and data, never on ui or ai
 src/ui/        React — depends on engine; engine must never depend on this
 data/          die-face JSON + schemas (content, not code)
 docs/          specs and rulebooks
@@ -564,7 +572,9 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   a preset resolves to one with only its armies, a rolled force is one the RNG wrote, and a
   `{ kind: 'built' }` spec carries two whole. `builtForceProblem` checks each **per force**, never
   per pair -- armies non-empty and at most half *that* force's health, dice that exist, named
-  dragons exactly `dragonCount` of its own size -- and `setupGame` throws naming the player.
+  dragons at least one and at most `dragonCount` of its own size -- and `setupGame` throws naming
+  the player. **At most, not exactly, since v3 Phase 0**: a run fields the dragons it owns. The
+  builder outside a run still asks for exactly the count (`forceProblems`' `'exactly'`).
   - **Setup no longer requires equal sides.** Whether an unequal pairing is intended is a question
     only the screen that made it can answer, so `newGame.ts` asks it; the engine does not.
   - **`forceSize(state, player)` is derived**: every unit the player owns, dead and buried
@@ -1198,7 +1208,8 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
 - **The army builder draws with the board's own components** (v2 Phase 4b): `UnitTileBody`,
   `DragonTileBody`, `InspectorPanel`, and `TerrainDetail` / `DragonDetail` taking a die id, so a die
   on no board and a die in play cannot look different. It edits a `BuiltForce` directly -- no
-  second draft shape -- and every rule it shows is `builder.ts`'s. Kept forces are a convenience
+  second draft shape -- and every rule it shows is `forceProblems`' (`src/engine/forceProblems.ts`,
+  moved out of `builder.ts` in v3 Phase 0 so the run can ask it too). Kept forces are a convenience
   store (`forceStore.ts`), not a save: no version, and legality asked fresh each time one is shown.
 - **A Reinforce Step sends dice to any and all terrains**, so its destination buttons *stage* into
   the `reinforcePlan` draft rather than dispatching. One action still reaches the engine -- the

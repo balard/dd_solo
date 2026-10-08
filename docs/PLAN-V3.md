@@ -7,7 +7,7 @@ acts whose enemies grow from 12 to 24 to 36 health. A loss ends the run.
 
 Read `PLAN-V2.md` Phase 4 (the collection and the builder) before anything here: v3 is that phase's
 `Collection` and `forceProblems` with a game around them. This document is the *order of work*.
-**Nothing has landed yet.**
+**Phase 0 has landed** (the run model); nothing after it has.
 
 **Scope decisions this plan is built on** (agreed 2026-10-07):
 - **A mode in this repo, not a fork.** The single game stays exactly what it is. The run is a
@@ -175,7 +175,8 @@ also a save at a decision.
 pick_race  -> large die -> second medium's line -> dragon element -> dragon form
            -> Home terrain -> Frontier proposal -> split
 encounter  -> battle or event (70/30) -> which one, from the act's pool, without replacement
-reward     -> unit 1 (race or any, then which die) -> unit 2 -> unit 3 -> dragon -> terrain
+reward     -> unit 1 (race or any, then which die) -> unit 2 -> unit 3
+              -> dragon element -> dragon form -> terrain
               (the dragon and terrain from the elements of the force that won)
 transform  -> which die of the same species and health
 ```
@@ -235,6 +236,65 @@ It plays no real battle and costs milliseconds.
 
 **Exit criterion.** A run plays from `pick_race` to `won` and to `lost` in a test, with stubbed
 battles, and the same seed and answers give the same run.
+
+### What 0 found
+
+Landed as `src/run/` (`types.ts`, `draws.ts`, `reduce.ts`, `run.test.ts`) and
+`src/engine/forceProblems.ts`. The engine's rules moved in one place, the dragon count; both
+golden corpora are byte-identical and unregenerated, and `SAVE_VERSION` did not move.
+
+**What the plan said that the code could not do as written:**
+- **`arrange_force` is the first step of every battle encounter, and nowhere else.** "Follows
+  every reward and every event, and comes before the first battle", read literally, asks twice in
+  a row whenever a reward is followed by a battle: once after the reward and once at the battle.
+  Arranging matters only for the battle it is fielded in, so the run asks it there. A reward or an
+  event followed by an event does not ask at all, since events act on the pool. The save rule is
+  unchanged: an encounter still starts at its first `arrange_force` or `event`.
+- **The `battle` pending carries the encounter, not `SetupOptions`.** Phase 0 has no enemies to
+  build a setup from, and Phase 1's `battleSetup(run)` is a function of the run anyway. Keeping
+  the setup out of the pending also keeps it out of the snapshot Phase 3 saves, so a run saved
+  before a change to how battles are built picks the change up.
+- **No reward after the last battle of Act III.** Winning it ends the run, `won`, with nothing
+  left to spend a reward on.
+- **An upgrade "only if the force stays legal" is two checks, not `forceProblems`.** The force
+  can already be illegal when an event arrives: an earlier upgrade emptied an army, and an event
+  followed with no `ready` between. "Stays legal" would then always throw the die out. So an
+  upgrade stays in place when the two rules a heavier die can break still hold: the act's cap,
+  and half the force for the army it stands in. A heavier die cannot break any other rule.
+- **An event changes an unfielded copy first.** The pool counts copies, not dice, so "upgrade
+  this Oakling" names a type. When some copy is not fielded, that copy changes and the force is
+  untouched. Only when every copy is fielded does a fielded one change. The player can swap it in
+  at the next battle either way.
+- **`RunState.race` is `string | null`**, null until `pick_race`: a run exists before its race.
+- **The encounter pools are an argument**, `reduceRun(run, action, content)`. Phase 0 has no
+  `data/encounters.json`, so the tests pass sixteen encounters an act (eleven battles, five
+  events), and Phase 1 supplies the real ones. The draw sorts the pool by id, like every other
+  list the run draws from.
+
+**Seams, none with a rule behind it:**
+- **`forceProblems` went to `src/engine/`, not `src/data/`.** It needs `dragonCount`,
+  `BuiltForce` and `playable.ts`, and `src/data/` imports nothing from the engine. It gained a
+  fourth argument, `'exactly' | 'at_most'`. The builder passes nothing and keeps `'exactly'`. The
+  test that holds it equal to `builtForceProblem` runs under `'at_most'` now, because that is what
+  setup accepts. Its tests moved to `src/engine/forceProblems.test.ts`.
+- **`setup.ts` exports two lists it already computed**: `homeDiceFor(species)` and
+  `terrainDiceSharing(elements)`. The run's opening Home and Frontier, and every terrain reward,
+  draw from them, so "a Home of the race's own type" cannot mean two things. No draw moved.
+- **`purity.test.ts` covers `src/run/`**, with a rule of its own: a run file may not import
+  `src/ai/`. The opponent stays a string.
+
+**Would have shipped green:**
+- **The fuzz first took five seconds, not milliseconds.** About 150,000 `expect` calls in the
+  per-action loop were most of it, measured, not the reducer, which is about 25µs an action. The
+  loop checks with plain `if`s now, and 300 runs take about 1.8s. A slower machine will take
+  longer.
+- **A 12-health opening is below the size `repairSplit`'s proof covers** (24 and up). The opening
+  is always 3 + 2 + 2 + 1×5, which the repair deals 4/4/4, and the random deal usually succeeds
+  first. A test checks 25 seeds of every race against `forceProblems` and `builtForceProblem`,
+  and every race's opening sets up against itself.
+- **A Death race's starting dragon can be Death**, which is what "sharing an element with the
+  race" says, and the Death Drake and Wyrm are in the data. A dragon is drawn element first, then
+  form, both at the start and in a reward, so every element the force carries is equally likely.
 
 ---
 

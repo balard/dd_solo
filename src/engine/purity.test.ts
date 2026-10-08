@@ -10,7 +10,7 @@ import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 /** Directories that must stay free of UI and ambient randomness. */
-const PURE_DIRS = ['src/engine', 'src/ai']
+const PURE_DIRS = ['src/engine', 'src/ai', 'src/run']
 
 const ROOT = join(import.meta.dirname, '..', '..')
 
@@ -50,6 +50,11 @@ export function findViolations(files: readonly SourceFile[]): Violation[] {
           specifier.endsWith('/ui')
         if (forbidden) {
           violations.push({ path: file.path, line, rule: 'no-ui-import', text: text.trim() })
+        }
+        // Rule 1b (v3): a run names its opponent by string and never reaches an AI.
+        const intoAi = specifier.includes('/ai/') || specifier.endsWith('/ai')
+        if (file.path.startsWith('src/run/') && intoAi) {
+          violations.push({ path: file.path, line, rule: 'run-no-ai-import', text: text.trim() })
         }
       }
 
@@ -106,6 +111,14 @@ describe('findViolations', () => {
       { path: 'x.ts', content: "import { Board } from '../ui/Board'" },
     ])
     expect(found.map((v) => v.rule)).toEqual(['no-ui-import'])
+  })
+
+  it('keeps the run out of the AI, and only the run', () => {
+    const line = "import { greedyAi } from '../ai/greedy'"
+    expect(findViolations([{ path: 'src/run/reduce.ts', content: line }]).map((v) => v.rule)).toEqual([
+      'run-no-ai-import',
+    ])
+    expect(findViolations([{ path: 'src/engine/built.ts', content: line }])).toEqual([])
   })
 
   it('catches ambient randomness, including spaced-out spellings', () => {

@@ -22,11 +22,11 @@ import { FULL_COLLECTION, collectionNamed } from '../../data/collections'
 import { PLAYABLE_SPECIES } from '../../engine/playable'
 import { PRESETS, preset, presetHealth, PRESET_ARMY_NAMES } from '../../data/presets'
 import { builtForceHealth, rollForce, type BuiltForce, type ForcePool } from '../../engine/force'
+import { forceProblems } from '../../engine/forceProblems'
 import { rngFrom } from '../../engine/rng'
 import type { ForceSpec, SetupOptions } from '../../engine/setup'
 import { V1_RULES, type PlayerId } from '../../engine/types'
 
-import { forceProblems } from './builder'
 import type { SavedForce } from './forceStore'
 
 export interface PresetChoice {

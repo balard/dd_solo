@@ -46,7 +46,8 @@ export interface BuiltForce {
   readonly homeTerrain?: string
   /** A terrain die id: this player's Frontier proposal, under either roll-off rung. */
   readonly frontierProposal?: string
-  /** Dragon die ids, exactly `dragonCount` of them. Unused under `dragons: false`. */
+  /** Dragon die ids: at least one and at most `dragonCount` (v3 Phase 0). Unused under
+   *  `dragons: false`. */
   readonly dragons?: readonly string[]
 }
 
@@ -139,7 +140,14 @@ export function readBuiltForces(
  * - no army holds more than half the force's health, rounded down;
  * - every die it names exists in the data, and belongs to a species the engine can play
  *   (`playable.ts`: a species transcribed ahead of its rules is in the data but not here);
- * - named dragons number exactly one per 24 health, or part of it.
+ * - named dragons number at least one and at most one per 24 health, or part of it.
+ *
+ * **Fewer dragons than the size asks for is legal here** (v3 Phase 0): a run that reaches
+ * a 36-health act owning one dragon fields one, and plays at the disadvantage. At least
+ * one, because a run always owns its starting dragon and because the Phase 6 Frontier
+ * seed throws on an empty pool. The builder outside a run still asks for exactly the
+ * count -- that is `forceProblems`' `dragons: 'exactly'`, a statement about what a
+ * player building a normal game should bring, not about what setup can play.
  *
  * **Not checked: that the two sides are the same size.** That is a property of a
  * pairing, and an unequal one may be on purpose (v3's encounters) or a typo in a
@@ -178,11 +186,12 @@ export function builtForceProblem(force: BuiltForce): string | null {
   if (force.dragons !== undefined) {
     const unknown = force.dragons.find((id) => !DRAGON_IDS.has(id))
     if (unknown !== undefined) return `it names ${unknown}, which is not a dragon die`
-    const wanted = dragonCount(total)
-    if (force.dragons.length !== wanted) {
+    const most = dragonCount(total)
+    if (force.dragons.length === 0) return 'it brings no dragons; a force brings at least one'
+    if (force.dragons.length > most) {
       return (
-        `it brings ${force.dragons.length} dragon${force.dragons.length === 1 ? '' : 's'}; ` +
-        `a ${total}-health force brings exactly ${wanted}, one per 24 health or part of it`
+        `it brings ${force.dragons.length} dragons; a ${total}-health force brings at most ${most}, ` +
+        'one per 24 health or part of it'
       )
     }
   }

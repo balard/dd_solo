@@ -230,6 +230,30 @@ function startingSlot(armyName: PresetArmyName, player: PlayerId): TerrainSlot {
 const SORTED_TERRAIN_DICE: readonly string[] = [...TERRAIN_DICE].map((d) => d.id).sort()
 
 /**
+ * Every terrain die carrying at least one of these elements, sorted by id: what a
+ * Frontier proposal is drawn from. Exported for v3's run, which draws its Frontier die
+ * and its terrain rewards by the same rule -- a list, not a draw, so no stream moves.
+ * Death matches nothing, since no terrain carries it.
+ */
+export function terrainDiceSharing(elements: readonly Element[]): readonly string[] {
+  return SORTED_TERRAIN_DICE.filter((dieId) =>
+    terrainType(terrainDie(dieId).type).elements.some((e) => elements.includes(e)),
+  )
+}
+
+/**
+ * The terrain dice a species' Home Terrain is drawn from, sorted by id: the four dice of
+ * its own type, or for a species with none (every Death species) every die sharing one
+ * of its elements. Exported for v3's run, which draws a race's starting Home by it.
+ */
+export function homeDiceFor(speciesId: string): readonly string[] {
+  const own = ownTerrainType(speciesId)
+  return own !== null
+    ? SORTED_TERRAIN_DICE.filter((dieId) => terrainDie(dieId).type === own.id)
+    : terrainDiceSharing(speciesElements(speciesId))
+}
+
+/**
  * The species a drawn Home Terrain is chosen for: the one holding the most health in
  * the force, ties to the first by id. For a one-species force, that species.
  */
@@ -263,14 +287,7 @@ function homeSpecies(force: BuiltForce): string {
  * Growth never fire and its spells need a Standing Stones to be cast at all.
  */
 function drawHomeDie(force: BuiltForce, rng: RngState): readonly [string, RngState] {
-  const species = homeSpecies(force)
-  const own = ownTerrainType(species)
-  const elements = speciesElements(species)
-  const eligible = SORTED_TERRAIN_DICE.filter((dieId) =>
-    own !== null
-      ? terrainDie(dieId).type === own.id
-      : terrainType(terrainDie(dieId).type).elements.some((e) => elements.includes(e)),
-  )
+  const eligible = homeDiceFor(homeSpecies(force))
   const [index, next] = nextInt(rng, eligible.length)
   const dieId = eligible[index]
   if (dieId === undefined) throw new Error(`drew home terrain ${index} of ${eligible.length}`)
@@ -286,10 +303,7 @@ function drawHomeDie(force: BuiltForce, rng: RngState): readonly [string, RngSta
  * own type twice as likely as any other. Every eligible die is equally likely now.
  */
 function drawFrontierDie(force: BuiltForce, rng: RngState): readonly [string, RngState] {
-  const elements = forceElements(force)
-  const eligible = SORTED_TERRAIN_DICE.filter((dieId) =>
-    terrainType(terrainDie(dieId).type).elements.some((e) => elements.includes(e)),
-  )
+  const eligible = terrainDiceSharing(forceElements(force))
   const [index, next] = nextInt(rng, eligible.length)
   const dieId = eligible[index]
   if (dieId === undefined) throw new Error(`drew frontier die ${index} of ${eligible.length}`)

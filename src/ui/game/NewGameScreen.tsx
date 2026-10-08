@@ -17,10 +17,11 @@ import { useEffect, useState } from 'react'
 
 import { DEFAULT_OPPONENT, type OpponentName } from '../../ai/opponents'
 import type { ForcePool } from '../../engine/force'
+import { forceHealth } from '../../engine/forceProblems'
 import type { SetupOptions } from '../../engine/setup'
 
 import { ArmyBuilder } from './ArmyBuilder'
-import { defaultForceName, forceHealth } from './builder'
+import { defaultForceName } from './builder'
 import { speciesInfo } from './Elements'
 import { readSavedForces, type SavedForce } from './forceStore'
 import { readText, writeText } from './prefs'

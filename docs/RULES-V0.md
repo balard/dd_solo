@@ -235,10 +235,14 @@ Three house rules come with it:
 
 1. **The two sides need not be the same size.** Step 1's agreed total becomes each player's own.
    The p. 8 rules are checked **per force**: every army holds at least one unit, none holds more
-   than half *that force's* health (rounded down), and a force that names its dragons names exactly
-   one per 24 health of *its own* size, or part of it (one at 12, not none). Whether an unequal
+   than half *that force's* health (rounded down), and a force that names its dragons names at
+   least one and **at most** one per 24 health of *its own* size, or part of it. Whether an unequal
    pairing is intended is not the engine's question; the start screen still refuses one, having
    only presets to offer.
+   - **Fewer dragons than the size asks for is a v3 house rule** (v3 Phase 0): a run that reaches a
+     36-health act owning one dragon fields one, and plays short. p. 8 says *exactly* one per 24,
+     and the army builder outside a run still asks for exactly that; setup accepts the shorter list
+     so a run can field what it owns. Never none: a run always owns its starting dragon.
 2. **A player's force size is the total health of every unit they own**, dead and buried included.
    Any "per 24 points of total force size" limit (p. 21) reads the player's own. It is derived, not
    stored, because nothing in scope moves a unit between players or into or out of the game.

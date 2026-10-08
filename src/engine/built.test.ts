@@ -193,10 +193,24 @@ describe('builtForceProblem', () => {
     expect(builtForceProblem({ ...ok, dragons: ['ivory_drake'] })).toMatch(/ivory_drake/)
   })
 
-  it('holds named dragons to exactly one per 24 health, or part of it -- so one at 12, not none', () => {
-    expect(builtForceProblem({ ...ok, dragons: [] })).toMatch(/brings 0 dragons; a 12-health force brings exactly 1/)
-    expect(builtForceProblem({ ...ok, dragons: ['fire_drake', 'air_wyrm'] })).toMatch(/exactly 1/)
+  it('holds named dragons to at least one and at most one per 24 health, or part of it', () => {
+    expect(builtForceProblem({ ...ok, dragons: [] })).toMatch(/brings no dragons; a force brings at least one/)
+    expect(builtForceProblem({ ...ok, dragons: ['fire_drake', 'air_wyrm'] })).toMatch(
+      /brings 2 dragons; a 12-health force brings at most 1/,
+    )
     expect(builtForceProblem({ ...ok, dragons: ['death_wyrm'] })).toBeNull()
+  })
+
+  // v3 Phase 0: a run that reaches Act III owning one dragon fields one. The engine seam
+  // v3 knows of, and the only one -- no recorded game names a short list.
+  it('lets a force bring fewer dragons than its size asks for, and sets it up with them', () => {
+    const big: BuiltForce = { armies: preset('treefolk_bestiary').armies, dragons: ['water_wyrm'] }
+    expect(builtForceProblem(big)).toBeNull()
+    expect(builtForceProblem({ ...big, dragons: ['water_wyrm', 'earth_drake', 'fire_drake'] })).toMatch(/at most 2/)
+    const state = setupGame({ seed: 3, ruleSet: V1_RULES, forces: built({ p1: big, p2: MIXED_12.p2 }) })
+    expect(validateState(state)).toEqual([])
+    expect(forceSize(state, 'p1')).toBe(35)
+    expect(dragonDiceOf(state, 'p1')).toEqual(['water_wyrm'])
   })
 
   it('is asked of every force by setupGame, which names the player', () => {

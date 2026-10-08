@@ -27,6 +27,13 @@ import {
 import { TERRAIN_TYPES, dragonDie, dragonName, terrainDie, terrainDieName, unitType } from '../../data/load'
 import { PRESET_ARMY_NAMES, type PresetArmyName } from '../../data/presets'
 import { dragonCount, type BuiltForce } from '../../engine/force'
+import {
+  forceHealth,
+  forceProblems,
+  type ForceProblem,
+  type ProblemPlace,
+  type TerrainField,
+} from '../../engine/forceProblems'
 import { V1_RULES } from '../../engine/types'
 
 import { DragonDetail, DragonTileBody, TerrainDetail } from './Board'
@@ -38,17 +45,12 @@ import {
   armyLines,
   defaultCap,
   defaultForceName,
-  forceHealth,
-  forceProblems,
   palette,
   removeDragon,
   removeUnit,
   setTerrain,
   terrainChoices,
   unitPalette,
-  type ForceProblem,
-  type ProblemPlace,
-  type TerrainField,
 } from './builder'
 import { UnitDetail, UnitTileBody, describe } from './DiceGrid'
 import { ElementDots, speciesInfo } from './Elements'

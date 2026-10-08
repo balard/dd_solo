@@ -22,7 +22,7 @@ import {
 import { rngFrom } from '../../engine/rng'
 import { setupGame } from '../../engine/setup'
 
-import { forceProblems } from './builder'
+import { forceProblems } from '../../engine/forceProblems'
 import type { SavedForce } from './forceStore'
 import {
   choiceGroups,
