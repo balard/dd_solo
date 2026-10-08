@@ -7,7 +7,7 @@ acts whose enemies grow from 12 to 24 to 36 health. A loss ends the run.
 
 Read `PLAN-V2.md` Phase 4 (the collection and the builder) before anything here: v3 is that phase's
 `Collection` and `forceProblems` with a game around them. This document is the *order of work*.
-**Phases 0 to 3 have landed** (the run model, the encounters, a run in the terminal, run saves), and **4a** (the run screens' mockups); 4b-4d have not.
+**Phases 0 to 3 have landed** (the run model, the encounters, a run in the terminal, run saves), and **4a-4b** (the run screens' mockups, and the run shell); 4c-4d have not.
 
 **Scope decisions this plan is built on** (agreed 2026-10-07):
 - **A mode in this repo, not a fork.** The single game stays exactly what it is. The run is a
@@ -655,6 +655,77 @@ scrolls, so the question is only how much the player scrolls to judge it:
   pays only when the force is short of the cap, or when the player benches something for it. The
   event screen says so before the choice; whether upgrades should behave this way is a playtest
   question.
+
+
+### What 4b found
+
+Landed as:
+- `src/ui/run/`: `useRun`, `RunScreen`, `RunPanel`, and `runView.ts`, the screens' rules, tested
+  in node;
+- the run's `history` and `eventEffect` / `upgradePreview` in `src/run/`;
+- `App`'s fork between a run, the start screen and the game.
+
+The engine did not move. `RUN_VERSION` is 2.
+
+**Checked in the browser, end to end:**
+- A Treefolk run on seed 3 opened on the same encounter and force the terminal draws.
+- Fight played Lava Elf outriders with the encounter in the header. A reload mid-battle came back
+  to the start screen offering Continue, and after Continue and Fight the board read the same,
+  terrain for terrain and die for die. That is the second half of Phase 3's exit criterion, now
+  in the browser.
+- Conceding led to "See the run" and the run's end. A reload reopened that page once, and Back
+  to start cleared the save.
+- The reward and the event were reached through real saves, written in node by the autopilot and
+  continued in the page:
+  - picking an offer named it on Take;
+  - taking it wrote the history and moved to the next encounter;
+  - upgrading a fielded Nymph at 24 of 24 previewed "leaves the force", and the reducer did
+    exactly that.
+- A phone held upright drew the one-act strip and the fixed footer as the mockup has them.
+
+**What the plan's 4b did not include, and the slice needed:**
+- **The two things 4a said 4b builds first**:
+  - `history`, recorded by `finishEncounter` and on a battle that ends the run, which is the
+    first `RUN_VERSION` bump;
+  - `eventEffect`, the one statement of what an event does to the force. `upgradePreview` asks
+    it before the choice and the reducer applies it after. The run fuzz now checks every upgrade
+    against its preview.
+- **Stand-ins, so a run plays end to end in this slice**:
+  - **4c's force screen**: the next enemy with its dice, the force read-only, *Fill the force
+    from your pool* (`suggestForce`), Leave run, and Fight;
+  - **4d's battle**: the game screen with the encounter as its title, New game hidden, and the
+    game-over card leading to "Pick your reward" or "See the run";
+  - **the run's end**, built whole now, because a lost run had nowhere else to go.
+  4c and 4d replace or finish each of these. `useGame` gained `start` on a game in progress, so a
+  run's next battle can be asked for from either phase.
+- **`readRun` no longer deletes a bad save.** StrictMode reads a `useState` initializer twice. A
+  read that discarded the save left the second read finding nothing, and the message saying why
+  was lost with it. The screen clears it in an effect, which is safe to run twice.
+- **A run does not exist until its race is picked.** The race pick is a screen before the run,
+  so nothing is saved for a run never started. `RunScreen` still draws `choose_race`, since its
+  switch has no default, but the app never shows it.
+
+**Left as it is, on purpose:**
+- "New run" over a run in progress asks through `window.confirm`, as the game's Concede does,
+  rather than the mockup's inline question. The app has one way of asking that today, and 4d
+  revisits both.
+- Leaving a battle without conceding is a reload until 4d's Leave run. The save already holds
+  the encounter's start, so a reload is the quit rule working.
+
+**Found while playing, for Phase 5:**
+- **The autopilot fields monsters.** A watched Treefolk run reached Act II with five monsters in
+  its 24, because the reward rule takes the heaviest unit and the force rule fields the heaviest
+  first. That is a property of the rules of thumb, not of the run, but it is what Phase 2's
+  curve numbers were measured with.
+- **"The same board" needs the same force.** A Treefolk force arranged differently on the same
+  seed met a different enemy home: the Horde roll-off rolls the player's own Horde, so the force
+  is part of the stream. The quit rule promises the same board for the same play, and arranging
+  is play.
+
+**Would have shipped green:** the full suite's 200-game `GreedyAI` self-play test timed out once
+(44s against `testTimeout`'s 30s) while the dev server and the browser were busy. Alone it takes
+10s, and nothing in `src/ai/` or the engine changed. It is the machine-dependence `CLAUDE.md`
+warns about, recorded here rather than answered by raising the limit.
 
 ---
 

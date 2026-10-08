@@ -76,6 +76,8 @@ export interface PlayingGame {
   readonly rollShown: RollShown | null
   /** Back to the start screen, to pick forces again. */
   readonly newGame: () => void
+  /** Starts another game in place of this one: a run's next battle (v3 Phase 4b). */
+  readonly start: (setup: SetupOptions, opponent: OpponentName) => void
   readonly record: GameRecord
   /**
    * The game's clock (v2 Phase 3e): wall time from the moment it started, and the
@@ -364,6 +366,7 @@ export function useGame(): Game {
           }
         : null,
     newGame,
+    start,
     record,
     startedAt: session.startedAt,
     endedAt: session.endedAt,

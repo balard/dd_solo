@@ -1,0 +1,626 @@
+/**
+ * The run's screens between battles (v3 Phase 4b), from `run.pending` and nothing else:
+ * the race pick, the force before a battle, the reward of five, an event, and the run's
+ * end. Laid out by `docs/mockups/v3-phase-4a.html`; every rule they show is `src/run/`'s
+ * or `runView.ts`'s, and every die is drawn with the board's own components.
+ *
+ * The force before a battle is a stand-in until 4c gives it the army builder: the next
+ * enemy, the force as it stands, and the autopilot's force a tap away.
+ */
+import { useCallback, useState, type ReactNode } from 'react'
+
+import { dragonDie, ownTerrainType, speciesElements, unitType } from '../../data/load'
+import { PRESET_ARMY_NAMES, maxArmyHealth, type PresetArmyName } from '../../data/presets'
+import type { BuiltForce } from '../../engine/force'
+import { forceHealth, forceProblems, healthOf, used } from '../../engine/forceProblems'
+import { PLAYABLE_SPECIES, PLAYABLE_UNITS } from '../../engine/playable'
+import { ABILITY_TEXT, SPECIES_ABILITIES } from '../../engine/species'
+import { V1_RULES } from '../../engine/types'
+import { suggestForce } from '../../run/autopilot'
+import { enemyForce } from '../../run/battle'
+import { transformsOf } from '../../run/draws'
+import { upgradePreview } from '../../run/reduce'
+import { ACT_SIZE, type Offer, type RunState } from '../../run/types'
+
+import { DragonDetail, DragonTileBody, TerrainDetail } from '../game/Board'
+import { FaceSheet, UnitDetail, UnitTileBody, describe } from '../game/DiceGrid'
+import { ElementDots } from '../game/Elements'
+import { InspectorPanel } from '../game/Inspector'
+import { readSeed } from '../game/newGame'
+import { compareForDisplay } from '../game/prompts'
+import { tileSize } from '../game/stacks'
+import { newSeed } from '../game/useGame'
+import { RuleSetProvider } from '../game/useRuleSet'
+
+import {
+  ROMAN,
+  actStrip,
+  dragonNote,
+  entryWhere,
+  offerText,
+  outcomeText,
+  runName,
+  runStats,
+  runWhere,
+  speciesName,
+} from './runView'
+import type { RunApi } from './useRun'
+
+type Looking = { readonly kind: 'unit'; readonly typeId: string } | { readonly kind: 'dragon'; readonly dieId: string } | { readonly kind: 'terrain'; readonly dieId: string }
+
+const ARMY_NAME: Readonly<Record<PresetArmyName, string>> = { home: 'Home', campaign: 'Campaign', horde: 'Horde' }
+
+const allDice = (force: BuiltForce): readonly string[] => PRESET_ARMY_NAMES.flatMap((a) => force.armies[a])
+
+/** A unit die as a button: the board's tile, at the board's size. */
+function UnitButton({
+  typeId,
+  onClick,
+  picked = false,
+  isNew = false,
+  label,
+}: {
+  typeId: string
+  onClick: () => void
+  picked?: boolean
+  isNew?: boolean
+  label: string
+}) {
+  const side = tileSize(typeId, false)
+  const title = `${describe(unitType(typeId))} — ${label}`
+  return (
+    <div className={`die-wrap run-die${isNew ? ' is-new' : ''}`}>
+      <button
+        type="button"
+        className={`die die-squared die-selectable${picked ? ' die-selected' : ''}`}
+        style={{ width: side, height: side }}
+        onClick={onClick}
+        aria-pressed={picked}
+        title={title}
+        aria-label={title}
+      >
+        <UnitTileBody typeId={typeId} />
+      </button>
+    </div>
+  )
+}
+
+/** The three acts: where the run is and what is left. The current act alone on a narrow
+ *  or short screen (CSS), a line and twelve pips. */
+export function ActStrip({ run }: { run: RunState }) {
+  return (
+    <div className="act-strip" aria-label={`${runName(run)}, ${runWhere(run)}`}>
+      {actStrip(run).map((act) => (
+        <div key={act.act} className={`act act-${act.state}`}>
+          <div className="act-name">
+            Act {ROMAN[act.act]}{' '}
+            <span className="muted">
+              {act.state === 'now' && run.status === 'playing'
+                ? `cap ${act.cap} · encounter ${run.encounter + 1} of 12`
+                : act.state === 'done'
+                  ? 'cleared'
+                  : `cap ${act.cap}`}
+            </span>
+          </div>
+          <div className="act-slots">
+            {act.slots.map((slot, i) => (
+              <span key={i} className={`act-slot is-${slot}`} title={`Encounter ${i + 1}: ${slot}`}>
+                {slot === 'won' ? '✓' : slot === 'lost' ? '✗' : slot === 'here' ? i + 1 : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** A run screen: the strip, a scrolling page, and a footer that never scrolls. */
+function Frame({ run, children, foot }: { run: RunState | null; children: ReactNode; foot: ReactNode }) {
+  return (
+    <div className="app run-app">
+      <div className="run-page">
+        {run !== null && <ActStrip run={run} />}
+        {children}
+      </div>
+      <div className="run-foot">{foot}</div>
+    </div>
+  )
+}
+
+// --- the race pick ------------------------------------------------------------------
+
+/** Where a race's Home Terrain comes from, in words. */
+function homeWords(species: string): string {
+  const own = ownTerrainType(species)
+  if (own !== null) return `home on ${own.name}`
+  const elements = speciesElements(species).filter((e) => e !== 'death')
+  return `home on any ${elements.join(' or ')} terrain`
+}
+
+export function RacePick({ onStart, onBack }: { onStart: (race: string, seed: number) => void; onBack: () => void }) {
+  const [race, setRace] = useState<string>(PLAYABLE_SPECIES[0]?.id ?? 'treefolk')
+  const [seedText, setSeedText] = useState('')
+  const seed = readSeed(seedText)
+  return (
+    <Frame
+      run={null}
+      foot={
+        <>
+          <span className="run-foot-why">{seed.kind === 'bad' ? seed.problem : `${speciesName(race)} · ${homeWords(race)}`}</span>
+          <button type="button" className="choice secondary" onClick={onBack}>
+            Back
+          </button>
+          <button
+            type="button"
+            className="choice"
+            disabled={seed.kind === 'bad'}
+            onClick={() => seed.kind !== 'bad' && onStart(race, seed.kind === 'fixed' ? seed.seed : newSeed())}
+          >
+            Start a {speciesName(race)} run
+          </button>
+        </>
+      }
+    >
+      <div>
+        <h1 className="run-title">Pick a race</h1>
+        <p className="muted run-lede">
+          You start with one large die, a medium die of its line and one more, the race&rsquo;s five small dice, a
+          dragon and two terrains: 12 health, drawn from the seed.
+        </p>
+      </div>
+      <div className="race-grid" role="radiogroup" aria-label="Race">
+        {PLAYABLE_SPECIES.map((species) => {
+          const dice = ['large', 'medium', 'small'].flatMap((size) => sampleDie(species.id, size) ?? [])
+          return (
+            <button
+              key={species.id}
+              type="button"
+              role="radio"
+              aria-checked={race === species.id}
+              className={`race-card${race === species.id ? ' is-picked' : ''}`}
+              onClick={() => setRace(species.id)}
+            >
+              <span className="race-name">
+                <ElementDots elements={species.elements} />
+                {species.name}
+              </span>
+              <span className="muted">
+                {species.elements.join(' & ')} · {homeWords(species.id)}
+              </span>
+              <span className="race-abilities">
+                {(SPECIES_ABILITIES[species.id] ?? []).map((ability) => (
+                  <span key={ability} title={ABILITY_TEXT[ability]}>
+                    {ability}
+                  </span>
+                ))}
+              </span>
+              <span className="race-dice" aria-hidden="true">
+                {dice.map((typeId) => (
+                  <span key={typeId} className="die die-squared" style={{ width: tileSize(typeId, true), height: tileSize(typeId, true) }}>
+                    <UnitTileBody typeId={typeId} compact />
+                  </span>
+                ))}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      <label className="new-game-field run-seed">
+        <span className="new-game-label">Seed</span>
+        <input value={seedText} onChange={(e) => setSeedText(e.target.value)} placeholder="leave empty to roll one" inputMode="numeric" />
+      </label>
+    </Frame>
+  )
+}
+
+/** The race's first die of a size, in the board's display order: what its card shows. */
+function sampleDie(species: string, size: string): string | null {
+  return [...PLAYABLE_UNITS].filter((u) => u.species === species && u.size === size).sort(compareForDisplay)[0]?.id ?? null
+}
+
+// --- the force before a battle (4c makes this the builder) ------------------------------
+
+function ArrangeScreen({ api, run, onFight }: { api: RunApi; run: RunState; onFight: () => void }) {
+  const [looking, setLooking] = useState<Looking | null>(null)
+  if (run.pending.kind !== 'arrange_force' || run.current?.kind !== 'battle') return null
+  const cap = run.pending.cap
+  const enemy = enemyForce(run)
+  const problems = forceProblems(run.collection, cap, run.force, 'at_most')
+  const total = forceHealth(run.force)
+  const suggested = suggestForce(run, cap)
+  const better = suggested !== null && JSON.stringify(suggested) !== JSON.stringify(run.force)
+  return (
+    <Frame
+      run={run}
+      foot={
+        <>
+          <span className={`run-foot-why${problems.length > 0 ? ' is-bad' : ''}`}>
+            {problems[0]?.text ?? `${total} / ${cap} health · ${(run.force.dragons ?? []).map(dragonNameOf).join(', ')}`}
+          </span>
+          <button type="button" className="choice secondary" onClick={api.leave}>
+            Leave run
+          </button>
+          <button type="button" className="choice" disabled={problems.length > 0} onClick={onFight}>
+            Fight {run.current.name}
+          </button>
+        </>
+      }
+    >
+      <section className="run-panel">
+        <p className="run-label">Next battle · {runWhere(run)}</p>
+        <h2 className="run-h2">{run.current.name}</h2>
+        <p className="muted">
+          They field {speciesList(enemy)}, {forceHealth(enemy)} health in {allDice(enemy).length} dice, played by{' '}
+          {run.current.opponent}. You field {total} of {cap}.
+        </p>
+        <div className="dice-grid run-dice">
+          {[...allDice(enemy)].sort((a, b) => compareForDisplay(unitType(a), unitType(b))).map((id, i) => (
+            <UnitButton key={i} typeId={id} label="look" onClick={() => setLooking({ kind: 'unit', typeId: id })} />
+          ))}
+        </div>
+      </section>
+      <section>
+        <p className="run-label">Your force · {total} / {cap} health</p>
+        <div className="run-armies">
+          {PRESET_ARMY_NAMES.map((army) => (
+            <div key={army} className="run-army">
+              <div className="run-army-head">
+                <b>{ARMY_NAME[army]}</b>
+                <span className="muted">
+                  {healthOf(run.force.armies[army])}/{maxArmyHealth(total)}
+                </span>
+              </div>
+              <div className="dice-grid run-dice">
+                {run.force.armies[army].map((id, i) => (
+                  <UnitButton key={i} typeId={id} label="look" onClick={() => setLooking({ kind: 'unit', typeId: id })} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        {problems.map((p) => (
+          <p key={p.text} className="run-problem">
+            {p.text}
+          </p>
+        ))}
+        <div className="choices">
+          <button
+            type="button"
+            className="choice secondary"
+            disabled={!better}
+            onClick={() => suggested !== null && api.dispatch({ kind: 'set_force', force: suggested })}
+            title="As much of your pool as fits under the cap, split legally, with your terrains and dragons"
+          >
+            Fill the force from your pool
+          </button>
+        </div>
+      </section>
+      {looking !== null && <Inspect looking={looking} onClose={() => setLooking(null)} />}
+    </Frame>
+  )
+}
+
+const dragonNameOf = (dieId: string): string => {
+  const die = dragonDie(dieId)
+  return `${die.element[0]?.toUpperCase() ?? ''}${die.element.slice(1)} ${die.form === 'drake' ? 'Drake' : 'Wyrm'}`
+}
+
+const speciesList = (force: BuiltForce): string =>
+  [...new Set(allDice(force).map((id) => speciesName(unitType(id).species)))].join(' and ')
+
+// --- the reward ------------------------------------------------------------------------
+
+function OfferCard({ offer, run, picked, onPick, onLook }: { offer: Offer; run: RunState; picked: boolean; onPick: () => void; onLook: () => void }) {
+  const text = offerText(offer, run.race)
+  return (
+    <div className={`offer${picked ? ' is-picked' : ''}`}>
+      <div className="offer-die">
+        {offer.kind === 'unit' && <UnitButton typeId={offer.id} label="look" onClick={onLook} />}
+        {offer.kind === 'dragon' && (
+          <button type="button" className={`dragon-tile dragon-el-${dragonDie(offer.id).element}`} onClick={onLook} title={`${text.name} — look`}>
+            <DragonTileBody dieId={offer.id} />
+          </button>
+        )}
+      </div>
+      <button type="button" className="offer-pick" onClick={onPick} aria-pressed={picked}>
+        <span className="run-label">{text.kind}</span>
+        <b className="offer-name">{text.name}</b>
+        <span className="muted">{text.detail}</span>
+        {offer.kind === 'dragon' && <span className="offer-why">{dragonNote(run)}</span>}
+      </button>
+      {offer.kind === 'unit' && <FaceSheet typeId={offer.id} faces={unitType(offer.id).faces} size={30} />}
+      {offer.kind === 'terrain' && <TerrainDetail terrain={{ dieId: offer.id }} />}
+    </div>
+  )
+}
+
+function RewardScreen({ api, run }: { api: RunApi; run: RunState }) {
+  const [picked, setPicked] = useState<number | null>(null)
+  const [looking, setLooking] = useState<Looking | null>(null)
+  if (run.pending.kind !== 'reward') return null
+  const offers = run.pending.offers
+  const choice = picked === null ? undefined : offers[picked]
+  return (
+    <Frame
+      run={run}
+      foot={
+        <>
+          <span className="run-foot-why">{choice === undefined ? 'Pick one of the five.' : offerText(choice, run.race).detail}</span>
+          <button
+            type="button"
+            className="choice"
+            disabled={picked === null}
+            onClick={() => picked !== null && api.dispatch({ kind: 'take_offer', index: picked })}
+          >
+            {choice === undefined ? 'Take' : `Take ${offerText(choice, run.race).name}`}
+          </button>
+        </>
+      }
+    >
+      <div>
+        <h1 className="run-title">{run.current?.name ?? 'The battle'} is beaten. Pick a reward.</h1>
+        <p className="muted run-lede">It goes to your pool; you field it before the next battle. Tap a die to look at it.</p>
+      </div>
+      <div className="offers">
+        {offers.map((offer, i) => (
+          <OfferCard
+            key={i}
+            offer={offer}
+            run={run}
+            picked={picked === i}
+            onPick={() => setPicked(i)}
+            onLook={() =>
+              setLooking(offer.kind === 'unit' ? { kind: 'unit', typeId: offer.id } : { kind: offer.kind, dieId: offer.id })
+            }
+          />
+        ))}
+      </div>
+      {looking !== null && <Inspect looking={looking} onClose={() => setLooking(null)} />}
+    </Frame>
+  )
+}
+
+// --- the event --------------------------------------------------------------------------
+
+function EventScreen({ api, run }: { api: RunApi; run: RunState }) {
+  const [picked, setPicked] = useState<string | null>(null)
+  const [looking, setLooking] = useState<Looking | null>(null)
+  if (run.pending.kind !== 'event') return null
+  const pending = run.pending
+  const fielded = [...allDice(run.force)].sort((a, b) => compareForDisplay(unitType(a), unitType(b)))
+  const spare = Object.entries(run.collection.units)
+    .flatMap(([id, n]) => Array<string>(Math.max(0, n - used(run.force, 'units', id))).fill(id))
+    .sort((a, b) => compareForDisplay(unitType(a), unitType(b)))
+  const preview = picked === null ? null : upgradePreview(run, picked)
+  const into = picked === null ? [] : transformsOf(picked)
+  const name = (id: string) => unitType(id).name
+
+  const upgradeNote = (): string => {
+    if (picked === null) return 'Pick a die first.'
+    if (preview === null) return `${name(picked)} is the top of its line.`
+    switch (preview.effect) {
+      case 'pool':
+        return `You hold a spare ${name(picked)}: that copy changes, and your force does not.`
+      case 'in_place':
+        return `${name(preview.to)} takes its place in the ${preview.army === null ? 'force' : ARMY_NAME[preview.army]}: ${forceHealth(preview.force)} of ${ACT_SIZE[run.act]} health.`
+      case 'benched': {
+        const total = forceHealth(run.force) + unitType(preview.to).health - unitType(picked).health
+        const why =
+          total > ACT_SIZE[run.act]
+            ? `it would make your force ${total} health, over the cap of ${ACT_SIZE[run.act]}`
+            : `its army would hold more than half your force`
+        return `${name(preview.to)} does not fit where ${name(picked)} stands: ${why}. It leaves the force and waits in your pool until you field it.`
+      }
+    }
+  }
+  const tile = (id: string, i: number, isSpare: boolean) => (
+    <UnitButton key={`${isSpare ? 's' : 'f'}${i}`} typeId={id} picked={picked === id} label="pick" onClick={() => setPicked(id)} />
+  )
+
+  return (
+    <Frame
+      run={run}
+      foot={
+        <>
+          <span className="run-foot-why">{picked === null ? 'Pick a die from your pool, or walk on.' : name(picked)}</span>
+          <button type="button" className="choice secondary" onClick={() => api.dispatch({ kind: 'skip' })}>
+            Walk on
+          </button>
+          <button
+            type="button"
+            className="choice secondary"
+            disabled={picked === null || !pending.transformable.includes(picked)}
+            onClick={() => picked !== null && api.dispatch({ kind: 'transform', unit: picked })}
+          >
+            Transform
+          </button>
+          <button
+            type="button"
+            className="choice"
+            disabled={picked === null || preview === null}
+            onClick={() => picked !== null && api.dispatch({ kind: 'upgrade', unit: picked })}
+          >
+            {preview === null ? 'Upgrade' : `Upgrade to ${name(preview.to)}`}
+          </button>
+        </>
+      }
+    >
+      <div>
+        <h1 className="run-title">{pending.encounter.name}</h1>
+        <p className="muted run-lede">Change one die in your pool, or walk on.</p>
+      </div>
+      <section className="run-panel">
+        <p className="run-label">Fielded</p>
+        <div className="dice-grid run-dice">{fielded.map((id, i) => tile(id, i, false))}</div>
+        <p className="run-label">Spare</p>
+        <div className="dice-grid run-dice">{spare.length === 0 ? <p className="empty">Every die you own is fielded.</p> : spare.map((id, i) => tile(id, i, true))}</div>
+        {picked !== null && (
+          <button type="button" className="link-button" onClick={() => setLooking({ kind: 'unit', typeId: picked })}>
+            Look at {name(picked)}
+          </button>
+        )}
+      </section>
+      <div className="event-choices">
+        <section className="run-panel">
+          <h2 className="run-h3">Upgrade</h2>
+          {picked !== null && preview !== null && (
+            <div className="event-path">
+              <UnitButton typeId={picked} label="look" onClick={() => setLooking({ kind: 'unit', typeId: picked })} />
+              <span aria-hidden="true">→</span>
+              <UnitButton typeId={preview.to} label="look" onClick={() => setLooking({ kind: 'unit', typeId: preview.to })} />
+            </div>
+          )}
+          <p className={`run-note${preview?.effect === 'benched' ? ' is-warn' : ''}`}>{upgradeNote()}</p>
+        </section>
+        <section className="run-panel">
+          <h2 className="run-h3">Transform</h2>
+          {picked !== null && (
+            <div className="event-path">
+              <UnitButton typeId={picked} label="look" onClick={() => setLooking({ kind: 'unit', typeId: picked })} />
+              <span aria-hidden="true">→</span>
+              {into.map((id) => (
+                <UnitButton key={id} typeId={id} label="look" onClick={() => setLooking({ kind: 'unit', typeId: id })} />
+              ))}
+            </div>
+          )}
+          <p className="run-note">
+            {picked === null ? 'Pick a die first.' : 'One of these, at random: the same species and health.'}
+          </p>
+        </section>
+      </div>
+      {looking !== null && <Inspect looking={looking} onClose={() => setLooking(null)} />}
+    </Frame>
+  )
+}
+
+// --- the run's end ------------------------------------------------------------------------
+
+function RunEnd({ api, run, onNewRun }: { api: RunApi; run: RunState; onNewRun: () => void }) {
+  const stats = runStats(run)
+  const won = run.status === 'won'
+  const lastLost = [...run.history].reverse().find((h) => h.outcome.kind === 'lost')
+  return (
+    <Frame
+      run={run}
+      foot={
+        <>
+          <span className="run-foot-why">Seen once: the save is cleared when you leave this page.</span>
+          <button type="button" className="choice secondary" onClick={api.close}>
+            Back to start
+          </button>
+          <button type="button" className="choice" onClick={onNewRun}>
+            New run
+          </button>
+        </>
+      }
+    >
+      <div>
+        <h1 className={`run-title ${won ? 'is-won' : 'is-lost'}`}>{won ? 'The run is won.' : 'The run is lost.'}</h1>
+        <p className="muted run-lede">
+          {won
+            ? `${runName(run)}, all three acts cleared · seed ${run.seed}`
+            : `${runName(run)}, lost at ${runWhere(run)}${lastLost === undefined ? '' : `, to ${lastLost.name}`} · seed ${run.seed}`}
+        </p>
+      </div>
+      <div className="run-stats">
+        <div><b>{stats.battlesWon}</b><span>battles won</span></div>
+        <div><b>{stats.events}</b><span>events</span></div>
+        <div><b>{stats.poolHealth}</b><span>health in your pool</span></div>
+        <div><b>{stats.dragons}</b><span>dragons</span></div>
+      </div>
+      <section className="run-panel">
+        <p className="run-label">The force at the end · {stats.fielded} health</p>
+        <div className="dice-grid run-dice">
+          {allDice(run.force).map((id, i) => (
+            <span key={i} className="die die-squared" style={{ width: tileSize(id, false), height: tileSize(id, false) }}>
+              <UnitTileBody typeId={id} />
+            </span>
+          ))}
+        </div>
+      </section>
+      <section className="run-panel">
+        <p className="run-label">Encounter by encounter</p>
+        <ol className="run-history">
+          {run.history.map((entry, i) => (
+            <li key={i} className={`is-${entry.outcome.kind}`}>
+              <span className="muted">{entryWhere(entry)}</span>
+              <span>{entry.name}</span>
+              <span>{outcomeText(entry)}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </Frame>
+  )
+}
+
+// --- the inspector, and the fork ------------------------------------------------------------
+
+function Inspect({ looking, onClose }: { looking: Looking; onClose: () => void }) {
+  const close = useCallback(onClose, [onClose])
+  return (
+    <InspectorPanel onClose={close}>
+      {looking.kind === 'unit' && <UnitDetail typeId={looking.typeId} />}
+      {looking.kind === 'dragon' && <DragonDetail dieId={looking.dieId} whose={null} />}
+      {looking.kind === 'terrain' && <TerrainDetail terrain={{ dieId: looking.dieId }} />}
+    </InspectorPanel>
+  )
+}
+
+/**
+ * The run between battles, by its pending -- every kind, no default. A battle is `App`'s to
+ * play; this draws only the moment before it starts, which a reload can land on.
+ */
+export function RunScreen({
+  api,
+  run,
+  onFight,
+  onStartBattle,
+  onNewRun,
+}: {
+  api: RunApi
+  run: RunState
+  onFight: () => void
+  onStartBattle: () => void
+  onNewRun: () => void
+}) {
+  const pending = run.pending
+  let screen: ReactNode
+  switch (pending.kind) {
+    case 'choose_race':
+      screen = <RacePick onStart={api.begin} onBack={api.leave} />
+      break
+    case 'arrange_force':
+      screen = <ArrangeScreen api={api} run={run} onFight={onFight} />
+      break
+    case 'battle':
+      screen = (
+        <Frame
+          run={run}
+          foot={
+            <>
+              <span className="run-foot-why">{pending.encounter.name}</span>
+              <button type="button" className="choice" onClick={onStartBattle}>
+                Start the battle
+              </button>
+            </>
+          }
+        >
+          <h1 className="run-title">{pending.encounter.name}</h1>
+        </Frame>
+      )
+      break
+    case 'reward':
+      screen = <RewardScreen api={api} run={run} />
+      break
+    case 'event':
+      screen = <EventScreen api={api} run={run} />
+      break
+    case 'over':
+      screen = <RunEnd api={api} run={run} onNewRun={onNewRun} />
+      break
+  }
+  // Rule text on a face asks the rules being played (`useRuleSet`), and a run plays V1_RULES.
+  return <RuleSetProvider ruleSet={V1_RULES}>{screen}</RuleSetProvider>
+}

@@ -7,7 +7,13 @@
  */
 import { formatClock, type GameSummary } from './summary'
 
-export function GameOver({ summary, onNewGame }: { summary: GameSummary; onNewGame: () => void }) {
+/** What the card leads to: New game, or in a run (v3 Phase 4b) the reward or the run's end. */
+export interface GameOverNext {
+  readonly label: string
+  readonly onClick: () => void
+}
+
+export function GameOver({ summary, next }: { summary: GameSummary; next: GameOverNext }) {
   const side = (who: string, { left, of }: GameSummary['mine']) => (
     <div className="game-over-side">
       <dt>{who}</dt>
@@ -35,8 +41,8 @@ export function GameOver({ summary, onNewGame }: { summary: GameSummary; onNewGa
         {side('Enemy', summary.theirs)}
       </dl>
       <div className="choices">
-        <button type="button" className="choice" onClick={onNewGame}>
-          New game
+        <button type="button" className="choice" onClick={next.onClick}>
+          {next.label}
         </button>
       </div>
     </div>

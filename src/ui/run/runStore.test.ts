@@ -76,11 +76,13 @@ describe('runStore', () => {
     expect(readRun(storage)).toEqual({ kind: 'none' })
   })
 
-  it('discards a save it cannot carry on, once, saying why', () => {
+  it('reports a save it cannot carry on, every time it is read, until it is cleared', () => {
     const storage = memory()
     storage.setItem('dd_solo.run', JSON.stringify({ version: 0, run: {} }))
+    // Twice, as StrictMode reads: the second read must still say why.
     expect(readRun(storage)).toEqual({ kind: 'outdated', found: 0 })
-    expect(storage.items.size).toBe(0)
+    expect(readRun(storage)).toEqual({ kind: 'outdated', found: 0 })
+    clearRun(storage)
     expect(readRun(storage)).toEqual({ kind: 'none' })
   })
 

@@ -13,7 +13,7 @@
  * rolled instead (v2 Phase 4c). The builder is a page of its own, reached from here
  * and returning here -- with the force it built already picked, when asked to.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import { DEFAULT_OPPONENT, type OpponentName } from '../../ai/opponents'
 import type { ForcePool } from '../../engine/force'
@@ -161,8 +161,11 @@ function readRemembered(kept: readonly SavedForce[]): Remembered {
 
 export function NewGameScreen({
   onStart,
+  runPanel = null,
 }: {
   readonly onStart: (setup: SetupOptions, opponent: OpponentName) => void
+  /** The run section (v3 Phase 4b), above the single game. */
+  readonly runPanel?: ReactNode
 }) {
   const [kept, setKept] = useState<readonly SavedForce[]>(() => readSavedForces())
   const [saved] = useState(() => readRemembered(kept))
@@ -222,6 +225,8 @@ export function NewGameScreen({
     <div className="app">
       <div className="new-game">
         <h1>dd_solo</h1>
+        {runPanel}
+        <h2 className="new-game-section">A single game</h2>
         <p className="muted">
           Pick what each side brings, build a force of your own, or roll the whole thing.
         </p>

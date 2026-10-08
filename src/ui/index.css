@@ -1746,3 +1746,151 @@ body {
   cursor: pointer;
 }
 .new-game-check input { width: 18px; height: 18px; min-height: 0; padding: 0; margin: 2px 0 0; flex: none; }
+
+/* --- the run (v3 Phase 4b) ---------------------------------------------------------
+   Laid out by docs/mockups/v3-phase-4a.html: a scrolling page under the act strip, and a
+   footer that never scrolls, holding the screen's answer. */
+
+.run-app { padding-block: 0; }
+.run-page {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: grid; gap: 14px; align-content: start; padding-block: 12px 18px;
+}
+.run-foot {
+  flex: none; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end;
+  padding: 8px 0 10px; border-top: 1px solid var(--line); background: var(--bg);
+}
+.run-foot .choice { margin: 0; }
+.run-foot-why { flex: 1 1 200px; min-width: 0; font-size: var(--fs-sm); color: var(--muted); }
+.run-foot-why.is-bad { color: var(--melee); }
+.run-title { font-size: var(--fs-2xl); margin: 0; text-wrap: balance; }
+.run-title.is-won { color: var(--missile); }
+.run-title.is-lost { color: var(--melee); }
+.run-lede { margin: 4px 0 0; font-size: var(--fs-md); }
+.run-h2 { font-size: var(--fs-xl); margin: 0 0 4px; }
+.run-h3 { font-size: var(--fs-lg); margin: 0 0 6px; }
+.run-label {
+  margin: 0 0 4px; font-size: var(--fs-2xs); font-weight: 600; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--muted);
+}
+.run-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.run-panel > .run-label:not(:first-child) { margin-top: 8px; }
+.run-note { margin: 6px 0 0; font-size: var(--fs-sm); color: var(--muted); }
+.run-note.is-warn { color: var(--maneuver); }
+.run-problem { margin: 4px 0 0; font-size: var(--fs-sm); color: var(--melee); }
+.run-dice { gap: 4px; }
+.run-die.is-new { position: relative; }
+.run-die.is-new::after {
+  content: "new"; position: absolute; top: -7px; right: -5px; padding: 0 4px; border-radius: 4px;
+  background: var(--accent); color: var(--accent-fg); font-size: var(--fs-2xs); font-weight: 700;
+}
+.link-button {
+  margin-top: 6px; padding: 0; border: none; background: none; color: var(--accent);
+  font: inherit; font-size: var(--fs-sm); text-decoration: underline; cursor: pointer;
+}
+
+/* The act strip: three acts, the current one wide; a slot per encounter. */
+.act-strip { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: stretch; }
+.act {
+  display: grid; gap: 3px; align-content: start; padding: 6px 10px; min-width: 0;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--panel);
+}
+.act-now { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.act-done { color: var(--muted); }
+.act-name { font-size: var(--fs-sm); font-weight: 700; white-space: nowrap; }
+.act-name .muted { font-weight: 400; font-size: var(--fs-xs); }
+.act-slots { display: flex; gap: 4px; align-items: center; }
+.act-slot {
+  width: 18px; height: 18px; flex: none; display: grid; place-items: center; border-radius: 50%;
+  border: 1.5px solid var(--line); color: var(--muted); font-size: 10px; font-weight: 700;
+}
+.act-slot.is-won { background: var(--missile); border-color: var(--missile); color: #fff; border-radius: 4px; }
+.act-slot.is-lost { background: var(--melee); border-color: var(--melee); color: #fff; border-radius: 4px; }
+.act-slot.is-event { background: var(--sunk); border-color: var(--muted); border-radius: 3px; transform: rotate(45deg) scale(.8); }
+.act-slot.is-here { width: 22px; height: 22px; border: 2.5px solid var(--accent); color: var(--accent); }
+.act:not(.act-now) .act-slots { gap: 2px; }
+.act:not(.act-now) .act-slot { width: 10px; height: 10px; font-size: 0; }
+/* Upright or short: the current act alone, a line and its pips. */
+@media (max-width: 599px), (max-height: 499px) {
+  .act-strip { grid-template-columns: 1fr; }
+  .act:not(.act-now) { display: none; }
+  .act-now .act-slots { gap: 3px; }
+  .act-now .act-slot { width: 13px; height: 13px; font-size: 0; }
+  .act-now .act-slot.is-here { width: 16px; height: 16px; }
+}
+
+/* The race pick. */
+.race-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.race-card {
+  display: grid; gap: 4px; justify-items: start; text-align: left; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--fg); font: inherit;
+}
+.race-card.is-picked { border: 2px solid var(--accent); padding: 9px 11px; }
+.race-card .muted { font-size: var(--fs-sm); }
+.race-name { display: flex; gap: 8px; align-items: center; font-weight: 700; font-size: var(--fs-xl); }
+.race-abilities { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: var(--fs-sm); }
+.race-abilities span { text-decoration: underline dotted; text-underline-offset: 3px; }
+.race-dice { display: flex; gap: 4px; align-items: flex-end; }
+.run-seed { max-width: 320px; margin: 0; }
+.run-seed input {
+  width: 100%; min-height: 44px; padding: 9px 11px; background: var(--panel); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 7px; font: inherit;
+}
+@media (max-height: 499px) {
+  .race-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .race-abilities, .race-dice { display: none; }
+}
+
+/* The force before a battle (a stand-in until 4c). */
+.run-armies { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.run-army { border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px; background: var(--panel); }
+.run-army-head { display: flex; justify-content: space-between; font-size: var(--fs-sm); margin-bottom: 4px; }
+@media (max-width: 599px) { .run-armies { grid-template-columns: 1fr; } }
+
+/* The reward of five: pick, then Take. */
+.offers { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.offer {
+  display: grid; gap: 6px; align-content: start; min-width: 0; padding: 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+}
+.offer.is-picked { border: 2px solid var(--accent); padding: 9px; }
+.offer-pick {
+  display: grid; gap: 2px; justify-items: start; text-align: left; padding: 0; cursor: pointer;
+  border: none; background: none; color: var(--fg); font: inherit; min-height: 44px;
+}
+.offer-name { font-size: var(--fs-lg); }
+.offer-pick .muted { font-size: var(--fs-xs); }
+.offer-why { font-size: var(--fs-xs); color: var(--missile); }
+.offer .face-sheet { gap: 2px; }
+@media (max-width: 999px) { .offers { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); } }
+@media (max-width: 599px) {
+  .offers { grid-template-columns: 1fr; gap: 8px; }
+  .offer { grid-template-columns: auto 1fr; column-gap: 10px; }
+  .offer-die { grid-row: span 3; }
+}
+@media (max-height: 499px) { .offer .face-sheet, .offer .terrain-detail { display: none; } }
+
+/* The event. */
+.event-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.event-path { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+.event-path > span { color: var(--muted); font-size: var(--fs-xl); align-self: center; }
+@media (max-width: 599px) { .event-choices { grid-template-columns: 1fr; } }
+
+/* The run's end. */
+.run-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.run-stats > div { border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; background: var(--panel); }
+.run-stats b { display: block; font-size: var(--fs-2xl); font-variant-numeric: tabular-nums; }
+.run-stats span { font-size: var(--fs-xs); color: var(--muted); }
+.run-history { list-style: none; margin: 0; padding: 0; display: grid; font-size: var(--fs-sm); }
+.run-history li { display: grid; grid-template-columns: 56px 1fr auto; gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+.run-history li.is-won > :last-child { color: var(--missile); }
+.run-history li.is-lost > :last-child { color: var(--melee); font-weight: 600; }
+@media (max-width: 599px) { .run-stats { grid-template-columns: 1fr 1fr; } }
+
+/* The start screen's run panel. */
+.run-start { display: grid; gap: 8px; margin: 0 0 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.run-start-body p { margin: 0; }
+.run-start-title { font-weight: 700; font-size: var(--fs-xl); }
+.run-start-body .run-start-detail { font-size: var(--fs-sm); margin-top: 2px; }
+.run-start .choices { margin: 0; }
+.new-game-section { font-size: var(--fs-lg); margin: 0 0 4px; }

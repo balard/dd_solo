@@ -56,6 +56,13 @@ describe('the run save', () => {
     expect(loadMessage({ kind: 'none' })).toBeNull()
   })
 
+  it('discards a version-1 save, which has no history', () => {
+    const v1 = JSON.parse(written(newRun(1))) as { version: number; run: Record<string, unknown> }
+    v1.version = 1
+    delete v1.run['history']
+    expect(parseRunSave(JSON.stringify(v1))).toEqual({ kind: 'outdated', found: 1 })
+  })
+
   it('discards a save of another version, and says so', () => {
     const old = JSON.stringify({ ...JSON.parse(written(newRun(1))), version: RUN_VERSION + 1 })
     const load = parseRunSave(old)

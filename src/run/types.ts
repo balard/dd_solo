@@ -108,6 +108,29 @@ export type RunAction =
 
 export type RunStatus = 'playing' | 'won' | 'lost'
 
+/** How one encounter ended. A battle's reward is null only for the last battle of the run,
+ *  which ends it with nothing left to spend a reward on. */
+export type Outcome =
+  | { readonly kind: 'won'; readonly took: Offer | null }
+  | { readonly kind: 'lost' }
+  | { readonly kind: 'upgrade' | 'transform'; readonly from: string; readonly to: string }
+  | { readonly kind: 'skip' }
+
+/**
+ * One finished encounter (v3 Phase 4b). The act strip draws the run's past from these, the
+ * run's end lists them, and the force screen marks the dice won since the last battle.
+ * Nothing in the run's rules reads it: it is a record, kept in the state because a
+ * snapshot is all a save holds.
+ */
+export interface HistoryEntry {
+  readonly act: Act
+  /** 0..11 within the act. */
+  readonly encounter: number
+  readonly id: string
+  readonly name: string
+  readonly outcome: Outcome
+}
+
 export interface RunState {
   readonly seed: number
   /** The run's own stream, as a game carries its own. Battles draw from theirs. */
@@ -127,6 +150,8 @@ export interface RunState {
   readonly current: Encounter | null
   /** This act's draws so far, so its pool is drawn without replacement. */
   readonly drawn: readonly string[]
+  /** Every encounter finished, oldest first. */
+  readonly history: readonly HistoryEntry[]
   readonly pending: RunPending
   readonly status: RunStatus
 }

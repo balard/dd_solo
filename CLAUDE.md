@@ -313,13 +313,22 @@ the dice and the opponent.
 > always scrolls, and it leads with the next enemy. Offers and events show the dice themselves. 4b
 > must first give the run a `history`, which is the first `RUN_VERSION` bump, and an
 > `upgradePreview` query. *What 4a found* in `PLAN-V3.md`.
+>
+> **Phase 4b has landed: the run shell.** A run plays in the browser: the start screen's run
+> panel (Continue, New run), the race pick, the act strip, the reward of five and the event, drawn
+> with the board's own components, and the run's end. `useRun` binds `reduceRun` and writes the
+> save after every step. `App` forks between a run screen, the start screen and the game; a battle
+> is `useGame` started from `battleSetup`, and its game-over card leads back into the run. The force
+> screen is a stand-in until 4c, and Leave run in battle is 4d's. `RunState.history` is new
+> (`RUN_VERSION` 2), and `eventEffect` is the one statement of what an event does to the force.
+> `readRun` never deletes, because of StrictMode. *What 4b found* in `PLAN-V3.md`.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V3.md` | **The order of work now** (Phases 0-3 and 4a landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
+| `docs/PLAN-V3.md` | **The order of work now** (Phases 0-3 and 4a-4b landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
 | `docs/PLAN-V2.md` | How v2 got here: Phases 0 to 9 all landed. Mixed-species armies, built forces and the army builder, a schematic and landscape UI, the roll dialog, and Coral Elves, Dwarves, Goblins and Lava Elves. Phase 4 (the collection and the builder) is what v3 builds on; read its findings first. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |

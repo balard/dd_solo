@@ -12,6 +12,10 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { opponentNamed, type OpponentName } from '../ai/opponents'
+import type { SetupOptions } from '../engine/setup'
+import { battleSetup } from '../run/battle'
+
 import { unitType } from '../data/load'
 import {
   buriedUnits,
@@ -54,25 +58,94 @@ import { useGame, type PlayingGame } from './game/useGame'
 import { useLayout } from './game/useLayout'
 import { MarksProvider } from './game/useMarks'
 import { RuleSetProvider } from './game/useRuleSet'
+import { RunPanel } from './run/RunPanel'
+import { RacePick, RunScreen } from './run/RunScreen'
+import { runWhere } from './run/runView'
+import { useRun } from './run/useRun'
+
+/**
+ * A battle played inside a run (v3 Phase 4b): what the header calls it, and where the
+ * winner goes when the game is over. Null for a single game.
+ */
+interface RunBattle {
+  readonly label: string
+  readonly onFinish: (winner: PlayerId) => void
+}
 
 export function App() {
   const game = useGame()
-  return game.phase === 'choosing' ? (
-    <NewGameScreen onStart={game.start} />
-  ) : (
+  const run = useRun()
+  // Picking a race comes before a run exists, so nothing is saved for a run never started.
+  const [pickingRace, setPickingRace] = useState(false)
+
+  const play = (battle: { readonly setup: SetupOptions; readonly opponent: OpponentName } | null) => {
+    if (battle !== null) game.start(battle.setup, battle.opponent)
+  }
+  const current = run.run
+  const inBattle = current !== null && current.pending.kind === 'battle' && game.phase === 'playing'
+
+  if (pickingRace) {
+    return (
+      <RacePick
+        onStart={(race, seed) => {
+          run.begin(race, seed)
+          setPickingRace(false)
+        }}
+        onBack={() => setPickingRace(false)}
+      />
+    )
+  }
+  if (current !== null && !inBattle) {
+    return (
+      <RunScreen
+        api={run}
+        run={current}
+        onFight={() => play(run.fight())}
+        onStartBattle={() => {
+          // A battle the run is waiting on with no game in hand: set it up again, the same game.
+          if (current.pending.kind !== 'battle') return
+          const opponent = opponentNamed(current.pending.encounter.opponent)
+          if (opponent !== null) play({ setup: battleSetup(current), opponent })
+        }}
+        onNewRun={() => {
+          run.close()
+          setPickingRace(true)
+        }}
+      />
+    )
+  }
+  if (game.phase === 'choosing') {
+    return (
+      <NewGameScreen
+        onStart={game.start}
+        runPanel={<RunPanel saved={run.saved} onContinue={run.carryOn} onNewRun={() => setPickingRace(true)} />}
+      />
+    )
+  }
+  const runBattle: RunBattle | null =
+    inBattle && current.current !== null
+      ? {
+          label: `${runWhere(current)} · ${current.current.name}`,
+          onFinish: (winner) => {
+            run.dispatch({ kind: 'battle_ended', winner })
+            game.newGame()
+          },
+        }
+      : null
+  return (
     // The rules go in at the fork, because this is where "there is a game" is decided
     // and a game is the only thing that has any. The one reader is a face's hover
     // label, which has to say whether that face does anything in *this* game -- see
     // `useRuleSet` for why it is not a prop.
     <RuleSetProvider ruleSet={game.state.ruleSet}>
       <MarksProvider marks={game.marks}>
-        <GameView game={game} />
+        <GameView game={game} runBattle={runBattle} />
       </MarksProvider>
     </RuleSetProvider>
   )
 }
 
-function GameView({ game }: { readonly game: PlayingGame }) {
+function GameView({ game, runBattle }: { readonly game: PlayingGame; readonly runBattle: RunBattle | null }) {
   const { state, board, human, seed, opponent, origin, dispatch, newGame, opponentThinking, rollShown } = game
   // The playtest clock (v2 Phase 3e): client-side, stopped by the action that ends the game.
   const elapsed = useClock(game.startedAt, game.endedAt)
@@ -390,7 +463,7 @@ function GameView({ game }: { readonly game: PlayingGame }) {
     <div className={short ? 'app is-short' : 'app'}>
       <header className={oneLine ? 'app-head is-one-line' : 'app-head'}>
         <div className="app-title">
-          <h1>dd_solo</h1>
+          <h1>{runBattle?.label ?? 'dd_solo'}</h1>
           <p className="sub">
             Turn {turn} ·{' '}
             {board.winner !== null
@@ -444,21 +517,25 @@ function GameView({ game }: { readonly game: PlayingGame }) {
               Concede
             </button>
           )}
-          <button
-            type="button"
-            className="choice secondary"
-            onClick={() => {
-              if (
-                state.winner !== null ||
-                !started ||
-                window.confirm('Abandon this game and pick new forces?')
-              ) {
-                newGame()
-              }
-            }}
-          >
-            New game
-          </button>
+          {/* In a run, leaving is 4d's Leave run; until then a reload returns to the
+              encounter's start, which is the run's quit rule. */}
+          {runBattle === null && (
+            <button
+              type="button"
+              className="choice secondary"
+              onClick={() => {
+                if (
+                  state.winner !== null ||
+                  !started ||
+                  window.confirm('Abandon this game and pick new forces?')
+                ) {
+                  newGame()
+                }
+              }}
+            >
+              New game
+            </button>
+          )}
         </div>
       </header>
 
@@ -686,7 +763,17 @@ function GameView({ game }: { readonly game: PlayingGame }) {
         <RollCard shown={rollShown} state={state} human={human} onInspect={onInspect} />
       ) : summary !== null ? (
         // After the last roll card, never over it: the roll that won is seen first.
-        <GameOver summary={summary} onNewGame={newGame} />
+        <GameOver
+          summary={summary}
+          next={
+            runBattle === null || state.winner === null
+              ? { label: 'New game', onClick: newGame }
+              : {
+                  label: state.winner === human ? 'Pick your reward' : 'See the run',
+                  onClick: () => runBattle.onFinish(state.winner as PlayerId),
+                }
+          }
+        />
       ) : (
       <ActionBar
         state={state}

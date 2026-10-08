@@ -36,6 +36,8 @@ import {
   IllegalRunAction,
   RUN_PLAYER,
   type Act,
+  type HistoryEntry,
+  type Outcome,
   type RunAction,
   type RunContent,
   type RunPending,
@@ -57,6 +59,7 @@ export function newRun(seed: number): RunState {
     encounter: 0,
     current: null,
     drawn: [],
+    history: [],
     pending: { kind: 'choose_race', races: PLAYABLE_SPECIES.map((s) => s.id) },
     status: 'playing',
   }
@@ -102,11 +105,21 @@ function startEncounter(run: RunState, content: RunContent): RunState {
   return { ...next, pending: openingPending(next) }
 }
 
-/** The encounter in hand is over: on to the next, the next act, or the end of the run. */
-function finishEncounter(run: RunState, content: RunContent): RunState {
-  if (run.encounter + 1 < ENCOUNTERS_PER_ACT) return startEncounter({ ...run, encounter: run.encounter + 1 }, content)
-  if (run.act === 3) return { ...run, status: 'won', pending: { kind: 'over' } }
-  return startEncounter({ ...run, act: (run.act + 1) as Act, encounter: 0, drawn: [] }, content)
+/** The run with the encounter in hand written into its history. */
+function record(run: RunState, outcome: Outcome): RunState {
+  const encounter = run.current
+  if (encounter === null) throw new Error('an encounter finished with none in hand')
+  const entry: HistoryEntry = { act: run.act, encounter: run.encounter, id: encounter.id, name: encounter.name, outcome }
+  return { ...run, history: [...run.history, entry] }
+}
+
+/** The encounter in hand is over: recorded, then on to the next, the next act, or the end
+ *  of the run. */
+function finishEncounter(run: RunState, outcome: Outcome, content: RunContent): RunState {
+  const done = record(run, outcome)
+  if (done.encounter + 1 < ENCOUNTERS_PER_ACT) return startEncounter({ ...done, encounter: done.encounter + 1 }, content)
+  if (done.act === 3) return { ...done, status: 'won', pending: { kind: 'over' } }
+  return startEncounter({ ...done, act: (done.act + 1) as Act, encounter: 0, drawn: [] }, content)
 }
 
 const isLastEncounter = (run: RunState): boolean => run.act === 3 && run.encounter === ENCOUNTERS_PER_ACT - 1
@@ -136,7 +149,8 @@ function dropFirst(force: BuiltForce, id: string): BuiltForce {
 }
 
 /**
- * One die of the pool becomes another, by an event.
+ * What an event would do to the force, changing one copy of `from` into `to` (v3 Phase 4b:
+ * the event screen asks this before the choice, and the reducer applies the same answer).
  *
  * **An unfielded copy changes first**, so the force is untouched whenever it can be:
  * the event acts on a die *in the pool*, and the pool counts copies, not dice. Only when
@@ -147,19 +161,38 @@ function dropFirst(force: BuiltForce, id: string): BuiltForce {
  *   **leaves the force** and waits in the pool, and an army it empties is the player's
  *   to fill at the next `ready`.
  */
+export interface EventEffect {
+  /** `pool`: a spare copy changed, the force did not. `in_place`: the fielded die changed
+   *  where it stands. `benched`: the fielded die left the force, the new one waits. */
+  readonly effect: 'pool' | 'in_place' | 'benched'
+  /** The army the fielded die stood in; null for a spare copy. */
+  readonly army: PresetArmyName | null
+  readonly force: BuiltForce
+}
+
+export function eventEffect(run: RunState, from: string, to: string, kind: 'upgrade' | 'transform'): EventEffect {
+  const owned = run.collection.units[from] ?? 0
+  const swapped = owned > used(run.force, 'units', from) ? null : swapFirst(run.force, from, to)
+  if (swapped === null) return { effect: 'pool', army: null, force: run.force }
+  if (kind === 'transform') return { effect: 'in_place', army: swapped.army, force: swapped.force }
+  const total = forceHealth(swapped.force)
+  const fits = total <= ACT_SIZE[run.act] && healthOf(swapped.force.armies[swapped.army]) <= maxArmyHealth(total)
+  return fits
+    ? { effect: 'in_place', army: swapped.army, force: swapped.force }
+    : { effect: 'benched', army: swapped.army, force: dropFirst(run.force, from) }
+}
+
+/** What upgrading this die of the pool would do, or null when it cannot be upgraded. */
+export function upgradePreview(run: RunState, unit: string): (EventEffect & { readonly to: string }) | null {
+  const to = upgradeOf(unit)
+  if (to === null || (run.collection.units[unit] ?? 0) === 0) return null
+  return { ...eventEffect(run, unit, to, 'upgrade'), to }
+}
+
+/** One die of the pool becomes another, by an event, as `eventEffect` says. */
 function replaceDie(run: RunState, from: string, to: string, kind: 'upgrade' | 'transform'): RunState {
   const collection = adjust(adjust(run.collection, 'units', from, -1), 'units', to, 1)
-  const owned = run.collection.units[from] ?? 0
-  if (owned > used(run.force, 'units', from)) return { ...run, collection }
-
-  const swapped = swapFirst(run.force, from, to)
-  if (swapped === null) return { ...run, collection }
-  if (kind === 'transform') return { ...run, collection, force: swapped.force }
-
-  const total = forceHealth(swapped.force)
-  const fits =
-    total <= ACT_SIZE[run.act] && healthOf(swapped.force.armies[swapped.army]) <= maxArmyHealth(total)
-  return { ...run, collection, force: fits ? swapped.force : dropFirst(run.force, from) }
+  return { ...run, collection, force: eventEffect(run, from, to, kind).force }
 }
 
 function refuse(run: RunState, action: RunAction): never {
@@ -196,8 +229,8 @@ export function reduceRun(run: RunState, action: RunAction, content: RunContent 
 
     case 'battle': {
       if (action.kind !== 'battle_ended') return refuse(run, action)
-      if (action.winner !== RUN_PLAYER) return { ...run, status: 'lost', pending: { kind: 'over' } }
-      if (isLastEncounter(run)) return { ...run, status: 'won', pending: { kind: 'over' } }
+      if (action.winner !== RUN_PLAYER) return { ...record(run, { kind: 'lost' }), status: 'lost', pending: { kind: 'over' } }
+      if (isLastEncounter(run)) return { ...record(run, { kind: 'won', took: null }), status: 'won', pending: { kind: 'over' } }
       const race = run.race
       if (race === null) throw new Error('a battle in a run with no race')
       const [offers, rng] = drawReward(race, run.force, run.rng)
@@ -209,26 +242,29 @@ export function reduceRun(run: RunState, action: RunAction, content: RunContent 
       const offer = pending.offers[action.index]
       if (offer === undefined) throw new IllegalRunAction(`there is no offer ${action.index}`)
       const kind: CollectionKind = offer.kind === 'unit' ? 'units' : offer.kind === 'dragon' ? 'dragons' : 'terrains'
-      return finishEncounter({ ...run, collection: adjust(run.collection, kind, offer.id, 1) }, content)
+      const took = { ...run, collection: adjust(run.collection, kind, offer.id, 1) }
+      return finishEncounter(took, { kind: 'won', took: offer }, content)
     }
 
     case 'event': {
       switch (action.kind) {
         case 'skip':
-          return finishEncounter(run, content)
+          return finishEncounter(run, { kind: 'skip' }, content)
         case 'upgrade': {
           const to = upgradeOf(action.unit)
           if (!pending.upgradable.includes(action.unit) || to === null) {
             throw new IllegalRunAction(`${action.unit} is not a die in the pool that can be upgraded`)
           }
-          return finishEncounter(replaceDie(run, action.unit, to, 'upgrade'), content)
+          const upgraded = replaceDie(run, action.unit, to, 'upgrade')
+          return finishEncounter(upgraded, { kind: 'upgrade', from: action.unit, to }, content)
         }
         case 'transform': {
           if (!pending.transformable.includes(action.unit)) {
             throw new IllegalRunAction(`${action.unit} is not a die in the pool that can be transformed`)
           }
           const [to, rng] = drawTransform(action.unit, run.rng)
-          return finishEncounter(replaceDie({ ...run, rng }, action.unit, to, 'transform'), content)
+          const transformed = replaceDie({ ...run, rng }, action.unit, to, 'transform')
+          return finishEncounter(transformed, { kind: 'transform', from: action.unit, to }, content)
         }
         default:
           return refuse(run, action)

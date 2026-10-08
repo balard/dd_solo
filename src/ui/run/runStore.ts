@@ -13,8 +13,8 @@
  *   mid-battle comes back to that encounter's start, and the same board.
  * - **A finished run is written too**, so it is shown once on the next launch; the screen
  *   clears it when it has been shown.
- * - **A save that cannot be carried on is discarded on read**, and the read says why,
- *   for the screen to tell the player.
+ * - **A save that cannot be carried on is reported by the read and discarded by the
+ *   screen**, which says why first (`readRun` never deletes; see there).
  * - **The single-game save is untouched**: `storage.ts` and `SAVE_VERSION` stay off.
  */
 import { parseRunSave, serializeRun, shouldSave, type RunLoad } from '../../run/save'
@@ -34,8 +34,14 @@ function browserStorage(): RunStorage | null {
   }
 }
 
-/** The saved run, if any. A save that cannot be carried on is discarded here, and the
- *  result says why. */
+/**
+ * The saved run, if any, read and not touched: a save that cannot be carried on comes back
+ * as `outdated` or `unreadable`, for the screen to say so and then `clearRun` it.
+ *
+ * Reading never deletes, because React's StrictMode reads twice in development: a read that
+ * discarded the save would leave the second read finding nothing, and the message saying why
+ * would be lost with it.
+ */
 export function readRun(storage: RunStorage | null = browserStorage()): RunLoad {
   if (storage === null) return { kind: 'none' }
   let raw: string | null
@@ -44,9 +50,7 @@ export function readRun(storage: RunStorage | null = browserStorage()): RunLoad 
   } catch (error) {
     return { kind: 'unreadable', reason: `storage is unavailable (${String(error)})` }
   }
-  const load = parseRunSave(raw)
-  if (load.kind === 'outdated' || load.kind === 'unreadable') clearRun(storage)
-  return load
+  return parseRunSave(raw)
 }
 
 /**

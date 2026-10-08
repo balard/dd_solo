@@ -32,8 +32,12 @@ import { ENCOUNTERS_PER_ACT, type RunPending, type RunState } from './types'
  * That is the point of saving a snapshot.
  *
  * 1: v3 Phase 3, the first.
+ *
+ * 2: v3 Phase 4b. `RunState` gained `history`, one entry per finished encounter, which the
+ *    act strip and the run's end draw. A version-1 run has no record of its past, and
+ *    inventing one would draw a strip that lies about it.
  */
-export const RUN_VERSION = 1
+export const RUN_VERSION = 2
 
 export interface RunSave {
   readonly version: number
@@ -92,6 +96,10 @@ function runProblem(value: unknown): string | null {
   if (!isWhole(encounter) || encounter >= ENCOUNTERS_PER_ACT) return 'its encounter number is damaged'
   if (status !== 'playing' && status !== 'won' && status !== 'lost') return 'its status is damaged'
   if (!Array.isArray(drawn) || !drawn.every((id) => typeof id === 'string')) return 'its drawn encounters are damaged'
+  const history = value['history']
+  if (!Array.isArray(history) || !history.every((h) => isRecord(h) && typeof h['id'] === 'string' && isRecord(h['outcome']))) {
+    return 'its history is damaged'
+  }
   if (current !== null && (!isRecord(current) || typeof current['id'] !== 'string')) return 'its encounter is damaged'
   if (!isRecord(pending) || !PENDING_KINDS.has(pending['kind'] as RunPending['kind'])) return 'its next question is damaged'
 

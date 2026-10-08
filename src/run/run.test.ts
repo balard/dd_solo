@@ -16,7 +16,7 @@ import { homeDiceFor, setupGame, terrainDiceSharing } from '../engine/setup'
 import { V1_RULES } from '../engine/types'
 
 import { drawEncounter, drawReward, forceElements, rollStart, transformsOf, upgradeOf } from './draws'
-import { newRun, reduceRun } from './reduce'
+import { newRun, reduceRun, upgradePreview } from './reduce'
 import {
   ACTS,
   ACT_SIZE,
@@ -393,6 +393,78 @@ describe('upgrades and transforms', () => {
   })
 })
 
+describe('the history', () => {
+  it('records every encounter a run finished, in order, with how it ended', () => {
+    let run = started(21)
+    const outcomes: string[] = []
+    while (run.pending.kind !== 'over') {
+      const pending = run.pending
+      const action: RunAction =
+        pending.kind === 'arrange_force'
+          ? { kind: 'ready' }
+          : pending.kind === 'battle'
+            ? { kind: 'battle_ended', winner: run.act === 2 && run.encounter === 3 ? 'p2' : 'p1' }
+            : pending.kind === 'reward'
+              ? { kind: 'take_offer', index: 4 }
+              : pending.kind === 'event'
+                ? { kind: 'skip' }
+                : (() => {
+                    throw new Error(pending.kind)
+                  })()
+      run = step(run, action)
+    }
+    // Act I whole, then Act II up to the battle lost at its fourth encounter.
+    expect(run.history).toHaveLength(12 + 4)
+    expect(run.history.map((h) => [h.act, h.encounter])).toEqual([
+      ...Array.from({ length: 12 }, (_, i) => [1, i]),
+      ...Array.from({ length: 4 }, (_, i) => [2, i]),
+    ])
+    const last = run.history[run.history.length - 1]
+    expect(last?.outcome.kind).toBe('lost')
+    for (const entry of run.history.slice(0, -1)) {
+      expect(['won', 'skip']).toContain(entry.outcome.kind)
+      if (entry.outcome.kind === 'won') expect(entry.outcome.took?.kind).toBe('terrain')
+    }
+    outcomes.push(...run.history.map((h) => h.outcome.kind))
+    expect(outcomes).toContain('won')
+  })
+
+  it('ends a won run on a battle with no reward taken', () => {
+    let run = started(2)
+    while (run.pending.kind !== 'over') {
+      const pending = run.pending.kind
+      run = step(
+        run,
+        pending === 'arrange_force'
+          ? { kind: 'ready' }
+          : pending === 'battle'
+            ? { kind: 'battle_ended', winner: 'p1' }
+            : pending === 'reward'
+              ? { kind: 'take_offer', index: 0 }
+              : { kind: 'skip' },
+      )
+    }
+    expect(run.status).toBe('won')
+    expect(run.history).toHaveLength(36)
+    const last = run.history[35]
+    expect(last?.outcome.kind === 'won' || last?.outcome.kind === 'skip').toBe(true)
+    if (last?.outcome.kind === 'won') expect(last.outcome.took).toBeNull()
+  })
+})
+
+describe('upgradePreview', () => {
+  const base = started(seedOpeningOn('event'))
+  it('says a spare copy changes in the pool, a fielded one in place or benched', () => {
+    const spare = { ...base, collection: { ...base.collection, units: { ...base.collection.units, 'treefolk.oakling': 2 } } }
+    expect(upgradePreview(spare, 'treefolk.oakling')).toMatchObject({ to: 'treefolk.oak', effect: 'pool', army: null })
+    const force: BuiltForce = { ...base.force, armies: { home: ['treefolk.oak'], campaign: ['treefolk.pineling'], horde: ['treefolk.nymph'] } }
+    const small: RunState = { ...base, force, collection: { ...base.collection, units: { 'treefolk.oak': 1, 'treefolk.pineling': 1, 'treefolk.nymph': 1 } } }
+    expect(upgradePreview(small, 'treefolk.pineling')).toMatchObject({ to: 'treefolk.pine', effect: 'in_place', army: 'campaign' })
+    expect(upgradePreview(small, 'treefolk.oak')).toMatchObject({ to: 'treefolk.oak_lord', effect: 'benched', army: 'home' })
+    expect(upgradePreview(small, 'treefolk.oak_lord')).toBeNull()
+  })
+})
+
 describe('a battle encounter', () => {
   const run = started(seedOpeningOn('arrange_force'))
 
@@ -568,6 +640,17 @@ function playRun(
       // of this fuzz's time. A failure throws, naming the run and the step.
       const fail = (what: string) => {
         throw new Error(`run ${seed}, ${action.kind} at ${before.pending.kind}: ${what}`)
+      }
+      // The event screen's preview is the reducer's own answer (v3 Phase 4b).
+      if (action.kind === 'upgrade') {
+        const preview = upgradePreview(before, action.unit)
+        if (preview === null) fail('an upgrade the preview says cannot happen')
+        else if (JSON.stringify(preview.force) !== JSON.stringify(run.force)) fail(`the preview said ${preview.effect}`)
+      }
+      if (action.kind !== 'set_force' && action.kind !== 'ready' && action.kind !== 'pick_race') {
+        const finished = run.history.length - before.history.length
+        const expected = action.kind === 'battle_ended' && run.pending.kind === 'reward' ? 0 : 1
+        if (finished !== expected) fail(`the history grew by ${finished}`)
       }
       if (action.kind === 'ready') {
         const cap = ACT_SIZE[before.act]

@@ -105,13 +105,15 @@ function kindOf(type: UnitType): string {
  * strip used to use, a multi-icon face packs its copies into ~7px each and an ID
  * portrait becomes a smudge; at 44px both are clear.
  */
-function FaceSheet({ typeId, faces }: { typeId: string; faces: readonly Face[] }) {
+/** Every face of a unit die, in order. The inspector draws it at 44px; a run's reward
+ *  (v3 Phase 4b) draws it at 30, the floor art reads at. */
+export function FaceSheet({ typeId, faces, size = 44 }: { typeId: string; faces: readonly Face[]; size?: number }) {
   const ruleSet = useRuleSet()
   return (
     <div className="face-sheet">
       {faces.map((face, i) => (
         <span key={i} className={`sheet-face i-${face.icon}`} title={faceLabel(face, ruleSet)}>
-          <FaceArt typeId={typeId} faceIndex={i} face={face} size={44} />
+          <FaceArt typeId={typeId} faceIndex={i} face={face} size={size} />
         </span>
       ))}
     </div>
