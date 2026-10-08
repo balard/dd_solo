@@ -270,12 +270,22 @@ the dice and the opponent.
 > "insurance" case never. The house rule stays, recorded in `RULES-V0.md` section 11 with when
 > to revisit it. No engine change.
 
+> **v3 is planned, nothing has landed: the roguelike run** (`docs/PLAN-V3.md`). Pick a race,
+> start from a 12-health collection with one dragon and two terrains, fight three acts of
+> 12/24/36-health enemies (12 encounters each, drawn from a larger pool, about 70% battles and 30%
+> upgrade/transform events), and pick one of five rewards after each win. A loss ends the run.
+> The run is a pure, seeded reducer **above** the engine: it hands out `SetupOptions` and reads
+> back only the winner, so the goldens and `SAVE_VERSION` stay put. It is saved as a snapshot at
+> the start of each encounter. The one engine seam it plans is a force naming fewer dragons than
+> its size asks for.
+
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V2.md` | **The order of work now** (Phases 0 to 9 landed: Lava Elves the last species, the roll dialog the last phase). Mixed-species armies, built forces and the army builder, a schematic and landscape UI, and Coral Elves, Dwarves, Goblins and Lava Elves. Start here when writing code. |
+| `docs/PLAN-V3.md` | **The order of work now** (nothing landed yet). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
+| `docs/PLAN-V2.md` | How v2 got here: Phases 0 to 9 all landed. Mixed-species armies, built forces and the army builder, a schematic and landscape UI, the roll dialog, and Coral Elves, Dwarves, Goblins and Lava Elves. Phase 4 (the collection and the builder) is what v3 builds on; read its findings first. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
 | `docs/OVERVIEW.md` | Technology choice, engine architecture, AI ladder, UI thinking. The *why* behind the plan. |
