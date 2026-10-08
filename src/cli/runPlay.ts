@@ -13,6 +13,8 @@
  * Nothing is saved: a run in the terminal lives as long as the process. Run saves are
  * Phase 3, and they are the app's.
  */
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+
 import { OPPONENTS, opponentNamed } from '../ai/opponents'
 import type { AiPlayer } from '../ai/types'
 import { SPECIES, dragonName, terrainDieName, unitType } from '../data/load'
@@ -25,6 +27,7 @@ import { autopilot } from '../run/autopilot'
 import { battleSetup, enemyForce } from '../run/battle'
 import { transformsOf, upgradeOf } from '../run/draws'
 import { newRun, reduceRun } from '../run/reduce'
+import { loadMessage, parseRunSave, serializeRun, shouldSave, type RunLoad } from '../run/save'
 import {
   ACT_SIZE,
   ENCOUNTERS_PER_ACT,
@@ -46,6 +49,8 @@ export interface RunOptions {
   readonly race: string | null
   readonly self: AiPlayer | null
   readonly brief: boolean
+  /** `--continue`: carry on the run saved in `RUN_FILE` rather than start one. */
+  readonly resume: boolean
   readonly playBattle: (setup: SetupOptions, options: BattleOptions) => Promise<GameState>
 }
 
@@ -282,11 +287,91 @@ function narrate(before: RunState, action: RunAction, after: RunState): string |
   }
 }
 
+/**
+ * The terminal's run save (v3 Phase 3): the same snapshot as the app's (`src/run/save.ts`),
+ * in a file in the working directory rather than `localStorage`. Gitignored.
+ */
+export const RUN_FILE = '.run-save.json'
+
+function readRunFile(): RunLoad {
+  let raw: string | null = null
+  try {
+    raw = readFileSync(RUN_FILE, 'utf8')
+  } catch {
+    raw = null // no file is no run
+  }
+  return parseRunSave(raw)
+}
+
+function writeRunFile(run: RunState): void {
+  try {
+    writeFileSync(RUN_FILE, serializeRun(run, new Date().toISOString()))
+  } catch (error) {
+    console.log(red(`  the run could not be saved (${String(error)}); it goes on unsaved`))
+  }
+}
+
+function clearRunFile(): void {
+  rmSync(RUN_FILE, { force: true })
+}
+
+/**
+ * The run to play: the saved one under `--continue`, else a new one -- after asking,
+ * when that would overwrite a run still being played. Null when there is nothing to do.
+ */
+async function openRun(options: RunOptions, saving: boolean): Promise<RunState | null> {
+  if (!saving) return newRun(options.seed)
+  const load = readRunFile()
+  const message = loadMessage(load)
+  if (message !== null) {
+    console.log(yellow(message))
+    clearRunFile()
+  }
+
+  if (options.resume) {
+    if (load.kind !== 'ok') {
+      if (message === null) console.log(red(`there is no saved run in ${RUN_FILE}; npm run play -- --run starts one`))
+      return null
+    }
+    const run = load.run
+    console.log(dim(`carrying on the run saved ${load.savedAt}: ${run.race === null ? 'no race yet' : speciesName(run.race)}, ${where(run)}`))
+    if (run.status !== 'playing') {
+      console.log(run.status === 'won' ? bold(green('That run was won.')) : bold(red('That run was lost.')))
+      clearRunFile()
+      return null
+    }
+    return run
+  }
+
+  if (load.kind === 'ok' && load.run.status === 'playing') {
+    const run = load.run
+    const race = run.race === null ? 'a run' : `a ${speciesName(run.race)} run`
+    const sure = (await ask(yellow(`${race} is in progress, at ${where(run)}. Start a new one and lose it? (y/n) `)))
+      .trim()
+      .toLowerCase()
+    if (sure !== 'y' && sure !== 'yes') {
+      console.log(dim('kept it; npm run play -- --run --continue carries it on'))
+      return null
+    }
+  }
+  return newRun(options.seed)
+}
+
 /** Plays a whole run, from the race to won or lost, and prints how it went. */
 export async function playRunInTerminal(options: RunOptions): Promise<RunState> {
-  let run = newRun(options.seed)
   console.log(bold('\ndd_solo — a Dragon Dice run'))
-  console.log(dim(`run seed ${options.seed} · three acts of twelve encounters · a lost battle ends the run · nothing is saved`))
+  // A watched run is never saved: it is for looking at a curve, and must not overwrite
+  // the run somebody is playing.
+  const saving = options.self === null
+  const start = await openRun(options, saving)
+  if (start === null) return newRun(options.seed)
+  let run = start
+  console.log(
+    dim(
+      `run seed ${run.seed} · three acts of twelve encounters · a lost battle ends the run · ` +
+        (saving ? `saved to ${RUN_FILE} outside battles` : 'a watched run is not saved'),
+    ),
+  )
 
   // Each battle is announced once, before its force is arranged, however many edits that takes.
   let lastAnnounced: string | null = null
@@ -300,7 +385,14 @@ export async function playRunInTerminal(options: RunOptions): Promise<RunState> 
     }
     const action = run.pending.kind === 'battle' ? await fight(run, options) : await answer(run, options)
     if (action === null) {
-      console.log(dim('\nbye -- a run in the terminal is not saved'))
+      console.log(
+        dim(
+          saving
+            ? `\nbye -- the run is saved; npm run play -- --run --continue comes back to ${where(run)}` +
+                (run.pending.kind === 'arrange_force' ? ', before its battle' : '')
+            : '\nbye',
+        ),
+      )
       return run
     }
     const before = run
@@ -313,7 +405,10 @@ export async function playRunInTerminal(options: RunOptions): Promise<RunState> 
     }
     const line = narrate(before, action, run)
     if (line !== null) console.log(line)
+    if (saving && shouldSave(run)) writeRunFile(run)
   }
+  // Shown here and now, so there is nothing left to show on the next launch.
+  if (saving) clearRunFile()
 
   console.log(
     run.status === 'won'

@@ -44,3 +44,7 @@ docs/rules/V4.02 Dragon Dice rules.pdf
 # Local reference images (species art and the like): a working reference only, never
 # committed -- the same reason as public/faces/ above.
 image_references/
+
+# The terminal's saved run (v3 Phase 3, `npm run play -- --run`): one player's progress,
+# never the project's.
+.run-save.json

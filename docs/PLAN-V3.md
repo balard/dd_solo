@@ -7,7 +7,7 @@ acts whose enemies grow from 12 to 24 to 36 health. A loss ends the run.
 
 Read `PLAN-V2.md` Phase 4 (the collection and the builder) before anything here: v3 is that phase's
 `Collection` and `forceProblems` with a game around them. This document is the *order of work*.
-**Phases 0, 1 and 2 have landed** (the run model, the encounters, a run in the terminal); nothing after them has.
+**Phases 0 to 3 have landed** (the run model, the encounters, a run in the terminal, run saves); Phase 4 (the run screens) has not.
 
 **Scope decisions this plan is built on** (agreed 2026-10-07):
 - **A mode in this repo, not a fork.** The single game stays exactly what it is. The run is a
@@ -502,6 +502,57 @@ launch.
 
 **Exit criterion.** A browser run survives a reload at every pending, and a reload mid-battle
 returns to that encounter's start with the same board.
+
+### What 3 found
+
+Landed as `src/run/save.ts` (the format, pure, shared by both clients), `src/ui/run/runStore.ts`
+(the app's `localStorage` edge) and the terminal's own save in `src/cli/runPlay.ts`. The engine,
+`storage.ts` and `SAVE_VERSION` did not move.
+
+**The exit criterion is half met, and the other half moves to Phase 4.** There is no run in the
+browser yet, so "a browser run survives a reload" cannot be checked until 4b draws one. 4's own
+exit criterion already ends "surviving a reload", so that is where it is checked. What can be
+checked now is checked twice:
+- In node, `runStore.test.ts` saves after every step as the app will, up to a battle, and reads
+  back. The run is at that encounter's `arrange_force` with the force as arranged, and `ready`
+  rebuilds the identical battle state and `battleSetup`.
+- In the terminal, a run was quit mid-battle and carried on with `--continue`. It came back to
+  the same encounter and force, the same battle seed and the same roll-off. A new run over it
+  asked first and was refused, and the concession that ended it cleared the save.
+
+**What the plan said that the code could not do as written:**
+- **"Written at the start of each encounter" loses a won battle.** The reward is a resting point
+  after the win, and a reload there would have gone back to the battle and made the player fight
+  it again. So a run is written **whenever it rests outside a battle**, every `set_force`
+  included, and never inside one (`shouldSave`). The quit rule is unchanged: leaving mid-battle
+  comes back to that encounter's start.
+- **The plan named only the app's store.** The terminal is the only client that plays runs
+  today, so it saves too, to `.run-save.json` in the working directory (gitignored):
+  - `--run --continue` carries the saved run on;
+  - `--run` over a run in progress asks first, the plan's "New run" rule;
+  - `--continue` refuses `--seed`, `--race`, `--ai`, `--forces` and `--p1-ai`, since the saved
+    run carries its own;
+  - a watched run never saves, so watching a curve cannot overwrite somebody's run.
+
+**Decided while building:**
+- **The format is pure and shared** (`src/run/save.ts`): `RUN_VERSION`, `shouldSave`,
+  `serializeRun` and `parseRunSave`. The app's `runStore.ts` is the thin, wrapped edge. It takes
+  the storage as a parameter, so its tests use a fake one and one that throws on every call.
+- **A save is checked for its shape, and for dice the data no longer has.** That is the one thing
+  that can rot under a snapshot with no change of shape, and it would otherwise crash the first
+  screen to draw the die. Such a save is discarded, with a sentence.
+- **A save that cannot be carried on is discarded when read**, and the read says why, for the
+  screen to show.
+- **A finished run is written, read once, then cleared by the screen.** `runInProgress` is the
+  question "New run" asks. The terminal shows the end at once and clears it there.
+- **A restarted battle is the same game in the app as well:** `useGame` seeds the AI's stream
+  from `setup.seed ^ 0x5eed`, exactly as the terminal does. (Greedy draws nothing anyway.)
+
+**Would have shipped green:**
+- **Round-tripping every state of a whole run** (`save.test.ts`, a Coral Elf run to `won`, over
+  sixty states) reads each back equal, and the autopilot's next answer from the copy reproduces
+  the original's next state. A snapshot that drops a field would pass the shape check and fail
+  there.
 
 ---
 

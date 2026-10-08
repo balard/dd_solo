@@ -18,6 +18,7 @@
  *   npm run play -- --run               -- a roguelike run (v3): pick a race, three acts
  *   npm run play -- --run --race goblins --seed 7   -- a given race and run
  *   npm run play -- --run --p1-ai greedy --brief    -- watch a run, a line per battle
+ *   npm run play -- --run --continue    -- carry on the run saved in .run-save.json
  */
 import { readFileSync } from 'node:fs'
 
@@ -1776,6 +1777,7 @@ function parseArgs() {
     run: args.includes('--run'),
     race: get('--race') ?? null,
     brief: args.includes('--brief'),
+    resume: args.includes('--continue'),
   }
 }
 
@@ -1813,9 +1815,9 @@ export async function playBattle(setup: SetupOptions, options: BattleOptions): P
   log(dim(options.banner(state)))
   log(
     dim(
-      `q quits at any prompt; typing concede at a menu gives the game up${
-        options.concedeWarning === null ? '' : ', and the run with it'
-      }. Nothing is saved.\n`,
+      options.concedeWarning === null
+        ? `q quits at any prompt; typing concede at a menu gives the game up. Nothing is saved.\n`
+        : `q leaves the run, which comes back to this battle's start; concede gives up the battle and the run.\n`,
     ),
   )
   let aiRng: RngState = rngFrom(options.aiSeed ^ 0x5eed)
@@ -1883,9 +1885,14 @@ async function main() {
   if (args.run) {
     // A run's encounters name their enemies and opponents; a flag that cannot apply is
     // refused rather than quietly ignored.
-    for (const flag of ['--ai', '--forces']) {
+    const refused = args.resume ? ['--ai', '--forces', '--seed', '--race', '--p1-ai'] : ['--ai', '--forces']
+    for (const flag of refused) {
       if (process.argv.includes(flag)) {
-        console.error(`${flag} does not apply to a run: each encounter names its own`)
+        console.error(
+          args.resume
+            ? `${flag} does not apply to --continue: the saved run carries its own`
+            : `${flag} does not apply to a run: each encounter names its own`,
+        )
         process.exit(1)
       }
     }
@@ -1894,6 +1901,7 @@ async function main() {
       race: args.race,
       self: args.self,
       brief: args.brief,
+      resume: args.resume,
       playBattle,
     })
     closeInput()
