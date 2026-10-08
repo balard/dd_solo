@@ -14,10 +14,12 @@
  *   npm run play -- --forces mixed      -- rolled forces drawing from every species
  *   npm run play -- --forces built:data/forces/mixed-12.json   -- the exact forces in a file
  *   npm run play -- --p1-ai greedy      -- an AI plays your side too, and you watch
+ *
+ *   npm run play -- --run               -- a roguelike run (v3): pick a race, three acts
+ *   npm run play -- --run --race goblins --seed 7   -- a given race and run
+ *   npm run play -- --run --p1-ai greedy --brief    -- watch a run, a line per battle
  */
 import { readFileSync } from 'node:fs'
-import { createInterface } from 'node:readline/promises'
-import { stdin, stdout } from 'node:process'
 
 import { DEFAULT_OPPONENT, OPPONENT_NAMES, OPPONENTS, opponentNamed } from '../ai/opponents'
 import { randomAi } from '../ai/random'
@@ -38,7 +40,7 @@ import { OWN_ARMY_NOTE, poolSplit, spellPlan, spellTargetLabel, stageCast, targe
 
 
 import { readBuiltForces } from '../engine/force'
-import { FORCE_SETS, namedForces, setupGame, type ForceSpec } from '../engine/setup'
+import { FORCE_SETS, namedForces, setupGame, type ForceSpec, type SetupOptions } from '../engine/setup'
 import {
   V1_RULES,
   TERRAIN_SLOTS,
@@ -65,17 +67,10 @@ import {
   type UnitInstance,
 } from '../engine/types'
 
-// --- presentation ------------------------------------------------------------
+import { playRunInTerminal } from './runPlay'
+import { ask, bold, closeInput, cyan, dim, green, magenta, red, yellow } from './term'
 
-const useColor = !process.env['NO_COLOR']
-const paint = (code: string, text: string) => (useColor ? `[${code}m${text}[0m` : text)
-const bold = (t: string) => paint('1', t)
-const dim = (t: string) => paint('2', t)
-const red = (t: string) => paint('31', t)
-const green = (t: string) => paint('32', t)
-const yellow = (t: string) => paint('33', t)
-const cyan = (t: string) => paint('36', t)
-const magenta = (t: string) => paint('35', t)
+// --- presentation ------------------------------------------------------------
 
 const SLOT_LABEL: Record<ArmyRef, string> = {
   p1_home: 'P1 home',
@@ -1161,40 +1156,6 @@ const spellName = (state: GameState, target: SpellTarget): string =>
     (id) => armyRefOf(state, id),
   )
 
-const rl = createInterface({ input: stdin, output: stdout })
-
-/**
- * Buffered line input.
- *
- * `rl.question()` only captures lines emitted *after* it is called. That is fine
- * when a human types, but piped input arrives all at once, so every line after the
- * first is dropped and the game exits mid-turn. Queueing the lines ourselves makes
- * the client scriptable -- which is how it gets tested, and how a session can be
- * replayed from a file.
- */
-const queued: string[] = []
-const waiting: ((line: string) => void)[] = []
-let inputClosed = false
-
-rl.on('line', (line) => {
-  const next = waiting.shift()
-  if (next) next(line)
-  else queued.push(line)
-})
-rl.on('close', () => {
-  inputClosed = true
-  // Anything still waiting gets a quit rather than hanging forever.
-  for (const next of waiting.splice(0)) next('q')
-})
-
-function ask(prompt: string): Promise<string> {
-  stdout.write(prompt)
-  const line = queued.shift()
-  if (line !== undefined) return Promise.resolve(line)
-  if (inputClosed) return Promise.resolve('q')
-  return new Promise((resolve) => waiting.push(resolve))
-}
-
 /** The damage sheet: toggle units until the selection absorbs everything it can. */
 /**
  * Pick a maximal subset of an army by health: the damage sheet, and the targeting
@@ -1697,6 +1658,9 @@ async function askReinforce(state: GameState, player: PlayerId): Promise<GameAct
   }
 }
 
+/** Set by `playBattle`: what a concession costs beyond the game, asked about first. */
+let concedeWarning: string | null = null
+
 async function askHuman(state: GameState, pending: Pending): Promise<GameAction> {
   if (pending.kind === 'assign_damage') return askDamage(state, pending)
   if (pending.kind === 'dragon_breath') return askDragonBreath(state, pending)
@@ -1727,7 +1691,12 @@ async function askHuman(state: GameState, pending: Pending): Promise<GameAction>
     }
     // Giving up is a move, not a quit (v2 Phase 3e): the game ends with a winner, and
     // its record says so. Offered at every menu, which every turn passes through.
-    if (reply === 'concede') return { kind: 'concede' }
+    if (reply === 'concede') {
+      if (concedeWarning === null) return { kind: 'concede' }
+      const sure = (await ask(`  ${yellow(concedeWarning)} Concede? (y/n) `)).trim().toLowerCase()
+      if (sure === 'y' || sure === 'yes') return { kind: 'concede' }
+      continue
+    }
     const found = choices.find((c) => c.key === reply)
     if (found) return found.action
     console.log(red('  pick one of the listed options, or q to quit'))
@@ -1803,29 +1772,53 @@ function parseArgs() {
     // pairs instead -- `starter` is what the tests and the goldens play, `bestiary`
     // puts every monster and large die on the board.
     forces: forcesArg(get('--forces')),
+    // v3 Phase 2: a whole run instead of one game. The seed is the run's.
+    run: args.includes('--run'),
+    race: get('--race') ?? null,
+    brief: args.includes('--brief'),
   }
 }
 
-async function main() {
-  const { seed, ai, self, forces }: { seed: number; ai: AiPlayer; self: AiPlayer | null; forces: ForceSpec } =
-    parseArgs()
+/** How one game is played in the terminal: by whom, and how much of it is shown. */
+export interface BattleOptions {
+  readonly ai: AiPlayer
+  /** An AI playing your side too, or null when you play it. */
+  readonly self: AiPlayer | null
+  /** Seeds the AIs' own stream. */
+  readonly aiSeed: number
+  /** Watching only: print nothing of the game, so a run reads one line a battle. */
+  readonly brief: boolean
+  /** The line under the title; the single game names the seed and the forces. */
+  readonly banner: (state: GameState) => string
+  /** Said before a concession is accepted: in a run, what giving up costs. */
+  readonly concedeWarning: string | null
+}
+
+/** The most decisions a watched game may take. Greedy against itself finishes well
+ *  inside it; a game that reaches it has stalled, and says so rather than spinning. */
+const WATCHED_DECISIONS = 20_000
+
+/** Plays one game to its end and returns the final state. */
+export async function playBattle(setup: SetupOptions, options: BattleOptions): Promise<GameState> {
+  const { ai, self, brief } = options
   const human: PlayerId = 'p1'
+  const quiet = brief && self !== null
+  const log = (line: string) => {
+    if (!quiet) console.log(line)
+  }
+  concedeWarning = options.concedeWarning
 
-  let state = begin(setupGame({ seed, forces, ruleSet: V1_RULES }))
-
-  // Which species you are is a roll now, so the banner reads it off the board
-  // rather than stating it -- and the size too, since two sides need not match.
-  const fielding = (player: PlayerId) =>
-    `${speciesNames(forceSpecies(state, player))}, ${forceSize(state, player)} health`
-  console.log(bold('\ndd_solo — Dragon Dice'))
-  console.log(
+  let state = begin(setupGame(setup))
+  log(bold('\ndd_solo — Dragon Dice'))
+  log(dim(options.banner(state)))
+  log(
     dim(
-      `seed ${seed} · ${self === null ? 'you are' : `${self.name} plays`} p1 (${fielding('p1')}) · ` +
-        `opponent is ${ai.name} (${fielding('p2')})`,
+      `q quits at any prompt; typing concede at a menu gives the game up${
+        options.concedeWarning === null ? '' : ', and the run with it'
+      }. Nothing is saved.\n`,
     ),
   )
-  console.log(dim('q quits at any prompt; typing concede at a menu gives the game up. Nothing is saved.\n'))
-  let aiRng: RngState = rngFrom(seed ^ 0x5eed)
+  let aiRng: RngState = rngFrom(options.aiSeed ^ 0x5eed)
   let shown = 0
   // Redraw the board when the situation changes, not before every prompt --
   // a march is several decisions and reprinting between each is just noise.
@@ -1834,22 +1827,26 @@ async function main() {
   const flush = () => {
     for (const entry of state.log.slice(shown)) {
       const line = describe(entry, state)
-      if (line !== null) console.log(line)
-      for (const extra of mathLines(entry)) console.log(extra)
+      if (line !== null) log(line)
+      for (const extra of mathLines(entry)) log(extra)
     }
     shown = state.log.length
   }
 
   flush()
 
+  let decisions = 0
   while (state.winner === null && state.pending !== null) {
     const pending = state.pending
     let action: GameAction
+    if (self !== null && ++decisions > WATCHED_DECISIONS) {
+      throw new Error(`the game stalled: no winner after ${WATCHED_DECISIONS} decisions (seed ${setup.seed})`)
+    }
 
     if (pending.player === human) {
       const key = `${state.turn.marching}:${state.turn.phase}:${state.turn.marchIndex}:${state.turn.marchingArmy}`
       if (key !== lastBoard) {
-        console.log(board(state, human))
+        log(board(state, human))
         lastBoard = key
       }
       flush()
@@ -1870,19 +1867,62 @@ async function main() {
     flush()
   }
 
-  console.log(board(state, human))
-  console.log(
+  log(board(state, human))
+  log(
     self !== null
       ? bold(`\n${state.winner} wins.`)
       : state.winner === human
         ? bold(green('\nYou win.'))
         : bold(red('\nYou lose.')),
   )
-  rl.close()
+  return state
+}
+
+async function main() {
+  const args = parseArgs()
+  if (args.run) {
+    // A run's encounters name their enemies and opponents; a flag that cannot apply is
+    // refused rather than quietly ignored.
+    for (const flag of ['--ai', '--forces']) {
+      if (process.argv.includes(flag)) {
+        console.error(`${flag} does not apply to a run: each encounter names its own`)
+        process.exit(1)
+      }
+    }
+    await playRunInTerminal({
+      seed: args.seed,
+      race: args.race,
+      self: args.self,
+      brief: args.brief,
+      playBattle,
+    })
+    closeInput()
+    return
+  }
+
+  const { seed, ai, self, forces } = args
+  // Which species you are is a roll now, so the banner reads it off the board
+  // rather than stating it -- and the size too, since two sides need not match.
+  const fielding = (state: GameState, player: PlayerId) =>
+    `${speciesNames(forceSpecies(state, player))}, ${forceSize(state, player)} health`
+  await playBattle(
+    { seed, forces, ruleSet: V1_RULES },
+    {
+      ai,
+      self,
+      aiSeed: seed,
+      brief: false,
+      concedeWarning: null,
+      banner: (state) =>
+        `seed ${seed} · ${self === null ? 'you are' : `${self.name} plays`} p1 (${fielding(state, 'p1')}) · ` +
+        `opponent is ${ai.name} (${fielding(state, 'p2')})`,
+    },
+  )
+  closeInput()
 }
 
 main().catch((error: unknown) => {
   console.error(red(`\n${String(error)}`))
-  rl.close()
+  closeInput()
   process.exit(1)
 })

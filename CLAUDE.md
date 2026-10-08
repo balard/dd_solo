@@ -293,13 +293,20 @@ the dice and the opponent.
 > `SetupOptions`: `V1_RULES`, the player as p1, and a seed taken from the run seed at a counter
 > naming the act and encounter, so a restart is the same game. Opponent names are checked against
 > `OPPONENTS` by a test, since `src/run/` cannot import the registry. *What 1 found* in `PLAN-V3.md`.
+>
+> **Phase 2 has landed: a run in the terminal**, `npm run play -- --run`. `play.ts`'s game loop is
+> `playBattle`, shared by the single game and every battle of a run; `src/cli/runPlay.ts` asks the
+> run's questions, `src/cli/arrange.ts` turns a typed line into a `set_force`, and `src/cli/term.ts`
+> holds the one stdin queue both read. A watched run (`--p1-ai greedy --brief`) answers everything
+> but its battles with `src/run/autopilot.ts`. Greedy against greedy wins about half its battles,
+> so watched runs end in Act I: Phase 5's first number. *What 2 found* in `PLAN-V3.md`.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V3.md` | **The order of work now** (Phases 0 and 1 landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
+| `docs/PLAN-V3.md` | **The order of work now** (Phases 0-2 landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
 | `docs/PLAN-V2.md` | How v2 got here: Phases 0 to 9 all landed. Mixed-species armies, built forces and the army builder, a schematic and landscape UI, the roll dialog, and Coral Elves, Dwarves, Goblins and Lava Elves. Phase 4 (the collection and the builder) is what v3 builds on; read its findings first. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |
@@ -329,6 +336,7 @@ npm run data        # regenerate and validate data/starter/ from data/raw/
 npm run art         # optional: mirror real face art into public/faces/ + assets/faces/ (both gitignored)
 npm run play        # play a game in the terminal (--seed N, --ai greedy|passive|random,
                     #   --forces starter|bestiary|mixed|built:<file>, --p1-ai <ai> to watch)
+npm run play -- --run   # a v3 run (--seed N, --race <species>, --p1-ai <ai> [--brief] to watch)
 npm run fuzz        # the live-rules fuzz at 1000 games instead of 200 (about a minute)
 npm run goldens -- v1   # re-record one golden corpus (v0 or v1) -- see below before you do
 npm run sai-order   # how often the SAI resolution order could matter, over self-play (~20s)

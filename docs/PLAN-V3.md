@@ -7,7 +7,7 @@ acts whose enemies grow from 12 to 24 to 36 health. A loss ends the run.
 
 Read `PLAN-V2.md` Phase 4 (the collection and the builder) before anything here: v3 is that phase's
 `Collection` and `forceProblems` with a game around them. This document is the *order of work*.
-**Phases 0 and 1 have landed** (the run model, and the encounters); nothing after them has.
+**Phases 0, 1 and 2 have landed** (the run model, the encounters, a run in the terminal); nothing after them has.
 
 **Scope decisions this plan is built on** (agreed 2026-10-07):
 - **A mode in this repo, not a fork.** The single game stays exactly what it is. The run is a
@@ -424,6 +424,64 @@ v0, and it is the cheapest place to find out whether a run is any fun before a s
   hours at a keyboard. It is not pacing data: the AI never concedes.
 
 **Exit criterion.** One whole run, won or lost, in the terminal, for two different races.
+
+### What 2 found
+
+Landed as `src/cli/runPlay.ts` (the run's menus), `src/cli/arrange.ts` (the arranging commands,
+pure and tested), `src/cli/term.ts` (colour and line input, moved out of `play.ts`) and
+`src/run/autopilot.ts` (`suggestForce` and `autopilot`, pure and tested). `play.ts`'s game loop
+became `playBattle(setup, options)`, which the single game and every battle of a run share. The
+engine did not move.
+
+    npm run play -- --run [--seed N] [--race <species>]
+    npm run play -- --run --p1-ai greedy --brief      -- watch, a line an encounter
+
+**The exit criterion, met:**
+- Watched runs completed for Treefolk, Coral Elves and Dwarves.
+- A human run, typed through a pipe, picked a race, arranged by hand and with `auto`, was
+  refused a force over half, refused one concession and accepted the second. It then lost the
+  run.
+- An event upgraded a fielded die over the cap, which benched it, as Phase 0 decided.
+- Every run in the terminal ended `won` or `lost`. None stalled.
+
+**What the plan left out, and the code needed:**
+- **Somebody has to answer a watched run's own questions.** `--p1-ai` plays the battles, but a
+  run also asks for a race, a force, a reward and an event. `src/run/autopilot.ts` answers them
+  with plain rules of thumb rather than an AI, since `src/run/` may not import `src/ai/`:
+  - the race from the seed;
+  - the heaviest legal force;
+  - a dragon while it owns fewer than two, otherwise the heaviest unit;
+  - upgrade a medium die, then a small one, otherwise skip.
+  Its `suggestForce` is also the terminal's `auto`.
+- **`--brief`**, so a watched run reads one line per encounter instead of 25 games of log.
+- **One input queue.** The run's menus and the game's must read the same buffered stdin, or a
+  piped script loses lines between them. `term.ts` holds it, and both import it.
+- **The draft is the run's own `force`.** Each arranging command is a `set_force`, so the
+  terminal keeps no second copy. The reducer already took any number of them.
+- **A watched game stops at 20,000 decisions** with "the game stalled", rather than spinning.
+  None did.
+- **`--ai` and `--forces` are refused with `--run`**, since each encounter names its own enemy
+  and opponent. An unknown `--race` is an error, not a quiet pick.
+
+**Found by playing, for Phase 5:**
+- **Greedy against greedy wins about half its battles, so watched runs die in Act I.** Over 90
+  watched runs (fifteen seeds of each race), greedy won 81 of 171 battles, and every run ended
+  in Act I. The same AI at the same size makes each battle close to a coin flip, and a run needs
+  about 25 wins in a row. That is the plan's difficulty curve at its first look, not a bug.
+  Phase 5 has to choose what tilts it:
+  - Act I enemies below the cap;
+  - a gentler opponent early;
+  - rewards that outpace the enemy's growth.
+- **Played through to the end, every act holds up.** In a second pass every battle was played
+  for real, all states validated, but recorded as a win so the run reached Act III. That was
+  433 battles over 18 runs, with none capped and none invalid, and greedy won between half and
+  three in five per act. So Act II and III battles set up and finish with grown forces, short
+  dragon lists and 36-health enemies.
+- **In Act I an upgrade of a fielded die always benches it.** The opening fields exactly 12, so
+  any heavier die is over the cap. An Act I upgrade only pays once the player trades another die
+  out. The autopilot re-fills the force; a human sees the force drop to 10 and the problem
+  listed. That is Phase 0's rule working, and a question for the playtest: should an upgrade in
+  Act I be offered at all?
 
 ---
 
