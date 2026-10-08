@@ -1393,6 +1393,18 @@ body {
 .app-head.is-one-line { margin-bottom: 0; gap: 8px; }
 .app-head.is-one-line h1,
 .app-head.is-one-line .app-sub-extra { display: none; }
+
+/* A battle in a run (v3 Phase 4d): "Act II · 5 of 12" over "Tidal legion · Turn 9";
+   "II·5" upright with no name; and sideways, where the title goes, "II·5 · Turn 9". */
+.run-where-short,
+.app-run-tag { display: none; }
+@media (max-width: 599px) {
+  .run-where-long,
+  .app-run-name { display: none; }
+  .run-where-short { display: inline; }
+}
+.app-head.is-one-line .app-run-tag { display: inline; }
+.app-head.is-one-line .app-run-name { display: none; }
 .app-head.is-one-line .sub { color: var(--fg); font-weight: 700; white-space: nowrap; }
 .app-head.is-one-line .log-ticker { flex: 1; min-width: 0; min-height: 0; border-top: none; padding: 0; }
 .app-head.is-one-line .choice {
@@ -1591,6 +1603,13 @@ body {
 }
 .game-over-side dd { margin: 0; font-variant-numeric: tabular-nums; }
 .game-over-side dd b { font-size: var(--fs-xl); }
+
+/* A question in the dialog (v3 Phase 4d): Concede, Leave run, New run over a run. The
+   answer that loses something is drawn in the melee colour, never the accent. */
+.ask-card { padding: 12px 14px 14px; }
+.ask-card .question.big { margin-bottom: 2px; }
+.choice.secondary.danger { color: var(--melee); border-color: var(--melee); }
+.choice.secondary.danger:hover:not(:disabled) { background: var(--sunk); }
 
 /* --- the army builder (v2 Phase 4b) ----------------------------------------- */
 
@@ -1912,3 +1931,5 @@ body {
 .builder-fold { border: 1px solid var(--line); border-radius: 10px; padding: 4px 12px; background: var(--panel); }
 .builder-fold[open] { padding-bottom: 10px; }
 .builder-fold > summary b { font-size: var(--fs-md); }
+.run-start-ask { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.run-start-ask p { margin: 0; }

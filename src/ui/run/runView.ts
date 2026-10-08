@@ -45,6 +45,36 @@ export function actStrip(run: RunState): readonly ActView[] {
 export const runWhere = (run: RunState): string =>
   `Act ${ROMAN[run.act]} · ${run.encounter + 1} of ${ENCOUNTERS_PER_ACT}`
 
+/** "II·5": the same, where a header has one word of room (4a: upright, and sideways). */
+export const runWhereShort = (run: RunState): string => `${ROMAN[run.act]}·${run.encounter + 1}`
+
+/**
+ * What Concede asks in a run's battle (v3 Phase 4d): that a lost battle ends the run, and
+ * that Leave run is the way to stop for now.
+ */
+export function concedeAsk(run: RunState): { readonly question: string; readonly detail: string } {
+  const name = run.current?.name ?? 'this battle'
+  return {
+    question: `Concede ${name}?`,
+    detail:
+      `A lost battle ends the run: ${runName(run).replace(/^A /, 'your ')} stops at ${runWhere(run)}. ` +
+      `To stop for now and come back to this battle's start, use Leave run instead.`,
+  }
+}
+
+/**
+ * Where a battle's game-over card leads (v3 Phase 4d), read off the run *after* the
+ * result was recorded: to the reward, or to the run's end, with a line saying which. Null
+ * while the run still waits on the battle, which is the frame between the last blow and
+ * the result reaching the run.
+ */
+export function battleOutcome(run: RunState): { readonly label: string; readonly note: string | null } | null {
+  if (run.pending.kind === 'reward') return { label: 'Pick your reward', note: 'Pick one of five: it goes to your pool.' }
+  if (run.status === 'won') return { label: 'See the run', note: 'That was the last battle: the run is won.' }
+  if (run.status === 'lost') return { label: 'See the run', note: `The run ends at ${runWhere(run)}.` }
+  return null
+}
+
 export const speciesName = (id: string): string => speciesInfo(id)?.name ?? id
 
 /** "A Treefolk run", or "A run" before a race is picked. */
@@ -165,7 +195,14 @@ export function savedRunView(load: RunLoad, now: Date = new Date()): SavedRunVie
     case 'ok': {
       const run = load.run
       if (run.status !== 'playing') return { kind: 'over', title: `${runName(run)} ${run.status === 'won' ? 'was won' : 'was lost'}` }
-      const next = run.current === null ? '' : ` · next: ${run.current.name}`
+      // A run resting on its reward has beaten the encounter in hand (4d records the win
+      // the moment it lands), so that is not what comes next.
+      const next =
+        run.current === null
+          ? ''
+          : run.pending.kind === 'reward'
+            ? ` · ${run.current.name} beaten, a reward to pick`
+            : ` · next: ${run.current.name}`
       return {
         kind: 'playing',
         title: `${runName(run)} · ${runWhere(run)}`,

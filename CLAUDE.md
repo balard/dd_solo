@@ -328,13 +328,21 @@ the dice and the opponent.
 > `'exactly'` dragons; a run passes `'at_most'`, the dice won since the last battle
 > (`freshDice`), and folds for short screens. The run's `force` is the draft: each edit is a
 > `set_force`, saved as it is made. *What 4c found* in `PLAN-V3.md`.
+>
+> **Phase 4d has landed, and with it all of Phase 4: the battle in a run.** The header names the
+> encounter ("Act II · 5 of 12", "II·5" where there is one word of room), and Leave run sits
+> beside Concede. Concede asks in the dialog, not through `window.confirm`, and in a run offers
+> Leave run as a third answer; New run over a run asks inline too. **A battle's result reaches
+> the run the moment the engine has a winner**, not when the game-over card is pressed: a reload
+> on that card used to fight a won battle again and take back a defeat. `App` holds
+> `inRunBattle` so the board stays up under the card. *What 4d found* in `PLAN-V3.md`.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V3.md` | **The order of work now** (Phases 0-3 and 4a-4c landed). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
+| `docs/PLAN-V3.md` | **The order of work now** (Phases 0-4 landed; 5, the playtest, next). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
 | `docs/PLAN-V2.md` | How v2 got here: Phases 0 to 9 all landed. Mixed-species armies, built forces and the army builder, a schematic and landscape UI, the roll dialog, and Coral Elves, Dwarves, Goblins and Lava Elves. Phase 4 (the collection and the builder) is what v3 builds on; read its findings first. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |

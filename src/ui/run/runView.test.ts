@@ -6,7 +6,19 @@ import { describe, expect, it } from 'vitest'
 import { newRun, reduceRun } from '../../run/reduce'
 import type { RunAction, RunState } from '../../run/types'
 
-import { actStrip, freshDice, offerText, outcomeText, runStats, runWhere, savedRunView, savedWhen } from './runView'
+import {
+  actStrip,
+  battleOutcome,
+  concedeAsk,
+  freshDice,
+  offerText,
+  outcomeText,
+  runStats,
+  runWhere,
+  runWhereShort,
+  savedRunView,
+  savedWhen,
+} from './runView'
 
 /** A run played on rails: every battle won but one, every reward the first offer, every event skipped. */
 function playTo(seed: number, until: (run: RunState) => boolean, loseAt: string | null = null): RunState {
@@ -121,6 +133,15 @@ describe('savedRunView', () => {
     if (view.kind === 'playing') expect(view.detail).toMatch(/saved today at 14:02/)
   })
 
+  it('does not call a beaten encounter the next one', () => {
+    const fighting = playTo(3, (r) => r.pending.kind === 'battle')
+    const won = reduceRun(fighting, { kind: 'battle_ended', winner: 'p1' })
+    const view = savedRunView({ kind: 'ok', run: won, savedAt: now.toISOString() }, now)
+    if (view.kind !== 'playing') throw new Error('expected a run in progress')
+    expect(view.detail).toContain(`${fighting.current?.name} beaten, a reward to pick`)
+    expect(view.detail).not.toContain('next:')
+  })
+
   it('says a discarded save was discarded, and why', () => {
     expect(savedRunView({ kind: 'outdated', found: 1 })).toMatchObject({ kind: 'discarded' })
     expect(savedRunView({ kind: 'unreadable', reason: 'not JSON' })).toEqual({
@@ -133,5 +154,29 @@ describe('savedRunView', () => {
   it('says another day by its date', () => {
     expect(savedWhen(new Date(2026, 9, 3, 9, 0).toISOString(), now)).toBe('on 3 Oct')
     expect(savedWhen('nonsense', now)).toBe('some time ago')
+  })
+})
+
+describe('the battle in a run', () => {
+  it('names the encounter in hand, long and short', () => {
+    const run = playTo(3, (r) => r.act === 2 && r.encounter === 4 && r.pending.kind === 'battle')
+    expect(runWhere(run)).toBe('Act II · 5 of 12')
+    expect(runWhereShort(run)).toBe('II·5')
+    const ask = concedeAsk(run)
+    expect(ask.question).toBe(`Concede ${run.current?.name}?`)
+    expect(ask.detail).toMatch(/^A lost battle ends the run: your Treefolk run stops at Act II · 5 of 12\./)
+    expect(ask.detail).toMatch(/use Leave run instead/)
+  })
+
+  it('leads a won battle to the reward, a lost one and the last one to the run', () => {
+    const fighting = playTo(3, (r) => r.pending.kind === 'battle')
+    expect(battleOutcome(fighting)).toBeNull()
+    const won = reduceRun(fighting, { kind: 'battle_ended', winner: 'p1' })
+    expect(battleOutcome(won)?.label).toBe('Pick your reward')
+    const lost = reduceRun(fighting, { kind: 'battle_ended', winner: 'p2' })
+    expect(battleOutcome(lost)).toEqual({ label: 'See the run', note: `The run ends at ${runWhere(fighting)}.` })
+    const last = playTo(3, () => false)
+    expect(last.status).toBe('won')
+    expect(battleOutcome(last)?.note).toMatch(/the run is won/)
   })
 })

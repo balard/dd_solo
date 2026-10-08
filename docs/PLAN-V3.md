@@ -7,7 +7,7 @@ acts whose enemies grow from 12 to 24 to 36 health. A loss ends the run.
 
 Read `PLAN-V2.md` Phase 4 (the collection and the builder) before anything here: v3 is that phase's
 `Collection` and `forceProblems` with a game around them. This document is the *order of work*.
-**Phases 0 to 3 have landed** (the run model, the encounters, a run in the terminal, run saves), and **4a-4c** (the run screens' mockups, the run shell, and the force between encounters); 4d has not.
+**Phases 0 to 3 have landed** (the run model, the encounters, a run in the terminal, run saves), and all of **Phase 4** (the run screens' mockups, the run shell, the force between encounters, and the battle in a run). Phase 5, the playtest, is next.
 
 **Scope decisions this plan is built on** (agreed 2026-10-07):
 - **A mode in this repo, not a fork.** The single game stays exactly what it is. The run is a
@@ -784,6 +784,72 @@ palette of spare dice is the lever if the playtest asks for one.
 **Kept from 4b:** "Fill from your pool" (`suggestForce`) sits beside "Your force". It is the
 quickest way to field a reward, and a pool that has grown past the cap still has to be cut by
 hand.
+
+### What 4d found
+
+Landed as:
+- the run's header, Leave run and the concede dialog in `src/ui/App.tsx`;
+- `AskCard` beside `GameOver` in `src/ui/game/GameOver.tsx`, a question in the dialog;
+- `runWhereShort`, `concedeAsk` and `battleOutcome` in `runView.ts`, tested in node;
+- the inline New run question in `RunPanel.tsx`.
+
+The engine, `src/run/` and `RUN_VERSION` did not move.
+
+**What the plan's 4d said that was already there.** 4b's stand-in had the encounter in the
+header and the game-over card leading to "Pick your reward" or "See the run". 4d gives them their
+4a shape: "Act II · 5 of 12" over "Tidal legion · Turn 9", "II·5" upright with no name, and
+"II·5 · Turn 9" on a phone held sideways, where the title goes.
+
+**Would have shipped green:**
+- **A reload on the game-over card took back a defeat.** 4b reported the winner to the run only
+  when the card's button was pressed. A battle is never saved, so until then the save still held
+  the encounter's start: a reload after a loss came back to Continue and the same battle, and
+  "a defeat ends the run" was one reload deep. A won battle had the mirror bug, and was fought
+  again. The result now reaches the run the moment the engine has a winner (an effect in `App`),
+  and the save is written then. The board stays up under the card because `App` keeps
+  `inRunBattle`, which outlives the run's `battle` pending; it used to be derived from it.
+  Checked: a reload on a lost card opened the run's end, and on a won card Continue opened
+  the reward.
+- **The last battle of Act III would have led to "Pick your reward"**, a reward the run does not
+  offer: winning it ends the run. The label was chosen by "did you win". It is read off the run
+  after the result now (`battleOutcome`): the reward, the run won, or the run lost, each with a
+  line ("The run ends at Act I · 1 of 12."). No browser test reaches III·12, so only the node
+  test would ever have seen it.
+- **The start panel called a beaten encounter the next one.** It read "next: Bog lurkers" for a
+  run resting on Bog lurkers' reward. That save could not exist before the first bug was fixed.
+  It reads "Bog lurkers beaten, a reward to pick" now.
+
+**Decided while building:**
+- **Concede asks in the dialog**, over everything including a roll card, with the 4a wording.
+  In a run there are three answers: Concede and end the run, Leave run, Keep playing. A single
+  game gets the same dialog with two. 4b left Concede and New run on `window.confirm` for 4d to
+  revisit; both are gone. The single game's New game still confirms, since nothing in a run
+  reaches it.
+- **Leave run asks once the battle is under way**, from the first march: before that there is
+  nothing to lose. It needs no decision of yours, so unlike Concede it is live while the enemy
+  thinks, and the question stays up while the enemy moves on.
+- **Leaving after the result is in goes on**, to the reward or the run's end, as the card would.
+  There is no battle start left to return to.
+- **The answer that loses something is drawn in the melee colour** (`.choice.secondary.danger`):
+  the header's Concede, "Concede, and end the run" and "Lose it and start over". The accent stays
+  on Keep playing.
+
+**Checked in the browser** (laptop, phone upright, phone sideways):
+- Leave run at the roll-off went straight to the start screen. Continue and Fight gave the
+  same board, terrain for terrain and die for die.
+- New run over the saved run asked inline, and Keep it kept it.
+- Leave run on turn 2 asked, and Keep playing went back to the decision underneath.
+- Concede in a run showed the three answers, and Leave run from there left.
+- A single game's Concede showed two answers and ended the game.
+- Two battles played to the end by a click loop in the page (the first answer, random dice when
+  a pick stalled): one lost, one won. Both are described under the first bug above.
+- Sideways, the concede dialog is 152 of 390px (39%; 4a measured 41%).
+
+**The exit criterion, as far as it goes.** A run went from the race pick to lost in the browser,
+and a reload at every resting point along it came back where it was (here and in 4b and 4c). A
+run *won* in the browser means 36 encounters by hand and was not played. The screens it would
+reach are the reward and the run's end, both checked. The one thing particular to winning,
+the last battle's card, is the node test above.
 
 ---
 

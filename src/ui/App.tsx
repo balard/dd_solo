@@ -34,7 +34,7 @@ import { Board, DragonRow, EffectList } from './game/Board'
 import { DiceGrid } from './game/DiceGrid'
 import { speciesInfo } from './game/Elements'
 import { RollCard } from './game/RollCard'
-import { GameOver } from './game/GameOver'
+import { AskCard, GameOver, type GameOverNext } from './game/GameOver'
 import { formatClock, gameSummary, turnNumber } from './game/summary'
 import { useClock } from './game/useClock'
 import { LogPanel, LogTicker } from './game/LogPanel'
@@ -60,16 +60,27 @@ import { MarksProvider } from './game/useMarks'
 import { RuleSetProvider } from './game/useRuleSet'
 import { RunPanel } from './run/RunPanel'
 import { RacePick, RunScreen } from './run/RunScreen'
-import { runWhere } from './run/runView'
+import { battleOutcome, concedeAsk, runWhere, runWhereShort } from './run/runView'
 import { useRun } from './run/useRun'
 
 /**
- * A battle played inside a run (v3 Phase 4b): what the header calls it, and where the
- * winner goes when the game is over. Null for a single game.
+ * A battle played inside a run (v3 Phases 4b and 4d): what the header calls it, what
+ * Concede asks, where the game-over card leads, and the two ways off the screen. Null
+ * for a single game.
  */
 interface RunBattle {
-  readonly label: string
-  readonly onFinish: (winner: PlayerId) => void
+  /** "Act II · 5 of 12", and "II·5" where there is one word of room. */
+  readonly where: string
+  readonly whereShort: string
+  /** The encounter: "Tidal legion". */
+  readonly name: string
+  readonly ask: { readonly question: string; readonly detail: string }
+  /** Where the game-over card leads, once the run has the result; null until then. */
+  readonly over: { readonly label: string; readonly note: string | null } | null
+  /** The game-over card's button: on to the reward or the run's end. */
+  readonly onFinish: () => void
+  /** Back to the start screen, the run saved at this battle's start. */
+  readonly onLeave: () => void
 }
 
 export function App() {
@@ -77,12 +88,28 @@ export function App() {
   const run = useRun()
   // Picking a race comes before a run exists, so nothing is saved for a run never started.
   const [pickingRace, setPickingRace] = useState(false)
+  // Whether the game in hand is the run's battle (v3 Phase 4d). It outlives the run's
+  // `battle` pending: the result is recorded the moment there is one, and the board stays
+  // up under the game-over card until the player moves on.
+  const [inRunBattle, setInRunBattle] = useState(false)
 
   const play = (battle: { readonly setup: SetupOptions; readonly opponent: OpponentName } | null) => {
-    if (battle !== null) game.start(battle.setup, battle.opponent)
+    if (battle === null) return
+    game.start(battle.setup, battle.opponent)
+    setInRunBattle(true)
   }
   const current = run.run
-  const inBattle = current !== null && current.pending.kind === 'battle' && game.phase === 'playing'
+  const inBattle = current !== null && inRunBattle && game.phase === 'playing'
+
+  // The run hears how the battle ended as soon as the engine says so, not when the card's
+  // button is pressed. The result is saved then, so a reload on the game-over card neither
+  // fights a won battle again nor takes back a defeat -- and a defeat ends the run.
+  const winner = game.phase === 'playing' ? game.state.winner : null
+  const waiting = current?.pending.kind === 'battle'
+  const { dispatch: runDispatch } = run
+  useEffect(() => {
+    if (inBattle && waiting && winner !== null) runDispatch({ kind: 'battle_ended', winner })
+  }, [inBattle, waiting, winner, runDispatch])
 
   if (pickingRace) {
     return (
@@ -122,13 +149,24 @@ export function App() {
       />
     )
   }
+  const finishBattle = () => {
+    setInRunBattle(false)
+    game.newGame()
+  }
   const runBattle: RunBattle | null =
     inBattle && current.current !== null
       ? {
-          label: `${runWhere(current)} · ${current.current.name}`,
-          onFinish: (winner) => {
-            run.dispatch({ kind: 'battle_ended', winner })
-            game.newGame()
+          where: runWhere(current),
+          whereShort: runWhereShort(current),
+          name: current.current.name,
+          ask: concedeAsk(current),
+          over: battleOutcome(current),
+          onFinish: finishBattle,
+          // Once the result is in there is no battle start to come back to, so leaving
+          // goes on to the reward or the run's end, as the card would.
+          onLeave: () => {
+            finishBattle()
+            if (current.pending.kind === 'battle') run.leave()
           },
         }
       : null
@@ -250,6 +288,9 @@ function GameView({ game, runBattle }: { readonly game: PlayingGame; readonly ru
   // "Look at dice" (Phase 9e): while a decision is selecting dice, a tap inspects instead
   // of selecting -- and the selection draft stays exactly as it was.
   const [looking, setLooking] = useState(false)
+  // A question in the dialog (v3 Phase 4d): Concede, or in a run Leave run. Not cleared
+  // with the drafts: the enemy may move on while it is being read, and it stays asked.
+  const [asking, setAsking] = useState<'concede' | 'leave' | null>(null)
 
   // A selection is a draft answer to one question. When the question changes, the
   // draft is meaningless, so it goes. What counts as a change is `pendingKey` --
@@ -463,8 +504,25 @@ function GameView({ game, runBattle }: { readonly game: PlayingGame; readonly ru
     <div className={short ? 'app is-short' : 'app'}>
       <header className={oneLine ? 'app-head is-one-line' : 'app-head'}>
         <div className="app-title">
-          <h1>{runBattle?.label ?? 'dd_solo'}</h1>
+          <h1>
+            {runBattle === null ? (
+              'dd_solo'
+            ) : (
+              <>
+                <span className="run-where-long">{runBattle.where}</span>
+                <span className="run-where-short">{runBattle.whereShort}</span>
+              </>
+            )}
+          </h1>
           <p className="sub">
+            {/* In a run the encounter leads (4a): "Tidal legion · Turn 9", and on a phone
+                held sideways, where the title goes, "II·5 · Turn 9". */}
+            {runBattle !== null && (
+              <>
+                <span className="app-run-tag">{runBattle.whereShort} · </span>
+                <span className="app-run-name">{runBattle.name} · </span>
+              </>
+            )}
             Turn {turn} ·{' '}
             {board.winner !== null
               ? 'game over'
@@ -500,25 +558,34 @@ function GameView({ game, runBattle }: { readonly game: PlayingGame; readonly ru
               no player, so the open pending is who concedes. Waiting on the enemy, it is
               greyed with the reason on hover rather than hidden, so it does not jump. */}
           {/* The board's winner, not the state's: the button going is an outcome too. */}
-          {board.winner === null && (
+          {/* Leave run (v3 Phase 4d) needs no decision of yours: leaving changes nothing
+              in the game, it only puts it down. It asks once the battle is under way. */}
+          {runBattle !== null && board.winner === null && (
             <button
               type="button"
               className="choice secondary"
+              title="Stop for now: the run is saved at this battle's start, and Continue comes back to the same board"
+              onClick={() => (started ? setAsking('leave') : runBattle.onLeave())}
+            >
+              Leave run
+            </button>
+          )}
+          {board.winner === null && (
+            <button
+              type="button"
+              className={runBattle === null ? 'choice secondary' : 'choice secondary danger'}
               disabled={pending?.player !== human}
               title={
                 pending?.player === human
                   ? 'Give the game up: the enemy wins, and the summary shows how it went'
                   : 'You can concede on your next decision'
               }
-              onClick={() => {
-                if (window.confirm('Concede this game? The enemy wins.')) dispatch({ kind: 'concede' })
-              }}
+              onClick={() => setAsking('concede')}
             >
               Concede
             </button>
           )}
-          {/* In a run, leaving is 4d's Leave run; until then a reload returns to the
-              encounter's start, which is the run's quit rule. */}
+          {/* In a run, the way off this screen is Leave run, above. */}
           {runBattle === null && (
             <button
               type="button"
@@ -759,21 +826,38 @@ function GameView({ game, runBattle }: { readonly game: PlayingGame; readonly ru
       {/* One dialog, floating over the terrains: a roll not yet seen, and only then the
           decision it leads to. The game waits on the roll -- see `useGame`. */}
       <div className="float-dock" ref={dockRef}>
-      {rollShown !== null ? (
+      {asking !== null && state.winner === null ? (
+        // Over everything, a roll card included: it was asked for, so it is answered first.
+        <AskCard
+          {...askFor(asking, runBattle)}
+          answers={
+            asking === 'leave'
+              ? [
+                  { label: 'Leave run', kind: 'secondary', onClick: () => runBattle?.onLeave() },
+                  { label: 'Keep playing', kind: 'primary', onClick: () => setAsking(null) },
+                ]
+              : [
+                  {
+                    label: runBattle === null ? 'Concede' : 'Concede, and end the run',
+                    kind: 'danger',
+                    onClick: () => {
+                      setAsking(null)
+                      // The action carries no player: the open decision is who concedes.
+                      if (pending?.player === human) dispatch({ kind: 'concede' })
+                    },
+                  },
+                  ...(runBattle === null
+                    ? []
+                    : [{ label: 'Leave run', kind: 'secondary' as const, onClick: runBattle.onLeave }]),
+                  { label: 'Keep playing', kind: 'primary', onClick: () => setAsking(null) },
+                ]
+          }
+        />
+      ) : rollShown !== null ? (
         <RollCard shown={rollShown} state={state} human={human} onInspect={onInspect} />
       ) : summary !== null ? (
         // After the last roll card, never over it: the roll that won is seen first.
-        <GameOver
-          summary={summary}
-          next={
-            runBattle === null || state.winner === null
-              ? { label: 'New game', onClick: newGame }
-              : {
-                  label: state.winner === human ? 'Pick your reward' : 'See the run',
-                  onClick: () => runBattle.onFinish(state.winner as PlayerId),
-                }
-          }
-        />
+        <GameOver summary={summary} next={gameOverNext(runBattle, state.winner === human, newGame)} />
       ) : (
       <ActionBar
         state={state}
@@ -816,4 +900,25 @@ function GameView({ game, runBattle }: { readonly game: PlayingGame; readonly ru
 
     </div>
   )
+}
+
+/** What a question in the dialog says (v3 Phase 4d). */
+function askFor(
+  asking: 'concede' | 'leave',
+  runBattle: RunBattle | null,
+): { readonly question: string; readonly detail: string } {
+  if (asking === 'leave') {
+    return {
+      question: 'Leave the run for now?',
+      detail: "The run is saved at this battle's start. Continue comes back to the same board, and the battle starts over.",
+    }
+  }
+  return runBattle?.ask ?? { question: 'Concede this game?', detail: 'The enemy wins, and the summary shows how it went.' }
+}
+
+/** Where the game-over card leads: New game, or in a run the reward or the run's end. */
+function gameOverNext(runBattle: RunBattle | null, won: boolean, newGame: () => void): GameOverNext {
+  if (runBattle === null) return { label: 'New game', note: null, onClick: newGame }
+  if (runBattle.over === null) return { label: won ? 'Pick your reward' : 'See the run', note: null, onClick: null }
+  return { ...runBattle.over, onClick: runBattle.onFinish }
 }
