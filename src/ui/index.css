@@ -1866,7 +1866,7 @@ body {
   .race-abilities, .race-dice { display: none; }
 }
 
-/* The force before a battle (a stand-in until 4c). */
+/* Your force, army by army: the reward's "Show your force and pool". */
 .run-armies { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .run-army { border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px; background: var(--panel); }
 .run-army-head { display: flex; justify-content: space-between; font-size: var(--fs-sm); margin-bottom: 4px; }
@@ -1933,3 +1933,7 @@ body {
 .builder-fold > summary b { font-size: var(--fs-md); }
 .run-start-ask { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
 .run-start-ask p { margin: 0; }
+.run-holdings-toggle { margin-top: 8px; }
+.run-holdings { display: grid; gap: 6px; }
+.run-holdings .run-label { margin: 4px 0 0; }
+.run-terrains { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; }

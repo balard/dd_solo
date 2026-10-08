@@ -9,7 +9,7 @@
  */
 import { useCallback, useState, type ReactNode } from 'react'
 
-import { dragonDie, ownTerrainType, speciesElements, unitType } from '../../data/load'
+import { dragonDie, ownTerrainType, speciesElements, terrainDieName, unitType } from '../../data/load'
 import { PRESET_ARMY_NAMES, type PresetArmyName } from '../../data/presets'
 import type { BuiltForce } from '../../engine/force'
 import { forceHealth, forceProblems, used } from '../../engine/forceProblems'
@@ -51,6 +51,8 @@ import type { RunApi } from './useRun'
 type Looking = { readonly kind: 'unit'; readonly typeId: string } | { readonly kind: 'dragon'; readonly dieId: string } | { readonly kind: 'terrain'; readonly dieId: string }
 
 const ARMY_NAME: Readonly<Record<PresetArmyName, string>> = { home: 'Home', campaign: 'Campaign', horde: 'Horde' }
+/** Where each army starts a battle. */
+const ARMY_WHERE: Readonly<Record<PresetArmyName, string>> = { home: 'your Home', campaign: 'the Frontier', horde: 'their Home' }
 
 const allDice = (force: BuiltForce): readonly string[] => PRESET_ARMY_NAMES.flatMap((a) => force.armies[a])
 
@@ -338,9 +340,79 @@ function OfferCard({ offer, run, picked, onPick, onLook }: { offer: Offer; run: 
   )
 }
 
+/**
+ * What the player holds, read-only (playtest, 2026-10-08): the force as fielded, army by
+ * army, then what the pool holds beside it. Shown on the reward behind a button, so an
+ * offer can be judged against the dice it would join.
+ */
+function ForceAndPool({ run, onLook }: { run: RunState; onLook: (looking: Looking) => void }) {
+  const force = run.force
+  const spare = Object.entries(run.collection.units)
+    .flatMap(([id, n]) => Array<string>(Math.max(0, n - used(force, 'units', id))).fill(id))
+    .sort((a, b) => compareForDisplay(unitType(a), unitType(b)))
+  const owned = (counts: Readonly<Record<string, number>>) =>
+    Object.entries(counts).flatMap(([id, n]) => Array<string>(Math.max(0, n)).fill(id)).sort()
+  const dragons = owned(run.collection.dragons)
+  const terrains = owned(run.collection.terrains)
+  const fielded = new Set(force.dragons ?? [])
+  const health = (ids: readonly string[]) => ids.reduce((n, id) => n + unitType(id).health, 0)
+  const units = (ids: readonly string[], key: string) =>
+    [...ids]
+      .sort((a, b) => compareForDisplay(unitType(a), unitType(b)))
+      .map((id, i) => <UnitButton key={`${key}${i}`} typeId={id} label="look" onClick={() => onLook({ kind: 'unit', typeId: id })} />)
+  return (
+    <section className="run-panel run-holdings" aria-label="Your force and pool">
+      <p className="run-label">
+        Your force · {forceHealth(force)} of {ACT_SIZE[run.act]} health
+      </p>
+      <div className="run-armies">
+        {PRESET_ARMY_NAMES.map((army) => (
+          <div key={army} className="run-army">
+            <div className="run-army-head">
+              <span>
+                <b>{ARMY_NAME[army]}</b> <span className="muted">at {ARMY_WHERE[army]}</span>
+              </span>
+              <span className="muted">{health(force.armies[army])} health</span>
+            </div>
+            <div className="dice-grid run-dice">{units(force.armies[army], army)}</div>
+          </div>
+        ))}
+      </div>
+      <p className="run-label">In your pool, not fielded</p>
+      <div className="dice-grid run-dice">
+        {spare.length === 0 ? <p className="empty">Every die you own is fielded.</p> : units(spare, 's')}
+      </div>
+      <p className="run-label">Dragons</p>
+      <div className="dice-grid run-dice">
+        {dragons.map((id, i) => (
+          <button
+            key={i}
+            type="button"
+            className={`dragon-tile dragon-el-${dragonDie(id).element}`}
+            onClick={() => onLook({ kind: 'dragon', dieId: id })}
+            title={`${dragonNameOf(id)} — ${fielded.has(id) ? 'fielded' : 'in your pool'}`}
+          >
+            <DragonTileBody dieId={id} />
+          </button>
+        ))}
+      </div>
+      <p className="run-label">Terrains</p>
+      <p className="run-terrains">
+        {terrains.map((id, i) => (
+          <button key={i} type="button" className="link-button" onClick={() => onLook({ kind: 'terrain', dieId: id })}>
+            {terrainDieName(id)}
+            {id === force.homeTerrain ? ' (Home)' : id === force.frontierProposal ? ' (Frontier proposal)' : ''}
+          </button>
+        ))}
+      </p>
+    </section>
+  )
+}
+
 function RewardScreen({ api, run }: { api: RunApi; run: RunState }) {
   const [picked, setPicked] = useState<number | null>(null)
   const [looking, setLooking] = useState<Looking | null>(null)
+  const [holdings, setHoldings] = useState(false)
   if (run.pending.kind !== 'reward') return null
   const offers = run.pending.offers
   const choice = picked === null ? undefined : offers[picked]
@@ -364,7 +436,16 @@ function RewardScreen({ api, run }: { api: RunApi; run: RunState }) {
       <div>
         <h1 className="run-title">{run.current?.name ?? 'The battle'} is beaten. Pick a reward.</h1>
         <p className="muted run-lede">It goes to your pool; you field it before the next battle. Tap a die to look at it.</p>
+        <button
+          type="button"
+          className="choice secondary run-holdings-toggle"
+          aria-expanded={holdings}
+          onClick={() => setHoldings((open) => !open)}
+        >
+          {holdings ? 'Hide your force and pool' : 'Show your force and pool'}
+        </button>
       </div>
+      {holdings && <ForceAndPool run={run} onLook={setLooking} />}
       <div className="offers">
         {offers.map((offer, i) => (
           <OfferCard
@@ -430,13 +511,15 @@ function EventScreen({ api, run }: { api: RunApi; run: RunState }) {
           <button type="button" className="choice secondary" onClick={() => api.dispatch({ kind: 'skip' })}>
             Walk on
           </button>
+          {/* Upgrade and Transform weigh the same (playtest, 2026-10-08): neither is the
+              answer the screen recommends, so both are primary. */}
           <button
             type="button"
-            className="choice secondary"
+            className="choice"
             disabled={picked === null || !pending.transformable.includes(picked)}
             onClick={() => picked !== null && api.dispatch({ kind: 'transform', unit: picked })}
           >
-            Transform
+            {picked === null || !pending.transformable.includes(picked) ? 'Transform' : `Transform ${name(picked)}`}
           </button>
           <button
             type="button"

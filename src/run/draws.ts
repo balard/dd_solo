@@ -4,13 +4,15 @@
  * **The order is the stream**, as it is in `setupGame`, and `run.test.ts` pins it:
  *
  *     pick_race  -> large die -> second medium's line -> dragon element -> dragon form
- *                -> Home terrain -> Frontier proposal -> split
+ *                -> Home terrain -> Frontier proposal
  *     encounter  -> battle or event (7 in 10) -> which one, from the act's pool
+ *                   (the run's first encounter is a battle, and skips the first draw)
  *     reward     -> unit 1 (race or any, then which die) -> unit 2 -> unit 3
  *                -> dragon element -> dragon form -> terrain
  *     transform  -> which die of the same species and health
  *
- * A forced choice draws nothing -- the same-line medium, the five small dice -- the
+ * A forced choice draws nothing -- the same-line medium, the five small dice, the opening
+ * split, the run's first encounter being a battle -- the
  * setup rule for a pinned terrain. Every list a draw picks from is sorted by id, so
  * reordering a data file cannot reseat a run. Terrains are drawn by setup's own lists
  * (`homeDiceFor`, `terrainDiceSharing`), so "a Home of the race's own type" means here
@@ -19,7 +21,7 @@
 import { DRAGON_DICE, speciesElements, unitType } from '../data/load'
 import type { Element, UnitSize, UnitType } from '../data/types'
 import { PRESET_ARMY_NAMES } from '../data/presets'
-import { splitForce, type BuiltForce } from '../engine/force'
+import type { BuiltForce } from '../engine/force'
 import { PLAYABLE_UNITS } from '../engine/playable'
 import { nextInt, type RngState } from '../engine/rng'
 import { homeDiceFor, terrainDiceSharing } from '../engine/setup'
@@ -62,8 +64,11 @@ function drawDragon(elements: readonly Element[], rng: RngState): readonly [stri
 /**
  * The opening of a run, for a race (which must be playable): eight dice, one dragon and
  * two terrains, exactly 12 health, and the force they make -- every die fielded, the
- * Home and the proposal named, the dragon named, split by `splitForce` so the opening
- * is legal by the rule setup uses.
+ * Home and the proposal named, the dragon named.
+ *
+ * The split is fixed, not drawn: the large die and its same-line medium at Home (5
+ * health), the other medium at the Frontier (2), and the five small dice in the Horde,
+ * at the enemy's Home (5). No army is over half of 12, so it is legal by setup's rule.
  *
  * - one random large die, and the medium die of its class line (Oak Lord -> Oak);
  * - one medium die of a different class line, random;
@@ -95,10 +100,14 @@ export function rollStart(
   const [frontier, afterFrontier] = pick(terrainDiceSharing(elements), afterHome, `a Frontier for ${race}`)
 
   const units = [large, sameLine, other, ...smalls].map((u) => u.id)
-  const [armies, afterSplit] = splitForce(units, afterFrontier)
+  const armies = {
+    home: [large.id, sameLine.id],
+    campaign: [other.id],
+    horde: smalls.map((u) => u.id),
+  }
   return [
     { units, force: { armies, homeTerrain: home, frontierProposal: frontier, dragons: [dragon] } },
-    afterSplit,
+    afterFrontier,
   ] as const
 }
 
@@ -106,6 +115,9 @@ export function rollStart(
  * The next encounter of an act: a battle seven times in ten, then one encounter of that
  * kind from what is left of the act's pool. A half that has run out gives way to the
  * other, so the odds hold however the pool is filled and a short half never sticks.
+ *
+ * **The run's first encounter is always a battle** (a playtest decision, 2026-10-08),
+ * and draws no kind for it: a forced choice draws nothing.
  */
 export function drawEncounter(
   content: RunContent,
@@ -114,8 +126,9 @@ export function drawEncounter(
   rng: RngState,
 ): readonly [Encounter, RngState] {
   const left = byId(content.acts[act].filter((e) => !drawn.includes(e.id)))
-  const [roll, afterKind] = nextInt(rng, 10)
-  const wanted = roll < BATTLE_IN_10 ? 'battle' : 'event'
+  const first = act === 1 && drawn.length === 0
+  const [roll, afterKind] = first ? ([0, rng] as const) : nextInt(rng, 10)
+  const wanted = first || roll < BATTLE_IN_10 ? 'battle' : 'event'
   const ofKind = left.filter((e) => e.kind === wanted)
   return pick(ofKind.length > 0 ? ofKind : left, afterKind, `an act ${act} encounter`)
 }

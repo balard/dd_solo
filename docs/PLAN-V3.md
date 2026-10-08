@@ -37,13 +37,15 @@ Read `PLAN-V2.md` Phase 4 (the collection and the builder) before anything here:
   a Home today), and one for the Frontier proposal, a random die sharing an element with the race.
 
 That is 3 + 2 + 2 + 5 = **exactly 12 health**, eight dice, which split into three armies of at most
-6 each. No monster.
+6 each. No monster. **The split is fixed** (Phase 5): the large die and its same-line medium at Home
+(5), the other medium at the Frontier (2), and the five small dice in the Horde (5).
 
 **Acts.** Three acts, each with a cap and an enemy size: **Act I 12, Act II 24, Act III 36**. Each act
 draws **12 encounters** from its own pool, which holds more than 12. Clearing the twelfth encounter
 of Act III wins the run.
 
-**Encounters.** About **70% are battles** and **30% are events**.
+**Encounters.** About **70% are battles** and **30% are events**, and **the run's first encounter is
+always a battle** (Phase 5).
 - **A battle** is one game against an enemy force at the act's size, played by the AI.
 - **An event** offers the player a choice between two actions on one die they pick, or to skip:
   - **Upgrade**: swap the die for the next one up its class line (small → medium → large). A large
@@ -863,6 +865,25 @@ Not code first: the numbers this plan guessed, played.
 - **Whether a 36-health enemy is beatable** from what three acts of rewards can build.
 
 Each finding goes under *What 5 found*, and a change to a number names the run that prompted it.
+
+### What 5 found
+
+The first playtest notes (2026-10-08), each now in the run:
+- **The run's first encounter is always a battle.** `drawEncounter` forces it, so the draw spends
+  nothing on the kind: the stream is the battle pick alone. That moved every run seed's first
+  encounter, which costs nothing, since a run is a snapshot and a seed promises the same run only
+  under the same rules. No run opens on an event now, so the tests that needed one reach the
+  first event through won battles (`firstEvent` in `run.test.ts`).
+- **The opening split is fixed, not drawn:** the large die and its same-line medium at Home, the
+  other medium at the Frontier, and the five small dice in the Horde. `splitForce`'s draw left
+  the stream with it. 5 / 2 / 5 is legal for every race, since no army is over half of 12.
+- **On an event, Upgrade and Transform weigh the same.** Both are primary (green). Upgrade
+  was the only green button, which read as the answer the screen recommends. Transform names its die, as Upgrade
+  names its result.
+- **The reward shows what it would join.** "Show your force and pool" opens a read-only panel
+  above the offers: the three armies with where each stands, the spare dice, the dragons and the
+  terrains, each die opening the inspector. It reuses the 4b stand-in's army styles, which
+  nothing had used since 4c.
 
 ---
 

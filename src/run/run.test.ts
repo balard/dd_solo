@@ -85,6 +85,29 @@ function seedOpeningOn(kind: RunPending['kind'], race = 'treefolk', c: RunConten
   throw new Error(`no seed opens on ${kind}`)
 }
 
+/**
+ * A run standing on its first event. No run opens on one -- the first encounter is a
+ * battle -- so the battles before it are won and each reward is the first offer.
+ */
+function firstEvent(race = 'treefolk'): RunState {
+  for (let seed = 1; seed < 500; seed++) {
+    let run = started(seed, race)
+    while (run.pending.kind === 'arrange_force' || run.pending.kind === 'battle' || run.pending.kind === 'reward') {
+      const kind: RunPending['kind'] = run.pending.kind
+      run = step(
+        run,
+        kind === 'arrange_force'
+          ? { kind: 'ready' }
+          : kind === 'battle'
+            ? { kind: 'battle_ended', winner: 'p1' }
+            : { kind: 'take_offer', index: 0 },
+      )
+    }
+    if (run.pending.kind === 'event') return run
+  }
+  throw new Error('no run reaches an event')
+}
+
 describe('newRun', () => {
   it('asks for a race, from the playable species, and holds nothing yet', () => {
     const run = newRun(7)
@@ -102,7 +125,7 @@ describe('newRun', () => {
 
 describe('the opening draw', () => {
   /** The stream, step by step: large die -> second medium's line -> dragon element ->
-   *  dragon form -> Home -> Frontier -> split. A reorder of any two moves this test. */
+   *  dragon form -> Home -> Frontier. A reorder of any two moves this test. */
   it('draws in the pinned order', () => {
     const seed = 41
     const race = 'treefolk'
@@ -124,8 +147,11 @@ describe('the opening draw', () => {
     const home = at(homeDiceFor(race), i)
     ;[i, rng] = nextInt(rng, terrainDiceSharing(speciesElements(race)).length)
     const frontier = at(terrainDiceSharing(speciesElements(race)), i)
-    const units = [large, sameLine, other, ...sortedIds(dice.filter((u) => u.size === 'small'))]
-    const [armies, afterSplit] = splitForce(units as string[], rng)
+    const smalls = sortedIds(dice.filter((u) => u.size === 'small'))
+    const units = [large, sameLine, other, ...smalls]
+    // The split is fixed, and draws nothing.
+    const armies = { home: [large, sameLine], campaign: [other], horde: smalls }
+    const afterSplit = rng
 
     const [start, after] = rollStart(race, rngFrom(seed))
     expect(start.units).toEqual(units)
@@ -168,6 +194,19 @@ describe('the opening draw', () => {
     }
   })
 
+  it('splits the opening by size: the large die and its line at Home, the other medium at the Frontier, the smalls in the Horde', () => {
+    for (const species of PLAYABLE_SPECIES) {
+      for (let seed = 1; seed <= 10; seed++) {
+        const { armies } = started(seed, species.id).force
+        const sizes = (ids: readonly string[]) => ids.map((id) => unitType(id).size)
+        expect(sizes(armies.home)).toEqual(['large', 'medium'])
+        expect(unitType(at(armies.home, 0)).unitClass).toBe(unitType(at(armies.home, 1)).unitClass)
+        expect(sizes(armies.campaign)).toEqual(['medium'])
+        expect(sizes(armies.horde)).toEqual(['small', 'small', 'small', 'small', 'small'])
+      }
+    }
+  })
+
   it('makes a force setup plays, against itself', () => {
     for (const species of PLAYABLE_SPECIES) {
       const { force } = started(3, species.id)
@@ -179,6 +218,22 @@ describe('the opening draw', () => {
 })
 
 describe('the encounter draw', () => {
+  it('opens every run on a battle, drawing no kind for it', () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const rng = rngFrom(seed)
+      const [encounter, after] = drawEncounter(CONTENT, 1, [], rng)
+      expect(encounter.kind).toBe('battle')
+      // One draw, the battle itself: the kind is forced.
+      const battles = [...CONTENT.acts[1]].filter((e) => e.kind === 'battle').sort((a, b) => a.id.localeCompare(b.id))
+      const [i, afterPick] = nextInt(rng, battles.length)
+      expect(encounter).toEqual(battles[i])
+      expect(after).toEqual(afterPick)
+    }
+    // So no run opens on an event. (Act II's first draw still draws the kind: the
+    // seven-in-ten test below counts exactly those.)
+    expect(() => seedOpeningOn('event')).toThrow(/no seed opens on event/)
+  })
+
   it('draws twelve different encounters an act, battles about seven in ten', () => {
     let battles = 0
     let total = 0
@@ -311,7 +366,7 @@ describe('upgrades and transforms', () => {
 
   /** A run standing on an event, with this pool and force, its lists read afresh. */
   function eventRun(collection: Collection, force: BuiltForce): RunState {
-    const run = started(seedOpeningOn('event'))
+    const run = firstEvent()
     if (run.pending.kind !== 'event') throw new Error('not an event')
     const units = Object.keys(collection.units).sort()
     return {
@@ -326,7 +381,7 @@ describe('upgrades and transforms', () => {
     }
   }
 
-  const base = started(seedOpeningOn('event'))
+  const base = firstEvent()
 
   it('changes an unfielded copy first, leaving the force alone', () => {
     const collection = { ...base.collection, units: { ...base.collection.units, 'treefolk.oakling': 2 } }
@@ -453,7 +508,7 @@ describe('the history', () => {
 })
 
 describe('upgradePreview', () => {
-  const base = started(seedOpeningOn('event'))
+  const base = firstEvent()
   it('says a spare copy changes in the pool, a fielded one in place or benched', () => {
     const spare = { ...base, collection: { ...base.collection, units: { ...base.collection.units, 'treefolk.oakling': 2 } } }
     expect(upgradePreview(spare, 'treefolk.oakling')).toMatchObject({ to: 'treefolk.oak', effect: 'pool', army: null })
