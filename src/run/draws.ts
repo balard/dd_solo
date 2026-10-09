@@ -6,13 +6,13 @@
  *     pick_race  -> large die -> second medium's line -> dragon element -> dragon form
  *                -> Home terrain -> Frontier proposal
  *     encounter  -> battle or event (7 in 10) -> which one, from the act's pool
- *                   (the run's first encounter is a battle, and skips the first draw)
+ *                   (an act's first encounter is a battle, and skips the first draw)
  *     reward     -> unit 1 (race or any, then which die) -> unit 2 -> unit 3
  *                -> dragon element -> dragon form -> terrain
  *     transform  -> which die of the same species and health
  *
  * A forced choice draws nothing -- the same-line medium, the five small dice, the opening
- * split, the run's first encounter being a battle -- the
+ * split, an act's first encounter being a battle -- the
  * setup rule for a pinned terrain. Every list a draw picks from is sorted by id, so
  * reordering a data file cannot reseat a run. Terrains are drawn by setup's own lists
  * (`homeDiceFor`, `terrainDiceSharing`), so "a Home of the race's own type" means here
@@ -116,7 +116,7 @@ export function rollStart(
  * kind from what is left of the act's pool. A half that has run out gives way to the
  * other, so the odds hold however the pool is filled and a short half never sticks.
  *
- * **The run's first encounter is always a battle** (a playtest decision, 2026-10-08),
+ * **Every act's first encounter is a battle** (playtest decisions, 2026-10-08),
  * and draws no kind for it: a forced choice draws nothing.
  */
 export function drawEncounter(
@@ -126,7 +126,7 @@ export function drawEncounter(
   rng: RngState,
 ): readonly [Encounter, RngState] {
   const left = byId(content.acts[act].filter((e) => !drawn.includes(e.id)))
-  const first = act === 1 && drawn.length === 0
+  const first = drawn.length === 0
   const [roll, afterKind] = first ? ([0, rng] as const) : nextInt(rng, 10)
   const wanted = first || roll < BATTLE_IN_10 ? 'battle' : 'event'
   const ofKind = left.filter((e) => e.kind === wanted)

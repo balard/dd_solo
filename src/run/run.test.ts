@@ -218,20 +218,39 @@ describe('the opening draw', () => {
 })
 
 describe('the encounter draw', () => {
-  it('opens every run on a battle, drawing no kind for it', () => {
+  it.each([1, 2, 3] as const)('opens act %s on a battle, drawing no kind for it', (act) => {
+    const battles = [...CONTENT.acts[act]].filter((e) => e.kind === 'battle').sort((a, b) => a.id.localeCompare(b.id))
     for (let seed = 1; seed <= 200; seed++) {
       const rng = rngFrom(seed)
-      const [encounter, after] = drawEncounter(CONTENT, 1, [], rng)
-      expect(encounter.kind).toBe('battle')
+      const [encounter, after] = drawEncounter(CONTENT, act, [], rng)
       // One draw, the battle itself: the kind is forced.
-      const battles = [...CONTENT.acts[1]].filter((e) => e.kind === 'battle').sort((a, b) => a.id.localeCompare(b.id))
       const [i, afterPick] = nextInt(rng, battles.length)
       expect(encounter).toEqual(battles[i])
       expect(after).toEqual(afterPick)
     }
-    // So no run opens on an event. (Act II's first draw still draws the kind: the
-    // seven-in-ten test below counts exactly those.)
+  })
+
+  it('opens every act of a run on a battle', () => {
+    // So no run opens on an event.
     expect(() => seedOpeningOn('event')).toThrow(/no seed opens on event/)
+    for (let seed = 1; seed <= 20; seed++) {
+      let run = started(seed)
+      while (run.pending.kind !== 'over') {
+        if (run.encounter === 0) expect(run.current?.kind).toBe('battle')
+        const kind: RunPending['kind'] = run.pending.kind
+        run = step(
+          run,
+          kind === 'arrange_force'
+            ? { kind: 'ready' }
+            : kind === 'battle'
+              ? { kind: 'battle_ended', winner: 'p1' }
+              : kind === 'reward'
+                ? { kind: 'take_offer', index: 0 }
+                : { kind: 'skip' },
+        )
+      }
+      expect(run.history.filter((h) => h.encounter === 0).map((h) => h.outcome.kind)).toEqual(['won', 'won', 'won'])
+    }
   })
 
   it('draws twelve different encounters an act, battles about seven in ten', () => {
@@ -245,7 +264,8 @@ describe('the encounter draw', () => {
         rng = next
         expect(encounter.act).toBe(2)
         drawn.push(encounter.id)
-        if (n === 0) {
+        // The second draw: the first is forced to a battle.
+        if (n === 1) {
           total++
           if (encounter.kind === 'battle') battles++
         }
