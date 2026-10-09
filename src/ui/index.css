@@ -1942,3 +1942,9 @@ body {
 .event-result { display: grid; gap: 8px; }
 .event-result p { margin: 0; }
 .event-result .choices { margin: 4px 0 0; }
+
+/* The enemy's force before a battle: their armies, then their terrains and dragons. */
+.run-enemy .run-armies { margin-top: 6px; }
+.run-enemy-extras { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; margin-top: 8px; font-size: var(--fs-sm); }
+.run-enemy-extras .run-terrains { align-items: baseline; }
+.run-enemy-dragons { display: flex; gap: 8px; align-items: center; }

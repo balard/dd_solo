@@ -364,6 +364,28 @@ function drawDragonDice(
 }
 
 /**
+ * A force with what it does not name filled in by setup's own draws, in this order: its
+ * Home, its Frontier proposal, then its dragons. What it names draws nothing.
+ *
+ * For v3's run (Phase 5), which fixes its enemy when the encounter is drawn so the screen
+ * before the battle can show the enemy's Home and dragons. Left to `setupGame`, they were
+ * drawn after the roll-off, so they were unknown until the battle began, and moved
+ * whenever the player rearranged their own Horde. A seam, not a rule: the draws are the
+ * ones `setupGame` makes, on a stream the caller supplies, and `setupGame` itself does
+ * not call this.
+ */
+export function completeForce(force: BuiltForce, rng: RngState): readonly [BuiltForce, RngState] {
+  let state = rng
+  let homeTerrain = force.homeTerrain
+  if (homeTerrain === undefined) [homeTerrain, state] = drawHomeDie(force, state)
+  let frontierProposal = force.frontierProposal
+  if (frontierProposal === undefined) [frontierProposal, state] = drawFrontierDie(force, state)
+  let dragons = force.dragons
+  if (dragons === undefined) [dragons, state] = drawDragonDice(force, dragonCount(builtForceHealth(force)), state)
+  return [{ ...force, homeTerrain, frontierProposal, dragons }, state] as const
+}
+
+/**
  * Rolls a terrain's opening face: re-roll 8s, turn 7s down to 6, so every terrain
  * starts somewhere in 1-6 (RULES-V0.md section 7 step 5).
  */

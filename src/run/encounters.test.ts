@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { OPPONENT_NAMES } from '../ai/opponents'
 import { unitType } from '../data/load'
 import { PRESET_ARMY_NAMES } from '../data/presets'
-import { builtForceHealth, type BuiltForce } from '../engine/force'
+import { builtForceHealth, dragonCount, type BuiltForce } from '../engine/force'
 import { PLAYABLE_SPECIES } from '../engine/playable'
 import { setupGame } from '../engine/setup'
 import { V1_RULES, forceSize } from '../engine/types'
@@ -86,6 +86,33 @@ describe('battleSetup', () => {
         expect(speciesOf(force)).toEqual([battle.enemy.pool.species])
       }
     }
+  })
+
+  it('fixes the enemy whole before the battle, and setup plays exactly that', () => {
+    for (const battle of battles) {
+      const run = standingOn(battle, 'treefolk')
+      const enemy = enemyForce(run)
+      expect(enemy.homeTerrain, battle.id).toBeDefined()
+      expect(enemy.frontierProposal, battle.id).toBeDefined()
+      expect(enemy.dragons, battle.id).toHaveLength(dragonCount(builtForceHealth(enemy)))
+
+      const state = setupGame(battleSetup(run))
+      expect(state.terrains.p2_home.dieId, battle.id).toBe(enemy.homeTerrain)
+      // A run's battle names no first player and pins no Frontier, so both propose.
+      const rollOff = state.log.find((e) => e.kind === 'roll_off')
+      expect(rollOff?.kind === 'roll_off' ? rollOff.proposals?.p2 : null, battle.id).toBe(enemy.frontierProposal)
+      const theirDragons = Object.values(state.dragons).filter((d) => d.owner === 'p2').map((d) => d.dieId)
+      expect([...theirDragons].sort(), battle.id).toEqual([...(enemy.dragons ?? [])].sort())
+    }
+  })
+
+  it("does not move the enemy when the player rearranges their own force", () => {
+    const battle = battles[0] as BattleEncounter
+    const run = standingOn(battle, 'treefolk')
+    const { home, campaign, horde } = run.force.armies
+    const swapped = { ...run, force: { ...run.force, armies: { home: horde, campaign, horde: home } } }
+    expect(enemyForce(swapped)).toEqual(enemyForce(run))
+    expect(setupGame(battleSetup(swapped)).terrains.p2_home.dieId).toBe(enemyForce(run).homeTerrain)
   })
 
   it("is the same game on a restart, however far the run's own stream has gone", () => {

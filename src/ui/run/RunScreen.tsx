@@ -53,8 +53,62 @@ import type { RunApi } from './useRun'
 type Looking = { readonly kind: 'unit'; readonly typeId: string } | { readonly kind: 'dragon'; readonly dieId: string } | { readonly kind: 'terrain'; readonly dieId: string }
 
 const ARMY_NAME: Readonly<Record<PresetArmyName, string>> = { home: 'Home', campaign: 'Campaign', horde: 'Horde' }
-/** Where each army starts a battle. */
-const ARMY_WHERE: Readonly<Record<PresetArmyName, string>> = { home: 'your Home', campaign: 'the Frontier', horde: 'their Home' }
+/** Where each army starts a battle, said from the player's side: the enemy's Home army
+ *  stands on their Home, and their Horde on yours. */
+const ARMY_WHERE: Readonly<Record<'yours' | 'theirs', Readonly<Record<PresetArmyName, string>>>> = {
+  yours: { home: 'your Home', campaign: 'the Frontier', horde: 'their Home' },
+  theirs: { home: 'their Home', campaign: 'the Frontier', horde: 'your Home' },
+}
+
+/** One side's three armies, each with its health, where it starts, and its dice. */
+function ArmiesView({ force, side, onLook }: { force: BuiltForce; side: 'yours' | 'theirs'; onLook: (looking: Looking) => void }) {
+  const health = (ids: readonly string[]) => ids.reduce((n, id) => n + unitType(id).health, 0)
+  return (
+    <div className="run-armies">
+      {PRESET_ARMY_NAMES.map((army) => (
+        <div key={army} className="run-army">
+          <div className="run-army-head">
+            <span>
+              <b>{ARMY_NAME[army]}</b> <span className="muted">at {ARMY_WHERE[side][army]}</span>
+            </span>
+            <span className="muted">{health(force.armies[army])} health</span>
+          </div>
+          <div className="dice-grid run-dice">
+            {[...force.armies[army]]
+              .sort((a, b) => compareForDisplay(unitType(a), unitType(b)))
+              .map((id, i) => (
+                <UnitButton key={i} typeId={id} label="look" onClick={() => onLook({ kind: 'unit', typeId: id })} />
+              ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** A dragon die as a button that opens its faces. */
+function DragonLook({ dieId, note, onLook }: { dieId: string; note: string; onLook: (looking: Looking) => void }) {
+  return (
+    <button
+      type="button"
+      className={`dragon-tile dragon-el-${dragonDie(dieId).element}`}
+      onClick={() => onLook({ kind: 'dragon', dieId })}
+      title={`${dragonNameOf(dieId)} — ${note}`}
+    >
+      <DragonTileBody dieId={dieId} />
+    </button>
+  )
+}
+
+/** A terrain die by name, as a link that opens its eight faces. */
+function TerrainLook({ dieId, note, onLook }: { dieId: string; note: string; onLook: (looking: Looking) => void }) {
+  return (
+    <button type="button" className="link-button" onClick={() => onLook({ kind: 'terrain', dieId })}>
+      {terrainDieName(dieId)}
+      {note === '' ? '' : ` (${note})`}
+    </button>
+  )
+}
 
 const allDice = (force: BuiltForce): readonly string[] => PRESET_ARMY_NAMES.flatMap((a) => force.armies[a])
 
@@ -272,12 +326,27 @@ function ArrangeScreen({ api, run, onFight }: { api: RunApi; run: RunState; onFi
           They field {speciesList(enemy)}, {forceHealth(enemy)} health in {allDice(enemy).length} dice, played by{' '}
           {run.current.opponent}. You field {total} of {cap}.
         </p>
+        {/* Their force whole (playtest, 2026-10-09): the armies as they will stand, their
+            Home, the Frontier they will propose, and their dragons -- all fixed when the
+            encounter is drawn (`enemyForce`), so what is shown is what is played. */}
         <details className="run-enemy" open={!short}>
-          <summary>Their dice</summary>
-          <div className="dice-grid run-dice">
-            {[...allDice(enemy)].sort((a, b) => compareForDisplay(unitType(a), unitType(b))).map((id, i) => (
-              <UnitButton key={i} typeId={id} label="look" onClick={() => setLooking({ kind: 'unit', typeId: id })} />
-            ))}
+          <summary>Their force</summary>
+          <ArmiesView force={enemy} side="theirs" onLook={setLooking} />
+          <div className="run-enemy-extras">
+            <p className="run-terrains">
+              <span className="muted">Home</span>
+              {enemy.homeTerrain !== undefined && <TerrainLook dieId={enemy.homeTerrain} note="" onLook={setLooking} />}
+              <span className="muted">Frontier proposal</span>
+              {enemy.frontierProposal !== undefined && (
+                <TerrainLook dieId={enemy.frontierProposal} note="" onLook={setLooking} />
+              )}
+            </p>
+            <div className="run-enemy-dragons">
+              <span className="muted">Dragons</span>
+              {(enemy.dragons ?? []).map((id, i) => (
+                <DragonLook key={i} dieId={id} note="theirs" onLook={setLooking} />
+              ))}
+            </div>
           </div>
         </details>
       </section>
@@ -357,7 +426,6 @@ function ForceAndPool({ run, onLook }: { run: RunState; onLook: (looking: Lookin
   const dragons = owned(run.collection.dragons)
   const terrains = owned(run.collection.terrains)
   const fielded = new Set(force.dragons ?? [])
-  const health = (ids: readonly string[]) => ids.reduce((n, id) => n + unitType(id).health, 0)
   const units = (ids: readonly string[], key: string) =>
     [...ids]
       .sort((a, b) => compareForDisplay(unitType(a), unitType(b)))
@@ -367,19 +435,7 @@ function ForceAndPool({ run, onLook }: { run: RunState; onLook: (looking: Lookin
       <p className="run-label">
         Your force · {forceHealth(force)} of {ACT_SIZE[run.act]} health
       </p>
-      <div className="run-armies">
-        {PRESET_ARMY_NAMES.map((army) => (
-          <div key={army} className="run-army">
-            <div className="run-army-head">
-              <span>
-                <b>{ARMY_NAME[army]}</b> <span className="muted">at {ARMY_WHERE[army]}</span>
-              </span>
-              <span className="muted">{health(force.armies[army])} health</span>
-            </div>
-            <div className="dice-grid run-dice">{units(force.armies[army], army)}</div>
-          </div>
-        ))}
-      </div>
+      <ArmiesView force={force} side="yours" onLook={onLook} />
       <p className="run-label">In your pool, not fielded</p>
       <div className="dice-grid run-dice">
         {spare.length === 0 ? <p className="empty">Every die you own is fielded.</p> : units(spare, 's')}
@@ -387,24 +443,18 @@ function ForceAndPool({ run, onLook }: { run: RunState; onLook: (looking: Lookin
       <p className="run-label">Dragons</p>
       <div className="dice-grid run-dice">
         {dragons.map((id, i) => (
-          <button
-            key={i}
-            type="button"
-            className={`dragon-tile dragon-el-${dragonDie(id).element}`}
-            onClick={() => onLook({ kind: 'dragon', dieId: id })}
-            title={`${dragonNameOf(id)} — ${fielded.has(id) ? 'fielded' : 'in your pool'}`}
-          >
-            <DragonTileBody dieId={id} />
-          </button>
+          <DragonLook key={i} dieId={id} note={fielded.has(id) ? 'fielded' : 'in your pool'} onLook={onLook} />
         ))}
       </div>
       <p className="run-label">Terrains</p>
       <p className="run-terrains">
         {terrains.map((id, i) => (
-          <button key={i} type="button" className="link-button" onClick={() => onLook({ kind: 'terrain', dieId: id })}>
-            {terrainDieName(id)}
-            {id === force.homeTerrain ? ' (Home)' : id === force.frontierProposal ? ' (Frontier proposal)' : ''}
-          </button>
+          <TerrainLook
+            key={i}
+            dieId={id}
+            note={id === force.homeTerrain ? 'Home' : id === force.frontierProposal ? 'Frontier proposal' : ''}
+            onLook={onLook}
+          />
         ))}
       </p>
     </section>

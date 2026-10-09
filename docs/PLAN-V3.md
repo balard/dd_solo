@@ -899,6 +899,16 @@ The second round (2026-10-09):
   reducer's own rule, what happened to the force. So the dialog cannot describe a different
   outcome from the one the reducer applied. An upgrade that benches the die and empties its army
   says so, and says to fill the army before fighting.
+- **The screen before a battle shows the enemy whole**: their three armies with where each
+  stands, their Home, the Frontier they will propose, and their dragons, each opening the
+  inspector. They had to be fixed first. Setup drew the enemy's Home, proposal and dragons
+  after the roll-off, so they were unknown until the battle, and since the roll-off rolls the
+  player's Horde they moved whenever the player rearranged their own force (4b's "the same
+  board needs the same force"). `enemyForce` now completes the enemy on its own salted stream,
+  after its dice, with `completeForce`: setup's own three draws, exported from `setup.ts`. A
+  force naming all three draws nothing in setup. That is the engine's one new seam, and it is
+  not a rule: `setupGame` does not call it, so the goldens did not move. Every run battle's
+  enemy terrains and dragons moved once, which a snapshot run does not mind.
 
 ---
 

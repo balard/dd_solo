@@ -10,11 +10,17 @@
  * The enemy is rolled before setup, the way `newGame.ts` rolls a random opponent, and
  * handed to it as a built force: from the battle's seed, but salted onto its own stream,
  * so the roll-off never reads the numbers the enemy was drawn from.
+ *
+ * **The enemy comes whole** (Phase 5): its Home, its Frontier proposal and its dragons are
+ * drawn on that same stream, after its dice (`completeForce`, setup's own draws), so the
+ * screen before the battle can show them. Setup draws none of them, since the force names
+ * all three. They used to be drawn by setup after the roll-off, which rolls the player's
+ * Horde, so the enemy's Home moved whenever the player rearranged their force.
  */
 import { V1_RULES } from '../engine/types'
 import { rollForce, type BuiltForce } from '../engine/force'
 import { nextInt, rngFrom } from '../engine/rng'
-import type { SetupOptions } from '../engine/setup'
+import { completeForce, type SetupOptions } from '../engine/setup'
 
 import { RUN_CONTENT } from './encounters'
 import { ACT_SIZE, ENCOUNTERS_PER_ACT, type Act, type BattleEncounter, type RunContent, type RunState } from './types'
@@ -47,20 +53,22 @@ function battleInHand(run: RunState): BattleEncounter {
 
 /**
  * The enemy the battle in hand is fought against: the built force it names, or one rolled
- * at the act's size from its pool. Ready from the moment the encounter is drawn, so a
- * screen can show it while the player arranges their own force.
+ * at the act's size from its pool, with its Home, Frontier proposal and dragons filled in
+ * where it does not name them. Ready from the moment the encounter is drawn, so a screen
+ * can show it whole while the player arranges their own force.
  */
 export function enemyForce(run: RunState, content: RunContent = RUN_CONTENT): BuiltForce {
   const encounter = battleInHand(run)
   const enemy = encounter.enemy
+  const seed = battleSeed(run.seed, run.act, run.encounter)
+  const stream = rngFrom((seed ^ ENEMY_SALT) >>> 0)
   if ('built' in enemy) {
     const force = content.forces[enemy.built]
     if (force === undefined) throw new Error(`there is no enemy force ${enemy.built}`)
-    return force
+    return completeForce(force, stream)[0]
   }
-  const seed = battleSeed(run.seed, run.act, run.encounter)
-  const [force] = rollForce(ACT_SIZE[run.act], enemy.pool, rngFrom((seed ^ ENEMY_SALT) >>> 0))
-  return force
+  const [force, afterDice] = rollForce(ACT_SIZE[run.act], enemy.pool, stream)
+  return completeForce(force, afterDice)[0]
 }
 
 /**

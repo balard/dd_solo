@@ -668,6 +668,10 @@ low faces are magic and high faces are melee. Leave `TODO` and say so.
   - Phase 5b had homes uniform over all 24, which put Treefolk at home on a Wasteland: neither of
     their elements, so Replanting and Rapid Growth never fired there. The goldens pin all three
     terrains and never drew, which is why the change moved none of them.
+- **`completeForce(force, rng)` is setup's own Home, proposal and dragon draws, on a stream the
+  caller supplies** (v3 Phase 5). A run completes its enemy with it when the encounter is drawn,
+  so the screen before the battle can show what will be played; a force naming all three draws
+  nothing in setup. `setupGame` does not call it, which is why no golden moved.
 - **`SetupOptions.terrains` pins a die to a slot.** That is how a test says "a Tower, here", and it
   is what lets the golden corpus keep replaying the board it was recorded on now that the terrains
   are drawn rather than fixed. Applied last, over whatever would have been drawn.
