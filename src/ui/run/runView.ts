@@ -5,6 +5,7 @@
 import { dragonDie, dragonName, terrainDie, terrainDieName, terrainType, unitType } from '../../data/load'
 import { dragonCount } from '../../engine/force'
 import { forceHealth } from '../../engine/forceProblems'
+import { eventEffect } from '../../run/reduce'
 import { ACTS, ACT_SIZE, ENCOUNTERS_PER_ACT, type Act, type HistoryEntry, type Offer, type RunState } from '../../run/types'
 import type { RunLoad } from '../../run/save'
 
@@ -153,6 +154,71 @@ export function freshDice(run: RunState): { readonly units: ReadonlySet<string>;
     if (outcome.kind === 'lost') break
   }
   return { units, dragons }
+}
+
+/** What an event's dialog says it did (playtest, 2026-10-09). */
+export interface EventResult {
+  readonly kind: 'upgrade' | 'transform'
+  readonly from: string
+  readonly to: string
+  /** "Oak became an Oak Lord." */
+  readonly title: string
+  /** What happened to the force, in a sentence or two. */
+  readonly force: string
+  /** Where the run goes from here: "Next: Ember cult, a battle." */
+  readonly next: string
+}
+
+const article = (name: string): string => (/^[AEIOU]/i.test(name) ? `an ${name}` : `a ${name}`)
+const ARMY_WORD: Readonly<Record<string, string>> = { home: 'Home army', campaign: 'Campaign army', horde: 'Horde' }
+
+/**
+ * What an upgrade or a transform did, read off the run before it and after it: the die it
+ * changed into (a transform's is random, so only `after` knows), what that did to the
+ * force (`eventEffect`, the reducer's own rule, asked of `before`), and what comes next.
+ * Null when `after` did not just finish an upgrade or a transform.
+ */
+export function eventResult(before: RunState, after: RunState): EventResult | null {
+  if (after.history.length !== before.history.length + 1) return null
+  const outcome = after.history[after.history.length - 1]?.outcome
+  if (outcome === undefined || (outcome.kind !== 'upgrade' && outcome.kind !== 'transform')) return null
+  const from = unitType(outcome.from).name
+  const to = unitType(outcome.to).name
+  const effect = eventEffect(before, outcome.from, outcome.to, outcome.kind)
+  const cap = ACT_SIZE[before.act]
+  const where = effect.army === null ? 'force' : (ARMY_WORD[effect.army] ?? effect.army)
+  let force: string
+  switch (effect.effect) {
+    case 'pool':
+      force = `It was a spare ${from}, so your force did not change.`
+      break
+    case 'in_place':
+      force = `It took the ${from}'s place in your ${where}: ${forceHealth(effect.force)} of ${cap} health.`
+      break
+    case 'benched': {
+      const emptied = effect.army !== null && effect.force.armies[effect.army].length === 0
+      force =
+        `It did not fit where the ${from} stood, so it left your ${where} and waits in your pool.` +
+        (emptied ? ` That leaves your ${where} empty: fill it before you fight.` : ` Field it before the next battle.`)
+      break
+    }
+  }
+  const next =
+    after.status === 'won'
+      ? 'That was the last encounter: the run is won.'
+      : after.current === null
+        ? ''
+        : after.act !== before.act
+          ? `Act ${ROMAN[after.act]} begins, with a cap of ${ACT_SIZE[after.act]}. Next: ${after.current.name}, a battle.`
+          : `Next: ${after.current.name}, ${after.current.kind === 'battle' ? 'a battle' : 'an event'}.`
+  return {
+    kind: outcome.kind,
+    from: outcome.from,
+    to: outcome.to,
+    title: `${from} became ${article(to)}.`,
+    force,
+    next,
+  }
 }
 
 /** "II · 5": where an entry stood, for a list. */

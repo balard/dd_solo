@@ -289,8 +289,13 @@ export function ForceEditor({
   const problems = useMemo(() => forceProblems(collection, cap, force, dragonRule), [collection, cap, force, dragonRule])
   const health = forceHealth(force)
   const lines = armyLines(force)
+  // A die with no copies left is fielded already, so it is not drawn in the palette at all
+  // (playtest, 2026-10-09): it used to stay in place as a disabled "×0", which put every
+  // die of the force on screen twice. A species with nothing left loses its heading too.
   const units = unitPalette(collection, force)
-  const dragonsOwned = palette(collection, force, 'dragons')
+    .map((group) => ({ ...group, dice: group.dice.filter((die) => die.left > 0) }))
+    .filter((group) => group.dice.length > 0)
+  const dragonsOwned = palette(collection, force, 'dragons').filter((die) => die.left > 0)
   const wanted = dragonCount(health)
 
   const unitTap = (typeId: string, act: () => void) => (looking ? setInspect({ kind: 'unit', typeId }) : act())
@@ -349,13 +354,13 @@ export function ForceEditor({
             </div>
             <p className="builder-species-name">From the collection</p>
             <div className="dragon-row">
+              {dragonsOwned.length === 0 && <p className="empty">Every dragon you own is chosen.</p>}
               {dragonsOwned.map((die) => (
                 <DragonButton
                   key={die.id}
                   dieId={die.id}
                   left={leftLabel(die.left)}
-                  disabled={!looking && die.left <= 0}
-                  isNew={die.left > 0 && fresh.dragons.has(die.id)}
+                  isNew={fresh.dragons.has(die.id)}
                   action={looking ? 'look' : 'add'}
                   onClick={() => dragonTap(die.id, () => setForce(addDragon(force, die.id)))}
                 />
@@ -440,6 +445,7 @@ export function ForceEditor({
                 {looking ? 'Done looking' : 'Look at dice'}
               </button>
             </div>
+            {units.length === 0 && <p className="empty">Every die you own is in the force.</p>}
             {units.map((group) => {
               const species = speciesInfo(group.species)
               return (
@@ -455,8 +461,7 @@ export function ForceEditor({
                         typeId={die.id}
                         compact
                         left={leftLabel(die.left)}
-                        disabled={!looking && die.left <= 0}
-                        isNew={die.left > 0 && fresh.units.has(die.id)}
+                        isNew={fresh.units.has(die.id)}
                         action={looking ? 'look' : `add to ${ARMY_TEXT[active].name}`}
                         onClick={() => unitTap(die.id, () => setForce(addUnit(force, active, die.id)))}
                       />

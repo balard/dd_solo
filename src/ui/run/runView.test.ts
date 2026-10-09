@@ -10,6 +10,7 @@ import {
   actStrip,
   battleOutcome,
   concedeAsk,
+  eventResult,
   freshDice,
   offerText,
   outcomeText,
@@ -178,5 +179,43 @@ describe('the battle in a run', () => {
     const last = playTo(3, () => false)
     expect(last.status).toBe('won')
     expect(battleOutcome(last)?.note).toMatch(/the run is won/)
+  })
+})
+
+describe('eventResult', () => {
+  /** The first event a run on rails reaches. */
+  const atEvent = (seed: number): RunState => {
+    const run = playTo(seed, (r) => r.pending.kind === 'event')
+    if (run.pending.kind !== 'event') throw new Error('no event reached')
+    return run
+  }
+
+  it('names the change, what it did to the force, and what comes next', () => {
+    const before = atEvent(2)
+    // A spare copy: the pool changes and the force does not.
+    const spare: RunState = { ...before, collection: { ...before.collection, units: { ...before.collection.units, 'treefolk.oakling': 2 } } }
+    const after = reduceRun(spare, { kind: 'upgrade', unit: 'treefolk.oakling' })
+    const result = eventResult(spare, after)
+    expect(result).toMatchObject({ kind: 'upgrade', from: 'treefolk.oakling', to: 'treefolk.oak', title: 'Oakling became an Oak.' })
+    expect(result?.force).toBe('It was a spare Oakling, so your force did not change.')
+    expect(result?.next).toMatch(new RegExp(`^Next: ${after.current?.name}, (a battle|an event)\.$`))
+  })
+
+  it('says where a fielded die went, and when it no longer fits', () => {
+    const before = atEvent(2)
+    const fielded = before.force.armies.horde[0] as string
+    const after = reduceRun(before, { kind: 'transform', unit: fielded })
+    const result = eventResult(before, after)
+    expect(result?.kind).toBe('transform')
+    expect(result?.force).toMatch(/took the .* place in your Horde: 1\d of 12 health\./)
+    // A full force: an upgrade of a fielded die benches it.
+    const benched = eventResult(before, reduceRun(before, { kind: 'upgrade', unit: fielded }))
+    expect(benched?.force).toMatch(/did not fit .* waits in your pool/)
+  })
+
+  it('is null for a skip, or when nothing new was recorded', () => {
+    const before = atEvent(2)
+    expect(eventResult(before, reduceRun(before, { kind: 'skip' }))).toBeNull()
+    expect(eventResult(before, before)).toBeNull()
   })
 })

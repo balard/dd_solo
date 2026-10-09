@@ -1937,3 +1937,8 @@ body {
 .run-holdings { display: grid; gap: 6px; }
 .run-holdings .run-label { margin: 4px 0 0; }
 .run-terrains { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; }
+
+/* What an event did, before the run moves on. */
+.event-result { display: grid; gap: 8px; }
+.event-result p { margin: 0; }
+.event-result .choices { margin: 4px 0 0; }

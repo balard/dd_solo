@@ -886,6 +886,20 @@ The first playtest notes (2026-10-08), each now in the run:
   terrains, each die opening the inspector. It reuses the 4b stand-in's army styles, which
   nothing had used since 4c.
 
+The second round (2026-10-09):
+- **The palette lists only what is left to field.** A die with no copies left is not drawn, and a
+  species with nothing left loses its heading, for units and dragons alike. That overturns 4c's
+  "×0 tiles kept in place, so a tile never moves under the thumb": the cost was every fielded die
+  on screen twice. It is `ForceEditor`'s rule, so the single-game builder over a limited
+  collection does the same; the full collection never runs out.
+- **An upgrade or a transform shows what it did** before the run moves on: a dialog over the next
+  screen with the die as it was and as it is, what that did to the force, and the next encounter.
+  It used to cut straight to the next encounter. `eventResult(before, after)` in `runView.ts`
+  reads the new die off the history, since a transform's is random, and asks `eventEffect`, the
+  reducer's own rule, what happened to the force. So the dialog cannot describe a different
+  outcome from the one the reducer applied. An upgrade that benches the die and empties its army
+  says so, and says to fill the army before fighting.
+
 ---
 
 ## Deliberately out of v3 (for now)

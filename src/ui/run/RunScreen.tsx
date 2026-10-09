@@ -38,6 +38,7 @@ import {
   actStrip,
   dragonNote,
   entryWhere,
+  eventResult,
   freshDice,
   offerText,
   outcomeText,
@@ -45,6 +46,7 @@ import {
   runStats,
   runWhere,
   speciesName,
+  type EventResult,
 } from './runView'
 import type { RunApi } from './useRun'
 
@@ -467,7 +469,44 @@ function RewardScreen({ api, run }: { api: RunApi; run: RunState }) {
 
 // --- the event --------------------------------------------------------------------------
 
-function EventScreen({ api, run }: { api: RunApi; run: RunState }) {
+/**
+ * The event's answer, shown before the run moves on (playtest, 2026-10-09): the die as it
+ * was and as it is, what that did to the force, and what comes next. Without it an upgrade
+ * cut straight to the next encounter, and the change it made was easy to miss.
+ */
+function EventResultDialog({ result, onClose }: { result: EventResult; onClose: () => void }) {
+  const close = useCallback(onClose, [onClose])
+  // In a `div`: `.event-path > span` is the arrow's rule.
+  const die = (id: string) => (
+    <div className="die-wrap">
+      <span className="die die-squared" style={{ width: tileSize(id, false), height: tileSize(id, false) }} title={describe(unitType(id))}>
+        <UnitTileBody typeId={id} />
+      </span>
+    </div>
+  )
+  return (
+    <InspectorPanel onClose={close}>
+      <div className="event-result" aria-live="polite">
+        <p className="run-label">{result.kind === 'upgrade' ? 'Upgraded' : 'Transformed'}</p>
+        <h2 className="run-h2">{result.title}</h2>
+        <div className="event-path">
+          {die(result.from)}
+          <span aria-hidden="true">→</span>
+          {die(result.to)}
+        </div>
+        <p>{result.force}</p>
+        {result.next !== '' && <p className="muted">{result.next}</p>}
+        <div className="choices">
+          <button type="button" className="choice" onClick={close} autoFocus>
+            Continue
+          </button>
+        </div>
+      </div>
+    </InspectorPanel>
+  )
+}
+
+function EventScreen({ api, run, onChange }: { api: RunApi; run: RunState; onChange: () => void }) {
   const [picked, setPicked] = useState<string | null>(null)
   const [looking, setLooking] = useState<Looking | null>(null)
   if (run.pending.kind !== 'event') return null
@@ -517,7 +556,11 @@ function EventScreen({ api, run }: { api: RunApi; run: RunState }) {
             type="button"
             className="choice"
             disabled={picked === null || !pending.transformable.includes(picked)}
-            onClick={() => picked !== null && api.dispatch({ kind: 'transform', unit: picked })}
+            onClick={() => {
+              if (picked === null) return
+              onChange()
+              api.dispatch({ kind: 'transform', unit: picked })
+            }}
           >
             {picked === null || !pending.transformable.includes(picked) ? 'Transform' : `Transform ${name(picked)}`}
           </button>
@@ -525,7 +568,11 @@ function EventScreen({ api, run }: { api: RunApi; run: RunState }) {
             type="button"
             className="choice"
             disabled={picked === null || preview === null}
-            onClick={() => picked !== null && api.dispatch({ kind: 'upgrade', unit: picked })}
+            onClick={() => {
+              if (picked === null) return
+              onChange()
+              api.dispatch({ kind: 'upgrade', unit: picked })
+            }}
           >
             {preview === null ? 'Upgrade' : `Upgrade to ${name(preview.to)}`}
           </button>
@@ -672,6 +719,10 @@ export function RunScreen({
   onNewRun: () => void
 }) {
   const pending = run.pending
+  // The run as it stood before an upgrade or a transform, so the dialog can say what the
+  // event did once the run has moved on to the next encounter (playtest, 2026-10-09).
+  const [beforeEvent, setBeforeEvent] = useState<RunState | null>(null)
+  const result = beforeEvent === null ? null : eventResult(beforeEvent, run)
   let screen: ReactNode
   switch (pending.kind) {
     case 'choose_race':
@@ -701,12 +752,17 @@ export function RunScreen({
       screen = <RewardScreen api={api} run={run} />
       break
     case 'event':
-      screen = <EventScreen api={api} run={run} />
+      screen = <EventScreen api={api} run={run} onChange={() => setBeforeEvent(run)} />
       break
     case 'over':
       screen = <RunEnd api={api} run={run} onNewRun={onNewRun} />
       break
   }
   // Rule text on a face asks the rules being played (`useRuleSet`), and a run plays V1_RULES.
-  return <RuleSetProvider ruleSet={V1_RULES}>{screen}</RuleSetProvider>
+  return (
+    <RuleSetProvider ruleSet={V1_RULES}>
+      {screen}
+      {result !== null && <EventResultDialog result={result} onClose={() => setBeforeEvent(null)} />}
+    </RuleSetProvider>
+  )
 }
