@@ -47,6 +47,7 @@ describe('the run save', () => {
       battle: false,
       reward: true,
       event: true,
+      boon: true,
       over: true,
     })
   })

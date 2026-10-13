@@ -26,6 +26,7 @@ import {
   REWARD_TEMPLATES,
   IllegalRunAction,
   actLength,
+  fillsSlot,
   slotsIn,
   type Act,
   type Encounter,
@@ -35,10 +36,11 @@ import {
   type RunContent,
   type RunPending,
   type RunState,
+  type Slot,
 } from './types'
 
-/** Sixteen encounters an act, eleven battles and five events: more than twelve, and
- *  both halves deep enough that the 7-in-10 draw rarely has to fall back. */
+/** Eleven battles, five events and two boons of each kind an act: more of every kind
+ *  than any act's schedule plays. */
 function content(battles = 11, events = 5): RunContent {
   const act = (n: Act): readonly Encounter[] => [
     ...Array.from({ length: battles }, (_, i) => ({
@@ -50,6 +52,9 @@ function content(battles = 11, events = 5): RunContent {
       opponent: 'greedy',
     })),
     ...Array.from({ length: events }, (_, i) => ({ id: `act${n}.event-${i}`, act: n, kind: 'event' as const, name: `Event ${i}` })),
+    ...(['dragon', 'terrain', 'monster'] as const).flatMap((gives) =>
+      [0, 1].map((i) => ({ id: `act${n}.${gives}-${i}`, act: n, kind: 'boon' as const, gives, name: `Boon ${gives} ${i}` })),
+    ),
   ]
   return { acts: { 1: act(1), 2: act(2), 3: act(3) }, forces: {} }
 }
@@ -82,6 +87,25 @@ function fieldsOnlyOwned(run: RunState): boolean {
 /** Answers a run's pending with `action`, through the reducer. */
 const step = (run: RunState, action: RunAction, c: RunContent = CONTENT): RunState => reduceRun(run, action, c)
 
+/** The answer a run on rails gives: ready, win (unless told otherwise), the first offer,
+ *  and an event's lone small die. */
+function onRails(run: RunState, winner: 'p1' | 'p2' = 'p1'): RunAction {
+  switch (run.pending.kind) {
+    case 'arrange_force':
+      return { kind: 'ready' }
+    case 'battle':
+      return { kind: 'battle_ended', winner }
+    case 'reward':
+    case 'boon':
+      return { kind: 'take_offer', index: 0 }
+    case 'event':
+      return { kind: 'take_small' }
+    case 'choose_race':
+    case 'over':
+      throw new Error(`no rails answer to ${run.pending.kind}`)
+  }
+}
+
 /** A run past `pick_race`, standing at its first encounter. */
 const started = (seed: number, race = 'treefolk', c: RunContent = CONTENT): RunState =>
   step(newRun(seed), { kind: 'pick_race', race }, c)
@@ -99,17 +123,7 @@ function seedOpeningOn(kind: RunPending['kind'], race = 'treefolk', c: RunConten
 function firstEvent(race = 'treefolk'): RunState {
   for (let seed = 1; seed < 500; seed++) {
     let run = started(seed, race)
-    while (run.pending.kind === 'arrange_force' || run.pending.kind === 'battle' || run.pending.kind === 'reward') {
-      const kind: RunPending['kind'] = run.pending.kind
-      run = step(
-        run,
-        kind === 'arrange_force'
-          ? { kind: 'ready' }
-          : kind === 'battle'
-            ? { kind: 'battle_ended', winner: 'p1' }
-            : { kind: 'take_offer', index: 0 },
-      )
-    }
+    while (run.pending.kind !== 'event' && run.pending.kind !== 'over') run = step(run, onRails(run))
     if (run.pending.kind === 'event') return run
   }
   throw new Error('no run reaches an event')
@@ -226,23 +240,18 @@ describe('the opening draw', () => {
   })
 })
 
-/** Plays a run to its end: every battle won, the first offer, and an event skipped. */
+/** Plays a run to its end on rails, every battle won. */
 function wonThrough(seed: number): RunState {
   let run = started(seed)
-  while (run.pending.kind !== 'over') {
-    const kind: RunPending['kind'] = run.pending.kind
-    run = step(
-      run,
-      kind === 'arrange_force'
-        ? { kind: 'ready' }
-        : kind === 'battle'
-          ? { kind: 'battle_ended', winner: 'p1' }
-          : kind === 'reward'
-            ? { kind: 'take_offer', index: 0 }
-            : { kind: 'skip' },
-    )
-  }
+  while (run.pending.kind !== 'over') run = step(run, onRails(run))
   return run
+}
+
+/** The slot an encounter of the fixture filled, by its id. */
+function slotOf(id: string): Slot {
+  const encounter = ACTS.flatMap((act) => CONTENT.acts[act]).find((e) => e.id === id)
+  if (encounter === undefined) throw new Error(`no encounter ${id}`)
+  return encounter.kind === 'boon' ? encounter.gives : encounter.kind
 }
 
 describe('the schedule', () => {
@@ -252,7 +261,7 @@ describe('the schedule', () => {
       expect(schedule).toHaveLength(actLength(act))
       expect(schedule[0]).toBe('battle')
       expect(schedule[schedule.length - 1]).toBe('battle')
-      const counts = { battle: 0, event: 0 }
+      const counts: Record<Slot, number> = { battle: 0, event: 0, dragon: 0, terrain: 0, monster: 0 }
       for (const slot of schedule) counts[slot]++
       expect(counts).toEqual(slotsIn(act))
     }
@@ -288,11 +297,13 @@ describe('the schedule', () => {
       const run = wonThrough(seed)
       expect(run.status).toBe('won')
       for (const act of ACTS) {
-        const kinds = run.history.filter((h) => h.act === act).map((h) => (h.outcome.kind === 'won' ? 'battle' : 'event'))
-        expect(kinds).toHaveLength(actLength(act))
-        expect(kinds[0]).toBe('battle')
-        expect(kinds[kinds.length - 1]).toBe('battle')
-        expect(kinds.filter((k) => k === 'event')).toHaveLength(slotsIn(act).event)
+        const slots = run.history.filter((h) => h.act === act).map((h) => slotOf(h.id))
+        expect(slots).toHaveLength(actLength(act))
+        expect(slots[0]).toBe('battle')
+        expect(slots[slots.length - 1]).toBe('battle')
+        const counts: Record<Slot, number> = { battle: 0, event: 0, dragon: 0, terrain: 0, monster: 0 }
+        for (const slot of slots) counts[slot]++
+        expect(counts).toEqual(slotsIn(act))
       }
     }
   })
@@ -300,8 +311,8 @@ describe('the schedule', () => {
 
 describe('the encounter draw', () => {
   it.each([1, 2, 3] as const)("draws one encounter of the slot's kind in act %s, in one draw", (act) => {
-    for (const slot of ['battle', 'event'] as const) {
-      const ofKind = [...CONTENT.acts[act]].filter((e) => e.kind === slot).sort((a, b) => a.id.localeCompare(b.id))
+    for (const slot of ['battle', 'event', 'dragon', 'terrain', 'monster'] as const) {
+      const ofKind = [...CONTENT.acts[act]].filter((e) => fillsSlot(e, slot)).sort((a, b) => a.id.localeCompare(b.id))
       for (let seed = 1; seed <= 50; seed++) {
         const rng = rngFrom(seed)
         const [encounter, after] = drawEncounter(CONTENT, act, slot, [], rng)
@@ -483,8 +494,12 @@ describe('upgrades and transforms', () => {
     const home = after.force.armies.home
     expect(home).toHaveLength(1)
     expect(transformsOf('treefolk.oak')).toContain(home[0])
-    expect(after.collection.units['treefolk.oak']).toBeUndefined()
-    expect(ownedHealth(after.collection)).toBe(4)
+    // The Oak's place changed and a small die came with it (v3 Phase 6): 4 health, then 5.
+    if (base.pending.kind !== 'event') throw new Error('not an event')
+    const small = base.pending.smalls[0]
+    expect(after.collection.units['treefolk.oak'] ?? 0).toBe(small === 'treefolk.oak' ? 1 : 0)
+    expect(after.collection.units[small]).toBeGreaterThanOrEqual(1)
+    expect(ownedHealth(after.collection)).toBe(5)
   })
 
   it('refuses an upgrade of a die that cannot be upgraded, or is not in the pool', () => {
@@ -500,20 +515,7 @@ describe('the history', () => {
     let run = started(21)
     const outcomes: string[] = []
     while (run.pending.kind !== 'over') {
-      const pending = run.pending
-      const action: RunAction =
-        pending.kind === 'arrange_force'
-          ? { kind: 'ready' }
-          : pending.kind === 'battle'
-            ? { kind: 'battle_ended', winner: run.act === 2 && run.encounter === actLength(2) - 1 ? 'p2' : 'p1' }
-            : pending.kind === 'reward'
-              ? { kind: 'take_offer', index: 0 }
-              : pending.kind === 'event'
-                ? { kind: 'skip' }
-                : (() => {
-                    throw new Error(pending.kind)
-                  })()
-      run = step(run, action)
+      run = step(run, onRails(run, run.act === 2 && run.encounter === actLength(2) - 1 ? 'p2' : 'p1'))
     }
     // Act I whole, then Act II up to the battle that closes it, lost.
     expect(run.history).toHaveLength(actLength(1) + actLength(2))
@@ -524,7 +526,7 @@ describe('the history', () => {
     const last = run.history[run.history.length - 1]
     expect(last?.outcome.kind).toBe('lost')
     for (const entry of run.history.slice(0, -1)) {
-      expect(['won', 'skip']).toContain(entry.outcome.kind)
+      expect(['won', 'small', 'boon']).toContain(entry.outcome.kind)
       if (entry.outcome.kind === 'won') expect(entry.outcome.took?.grants.length).toBeGreaterThan(0)
     }
     outcomes.push(...run.history.map((h) => h.outcome.kind))
@@ -533,19 +535,7 @@ describe('the history', () => {
 
   it('ends a won run on a battle with no reward taken', () => {
     let run = started(2)
-    while (run.pending.kind !== 'over') {
-      const pending = run.pending.kind
-      run = step(
-        run,
-        pending === 'arrange_force'
-          ? { kind: 'ready' }
-          : pending === 'battle'
-            ? { kind: 'battle_ended', winner: 'p1' }
-            : pending === 'reward'
-              ? { kind: 'take_offer', index: 0 }
-              : { kind: 'skip' },
-      )
-    }
+    while (run.pending.kind !== 'over') run = step(run, onRails(run))
     expect(run.status).toBe('won')
     expect(run.history).toHaveLength(actLength(1) + actLength(2) + actLength(3))
     // The last encounter of Act III is always a battle now (v3 Phase 6), and gives nothing.
@@ -599,7 +589,7 @@ describe('a battle encounter', () => {
     const lost = step(step(run, { kind: 'ready' }), { kind: 'battle_ended', winner: 'p2' })
     expect(lost.status).toBe('lost')
     expect(lost.pending).toEqual({ kind: 'over' })
-    expect(() => step(lost, { kind: 'skip' })).toThrow(/the run is over \(lost\)/)
+    expect(() => step(lost, { kind: 'take_small' })).toThrow(/the run is over \(lost\)/)
   })
 })
 
@@ -690,10 +680,11 @@ function randomActions(run: RunState, winChance: number, rng: RngState): readonl
       ;[roll, state] = nextInt(state, 1000)
       return [[{ kind: 'battle_ended', winner: roll < winChance * 1000 ? 'p1' : 'p2' }], state] as const
     case 'reward':
+    case 'boon':
       ;[roll, state] = nextInt(state, pending.offers.length)
       return [[{ kind: 'take_offer', index: roll }], state] as const
     case 'event': {
-      const options: RunAction[] = [{ kind: 'skip' }]
+      const options: RunAction[] = [{ kind: 'take_small' }]
       if (pending.upgradable.length > 0) {
         let unit: string
         ;[unit, state] = pick(pending.upgradable, state)
@@ -763,13 +754,33 @@ function playRun(
         if (engine !== null) fail(`ready accepted a force setup refuses: ${engine}`)
         if (forceHealth(run.force) > cap) fail(`ready accepted ${forceHealth(run.force)} health over ${cap}`)
       }
+      // Every pick is health (v3 Phase 6): an event exactly 1, a battle's reward at least 1
+      // and 3 off an act's closing battle, a monster boon 4, a dragon or terrain boon none.
       const grew = ownedHealth(run.collection) - ownedHealth(before.collection)
-      const expected = action.kind === 'transform' ? grew === 0 : action.kind === 'upgrade' ? grew === 1 : grew >= 0
+      const pending = before.pending
+      const expected =
+        action.kind === 'pick_race'
+          ? grew === 12
+          : action.kind === 'transform' || action.kind === 'upgrade' || action.kind === 'take_small'
+          ? grew === 1
+          : action.kind === 'take_offer' && pending.kind === 'reward'
+            ? grew >= (before.encounter === actLength(before.act) - 1 ? 3 : 1)
+            : action.kind === 'take_offer' && pending.kind === 'boon'
+              ? grew === (pending.encounter.gives === 'monster' ? 4 : 0)
+              : grew === 0
       if (!expected) fail(`the pool's health moved by ${grew}`)
-      // Every reward pick is health (v3 Phase 6): at least 1, and 3 off an act's closing battle.
-      if (action.kind === 'take_offer') {
-        const closing = before.encounter === actLength(before.act) - 1
-        if (grew < (closing ? 3 : 1)) fail(`a ${closing ? 'closing ' : ''}reward gave ${grew} health`)
+      // The curve's floors (v3 Phase 6), whatever was answered: an act's end owns at least
+      // 12 + 15 health after Act I and 12 more after Act II, and Act I hands out the
+      // second dragon Act III fields.
+      if (run.act !== before.act || (run.status === 'won' && before.status === 'playing')) {
+        const floor: Readonly<Record<Act, number>> = { 1: 12 + 15, 2: 12 + 15 + 12, 3: 0 }
+        if (ownedHealth(run.collection) < floor[before.act]) fail(`act ${before.act} ended on ${ownedHealth(run.collection)} health`)
+        const dragons = Object.values(run.collection.dragons).reduce((n, c) => n + c, 0)
+        if (dragons < 2) fail(`act ${before.act} ended owning ${dragons} dragon`)
+      }
+      // A boon's three offers are three different dice.
+      if (pending.kind === 'boon' && new Set(pending.offers.map((o) => o.grants[0]?.id)).size !== 3) {
+        fail('a boon offered one die twice')
       }
       if (action.kind !== 'set_force' && !fieldsOnlyOwned(run)) fail('the force fields a die the pool does not hold')
     }
@@ -781,7 +792,7 @@ function playRun(
 describe('the run fuzz', () => {
   it('plays hundreds of runs to their end, reaching every pending and every action', () => {
     const seen = {
-      pendings: { choose_race: 0, arrange_force: 0, battle: 0, reward: 0, event: 0, over: 0 } satisfies Record<
+      pendings: { choose_race: 0, arrange_force: 0, battle: 0, reward: 0, event: 0, boon: 0, over: 0 } satisfies Record<
         RunPending['kind'],
         number
       >,
@@ -793,7 +804,7 @@ describe('the run fuzz', () => {
         take_offer: 0,
         upgrade: 0,
         transform: 0,
-        skip: 0,
+        take_small: 0,
       } satisfies Record<RunAction['kind'], number>,
     }
     const ends = { won: 0, lost: 0 }
@@ -821,8 +832,8 @@ describe('the run fuzz', () => {
 
   it('replays the same run from the same seed and answers', () => {
     const seen = {
-      pendings: { choose_race: 0, arrange_force: 0, battle: 0, reward: 0, event: 0, over: 0 },
-      actions: { pick_race: 0, set_force: 0, ready: 0, battle_ended: 0, take_offer: 0, upgrade: 0, transform: 0, skip: 0 },
+      pendings: { choose_race: 0, arrange_force: 0, battle: 0, reward: 0, event: 0, boon: 0, over: 0 },
+      actions: { pick_race: 0, set_force: 0, ready: 0, battle_ended: 0, take_offer: 0, upgrade: 0, transform: 0, take_small: 0 },
     }
     for (const seed of [4, 8, 15]) {
       const first = playRun(seed, 1, seen)

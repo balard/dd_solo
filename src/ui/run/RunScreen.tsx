@@ -556,6 +556,50 @@ function RewardScreen({ api, run }: { api: RunApi; run: RunState }) {
   )
 }
 
+// --- the boon ---------------------------------------------------------------------------
+
+const BOON_WORD = { dragon: 'dragon', terrain: 'terrain', monster: 'monster' } as const
+
+/** A boon (v3 Phase 6): three dice of one kind, pick one. No skip: it is a gift. */
+function BoonScreen({ api, run }: { api: RunApi; run: RunState }) {
+  const [picked, setPicked] = useState<number | null>(null)
+  const [looking, setLooking] = useState<Looking | null>(null)
+  if (run.pending.kind !== 'boon') return null
+  const { encounter, offers } = run.pending
+  const choice = picked === null ? undefined : offers[picked]
+  return (
+    <Frame
+      run={run}
+      foot={
+        <>
+          <span className="run-foot-why">{choice === undefined ? `Pick one ${BOON_WORD[encounter.gives]}.` : offerText(choice, run.race).detail}</span>
+          <button
+            type="button"
+            className="choice"
+            disabled={picked === null}
+            onClick={() => picked !== null && api.dispatch({ kind: 'take_offer', index: picked })}
+          >
+            {choice === undefined ? 'Take' : `Take ${offerText(choice, run.race).name}`}
+          </button>
+        </>
+      }
+    >
+      <div>
+        <h1 className="run-title">{encounter.name}</h1>
+        <p className="muted run-lede">
+          Pick one {BOON_WORD[encounter.gives]}: it goes to your pool. Tap a die to look at it.
+        </p>
+      </div>
+      <div className="offers" style={{ '--offers': offers.length } as CSSProperties}>
+        {offers.map((offer, i) => (
+          <OfferCard key={i} offer={offer} run={run} picked={picked === i} onPick={() => setPicked(i)} onLook={setLooking} />
+        ))}
+      </div>
+      {looking !== null && <Inspect looking={looking} onClose={() => setLooking(null)} />}
+    </Frame>
+  )
+}
+
 // --- the event --------------------------------------------------------------------------
 
 /**
@@ -584,6 +628,12 @@ function EventResultDialog({ result, onClose }: { result: EventResult; onClose: 
           {die(result.to)}
         </div>
         <p>{result.force}</p>
+        {result.small !== null && (
+          <>
+            <div className="event-path">{die(result.small)}</div>
+            <p>{unitType(result.small).name} joins your pool with it.</p>
+          </>
+        )}
         {result.next !== '' && <p className="muted">{result.next}</p>}
         <div className="choices">
           <button type="button" className="choice" onClick={close} autoFocus>
@@ -607,6 +657,7 @@ function EventScreen({ api, run, onChange }: { api: RunApi; run: RunState; onCha
   const preview = picked === null ? null : upgradePreview(run, picked)
   const into = picked === null ? [] : transformsOf(picked)
   const name = (id: string) => unitType(id).name
+  const [withTransform, alone] = pending.smalls
 
   const upgradeNote = (): string => {
     if (picked === null) return 'Pick a die first.'
@@ -635,12 +686,12 @@ function EventScreen({ api, run, onChange }: { api: RunApi; run: RunState; onCha
       run={run}
       foot={
         <>
-          <span className="run-foot-why">{picked === null ? 'Pick a die from your pool, or walk on.' : name(picked)}</span>
-          <button type="button" className="choice secondary" onClick={() => api.dispatch({ kind: 'skip' })}>
-            Walk on
+          <span className="run-foot-why">{picked === null ? 'Take a small die, or pick a die from your pool.' : name(picked)}</span>
+          {/* The three answers weigh the same (playtest, 2026-10-08; v3 Phase 6): each is
+              1 health, and none is the answer the screen recommends, so all are primary. */}
+          <button type="button" className="choice" onClick={() => api.dispatch({ kind: 'take_small' })}>
+            Take {name(alone)}
           </button>
-          {/* Upgrade and Transform weigh the same (playtest, 2026-10-08): neither is the
-              answer the screen recommends, so both are primary. */}
           <button
             type="button"
             className="choice"
@@ -651,7 +702,7 @@ function EventScreen({ api, run, onChange }: { api: RunApi; run: RunState; onCha
               api.dispatch({ kind: 'transform', unit: picked })
             }}
           >
-            {picked === null || !pending.transformable.includes(picked) ? 'Transform' : `Transform ${name(picked)}`}
+            {picked === null || !pending.transformable.includes(picked) ? 'Transform' : `Transform ${name(picked)} + ${name(withTransform)}`}
           </button>
           <button
             type="button"
@@ -670,7 +721,9 @@ function EventScreen({ api, run, onChange }: { api: RunApi; run: RunState; onCha
     >
       <div>
         <h1 className="run-title">{pending.encounter.name}</h1>
-        <p className="muted run-lede">Change one die in your pool, or walk on.</p>
+        <p className="muted run-lede">
+          Pick one: each adds 1 health to your pool. Tap a die of yours to upgrade or transform it.
+        </p>
       </div>
       <section className="run-panel">
         <p className="run-label">Fielded</p>
@@ -685,6 +738,13 @@ function EventScreen({ api, run, onChange }: { api: RunApi; run: RunState; onCha
       </section>
       <div className="event-choices">
         <section className="run-panel">
+          <h2 className="run-h3">A small die</h2>
+          <div className="event-path">
+            <UnitButton typeId={alone} label="look" onClick={() => setLooking({ kind: 'unit', typeId: alone })} />
+          </div>
+          <p className="run-note">{name(alone)} joins your pool. Nothing else changes.</p>
+        </section>
+        <section className="run-panel">
           <h2 className="run-h3">Upgrade</h2>
           {picked !== null && preview !== null && (
             <div className="event-path">
@@ -696,7 +756,11 @@ function EventScreen({ api, run, onChange }: { api: RunApi; run: RunState; onCha
           <p className={`run-note${preview?.effect === 'benched' ? ' is-warn' : ''}`}>{upgradeNote()}</p>
         </section>
         <section className="run-panel">
-          <h2 className="run-h3">Transform</h2>
+          <h2 className="run-h3">Transform, and a small die</h2>
+          <div className="event-path">
+            <UnitButton typeId={withTransform} label="look" onClick={() => setLooking({ kind: 'unit', typeId: withTransform })} />
+          </div>
+          <p className="run-note">{name(withTransform)} joins your pool with the transform.</p>
           {picked !== null && (
             <div className="event-path">
               <UnitButton typeId={picked} label="look" onClick={() => setLooking({ kind: 'unit', typeId: picked })} />
@@ -842,6 +906,9 @@ export function RunScreen({
       break
     case 'event':
       screen = <EventScreen api={api} run={run} onChange={() => setBeforeEvent(run)} />
+      break
+    case 'boon':
+      screen = <BoonScreen api={api} run={run} />
       break
     case 'over':
       screen = <RunEnd api={api} run={run} onNewRun={onNewRun} />

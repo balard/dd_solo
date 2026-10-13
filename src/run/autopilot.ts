@@ -93,8 +93,10 @@ const sameForce = (a: BuiltForce, b: BuiltForce): boolean => JSON.stringify(a) =
  * - **force**: `suggestForce`, then ready;
  * - **reward**: an offer with a dragon while the pool is short of the two Act III asks
  *   for, else the offer worth the most health (the first of equals);
- * - **event**: upgrade a medium die to large if it can, else a small to medium, else skip.
- *   A transform is a sideways move, and a rule of thumb has no reason to want one.
+ * - **event**: upgrade a medium die to large if it can, else a small to medium, else take
+ *   the small die. A transform is a sideways move, and a rule of thumb has no reason to
+ *   want one;
+ * - **boon**: the first offer, the one always like the pool.
  */
 export function autopilot(run: RunState): RunAction {
   const pending = run.pending
@@ -129,8 +131,10 @@ export function autopilot(run: RunState): RunAction {
         const unit = pending.upgradable.find((id) => unitType(id).size === size && upgradeOf(id) !== null)
         if (unit !== undefined) return { kind: 'upgrade', unit }
       }
-      return { kind: 'skip' }
+      return { kind: 'take_small' }
     }
+    case 'boon':
+      return { kind: 'take_offer', index: 0 }
     case 'battle':
       throw new IllegalRunAction('a battle is played, not answered by the autopilot')
     case 'over':

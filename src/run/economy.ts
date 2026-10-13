@@ -40,13 +40,14 @@ function pickOffer(offers: readonly Offer[], policy: 'heaviest' | 'lightest'): n
 function randomAnswer(run: RunState, rng: RngState): readonly [RunAction, RngState] {
   const pending = run.pending
   switch (pending.kind) {
-    case 'reward': {
+    case 'reward':
+    case 'boon': {
       const [index, next] = nextInt(rng, pending.offers.length)
       return [{ kind: 'take_offer', index }, next]
     }
     case 'event': {
       const answers: RunAction[] = [
-        { kind: 'skip' },
+        { kind: 'take_small' },
         ...pending.upgradable.map((unit): RunAction => ({ kind: 'upgrade', unit })),
         ...pending.transformable.map((unit): RunAction => ({ kind: 'transform', unit })),
       ]
@@ -64,7 +65,7 @@ function randomAnswer(run: RunState, rng: RngState): readonly [RunAction, RngSta
 function answer(run: RunState, policy: Policy, rng: RngState): readonly [RunAction, RngState] {
   if (run.pending.kind === 'battle') return [{ kind: 'battle_ended', winner: RUN_PLAYER }, rng]
   if (policy === 'random') return randomAnswer(run, rng)
-  if (policy !== 'autopilot' && run.pending.kind === 'reward') {
+  if (policy !== 'autopilot' && (run.pending.kind === 'reward' || run.pending.kind === 'boon')) {
     return [{ kind: 'take_offer', index: pickOffer(run.pending.offers, policy) }, rng]
   }
   return [autopilot(run), rng]

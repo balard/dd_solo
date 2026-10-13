@@ -206,20 +206,37 @@ async function answer(run: RunState, options: RunOptions): Promise<RunAction | n
       }
     }
 
+    case 'boon': {
+      if (watching) return autopilot(run)
+      console.log(`\n${bold(pending.encounter.name)} ${dim(`-- pick one ${pending.encounter.gives}; it goes to your pool`)}`)
+      pending.offers.forEach((offer, i) => console.log(`  ${i + 1}) ${offerLine(offer)}`))
+      for (;;) {
+        const reply = (await ask('> ')).trim().toLowerCase()
+        if (reply === 'q') return null
+        const index = Number(reply) - 1
+        if (pending.offers[index] !== undefined) return { kind: 'take_offer', index }
+        console.log(red('  pick a number from the list'))
+      }
+    }
+
     case 'event': {
       if (watching) return autopilot(run)
-      console.log(`\n${bold(pending.encounter.name)} ${dim('-- change one die in your pool, or walk on')}`)
+      const [withTransform, alone] = pending.smalls
+      console.log(`\n${bold(pending.encounter.name)} ${dim('-- pick one; each adds 1 health to your pool')}`)
+      console.log(`  take ${unitLine(alone)}`)
+      console.log(`  or transform a die below, and take ${unitLine(withTransform)} with it`)
+      console.log(`  or upgrade a die below`)
       pending.transformable.forEach((id, i) => {
         const up = upgradeOf(id)
         const upgrade = up === null ? dim('cannot be upgraded') : `upgrades to ${unitType(up).name}`
         const into = transformsOf(id).map((t) => unitType(t).name).join(', ')
         console.log(`  ${i + 1}) ${unitLine(id)} -- ${upgrade}; transforms into one of ${into}`)
       })
-      console.log(dim('  u 3  upgrade die 3 · t 3  transform it · s  skip · q quits'))
+      console.log(dim('  s  take the small die · u 3  upgrade die 3 · t 3  transform it · q quits'))
       for (;;) {
         const [verb, number] = (await ask('> ')).trim().toLowerCase().split(/\s+/)
         if (verb === 'q') return null
-        if (verb === 's' || verb === 'skip') return { kind: 'skip' }
+        if (verb === 's') return { kind: 'take_small' }
         const unit = pending.transformable[Number(number) - 1]
         if (unit !== undefined && verb === 'u' && pending.upgradable.includes(unit)) return { kind: 'upgrade', unit }
         if (unit !== undefined && verb === 't') return { kind: 'transform', unit }
@@ -276,20 +293,29 @@ function narrate(before: RunState, action: RunAction, after: RunState): string |
         dim(` with ${forceHealth(before.force)} of ${ACT_SIZE[before.act]} health fielded`)
     }
     case 'take_offer': {
-      const offer = before.pending.kind === 'reward' ? before.pending.offers[action.index] : undefined
-      return offer === undefined ? null : dim(`  took ${offerLine(offer)}`)
+      const pending = before.pending
+      const offer = pending.kind === 'reward' || pending.kind === 'boon' ? pending.offers[action.index] : undefined
+      if (offer === undefined) return null
+      return pending.kind === 'boon'
+        ? `${where(before)} · ${before.current?.name ?? 'boon'} · took ${offerLine(offer)}`
+        : dim(`  took ${offerLine(offer)}`)
     }
     case 'upgrade':
-    case 'transform': {
-      const from = unitType(action.unit).name
-      const gained = Object.keys(after.collection.units).find(
-        (id) => (after.collection.units[id] ?? 0) > (before.collection.units[id] ?? 0),
-      )
-      const to = gained === undefined ? '?' : unitType(gained).name
-      return `${where(before)} · ${before.current?.name ?? 'event'} · ${action.kind === 'upgrade' ? 'upgraded' : 'transformed'} ${from} into ${to}`
+    case 'transform':
+    case 'take_small': {
+      // The outcome says what the event did: a transform's die is random and brings a small
+      // die with it, so the pool's difference alone cannot name the new die.
+      const outcome = after.history[after.history.length - 1]?.outcome
+      const did =
+        outcome?.kind === 'upgrade'
+          ? `upgraded ${unitType(outcome.from).name} into ${unitType(outcome.to).name}`
+          : outcome?.kind === 'transform'
+            ? `transformed ${unitType(outcome.from).name} into ${unitType(outcome.to).name}, and took ${unitType(outcome.small).name}`
+            : outcome?.kind === 'small'
+              ? `took ${unitType(outcome.took).name}`
+              : '?'
+      return `${where(before)} · ${before.current?.name ?? 'event'} · ${did}`
     }
-    case 'skip':
-      return `${where(before)} · ${before.current?.name ?? 'event'} · ${dim('walked on')}`
   }
 }
 

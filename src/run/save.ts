@@ -36,8 +36,13 @@ import { actLength, type RunPending, type RunState, type Slot } from './types'
  * 2: v3 Phase 4b. `RunState` gained `history`, one entry per finished encounter, which the
  *    act strip and the run's end draw. A version-1 run has no record of its past, and
  *    inventing one would draw a strip that lies about it.
+ * 3: v3 Phase 6b. `RunState` gained `schedule`, the act's slots drawn when it starts.
+ * 4: v3 Phase 6c and 6d. An `Offer` became a bundle of grants (6c, which should have
+ *    bumped on its own and did not), and the event and the boon changed what a pending
+ *    and an outcome hold (6d). A version-3 save written between the two would be read
+ *    with offers no screen can draw.
  */
-export const RUN_VERSION = 3
+export const RUN_VERSION = 4
 
 export interface RunSave {
   readonly version: number
@@ -72,7 +77,7 @@ const KNOWN: Readonly<Record<'units' | 'dragons' | 'terrains', ReadonlySet<strin
   terrains: new Set(TERRAIN_DICE.map((d) => d.id)),
 }
 
-const SLOTS: ReadonlySet<Slot> = new Set<Slot>(['battle', 'event'])
+const SLOTS: ReadonlySet<Slot> = new Set<Slot>(['battle', 'event', 'dragon', 'terrain', 'monster'])
 
 const PENDING_KINDS: ReadonlySet<RunPending['kind']> = new Set<RunPending['kind']>([
   'choose_race',
@@ -80,6 +85,7 @@ const PENDING_KINDS: ReadonlySet<RunPending['kind']> = new Set<RunPending['kind'
   'battle',
   'reward',
   'event',
+  'boon',
   'over',
 ])
 

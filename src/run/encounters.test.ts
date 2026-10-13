@@ -17,7 +17,7 @@ import { validateState } from '../engine/validate'
 import { battleSeed, battleSetup, enemyForce } from './battle'
 import { RUN_CONTENT, readEncounters, readEnemyForces } from './encounters'
 import { newRun, reduceRun } from './reduce'
-import { ACTS, ACT_SIZE, actLength, slotsIn, type BattleEncounter, type RunState } from './types'
+import { ACTS, ACT_SIZE, actLength, fillsSlot, slotsIn, type BattleEncounter, type RunState, type Slot } from './types'
 
 const battles: readonly BattleEncounter[] = ACTS.flatMap((act) =>
   RUN_CONTENT.acts[act].filter((e): e is BattleEncounter => e.kind === 'battle'),
@@ -37,8 +37,9 @@ describe('the encounters in the data', () => {
   it('hold more of each kind than an act plays, every enemy force met', () => {
     for (const act of ACTS) {
       const list = RUN_CONTENT.acts[act]
-      for (const [kind, wanted] of Object.entries(slotsIn(act))) {
-        expect(list.filter((e) => e.kind === kind).length, `act ${act} ${kind}`).toBeGreaterThan(wanted)
+      // More than the schedule plays of every kind it plays, so the draw is a choice.
+      for (const [slot, wanted] of Object.entries(slotsIn(act)) as [Slot, number][]) {
+        if (wanted > 0) expect(list.filter((e) => fillsSlot(e, slot)).length, `act ${act} ${slot}`).toBeGreaterThan(wanted)
       }
       for (const e of list) expect(e.act).toBe(act)
     }
@@ -153,11 +154,15 @@ describe('readEncounters', () => {
     ...extra,
   })
   const event = (id: string) => ({ id, kind: 'event', name: id })
-  /** Twelve battles and two events: as many events as Act I's schedule plays. */
+  const boon = (id: string, gives: string) => ({ id, kind: 'boon', gives, name: id })
+  /** Twelve battles, two events and a boon of each kind: what Act I's schedule plays. */
   const act = (n: number) => [
     ...Array.from({ length: 12 }, (_, i) => battle(`a${n}.b${i}`)),
     event(`a${n}.e0`),
     event(`a${n}.e1`),
+    boon(`a${n}.dragon`, 'dragon'),
+    boon(`a${n}.terrain`, 'terrain'),
+    boon(`a${n}.monster`, 'monster'),
   ]
   const problemsOf = (value: unknown, forces: Readonly<Record<string, BuiltForce>> = {}) => {
     const read = readEncounters(value, forces)
@@ -181,19 +186,24 @@ describe('readEncounters', () => {
           battle('a3.w', { enemy: { built: 'nowhere' } }),
           battle('a3.v', { enemy: { pool: { kind: 'mixed' }, built: 'treefolk-12' } }),
           { id: 'a3.u', kind: 'shop', name: 'Shop' },
+          boon('a3.t', 'gold'),
         ],
       },
     }
     expect(problemsOf(bad, { 'treefolk-12': ok, unused: ok })).toEqual([
       'a1.b0 is used twice',
       'act 2 holds 0 of kind event; its schedule plays 1',
+      'act 2 holds 0 of kind terrain; its schedule plays 1',
+      'act 2 holds 0 of kind monster; its schedule plays 1',
       'a3.x (act 3, encounter 13): there is no species elves',
       'a3.y (act 3, encounter 14): random is the fuzz opponent, not an opponent',
       'a3.z (act 3, encounter 15): treefolk-12 is 12 health, and Act 3 meets 36',
       'a3.w (act 3, encounter 16): there is no enemy force nowhere in data/forces/enemies/',
       'a3.v (act 3, encounter 17): an enemy is a pool or a built force, exactly one',
-      'a3.u (act 3, encounter 18): its kind is "battle" or "event"',
+      'a3.u (act 3, encounter 18): its kind is "battle", "event" or "boon"',
+      'a3.t (act 3, encounter 19): a boon gives "dragon", "terrain" or "monster"',
       'act 3 holds 0 of kind event; its schedule plays 1',
+      'act 3 holds 0 of kind monster; its schedule plays 1',
       'no encounter meets the enemy force treefolk-12',
       'no encounter meets the enemy force unused',
     ])

@@ -5,6 +5,7 @@
  *
  *     battle:  arrange_force -> battle -> reward      (or -> over, lost)
  *     event:   event
+ *     boon:    boon
  *
  * then the next encounter is drawn at once, so a run always rests at the start of an
  * encounter or inside one -- which is what lets Phase 3 save it "at the start of each
@@ -30,7 +31,17 @@ import { PLAYABLE_SPECIES } from '../engine/playable'
 import { rngFrom } from '../engine/rng'
 
 import { RUN_CONTENT } from './encounters'
-import { drawEncounter, drawReward, drawSchedule, drawTransform, rollStart, transformsOf, upgradeOf } from './draws'
+import {
+  drawBoon,
+  drawEncounter,
+  drawReward,
+  drawSchedule,
+  drawSmalls,
+  drawTransform,
+  rollStart,
+  transformsOf,
+  upgradeOf,
+} from './draws'
 import {
   ACT_SIZE,
   IllegalRunAction,
@@ -82,21 +93,29 @@ const ownedUnits = (collection: Collection): readonly string[] =>
     .filter((id) => (collection.units[id] ?? 0) > 0)
     .sort()
 
-/** The pending an encounter opens on. */
-function openingPending(run: RunState): RunPending {
+/** The run opened on the encounter in hand: its first pending, and what it draws to
+ *  get there -- an event its two small dice, a boon its three offers. */
+function openEncounter(run: RunState): RunState {
   const encounter = run.current
   if (encounter === null) throw new Error('no encounter in hand')
   switch (encounter.kind) {
     case 'battle':
-      return { kind: 'arrange_force', cap: ACT_SIZE[run.act] }
+      return { ...run, pending: { kind: 'arrange_force', cap: ACT_SIZE[run.act] } }
     case 'event': {
       const units = ownedUnits(run.collection)
-      return {
+      const [smalls, rng] = drawSmalls(run.collection, run.rng)
+      const pending: RunPending = {
         kind: 'event',
         encounter,
+        smalls,
         upgradable: units.filter((id) => upgradeOf(id) !== null),
         transformable: units.filter((id) => transformsOf(id).length > 0),
       }
+      return { ...run, rng, pending }
+    }
+    case 'boon': {
+      const [offers, rng] = drawBoon(encounter.gives, run.collection, run.rng)
+      return { ...run, rng, pending: { kind: 'boon', encounter, offers } }
     }
   }
 }
@@ -106,8 +125,7 @@ function startEncounter(run: RunState, content: RunContent): RunState {
   const slot = run.schedule[run.encounter]
   if (slot === undefined) throw new Error(`act ${run.act} has no encounter ${run.encounter}`)
   const [encounter, rng] = drawEncounter(content, run.act, slot, run.drawn, run.rng)
-  const next: RunState = { ...run, rng, current: encounter, drawn: [...run.drawn, encounter.id] }
-  return { ...next, pending: openingPending(next) }
+  return openEncounter({ ...run, rng, current: encounter, drawn: [...run.drawn, encounter.id] })
 }
 
 /** Opens `act`: its schedule drawn, its pool's draws forgotten, its first encounter. */
@@ -265,10 +283,20 @@ export function reduceRun(run: RunState, action: RunAction, content: RunContent 
       return finishEncounter({ ...run, collection: grantOffer(run.collection, offer) }, { kind: 'won', took: offer }, content)
     }
 
+    case 'boon': {
+      if (action.kind !== 'take_offer') return refuse(run, action)
+      const offer = pending.offers[action.index]
+      if (offer === undefined) throw new IllegalRunAction(`there is no offer ${action.index}`)
+      return finishEncounter({ ...run, collection: grantOffer(run.collection, offer) }, { kind: 'boon', took: offer }, content)
+    }
+
     case 'event': {
+      const [withTransform, alone] = pending.smalls
       switch (action.kind) {
-        case 'skip':
-          return finishEncounter(run, { kind: 'skip' }, content)
+        case 'take_small': {
+          const took = { ...run, collection: adjust(run.collection, 'units', alone, 1) }
+          return finishEncounter(took, { kind: 'small', took: alone }, content)
+        }
         case 'upgrade': {
           const to = upgradeOf(action.unit)
           if (!pending.upgradable.includes(action.unit) || to === null) {
@@ -281,9 +309,11 @@ export function reduceRun(run: RunState, action: RunAction, content: RunContent 
           if (!pending.transformable.includes(action.unit)) {
             throw new IllegalRunAction(`${action.unit} is not a die in the pool that can be transformed`)
           }
+          // The small die was drawn when the event opened, so it is known before this roll.
           const [to, rng] = drawTransform(action.unit, run.rng)
           const transformed = replaceDie({ ...run, rng }, action.unit, to, 'transform')
-          return finishEncounter(transformed, { kind: 'transform', from: action.unit, to }, content)
+          const withSmall = { ...transformed, collection: adjust(transformed.collection, 'units', withTransform, 1) }
+          return finishEncounter(withSmall, { kind: 'transform', from: action.unit, to, small: withTransform }, content)
         }
         default:
           return refuse(run, action)

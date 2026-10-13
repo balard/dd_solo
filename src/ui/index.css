@@ -1899,7 +1899,7 @@ body {
 @media (max-height: 499px) { .offer .face-sheet, .offer .terrain-detail { display: none; } }
 
 /* The event. */
-.event-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.event-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
 .event-path { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
 .event-path > span { color: var(--muted); font-size: var(--fs-xl); align-self: center; }
 @media (max-width: 599px) { .event-choices { grid-template-columns: 1fr; } }

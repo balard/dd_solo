@@ -272,8 +272,8 @@ the dice and the opponent.
 
 > **v3 is under way: the roguelike run** (`docs/PLAN-V3.md`). Pick a race,
 > start from a 12-health collection with one dragon and two terrains, fight three acts of
-> 12/24/36-health enemies (12 encounters each, drawn from a larger pool, about 70% battles and 30%
-> upgrade/transform events), and pick one of five rewards after each win. A loss ends the run.
+> 12/24/36-health enemies (11 / 8 / 7 encounters, a schedule of battles, die events and boons
+> since Phase 6), and pick a reward after each win. A loss ends the run.
 > The run is a pure, seeded reducer **above** the engine: it hands out `SetupOptions` and reads
 > back only the winner, so the goldens and `SAVE_VERSION` stay put. It is saved as a snapshot at
 > the start of each encounter. The one engine seam it plans is a force naming fewer dragons than
@@ -336,13 +336,24 @@ the dice and the opponent.
 > the run the moment the engine has a winner**, not when the game-over card is pressed: a reload
 > on that card used to fight a won battle again and take back a defeat. `App` holds
 > `inRunBattle` so the board stays up under the card. *What 4d found* in `PLAN-V3.md`.
+>
+> **Phase 6 has landed: the act's shape and the health curve.** An act is a **schedule**
+> (`ACT_PLAN`, 11 / 8 / 7 encounters), drawn when it starts, that opens and closes on a battle.
+> Every die given is a kind, then **similar** or **general** by the pool's health
+> (`src/run/give.ts`). A battle's reward is one of three templates, and an act's closing battle
+> gives four offers. An `Offer` is a bundle of grants. A die event has three answers, each
+> +1 health and none of them a skip; a **boon** is pick 1 of 3 dragons, terrains or monsters.
+> The fuzz holds the curve's floors on every run: Act I ends on at least 27 health owning two
+> dragons, and Act II on at least 39. `npm run run-economy` measures the curve per answering
+> policy; the reward mix is the next thing it tunes. `RUN_VERSION` 4. *What 6a-6d found* in
+> `PLAN-V3.md`.
 
 ## Read these first
 
 | File | What it is |
 |---|---|
 | `docs/RULES-V0.md` | **Normative spec for the alpha.** The exact rule subset, the house rules, and what was cut. This wins over the rulebooks where they differ. |
-| `docs/PLAN-V3.md` | **The order of work now** (Phases 0-4 landed; 5, the playtest, under way). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
+| `docs/PLAN-V3.md` | **The order of work now** (Phases 0-4 and 6 landed; 5, the playtest, under way). The roguelike run: a pure, seeded run reducer in `src/run/` above the engine, encounters in `data/encounters.json`, a run in the terminal, run saves, then run screens. Every battle is a `V1_RULES` game. Start here when writing code. |
 | `docs/PLAN-V2.md` | How v2 got here: Phases 0 to 9 all landed. Mixed-species armies, built forces and the army builder, a schematic and landscape UI, the roll dialog, and Coral Elves, Dwarves, Goblins and Lava Elves. Phase 4 (the collection and the builder) is what v3 builds on; read its findings first. |
 | `docs/PLAN-V1.md` | How the complete basic game got here: all phases done. Each landed phase carries a write-up of what the plan got wrong -- read the one for any seam you are about to touch. |
 | `docs/PLAN-V0.md` | How the alpha got here: nine phases, all done. History, not instructions. |

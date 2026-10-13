@@ -7,7 +7,7 @@ acts whose enemies grow from 12 to 24 to 36 health. A loss ends the run.
 
 Read `PLAN-V2.md` Phase 4 (the collection and the builder) before anything here: v3 is that phase's
 `Collection` and `forceProblems` with a game around them. This document is the *order of work*.
-**Phases 0 to 3 have landed** (the run model, the encounters, a run in the terminal, run saves), and all of **Phase 4** (the run screens' mockups, the run shell, the force between encounters, and the battle in a run). Phase 5, the playtest, is next.
+**Phases 0 to 3 have landed** (the run model, the encounters, a run in the terminal, run saves), and all of **Phase 4** (the run screens' mockups, the run shell, the force between encounters, and the battle in a run). Phase 5, the playtest, is under way, and **Phase 6** (the act's shape and the health curve), which it prompted, has landed.
 
 **Scope decisions this plan is built on** (agreed 2026-10-07):
 - **A mode in this repo, not a fork.** The single game stays exactly what it is. The run is a
@@ -40,28 +40,48 @@ That is 3 + 2 + 2 + 5 = **exactly 12 health**, eight dice, which split into thre
 6 each. No monster. **The split is fixed** (Phase 5): the large die and its same-line medium at Home
 (5), the other medium at the Frontier (2), and the five small dice in the Horde (5).
 
-**Acts.** Three acts, each with a cap and an enemy size: **Act I 12, Act II 24, Act III 36**. Each act
-draws **12 encounters** from its own pool, which holds more than 12. Clearing the twelfth encounter
-of Act III wins the run.
+**Acts.** Three acts, each with a cap and an enemy size: **Act I 12, Act II 24, Act III 36**. An act
+is a **schedule** (Phase 6) of **11 / 8 / 7 encounters**, drawn when it starts:
 
-**Encounters.** About **70% are battles** and **30% are events**, and **every act's first encounter is
-a battle** (Phase 5).
+| | Battles | Die events | Boons |
+|---|---|---|---|
+| Act I | 7 | 2 | dragon, monster |
+| Act II | 5 | 1 | terrain, monster |
+| Act III | 5 | 1 | monster |
+
+Every act **opens and closes on a battle**, and the rest is shuffled between them. Each slot draws an
+encounter of its kind from the act's own pool, without replacement. Clearing the last battle of Act
+III wins the run.
+
+**Encounters.**
 - **A battle** is one game against an enemy force at the act's size, played by the AI.
-- **An event** offers the player a choice between two actions on one die they pick, or to skip:
-  - **Upgrade**: swap the die for the next one up its class line (small → medium → large). A large
-    die or a monster cannot be upgraded.
-  - **Transform**: swap the die for a random *different* die of the same species and health.
+- **A die event** has three answers, each **+1 health** to the pool, and no skip:
+  - **a small die and a transform**. The small die is shown first; the transform swaps a die the
+    player picks for a random *different* die of the same species and health;
+  - **an upgrade**: swap a die for the next one up its class line (small → medium → large). A
+    large die or a monster cannot be upgraded;
+  - **a different small die**, alone.
+- **A boon** offers **three different dice** of one kind (dragon, terrain or monster). The player
+  picks one, and there is no skip.
 
-**Rewards.** After every battle won, the player **picks one of five offers**:
-- **three units**, each rolled independently: **70%** a random die of the player's race, **30%** a
-  random die of any playable species;
-- **one dragon** sharing an element with the force;
-- **one terrain** sharing an element with the force.
+**Every die given** is a kind, then **similar** or **general**, by the pool's health. The tables
+are in Phase 6 below.
 
-"The force" there means **every element of every species in it**: a Goblin force that fields a
-Coral Elf matches death, earth, air and water. Death counts for dragons, since the Death Drake
-and Death Wyrm are in the data. It does not count for terrains: the six basic terrain types are
-the six pairs of air, water, earth and fire, so no terrain die carries death.
+**Rewards.** After every battle won, one of three templates:
+- small + dragon, medium, large;
+- small + terrain, medium, large;
+- medium, large, monster.
+
+The battle that **closes Act I or II** gives four offers instead:
+- small ×3 + a dragon (or + a terrain);
+- medium ×2;
+- large;
+- monster.
+
+So a battle's pick is at least 1 health, and the closing one at least 3.
+
+The curve this guarantees whatever the player picks: **Act I ends on ≥ 27 health owning two
+dragons, and Act II on ≥ 39.**
 
 **The force.** The player owns a **pool** (the collection) and fields a **force** from it, under the
 act's cap. **The force is kept between encounters**: a reward goes into the pool and changes nothing
@@ -1055,6 +1075,45 @@ picker now lands on both targets (30.5 against 30, 43.7 against 42). 6d still ad
 boon (+4 an act) and +1 to every die event. That will lift every row by about 6 in Act I and 5 in
 Act II, past the targets for a careful player. Tuning that is the reward-mix pass the curve was
 built for.
+
+### What 6d found
+
+- **Every pick is now health, and the fuzz holds the guarantees on every run, whatever is
+  answered.** On top of 6c's reward checks:
+  - a die event adds exactly 1;
+  - a monster boon adds 4, and a dragon or terrain boon 0;
+  - Act I ends on at least 27 health owning two dragons, and Act II on at least 39;
+  - a boon's three offers are three different dice.
+- **The event opens with both small dice drawn**, so the one beside the transform is on screen
+  before its roll, as agreed. Opening an event draws now: `openEncounter` replaced
+  `openingPending`, and a boon draws its three offers the same way.
+- **Skip is gone.** "A different small die" costs nothing and dominates it. So `skip` left
+  `RunAction`, and its outcome left `Outcome`. A transform's outcome names its small die, and a
+  small taken alone is an outcome of its own (`small`).
+- **The terminal's event line read the pool's difference to name the new die.** With a small die
+  arriving beside a transform, that would have named whichever the pool listed first. It reads
+  the outcome now.
+- **`RUN_VERSION` is 4**, for 6c's bundled offers as much as 6d's events. 6c changed the shape
+  and did not bump. A version-3 save written between them would have held offers no screen can
+  draw.
+- **The boon names are placeholders**, three of each kind an act needs, in `data/encounters.json`.
+
+The report on 11 / 8 / 7, the whole of Phase 6:
+
+| Policy | Act I mean (min–p90) | Act II mean | Act III mean | < 2 dragons after Act I |
+|---|---|---|---|---|
+| autopilot | 40.6 (38–43) | 63.0 | 81.2 | 0% |
+| heaviest | 42.0 (40–44) | 64.4 | 82.7 | 0% |
+| lightest | 29.0 (27–31) | 42.4 | 52.8 | 0% |
+| random | 35.8 (28–39) | 53.6 | 68.0 | 0% |
+
+**The floors hold exactly at the minimum.** The lightest picker never ends Act I below 27 or Act
+II below 39, and no policy leaves Act I without its second dragon.
+
+**The curve now sits above the targets.** Even the lightest picker lands on them: 29 against 30,
+and 42.4 against 42. A random picker gains +24 in Act I against +18, and +18 in Act II against
++12. The heaviest gains +30 and +22. That is the reward mix to tune next, as agreed. The obvious
+levers are fewer monsters in the templates, and the closing reward's ×3 / ×2.
 
 ---
 

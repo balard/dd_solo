@@ -22,8 +22,11 @@ export const ACTS: readonly Act[] = [1, 2, 3]
 /** The force-size cap of each act, which is also the size of the enemies met there. */
 export const ACT_SIZE: Readonly<Record<Act, number>> = { 1: 12, 2: 24, 3: 36 }
 
-/** What one encounter of an act's schedule will be. */
-export type Slot = 'battle' | 'event'
+/** What a boon gives: three dice of one kind, pick one (v3 Phase 6). */
+export type BoonGives = 'dragon' | 'terrain' | 'monster'
+
+/** What one encounter of an act's schedule will be: a battle, a die event, or a boon. */
+export type Slot = 'battle' | 'event' | BoonGives
 
 /**
  * The shape of each act (v3 Phase 6): how many battles, and the other slots between them.
@@ -32,9 +35,9 @@ export type Slot = 'battle' | 'event'
  * same number of rewards and events -- which is what lets the pool grow on a curve.
  */
 export const ACT_PLAN: Readonly<Record<Act, { readonly battles: number; readonly between: readonly Slot[] }>> = {
-  1: { battles: 7, between: ['event', 'event'] },
-  2: { battles: 5, between: ['event'] },
-  3: { battles: 5, between: ['event'] },
+  1: { battles: 7, between: ['event', 'event', 'dragon', 'monster'] },
+  2: { battles: 5, between: ['event', 'terrain', 'monster'] },
+  3: { battles: 5, between: ['event', 'monster'] },
 }
 
 /** Encounters played in an act. The act's pool holds more of each kind, drawn without
@@ -43,7 +46,7 @@ export const actLength = (act: Act): number => ACT_PLAN[act].battles + ACT_PLAN[
 
 /** How many of each slot an act's schedule holds. */
 export function slotsIn(act: Act): Readonly<Record<Slot, number>> {
-  const counts: Record<Slot, number> = { battle: ACT_PLAN[act].battles, event: 0 }
+  const counts: Record<Slot, number> = { battle: ACT_PLAN[act].battles, event: 0, dragon: 0, terrain: 0, monster: 0 }
   for (const slot of ACT_PLAN[act].between) counts[slot]++
   return counts
 }
@@ -51,7 +54,7 @@ export function slotsIn(act: Act): Readonly<Record<Slot, number>> {
 /** The human's seat in every battle. `battle_ended` names a winner, and this is a win. */
 export const RUN_PLAYER: PlayerId = 'p1'
 
-export type EncounterKind = 'battle' | 'event'
+export type EncounterKind = 'battle' | 'event' | 'boon'
 
 /**
  * Who a battle is fought against: a force rolled at the act's size from a pool, or a
@@ -76,13 +79,24 @@ export interface BattleEncounter extends EncounterBase {
   readonly opponent: string
 }
 
-/** An event: upgrade or transform one die of the pool, or skip. */
+/** A die event: a small die and a transform, an upgrade, or another small die. Every
+ *  answer is 1 health more in the pool (v3 Phase 6); there is no skip. */
 export interface EventEncounter extends EncounterBase {
   readonly kind: 'event'
 }
 
+/** A boon: three different dice of one kind, pick one, no skip (v3 Phase 6). */
+export interface BoonEncounter extends EncounterBase {
+  readonly kind: 'boon'
+  readonly gives: BoonGives
+}
+
 /** One encounter of an act's pool, from `data/encounters.json`. */
-export type Encounter = BattleEncounter | EventEncounter
+export type Encounter = BattleEncounter | EventEncounter | BoonEncounter
+
+/** Whether an encounter can fill a slot of a schedule. */
+export const fillsSlot = (encounter: Encounter, slot: Slot): boolean =>
+  encounter.kind === 'boon' ? encounter.gives === slot : encounter.kind === slot
 
 /** Every encounter a run can draw, by act, and the hand-built enemy forces by name:
  *  the reducer's one input that is not state. */
@@ -161,13 +175,17 @@ export type RunPending =
   | { readonly kind: 'arrange_force'; readonly cap: number }
   | { readonly kind: 'battle'; readonly encounter: BattleEncounter }
   | { readonly kind: 'reward'; readonly offers: readonly Offer[] }
-  /** `upgradable` and `transformable` are the unit dice in the pool each may act on. */
+  /** `smalls` are drawn when the event opens: the first comes with a transform, the
+   *  second alone. `upgradable` and `transformable` are the unit dice in the pool each
+   *  may act on. */
   | {
       readonly kind: 'event'
       readonly encounter: EventEncounter
+      readonly smalls: readonly [string, string]
       readonly upgradable: readonly string[]
       readonly transformable: readonly string[]
     }
+  | { readonly kind: 'boon'; readonly encounter: BoonEncounter; readonly offers: readonly Offer[] }
   | { readonly kind: 'over' }
 
 export type RunAction =
@@ -178,7 +196,7 @@ export type RunAction =
   | { readonly kind: 'take_offer'; readonly index: number }
   | { readonly kind: 'upgrade'; readonly unit: string }
   | { readonly kind: 'transform'; readonly unit: string }
-  | { readonly kind: 'skip' }
+  | { readonly kind: 'take_small' }
 
 export type RunStatus = 'playing' | 'won' | 'lost'
 
@@ -187,8 +205,11 @@ export type RunStatus = 'playing' | 'won' | 'lost'
 export type Outcome =
   | { readonly kind: 'won'; readonly took: Offer | null }
   | { readonly kind: 'lost' }
-  | { readonly kind: 'upgrade' | 'transform'; readonly from: string; readonly to: string }
-  | { readonly kind: 'skip' }
+  | { readonly kind: 'upgrade'; readonly from: string; readonly to: string }
+  /** `small` is the die that came with the transform. */
+  | { readonly kind: 'transform'; readonly from: string; readonly to: string; readonly small: string }
+  | { readonly kind: 'small'; readonly took: string }
+  | { readonly kind: 'boon'; readonly took: Offer }
 
 /**
  * One finished encounter (v3 Phase 4b). The act strip draws the run's past from these, the

@@ -1,5 +1,5 @@
 {
-  "_comment": "The run's encounters (v3 Phase 1), one list per act: Act I meets 12-health enemies, Act II 24 and Act III 36. A run draws 12 from each list without replacement, a battle seven times in ten. A battle's enemy is a pool -- rolled at the act's size from the battle's seed -- or a built force named by its file in data/forces/enemies/. Its opponent is an OPPONENTS name (src/ai/opponents.ts), never random. An event offers an upgrade or a transform of one die, or skip. Hand-authored like presets.json; src/run/encounters.ts validates it at load.",
+  "_comment": "The run's encounters (v3 Phase 1, reshaped in Phase 6), one list per act: Act I meets 12-health enemies, Act II 24 and Act III 36. An act plays a schedule (ACT_PLAN in src/run/types.ts): a battle, its other slots shuffled, a battle; each slot draws an encounter of its kind from this list without replacement, so each list holds at least as many of each kind as its schedule plays. A battle's enemy is a pool -- rolled at the act's size from the battle's seed -- or a built force named by its file in data/forces/enemies/. Its opponent is an OPPONENTS name (src/ai/opponents.ts), never random. An event offers a small die and a transform, an upgrade, or another small die. A boon gives one of three dragons, terrains or monsters. Hand-authored like presets.json; src/run/encounters.ts validates it at load.",
   "acts": {
     "1": [
       {"id": "act1.treefolk-grove", "kind": "battle", "name": "Treefolk grove", "enemy": {"pool": {"kind": "species", "species": "treefolk"}}, "opponent": "greedy"},
@@ -18,7 +18,13 @@
       {"id": "act1.village-forge", "kind": "event", "name": "Village forge"},
       {"id": "act1.hermit", "kind": "event", "name": "Hermit's hut"},
       {"id": "act1.standing-stone", "kind": "event", "name": "Standing stone"},
-      {"id": "act1.crossroads-market", "kind": "event", "name": "Crossroads market"}
+      {"id": "act1.crossroads-market", "kind": "event", "name": "Crossroads market"},
+      {"id": "act1.dragon-roost", "kind": "boon", "gives": "dragon", "name": "Dragon roost"},
+      {"id": "act1.hatchery", "kind": "boon", "gives": "dragon", "name": "Hatchery"},
+      {"id": "act1.wyrm-cave", "kind": "boon", "gives": "dragon", "name": "Wyrm cave"},
+      {"id": "act1.beast-pit", "kind": "boon", "gives": "monster", "name": "Beast pit"},
+      {"id": "act1.old-den", "kind": "boon", "gives": "monster", "name": "Old den"},
+      {"id": "act1.menagerie", "kind": "boon", "gives": "monster", "name": "Menagerie"}
     ],
     "2": [
       {"id": "act2.old-growth", "kind": "battle", "name": "Old growth", "enemy": {"pool": {"kind": "species", "species": "treefolk"}}, "opponent": "greedy"},
@@ -37,7 +43,13 @@
       {"id": "act2.dragon-bones", "kind": "event", "name": "Dragon bones"},
       {"id": "act2.alchemist", "kind": "event", "name": "Alchemist's tower"},
       {"id": "act2.sacred-grove", "kind": "event", "name": "Sacred grove"},
-      {"id": "act2.blacksmith", "kind": "event", "name": "Wandering blacksmith"}
+      {"id": "act2.blacksmith", "kind": "event", "name": "Wandering blacksmith"},
+      {"id": "act2.cartographer", "kind": "boon", "gives": "terrain", "name": "Cartographer"},
+      {"id": "act2.surveyors-camp", "kind": "boon", "gives": "terrain", "name": "Surveyors' camp"},
+      {"id": "act2.lost-road", "kind": "boon", "gives": "terrain", "name": "Lost road"},
+      {"id": "act2.monster-market", "kind": "boon", "gives": "monster", "name": "Monster market"},
+      {"id": "act2.tamers-lodge", "kind": "boon", "gives": "monster", "name": "Tamer's lodge"},
+      {"id": "act2.wild-lair", "kind": "boon", "gives": "monster", "name": "Wild lair"}
     ],
     "3": [
       {"id": "act3.elder-forest", "kind": "battle", "name": "Elder forest", "enemy": {"pool": {"kind": "species", "species": "treefolk"}}, "opponent": "greedy"},
@@ -56,7 +68,10 @@
       {"id": "act3.fallen-titan", "kind": "event", "name": "Fallen titan"},
       {"id": "act3.arcane-well", "kind": "event", "name": "Arcane well"},
       {"id": "act3.war-camp", "kind": "event", "name": "War camp"},
-      {"id": "act3.ancient-altar", "kind": "event", "name": "Ancient altar"}
+      {"id": "act3.ancient-altar", "kind": "event", "name": "Ancient altar"},
+      {"id": "act3.titan-forge", "kind": "boon", "gives": "monster", "name": "Titan forge"},
+      {"id": "act3.deep-lair", "kind": "boon", "gives": "monster", "name": "Deep lair"},
+      {"id": "act3.beast-throne", "kind": "boon", "gives": "monster", "name": "Beast throne"}
     ]
   }
 }

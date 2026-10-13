@@ -21,7 +21,8 @@ import {
   savedWhen,
 } from './runView'
 
-/** A run played on rails: every battle won but one, every reward the first offer, every event skipped. */
+/** A run played on rails: every battle won but one, every reward and boon the first offer,
+ *  every event its lone small die. */
 function playTo(seed: number, until: (run: RunState) => boolean, loseAt: string | null = null): RunState {
   let run = reduceRun(newRun(seed), { kind: 'pick_race', race: 'treefolk' })
   while (!until(run) && run.pending.kind !== 'over') {
@@ -31,9 +32,9 @@ function playTo(seed: number, until: (run: RunState) => boolean, loseAt: string 
         ? { kind: 'ready' }
         : kind === 'battle'
           ? { kind: 'battle_ended', winner: run.current?.id === loseAt ? 'p2' : 'p1' }
-          : kind === 'reward'
-            ? { kind: 'take_offer', index: 0 }
-            : { kind: 'skip' }
+          : kind === 'event'
+            ? { kind: 'take_small' }
+            : { kind: 'take_offer', index: 0 }
     run = reduceRun(run, action)
   }
   return run
@@ -97,7 +98,11 @@ describe('the words', () => {
     expect(outcomeText({ ...at, outcome: { kind: 'won', took: null } })).toBe('won')
     expect(outcomeText({ ...at, outcome: { kind: 'lost' } })).toBe('lost')
     expect(outcomeText({ ...at, outcome: { kind: 'upgrade', from: 'treefolk.oak', to: 'treefolk.oak_lord' } })).toBe('upgraded Oak to Oak Lord')
-    expect(outcomeText({ ...at, outcome: { kind: 'skip' } })).toBe('walked on')
+    expect(
+      outcomeText({ ...at, outcome: { kind: 'transform', from: 'treefolk.oak', to: 'treefolk.pine', small: 'treefolk.nymph' } }),
+    ).toBe('took Nymph, transformed Oak into Pine')
+    expect(outcomeText({ ...at, outcome: { kind: 'small', took: 'treefolk.nymph' } })).toBe('took Nymph')
+    expect(outcomeText({ ...at, outcome: { kind: 'boon', took: offer(['dragon', 'fire_drake']) } })).toBe('took Fire Drake')
   })
 
   it('counts a run for its end', () => {
@@ -122,12 +127,13 @@ describe('freshDice', () => {
         { kind: 'won', took: offer(['unit', 'treefolk.oak']) },
         { kind: 'upgrade', from: 'treefolk.oakling', to: 'treefolk.oak' },
         { kind: 'won', took: offer(['unit', 'treefolk.pineling'], ['dragon', 'earth_wyrm']) },
-        { kind: 'transform', from: 'treefolk.pine', to: 'treefolk.willow' },
-        { kind: 'skip' },
+        { kind: 'transform', from: 'treefolk.pine', to: 'treefolk.willow', small: 'treefolk.nymph' },
+        { kind: 'boon', took: offer(['dragon', 'fire_drake']) },
+        { kind: 'small', took: 'treefolk.hamadryad' },
       ]),
     )
-    expect([...fresh.units]).toEqual(['treefolk.willow', 'treefolk.pineling'])
-    expect([...fresh.dragons]).toEqual(['earth_wyrm'])
+    expect([...fresh.units].sort()).toEqual(['treefolk.hamadryad', 'treefolk.nymph', 'treefolk.pineling', 'treefolk.willow'])
+    expect([...fresh.dragons].sort()).toEqual(['earth_wyrm', 'fire_drake'])
   })
 
   it('has nothing new at the opening, or after a terrain reward', () => {
@@ -211,7 +217,7 @@ describe('eventResult', () => {
     const result = eventResult(spare, after)
     expect(result).toMatchObject({ kind: 'upgrade', from: 'treefolk.oakling', to: 'treefolk.oak', title: 'Oakling became an Oak.' })
     expect(result?.force).toBe('It was a spare Oakling, so your force did not change.')
-    expect(result?.next).toMatch(new RegExp(`^Next: ${after.current?.name}, (a battle|an event)\.$`))
+    expect(result?.next).toMatch(new RegExp(`^Next: ${after.current?.name}, (a battle|an event|a boon)\.$`))
   })
 
   it('says where a fielded die went, and when it no longer fits', () => {
@@ -220,15 +226,17 @@ describe('eventResult', () => {
     const after = reduceRun(before, { kind: 'transform', unit: fielded })
     const result = eventResult(before, after)
     expect(result?.kind).toBe('transform')
+    if (before.pending.kind !== 'event') throw new Error('not an event')
+    expect(result?.small).toBe(before.pending.smalls[0]) // shown before the roll, given with it
     expect(result?.force).toMatch(/took the .* place in your Horde: 1\d of 12 health\./)
     // A full force: an upgrade of a fielded die benches it.
     const benched = eventResult(before, reduceRun(before, { kind: 'upgrade', unit: fielded }))
     expect(benched?.force).toMatch(/did not fit .* waits in your pool/)
   })
 
-  it('is null for a skip, or when nothing new was recorded', () => {
+  it('is null for a small die taken alone, or when nothing new was recorded', () => {
     const before = atEvent(2)
-    expect(eventResult(before, reduceRun(before, { kind: 'skip' }))).toBeNull()
+    expect(eventResult(before, reduceRun(before, { kind: 'take_small' }))).toBeNull()
     expect(eventResult(before, before)).toBeNull()
   })
 })

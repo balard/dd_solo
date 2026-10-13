@@ -11,7 +11,9 @@
  *                   flavour -> (similar) a copy of the pool [-> its element] -> the die
  *                              (general unit) shared or any -> the die
  *                              (general dragon, terrain) the die
- *     transform  -> which die of the same species and health
+ *     die event  -> its first small die -> its second, a different die   (when it opens)
+ *     boon       -> die 1, similar -> die 2, by the pool's health -> die 3, general
+ *     transform  -> which die of the same species and health          (when answered)
  *
  * A forced choice draws nothing -- the same-line medium, the five small dice, the opening
  * split, the battles that open and close an act -- the
@@ -32,7 +34,9 @@ import {
   ACT_PLAN,
   CLOSING_TEMPLATES,
   REWARD_TEMPLATES,
+  fillsSlot,
   type Act,
+  type BoonGives,
   type Encounter,
   type Grant,
   type Offer,
@@ -134,7 +138,7 @@ export function drawEncounter(
   drawn: readonly string[],
   rng: RngState,
 ): readonly [Encounter, RngState] {
-  const left = byId(content.acts[act].filter((e) => e.kind === slot && !drawn.includes(e.id)))
+  const left = byId(content.acts[act].filter((e) => fillsSlot(e, slot) && !drawn.includes(e.id)))
   return pick(left, rng, `an act ${act} ${slot}`)
 }
 
@@ -155,6 +159,30 @@ export function drawReward(collection: Collection, closing: boolean, rng: RngSta
     return { grants }
   })
   return [offers, state] as const
+}
+
+/**
+ * A boon's three offers (v3 Phase 6): three different dice of one kind, the first always
+ * similar, the second similar or general by the pool's health, the third always general.
+ */
+export function drawBoon(gives: BoonGives, collection: Collection, rng: RngState): readonly [readonly Offer[], RngState] {
+  const taken: string[] = []
+  let state = rng
+  const offers = (['similar', undefined, 'general'] as const).map((forced): Offer => {
+    const [grant, next] = giveDie(gives, 1, collection, state, forced === undefined ? { taken } : { forced, taken })
+    state = next
+    taken.push(grant.id)
+    return { grants: [grant] }
+  })
+  return [offers, state] as const
+}
+
+/** A die event's two small dice, drawn when it opens: different dice, each similar or
+ *  general by the pool's health. */
+export function drawSmalls(collection: Collection, rng: RngState): readonly [readonly [string, string], RngState] {
+  const [first, afterFirst] = giveDie('small', 1, collection, rng)
+  const [second, afterSecond] = giveDie('small', 1, collection, afterFirst, { taken: [first.id] })
+  return [[first.id, second.id], afterSecond] as const
 }
 
 const NEXT_SIZE: Readonly<Partial<Record<UnitSize, UnitSize>>> = { small: 'medium', medium: 'large' }

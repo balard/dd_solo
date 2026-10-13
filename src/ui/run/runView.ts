@@ -6,7 +6,17 @@ import { dragonDie, dragonName, terrainDie, terrainDieName, terrainType, unitTyp
 import { dragonCount } from '../../engine/force'
 import { forceHealth } from '../../engine/forceProblems'
 import { eventEffect } from '../../run/reduce'
-import { ACTS, ACT_SIZE, actLength, type Act, type Grant, type HistoryEntry, type Offer, type RunState } from '../../run/types'
+import {
+  ACTS,
+  ACT_SIZE,
+  actLength,
+  type Act,
+  type Encounter,
+  type Grant,
+  type HistoryEntry,
+  type Offer,
+  type RunState,
+} from '../../run/types'
 import type { RunLoad } from '../../run/save'
 
 import { describe } from '../game/DiceGrid'
@@ -146,9 +156,11 @@ export function outcomeText(entry: HistoryEntry): string {
     case 'upgrade':
       return `upgraded ${unitType(outcome.from).name} to ${unitType(outcome.to).name}`
     case 'transform':
-      return `transformed ${unitType(outcome.from).name} into ${unitType(outcome.to).name}`
-    case 'skip':
-      return 'walked on'
+      return `took ${unitType(outcome.small).name}, transformed ${unitType(outcome.from).name} into ${unitType(outcome.to).name}`
+    case 'small':
+      return `took ${unitType(outcome.took).name}`
+    case 'boon':
+      return `took ${offerText(outcome.took, null).name}`
   }
 }
 
@@ -162,12 +174,18 @@ export function freshDice(run: RunState): { readonly units: ReadonlySet<string>;
   const dragons = new Set<string>()
   for (const entry of [...run.history].reverse()) {
     const outcome = entry.outcome
-    if (outcome.kind === 'upgrade' || outcome.kind === 'transform') units.add(outcome.to)
-    if (outcome.kind === 'won') {
-      for (const grant of outcome.took?.grants ?? []) {
+    const add = (offer: Offer | null) => {
+      for (const grant of offer?.grants ?? []) {
         if (grant.kind === 'unit') units.add(grant.id)
         if (grant.kind === 'dragon') dragons.add(grant.id)
       }
+    }
+    if (outcome.kind === 'upgrade') units.add(outcome.to)
+    if (outcome.kind === 'transform') units.add(outcome.to).add(outcome.small)
+    if (outcome.kind === 'small') units.add(outcome.took)
+    if (outcome.kind === 'boon') add(outcome.took)
+    if (outcome.kind === 'won') {
+      add(outcome.took)
       break
     }
     if (outcome.kind === 'lost') break
@@ -180,6 +198,8 @@ export interface EventResult {
   readonly kind: 'upgrade' | 'transform'
   readonly from: string
   readonly to: string
+  /** The small die that came with a transform. */
+  readonly small: string | null
   /** "Oak became an Oak Lord." */
   readonly title: string
   /** What happened to the force, in a sentence or two. */
@@ -187,6 +207,8 @@ export interface EventResult {
   /** Where the run goes from here: "Next: Ember cult, a battle." */
   readonly next: string
 }
+
+const ENCOUNTER_WORD: Readonly<Record<Encounter['kind'], string>> = { battle: 'a battle', event: 'an event', boon: 'a boon' }
 
 const article = (name: string): string => (/^[AEIOU]/i.test(name) ? `an ${name}` : `a ${name}`)
 const ARMY_WORD: Readonly<Record<string, string>> = { home: 'Home army', campaign: 'Campaign army', horde: 'Horde' }
@@ -229,11 +251,12 @@ export function eventResult(before: RunState, after: RunState): EventResult | nu
         ? ''
         : after.act !== before.act
           ? `Act ${ROMAN[after.act]} begins, with a cap of ${ACT_SIZE[after.act]}. Next: ${after.current.name}, a battle.`
-          : `Next: ${after.current.name}, ${after.current.kind === 'battle' ? 'a battle' : 'an event'}.`
+          : `Next: ${after.current.name}, ${ENCOUNTER_WORD[after.current.kind]}.`
   return {
     kind: outcome.kind,
     from: outcome.from,
     to: outcome.to,
+    small: outcome.kind === 'transform' ? outcome.small : null,
     title: `${from} became ${article(to)}.`,
     force,
     next,

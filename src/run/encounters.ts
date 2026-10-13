@@ -21,7 +21,7 @@ import { DataError } from '../data/types'
 import { builtForceHealth, builtForceProblem, readBuiltForce, type BuiltForce, type ForcePool } from '../engine/force'
 import { speciesProblem } from '../engine/playable'
 
-import { ACTS, ACT_SIZE, slotsIn, type Act, type Encounter, type EnemySpec, type RunContent } from './types'
+import { ACTS, ACT_SIZE, fillsSlot, slotsIn, type Act, type Encounter, type EnemySpec, type RunContent, type Slot } from './types'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -100,7 +100,14 @@ function readEncounter(
   const where = `${id} (${label})`
   if (typeof name !== 'string' || name.trim() === '') return problems.push(`${where}: it has no name`), null
   if (kind === 'event') return { id, act, kind, name }
-  if (kind !== 'battle') return problems.push(`${where}: its kind is "battle" or "event"`), null
+  if (kind === 'boon') {
+    const gives = raw['gives']
+    if (gives !== 'dragon' && gives !== 'terrain' && gives !== 'monster') {
+      return problems.push(`${where}: a boon gives "dragon", "terrain" or "monster"`), null
+    }
+    return { id, act, kind, name, gives }
+  }
+  if (kind !== 'battle') return problems.push(`${where}: its kind is "battle", "event" or "boon"`), null
 
   const opponent = raw['opponent']
   if (typeof opponent !== 'string' || opponent === '') return problems.push(`${where}: it names no opponent`), null
@@ -114,8 +121,8 @@ function readEncounter(
 /**
  * The run's content from parsed `encounters.json` and the enemy forces, or every
  * problem with it:
- * - one list per act, each holding **more** than twelve encounters and at least one of
- *   each kind, so a run can draw its twelve without replacement and still meet both;
+ * - one list per act, holding at least as many encounters for each kind of slot as the
+ *   act's schedule plays (`slotsIn`), so a run draws them without replacement;
  * - ids unique across the acts;
  * - every pool's species playable;
  * - every built enemy one of the forces, and its act's size;
@@ -151,9 +158,9 @@ export function readEncounters(
       if (encounter.kind === 'battle' && 'built' in encounter.enemy) used.add(encounter.enemy.built)
       encounters.push(encounter)
     })
-    for (const [kind, wanted] of Object.entries(slotsIn(act))) {
-      const held = encounters.filter((e) => e.kind === kind).length
-      if (held < wanted) problems.push(`act ${act} holds ${held} of kind ${kind}; its schedule plays ${wanted}`)
+    for (const [slot, wanted] of Object.entries(slotsIn(act)) as [Slot, number][]) {
+      const held = encounters.filter((e) => fillsSlot(e, slot)).length
+      if (held < wanted) problems.push(`act ${act} holds ${held} of kind ${slot}; its schedule plays ${wanted}`)
     }
     acts[act] = encounters
   }

@@ -77,16 +77,26 @@ describe('autopilot', () => {
     expect(autopilot(twoDragons)).toEqual({ kind: 'take_offer', index: 1 })
   })
 
-  it('upgrades a medium before a small, and skips when nothing can be', () => {
+  it('upgrades a medium before a small, and takes the small die when nothing can be', () => {
     const run = reduceRun(newRun(5), { kind: 'pick_race', race: 'treefolk' })
     const encounter = { id: 'x', act: 1 as const, kind: 'event' as const, name: 'X' }
+    const smalls = ['treefolk.oakling', 'treefolk.nymph'] as const
     const event = (upgradable: string[]): RunState => ({
       ...run,
-      pending: { kind: 'event', encounter, upgradable, transformable: upgradable },
+      pending: { kind: 'event', encounter, smalls, upgradable, transformable: upgradable },
     })
     expect(autopilot(event(['treefolk.oakling', 'treefolk.oak']))).toEqual({ kind: 'upgrade', unit: 'treefolk.oak' })
     expect(autopilot(event(['treefolk.oakling']))).toEqual({ kind: 'upgrade', unit: 'treefolk.oakling' })
-    expect(autopilot(event([]))).toEqual({ kind: 'skip' })
+    expect(autopilot(event([]))).toEqual({ kind: 'take_small' })
+  })
+
+  it('takes a boon\'s first offer, the one like the pool', () => {
+    const run = reduceRun(newRun(5), { kind: 'pick_race', race: 'treefolk' })
+    const encounter = { id: 'x', act: 1 as const, kind: 'boon' as const, gives: 'dragon' as const, name: 'X' }
+    const offers = (['water_drake', 'earth_wyrm', 'fire_drake'] as const).map(
+      (id): Offer => ({ grants: [{ kind: 'dragon', id, count: 1, flavour: 'similar' }] }),
+    )
+    expect(autopilot({ ...run, pending: { kind: 'boon', encounter, offers } })).toEqual({ kind: 'take_offer', index: 0 })
   })
 })
 
