@@ -1872,8 +1872,11 @@ body {
 .run-army-head { display: flex; justify-content: space-between; font-size: var(--fs-sm); margin-bottom: 4px; }
 @media (max-width: 599px) { .run-armies { grid-template-columns: 1fr; } }
 
-/* The reward of five: pick, then Take. */
-.offers { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+/* The reward: three offers, four on an act's closing battle; pick, then Take. */
+.offers { display: grid; grid-template-columns: repeat(var(--offers, 3), minmax(0, 1fr)); gap: 10px; }
+.offer-die { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+.offer-grant { display: inline-flex; align-items: flex-end; gap: 4px; }
+.offer-count { font-size: var(--fs-lg); font-weight: 700; line-height: 1; }
 .offer {
   display: grid; gap: 6px; align-content: start; min-width: 0; padding: 10px;
   border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
@@ -1891,7 +1894,7 @@ body {
 @media (max-width: 599px) {
   .offers { grid-template-columns: 1fr; gap: 8px; }
   .offer { grid-template-columns: auto 1fr; column-gap: 10px; }
-  .offer-die { grid-row: span 3; }
+  .offer-die { grid-row: span 3; flex-direction: column; align-items: flex-start; align-self: start; }
 }
 @media (max-height: 499px) { .offer .face-sheet, .offer .terrain-detail { display: none; } }
 

@@ -6,7 +6,7 @@ import { dragonDie, dragonName, terrainDie, terrainDieName, terrainType, unitTyp
 import { dragonCount } from '../../engine/force'
 import { forceHealth } from '../../engine/forceProblems'
 import { eventEffect } from '../../run/reduce'
-import { ACTS, ACT_SIZE, actLength, type Act, type HistoryEntry, type Offer, type RunState } from '../../run/types'
+import { ACTS, ACT_SIZE, actLength, type Act, type Grant, type HistoryEntry, type Offer, type RunState } from '../../run/types'
 import type { RunLoad } from '../../run/save'
 
 import { describe } from '../game/DiceGrid'
@@ -70,7 +70,7 @@ export function concedeAsk(run: RunState): { readonly question: string; readonly
  * the result reaching the run.
  */
 export function battleOutcome(run: RunState): { readonly label: string; readonly note: string | null } | null {
-  if (run.pending.kind === 'reward') return { label: 'Pick your reward', note: 'Pick one of five: it goes to your pool.' }
+  if (run.pending.kind === 'reward') return { label: 'Pick your reward', note: 'Pick one offer: it goes to your pool.' }
   if (run.status === 'won') return { label: 'See the run', note: 'That was the last battle: the run is won.' }
   if (run.status === 'lost') return { label: 'See the run', note: `The run ends at ${runWhere(run)}.` }
   return null
@@ -81,26 +81,43 @@ export const speciesName = (id: string): string => speciesInfo(id)?.name ?? id
 /** "A Treefolk run", or "A run" before a race is picked. */
 export const runName = (run: RunState): string => (run.race === null ? 'A run' : `A ${speciesName(run.race)} run`)
 
-/** How one offer reads: what kind it is, its name, and one line about it. */
-export function offerText(offer: Offer, race: string | null): { kind: string; name: string; detail: string } {
-  switch (offer.kind) {
+interface OfferText {
+  readonly kind: string
+  readonly name: string
+  readonly detail: string
+}
+
+/** How one die given reads: what kind it is, its name with its count, and a line about it. */
+export function grantText(grant: Grant, race: string | null): OfferText {
+  const times = grant.count > 1 ? ` ×${grant.count}` : ''
+  switch (grant.kind) {
     case 'unit': {
-      const type = unitType(offer.id)
+      const type = unitType(grant.id)
       const yours = race !== null && type.species === race
       return {
         kind: yours ? 'Your race' : speciesName(type.species),
-        name: type.name,
-        detail: `${speciesName(type.species)} · ${type.health} health · ${describe(type).replace(`${type.name} — `, '')}`,
+        name: `${type.name}${times}`,
+        detail: `${speciesName(type.species)} · ${type.health * grant.count} health · ${describe(type).replace(`${type.name} — `, '')}`,
       }
     }
     case 'dragon': {
-      const die = dragonDie(offer.id)
-      return { kind: 'Dragon', name: dragonName(offer.id), detail: `${die.element} · ${die.form}` }
+      const die = dragonDie(grant.id)
+      return { kind: 'Dragon', name: `${dragonName(grant.id)}${times}`, detail: `${die.element} · ${die.form}` }
     }
     case 'terrain': {
-      const type = terrainType(terrainDie(offer.id).type)
-      return { kind: 'Terrain', name: terrainDieName(offer.id), detail: type.elements.join(' & ') }
+      const type = terrainType(terrainDie(grant.id).type)
+      return { kind: 'Terrain', name: `${terrainDieName(grant.id)}${times}`, detail: type.elements.join(' & ') }
     }
+  }
+}
+
+/** How one offer reads (v3 Phase 6: an offer can give two dice): each die's words, joined. */
+export function offerText(offer: Offer, race: string | null): OfferText {
+  const parts = offer.grants.map((g) => grantText(g, race))
+  return {
+    kind: parts.map((p) => p.kind).join(' + '),
+    name: parts.map((p) => p.name).join(' + '),
+    detail: parts.map((p) => p.detail).join(' · '),
   }
 }
 
@@ -147,8 +164,10 @@ export function freshDice(run: RunState): { readonly units: ReadonlySet<string>;
     const outcome = entry.outcome
     if (outcome.kind === 'upgrade' || outcome.kind === 'transform') units.add(outcome.to)
     if (outcome.kind === 'won') {
-      if (outcome.took?.kind === 'unit') units.add(outcome.took.id)
-      if (outcome.took?.kind === 'dragon') dragons.add(outcome.took.id)
+      for (const grant of outcome.took?.grants ?? []) {
+        if (grant.kind === 'unit') units.add(grant.id)
+        if (grant.kind === 'dragon') dragons.add(grant.id)
+      }
       break
     }
     if (outcome.kind === 'lost') break

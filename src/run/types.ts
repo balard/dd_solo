@@ -10,6 +10,7 @@
  * (`purity.test.ts`). The engine does not know runs exist.
  */
 import type { Collection } from '../data/collections'
+import type { UnitSize } from '../data/types'
 import type { BuiltForce, ForcePool } from '../engine/force'
 import type { RngState } from '../engine/rng'
 import type { PlayerId } from '../engine/types'
@@ -20,9 +21,6 @@ export const ACTS: readonly Act[] = [1, 2, 3]
 
 /** The force-size cap of each act, which is also the size of the enemies met there. */
 export const ACT_SIZE: Readonly<Record<Act, number>> = { 1: 12, 2: 24, 3: 36 }
-
-/** One in ten reward draws is of any species, the rest of the run's race. */
-export const RACE_DIE_IN_10 = 7
 
 /** What one encounter of an act's schedule will be. */
 export type Slot = 'battle' | 'event'
@@ -49,9 +47,6 @@ export function slotsIn(act: Act): Readonly<Record<Slot, number>> {
   for (const slot of ACT_PLAN[act].between) counts[slot]++
   return counts
 }
-
-/** How many unit dice a reward offers, beside its one dragon and one terrain. */
-export const UNIT_OFFERS = 3
 
 /** The human's seat in every battle. `battle_ended` names a winner, and this is a win. */
 export const RUN_PLAYER: PlayerId = 'p1'
@@ -96,11 +91,68 @@ export interface RunContent {
   readonly forces: Readonly<Record<string, BuiltForce>>
 }
 
-/** One of a reward's five offers. */
-export type Offer =
-  | { readonly kind: 'unit'; readonly id: string }
-  | { readonly kind: 'dragon'; readonly id: string }
-  | { readonly kind: 'terrain'; readonly id: string }
+/**
+ * Whether a die given is like the pool or from outside it (v3 Phase 6): a *similar* die
+ * is drawn from the species and elements of a die the pool holds, a *general* one more
+ * widely. See `give.ts` for each kind's rule.
+ */
+export type Flavour = 'similar' | 'general'
+
+/**
+ * The chance in 100 that a die given is similar, by the pool's health: as the pool grows,
+ * more of what it is given comes from outside it. Read top down; the first band whose
+ * `upTo` the health does not pass is the one.
+ */
+export const SIMILAR_IN_100: readonly { readonly upTo: number; readonly chance: number }[] = [
+  { upTo: 24, chance: 99 },
+  { upTo: 36, chance: 90 },
+  { upTo: Infinity, chance: 70 },
+]
+
+/** A general unit die shares an element with the pool this many times in ten, else it is
+ *  any die of its size. */
+export const GENERAL_SHARED_IN_10 = 7
+
+/** What a die given is, decided before anything about it is drawn: a unit by its size, a
+ *  dragon or a terrain. */
+export type GiftKind = UnitSize | 'dragon' | 'terrain'
+
+/** One die a reward or a boon gives, `count` copies of it. */
+export interface Grant {
+  readonly kind: 'unit' | 'dragon' | 'terrain'
+  readonly id: string
+  readonly count: number
+  readonly flavour: Flavour
+}
+
+/** One offer a reward makes: everything in it is taken together. */
+export interface Offer {
+  readonly grants: readonly Grant[]
+}
+
+/** One offer of a reward template: the dice it gives, by kind, before any is drawn. */
+export type OfferSpec = readonly { readonly kind: GiftKind; readonly count: number }[]
+
+const one = (kind: GiftKind, count = 1) => ({ kind, count })
+
+/**
+ * The rewards after a battle (v3 Phase 6): one template, uniformly, then its offers in
+ * order. Every offer is at least 1 health, so no pick leaves the pool where it was.
+ */
+export const REWARD_TEMPLATES: readonly (readonly OfferSpec[])[] = [
+  [[one('small'), one('dragon')], [one('medium')], [one('large')]],
+  [[one('small'), one('terrain')], [one('medium')], [one('large')]],
+  [[one('medium')], [one('large')], [one('monster')]],
+]
+
+/**
+ * The reward of the battle that closes Acts I and II: four offers, each at least 3
+ * health -- a small die three times over, a medium one twice.
+ */
+export const CLOSING_TEMPLATES: readonly (readonly OfferSpec[])[] = [
+  [[one('small', 3), one('dragon')], [one('medium', 2)], [one('large')], [one('monster')]],
+  [[one('small', 3), one('terrain')], [one('medium', 2)], [one('large')], [one('monster')]],
+]
 
 export type RunPending =
   | { readonly kind: 'choose_race'; readonly races: readonly string[] }

@@ -38,6 +38,7 @@ import {
   actLength,
   type Act,
   type HistoryEntry,
+  type Offer,
   type Outcome,
   type RunAction,
   type RunContent,
@@ -133,6 +134,18 @@ function finishEncounter(run: RunState, outcome: Outcome, content: RunContent): 
 }
 
 const isLastEncounter = (run: RunState): boolean => run.act === 3 && run.encounter === actLength(3) - 1
+
+/** The encounter in hand closes its act: its reward is the closing one (v3 Phase 6). */
+const isActClose = (run: RunState): boolean => run.encounter === actLength(run.act) - 1
+
+/** The pool with everything one offer gives. */
+export function grantOffer(collection: Collection, offer: Offer): Collection {
+  let pool = collection
+  for (const grant of offer.grants) {
+    pool = adjust(pool, grant.kind === 'unit' ? 'units' : grant.kind === 'dragon' ? 'dragons' : 'terrains', grant.id, grant.count)
+  }
+  return pool
+}
 
 /** The force with the first copy of `from` (in army order) changed to `to`, and the
  *  army it stood in; null when the force fields no `from`. */
@@ -241,9 +254,7 @@ export function reduceRun(run: RunState, action: RunAction, content: RunContent 
       if (action.kind !== 'battle_ended') return refuse(run, action)
       if (action.winner !== RUN_PLAYER) return { ...record(run, { kind: 'lost' }), status: 'lost', pending: { kind: 'over' } }
       if (isLastEncounter(run)) return { ...record(run, { kind: 'won', took: null }), status: 'won', pending: { kind: 'over' } }
-      const race = run.race
-      if (race === null) throw new Error('a battle in a run with no race')
-      const [offers, rng] = drawReward(race, run.force, run.rng)
+      const [offers, rng] = drawReward(run.collection, isActClose(run), run.rng)
       return { ...run, rng, pending: { kind: 'reward', offers } }
     }
 
@@ -251,9 +262,7 @@ export function reduceRun(run: RunState, action: RunAction, content: RunContent 
       if (action.kind !== 'take_offer') return refuse(run, action)
       const offer = pending.offers[action.index]
       if (offer === undefined) throw new IllegalRunAction(`there is no offer ${action.index}`)
-      const kind: CollectionKind = offer.kind === 'unit' ? 'units' : offer.kind === 'dragon' ? 'dragons' : 'terrains'
-      const took = { ...run, collection: adjust(run.collection, kind, offer.id, 1) }
-      return finishEncounter(took, { kind: 'won', took: offer }, content)
+      return finishEncounter({ ...run, collection: grantOffer(run.collection, offer) }, { kind: 'won', took: offer }, content)
     }
 
     case 'event': {

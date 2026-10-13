@@ -12,7 +12,7 @@ import { PLAYABLE_SPECIES } from '../engine/playable'
 
 import { autopilot, suggestForce, unfieldedHealth } from './autopilot'
 import { newRun, reduceRun } from './reduce'
-import { ACT_SIZE, type RunState } from './types'
+import { ACT_SIZE, type Grant, type Offer, type RunState } from './types'
 
 /** Plays a run on autopilot, every battle won (or lost on `loseAt`). */
 function autoRun(seed: number, race: string, loseAt = Infinity): { run: RunState; readies: number } {
@@ -61,17 +61,18 @@ describe('autopilot', () => {
     expect(() => autopilot(run)).toThrow(/a battle is played/)
   })
 
-  it('takes a dragon while short of two, then the heaviest unit', () => {
+  it('takes a dragon while short of two, then the offer worth the most health', () => {
     const run = reduceRun(newRun(5), { kind: 'pick_race', race: 'treefolk' })
-    const offers = [
-      { kind: 'unit', id: 'treefolk.oak' },
-      { kind: 'unit', id: 'treefolk.darktree' },
-      { kind: 'unit', id: 'treefolk.oakling' },
-      { kind: 'dragon', id: 'water_wyrm' },
-      { kind: 'terrain', id: 'swampland_city' },
-    ] as const
+    const grant = (kind: Grant['kind'], id: string, count = 1): Grant => ({ kind, id, count, flavour: 'similar' })
+    const offers: readonly Offer[] = [
+      { grants: [grant('unit', 'treefolk.oakling', 3), grant('terrain', 'swampland_city')] },
+      { grants: [grant('unit', 'treefolk.darktree')] },
+      { grants: [grant('unit', 'treefolk.oakling'), grant('dragon', 'water_wyrm')] },
+      { grants: [grant('unit', 'treefolk.oak', 2)] },
+    ]
     const reward: RunState = { ...run, pending: { kind: 'reward', offers } }
-    expect(autopilot(reward)).toEqual({ kind: 'take_offer', index: 3 })
+    expect(autopilot(reward)).toEqual({ kind: 'take_offer', index: 2 })
+    // Owning two, the most health: the Darktree (4) and two Oaks (4) tie, and the first wins.
     const twoDragons = { ...reward, collection: { ...run.collection, dragons: { water_wyrm: 1, earth_drake: 1 } } }
     expect(autopilot(twoDragons)).toEqual({ kind: 'take_offer', index: 1 })
   })

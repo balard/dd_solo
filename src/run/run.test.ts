@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Collection } from '../data/collections'
-import { UNIT_TYPES, speciesElements, terrainDie, terrainType, unitType } from '../data/load'
+import { UNIT_TYPES, speciesElements, unitType } from '../data/load'
 import { PRESET_ARMY_NAMES } from '../data/presets'
 import { builtForceProblem, dragonCount, splitForce, type BuiltForce } from '../engine/force'
 import { forceHealth, forceProblems, used } from '../engine/forceProblems'
@@ -15,17 +15,22 @@ import { nextInt, rngFrom, type RngState } from '../engine/rng'
 import { homeDiceFor, setupGame, terrainDiceSharing } from '../engine/setup'
 import { V1_RULES } from '../engine/types'
 
-import { drawEncounter, drawReward, drawSchedule, forceElements, rollStart, transformsOf, upgradeOf } from './draws'
+import { drawEncounter, drawReward, drawSchedule, rollStart, transformsOf, upgradeOf } from './draws'
+import { giveDie, offerHealth } from './give'
 import { newRun, reduceRun, upgradePreview } from './reduce'
 import {
   ACTS,
   ACT_PLAN,
   ACT_SIZE,
+  CLOSING_TEMPLATES,
+  REWARD_TEMPLATES,
   IllegalRunAction,
   actLength,
   slotsIn,
   type Act,
   type Encounter,
+  type Offer,
+  type OfferSpec,
   type RunAction,
   type RunContent,
   type RunPending,
@@ -322,71 +327,63 @@ describe('the encounter draw', () => {
   })
 })
 
+/** What an offer is before it is drawn: its dice by kind and count. */
+const shapeOf = (offer: Offer): OfferSpec =>
+  offer.grants.map((g) => ({ kind: g.kind === 'unit' ? unitType(g.id).size : g.kind, count: g.count }))
+
 describe('the reward draw', () => {
-  const force: BuiltForce = started(5).force
+  const pool = started(5).collection
 
-  it('offers three distinct units, a dragon and a terrain, sharing the force\'s elements', () => {
-    for (let seed = 1; seed <= 100; seed++) {
-      const [offers] = drawReward('treefolk', force, rngFrom(seed))
-      expect(offers.map((o) => o.kind)).toEqual(['unit', 'unit', 'unit', 'dragon', 'terrain'])
-      expect(new Set(offers.slice(0, 3).map((o) => o.id)).size).toBe(3)
-      for (const o of offers.slice(0, 3)) expect(PLAYABLE_UNITS.map((u) => u.id)).toContain(o.id)
-      const elements = forceElements(force)
-      expect(elements).toContain(offers[3]?.id.split('_')[0])
-      const terrain = terrainType(terrainDie(offers[4]?.id as string).type)
-      expect(terrain.elements.some((e) => elements.includes(e))).toBe(true)
-    }
-  })
-
-  it('draws in the pinned order: each unit is source then die, then dragon element, form and terrain', () => {
-    const seed = 17
-    const race = 'treefolk'
-    const raceDice = sortedIds(PLAYABLE_UNITS.filter((u) => u.species === race))
-    const allDice = sortedIds(PLAYABLE_UNITS)
-    let rng = rngFrom(seed)
-    let i: number
-    const units: string[] = []
-    while (units.length < 3) {
-      ;[i, rng] = nextInt(rng, 10)
-      const source = i < 7 ? raceDice : allDice
-      ;[i, rng] = nextInt(rng, source.length)
-      const id = at(source, i)
-      if (!units.includes(id)) units.push(id)
-    }
-    const elements = [...forceElements(force)].sort()
-    ;[i, rng] = nextInt(rng, elements.length)
-    const element = at(elements, i)
-    ;[i, rng] = nextInt(rng, 2)
-    const dragon = `${element}_${i === 0 ? 'drake' : 'wyrm'}`
-    const terrains = terrainDiceSharing(forceElements(force))
-    ;[i, rng] = nextInt(rng, terrains.length)
-
-    const [offers, after] = drawReward(race, force, rngFrom(seed))
-    expect(offers.map((o) => o.id)).toEqual([...units, dragon, at(terrains, i)])
-    expect(after).toEqual(rng)
-  })
-
-  it('draws race dice about seven times in ten', () => {
-    let race = 0
-    let total = 0
-    for (let seed = 1; seed <= 300; seed++) {
-      const [offers] = drawReward('firewalkers', force, rngFrom(seed))
-      for (const o of offers.slice(0, 3)) {
-        total++
-        if (unitType(o.id).species === 'firewalkers') race++
+  it('offers one of the battle templates, each pick at least 1 health', () => {
+    const seen = new Set<number>()
+    for (let seed = 1; seed <= 200; seed++) {
+      const [offers] = drawReward(pool, false, rngFrom(seed))
+      const shapes = offers.map(shapeOf)
+      const template = REWARD_TEMPLATES.findIndex((t) => JSON.stringify(t) === JSON.stringify(shapes))
+      expect(template, JSON.stringify(shapes)).toBeGreaterThanOrEqual(0)
+      seen.add(template)
+      for (const offer of offers) expect(offerHealth(offer)).toBeGreaterThanOrEqual(1)
+      for (const g of offers.flatMap((o) => o.grants)) {
+        if (g.kind === 'unit') expect(PLAYABLE_UNITS.map((u) => u.id)).toContain(g.id)
       }
     }
-    // 70% race, plus the race's share of the 30% drawn from every playable die.
-    const expected = 0.7 + 0.3 / PLAYABLE_SPECIES.length
-    expect(race / total).toBeGreaterThan(expected - 0.08)
-    expect(race / total).toBeLessThan(expected + 0.08)
+    expect(seen.size).toBe(REWARD_TEMPLATES.length)
   })
 
-  it('reads every element of every species fielded, death included', () => {
-    const goblins: BuiltForce = {
-      armies: { home: ['goblins.thug'], campaign: ['goblins.pelter'], horde: ['coral_elves.fighter'] },
+  it("offers one of the closing templates after an act's last battle, each pick at least 3 health", () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const [offers] = drawReward(pool, true, rngFrom(seed))
+      const shapes = JSON.stringify(offers.map(shapeOf))
+      expect(CLOSING_TEMPLATES.some((t) => JSON.stringify(t) === shapes), shapes).toBe(true)
+      for (const offer of offers) expect(offerHealth(offer)).toBeGreaterThanOrEqual(3)
     }
-    expect([...forceElements(goblins)].sort()).toEqual(['air', 'death', 'earth', 'water'])
+  })
+
+  it('draws in the pinned order: the template, then each die of each offer by giveDie', () => {
+    const seed = 17
+    let rng = rngFrom(seed)
+    let i: number
+    ;[i, rng] = nextInt(rng, REWARD_TEMPLATES.length)
+    const offers = at(REWARD_TEMPLATES, i).map((spec): Offer => ({
+      grants: spec.map(({ kind, count }) => {
+        const [grant, next] = giveDie(kind, count, pool, rng)
+        rng = next
+        return grant
+      }),
+    }))
+    expect(drawReward(pool, false, rngFrom(seed))).toEqual([offers, rng])
+  })
+
+  it('gives a 12-health pool similar dice about 99 times in 100', () => {
+    let similar = 0
+    let total = 0
+    for (let seed = 1; seed <= 300; seed++) {
+      for (const g of drawReward(pool, false, rngFrom(seed))[0].flatMap((o) => o.grants)) {
+        total++
+        if (g.flavour === 'similar') similar++
+      }
+    }
+    expect(similar / total).toBeGreaterThan(0.96)
   })
 
   it('always has a terrain to offer: every species carries a non-death element', () => {
@@ -510,7 +507,7 @@ describe('the history', () => {
           : pending.kind === 'battle'
             ? { kind: 'battle_ended', winner: run.act === 2 && run.encounter === actLength(2) - 1 ? 'p2' : 'p1' }
             : pending.kind === 'reward'
-              ? { kind: 'take_offer', index: 4 }
+              ? { kind: 'take_offer', index: 0 }
               : pending.kind === 'event'
                 ? { kind: 'skip' }
                 : (() => {
@@ -528,7 +525,7 @@ describe('the history', () => {
     expect(last?.outcome.kind).toBe('lost')
     for (const entry of run.history.slice(0, -1)) {
       expect(['won', 'skip']).toContain(entry.outcome.kind)
-      if (entry.outcome.kind === 'won') expect(entry.outcome.took?.kind).toBe('terrain')
+      if (entry.outcome.kind === 'won') expect(entry.outcome.took?.grants.length).toBeGreaterThan(0)
     }
     outcomes.push(...run.history.map((h) => h.outcome.kind))
     expect(outcomes).toContain('won')
@@ -582,16 +579,18 @@ describe('a battle encounter', () => {
     expect(() => step(step(run, { kind: 'set_force', force: noDragon }), { kind: 'ready' })).toThrow(/choose a dragon/)
   })
 
-  it('fights, then offers five rewards, then draws the next encounter', () => {
+  it('fights, then offers three rewards, then draws the next encounter', () => {
     const battle = step(run, { kind: 'ready' })
     expect(battle.pending).toEqual({ kind: 'battle', encounter: run.current })
     const reward = step(battle, { kind: 'battle_ended', winner: 'p1' })
     if (reward.pending.kind !== 'reward') throw new Error(reward.pending.kind)
-    expect(reward.pending.offers).toHaveLength(5)
-    const offer = reward.pending.offers[0]
-    const after = step(reward, { kind: 'take_offer', index: 0 })
+    expect(reward.pending.offers).toHaveLength(3)
+    const offer = reward.pending.offers.find((o) => o.grants.length === 1 && o.grants[0]?.kind === 'unit')
+    const grant = offer?.grants[0]
+    if (offer === undefined || grant === undefined) throw new Error('every template has a lone unit offer')
+    const after = step(reward, { kind: 'take_offer', index: reward.pending.offers.indexOf(offer) })
     expect(after.encounter).toBe(1)
-    expect(after.collection.units[offer?.id as string]).toBe((run.collection.units[offer?.id as string] ?? 0) + 1)
+    expect(after.collection.units[grant.id]).toBe((run.collection.units[grant.id] ?? 0) + grant.count)
     expect(after.force).toEqual(run.force) // a reward goes to the pool, not the force
     expect(['arrange_force', 'event']).toContain(after.pending.kind)
   })
@@ -767,6 +766,11 @@ function playRun(
       const grew = ownedHealth(run.collection) - ownedHealth(before.collection)
       const expected = action.kind === 'transform' ? grew === 0 : action.kind === 'upgrade' ? grew === 1 : grew >= 0
       if (!expected) fail(`the pool's health moved by ${grew}`)
+      // Every reward pick is health (v3 Phase 6): at least 1, and 3 off an act's closing battle.
+      if (action.kind === 'take_offer') {
+        const closing = before.encounter === actLength(before.act) - 1
+        if (grew < (closing ? 3 : 1)) fail(`a ${closing ? 'closing ' : ''}reward gave ${grew} health`)
+      }
       if (action.kind !== 'set_force' && !fieldsOnlyOwned(run)) fail('the force fields a die the pool does not hold')
     }
   }

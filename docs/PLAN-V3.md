@@ -1017,6 +1017,45 @@ The report on 9 / 6 / 6, still with today's rewards:
 Shorter acts cut the heaviest player's Act I gain from +34 to +26. That is still too much, and
 the lightest is still +2: the spread is the reward mix's to close, not the schedule's.
 
+### What 6c found
+
+- **Nothing already offered is offered again, by filtering rather than redrawing.** "Redraw a
+  duplicate" can loop forever. A pool whose only dragon is fire has exactly two general dragons,
+  and a boon's first two offers may already be both. So `giveDie` takes a `taken` list, filters it
+  out of every list before the pick, and falls back to any die of the kind when a list is left
+  empty. The fallback keeps the flavour it was drawn as, so a rare "general" die there is wider
+  than the table says.
+- **A reward reads the pool, not the force that won.** `forceElements` is gone. The similar rule
+  picks a copy of a die the player owns, fielded or not, so a die on the bench now widens what is
+  offered.
+- **The race no longer drives the offers.** `RACE_DIE_IN_10` and `UNIT_OFFERS` are gone. The race
+  still decides the opening and the Home a suggested force prefers.
+- **An offer is a bundle.** `Offer` is `{ grants }`, and every client reads each grant:
+  - the terminal: "Nymph ×3 + Water Wyrm";
+  - the reward card: one tile per die, its count beside it;
+  - `freshDice`: a bundle's small die lights too.
+
+  The reward grid takes its column count from the offers (`--offers`), since it is three or four
+  now, not five.
+- **One hard-coded twelve survived 6b:** the act strip's "encounter 9 of 12", which no test
+  reads. The browser found it.
+- **The fuzz now holds every reward pick to ≥ 1 health, and ≥ 3 at an act's close.**
+
+The report on 9 / 6 / 6 with the new rewards (boons and the +1 die event are still 6d's):
+
+| Policy | Act I mean (min–p90) | Act II mean | Act III mean | < 2 dragons after Act I |
+|---|---|---|---|---|
+| autopilot | 36.1 (34–38) | 54.4 | 68.6 | 2% |
+| heaviest | 38.0 (36–39) | 56.4 | 70.6 | 100% |
+| lightest | 25.0 (23–26) | 34.4 | 40.7 | 2% |
+| random | 30.5 (24–34) | 43.7 | 53.3 | 46% |
+
+**The spread closed.** Act I's range across every policy went from 12–52 to 23–39, and a random
+picker now lands on both targets (30.5 against 30, 43.7 against 42). 6d still adds the monster
+boon (+4 an act) and +1 to every die event. That will lift every row by about 6 in Act I and 5 in
+Act II, past the targets for a careful player. Tuning that is the reward-mix pass the curve was
+built for.
+
 ---
 
 ## Deliberately out of v3 (for now)

@@ -16,6 +16,7 @@ import { forceProblems, used } from '../engine/forceProblems'
 import { homeDiceFor } from '../engine/setup'
 
 import { upgradeOf } from './draws'
+import { offerHealth } from './give'
 import { ACT_SIZE, IllegalRunAction, type RunAction, type RunState } from './types'
 
 /** Every copy the pool owns of one kind, one id per copy, sorted by id. */
@@ -90,8 +91,8 @@ const sameForce = (a: BuiltForce, b: BuiltForce): boolean => JSON.stringify(a) =
  * and the end, which nothing answers:
  * - **race**: picked by the seed, so a watched run without `--race` still varies;
  * - **force**: `suggestForce`, then ready;
- * - **reward**: a dragon while the force is short of the two Act III asks for, else the
- *   heaviest unit offered (the first of equals), else the first offer;
+ * - **reward**: an offer with a dragon while the pool is short of the two Act III asks
+ *   for, else the offer worth the most health (the first of equals);
  * - **event**: upgrade a medium die to large if it can, else a small to medium, else skip.
  *   A transform is a sideways move, and a rule of thumb has no reason to want one.
  */
@@ -113,13 +114,12 @@ export function autopilot(run: RunState): RunAction {
     }
     case 'reward': {
       const ownedDragons = Object.values(run.collection.dragons).reduce((n, c) => n + c, 0)
-      const dragon = pending.offers.findIndex((o) => o.kind === 'dragon')
+      const dragon = pending.offers.findIndex((o) => o.grants.some((g) => g.kind === 'dragon'))
       if (ownedDragons < dragonCount(ACT_SIZE[3]) && dragon >= 0) return { kind: 'take_offer', index: dragon }
       let best = 0
       let bestHealth = -1
       pending.offers.forEach((offer, index) => {
-        if (offer.kind !== 'unit') return
-        const health = unitType(offer.id).health
+        const health = offerHealth(offer)
         if (health > bestHealth) [best, bestHealth] = [index, health]
       })
       return { kind: 'take_offer', index: best }

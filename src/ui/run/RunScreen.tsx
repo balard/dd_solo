@@ -1,13 +1,13 @@
 /**
  * The run's screens between battles (v3 Phase 4b), from `run.pending` and nothing else:
- * the race pick, the force before a battle, the reward of five, an event, and the run's
+ * the race pick, the force before a battle, the reward, an event, and the run's
  * end. Laid out by `docs/mockups/v3-phase-4a.html`; every rule they show is `src/run/`'s
  * or `runView.ts`'s, and every die is drawn with the board's own components.
  *
  * The force before a battle is the army builder over the run's pool (4c), under the next
  * enemy.
  */
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useState, type CSSProperties, type ReactNode } from 'react'
 
 import { dragonDie, ownTerrainType, speciesElements, terrainDieName, unitType } from '../../data/load'
 import { PRESET_ARMY_NAMES, type PresetArmyName } from '../../data/presets'
@@ -20,7 +20,7 @@ import { suggestForce } from '../../run/autopilot'
 import { enemyForce } from '../../run/battle'
 import { transformsOf } from '../../run/draws'
 import { upgradePreview } from '../../run/reduce'
-import { ACT_SIZE, type Offer, type RunState } from '../../run/types'
+import { ACT_SIZE, type Grant, type Offer, type RunState } from '../../run/types'
 
 import { ForceEditor } from '../game/ArmyBuilder'
 import { DragonDetail, DragonTileBody, TerrainDetail } from '../game/Board'
@@ -146,7 +146,7 @@ function UnitButton({
 }
 
 /** The three acts: where the run is and what is left. The current act alone on a narrow
- *  or short screen (CSS), a line and twelve pips. */
+ *  or short screen (CSS), a line and a pip per encounter. */
 export function ActStrip({ run }: { run: RunState }) {
   return (
     <div className="act-strip" aria-label={`${runName(run)}, ${runWhere(run)}`}>
@@ -156,7 +156,7 @@ export function ActStrip({ run }: { run: RunState }) {
             Act {ROMAN[act.act]}{' '}
             <span className="muted">
               {act.state === 'now' && run.status === 'playing'
-                ? `cap ${act.cap} · encounter ${run.encounter + 1} of 12`
+                ? `cap ${act.cap} · encounter ${run.encounter + 1} of ${act.slots.length}`
                 : act.state === 'done'
                   ? 'cleared'
                   : `cap ${act.cap}`}
@@ -387,26 +387,74 @@ const speciesList = (force: BuiltForce): string =>
 
 // --- the reward ------------------------------------------------------------------------
 
-function OfferCard({ offer, run, picked, onPick, onLook }: { offer: Offer; run: RunState; picked: boolean; onPick: () => void; onLook: () => void }) {
+/** What tapping a die given opens in the inspector. */
+const lookAt = (grant: Grant): Looking =>
+  grant.kind === 'unit' ? { kind: 'unit', typeId: grant.id } : { kind: grant.kind, dieId: grant.id }
+
+/** One die an offer gives, as a tile, its count beside it. A terrain draws no tile: its
+ *  faces are the card's body. */
+function GrantDie({ grant, onLook }: { grant: Grant; onLook: (looking: Looking) => void }) {
+  const times = grant.count > 1 && <span className="offer-count">×{grant.count}</span>
+  if (grant.kind === 'unit') {
+    return (
+      <span className="offer-grant">
+        <UnitButton typeId={grant.id} label="look" onClick={() => onLook(lookAt(grant))} />
+        {times}
+      </span>
+    )
+  }
+  if (grant.kind === 'dragon') {
+    return (
+      <span className="offer-grant">
+        <button
+          type="button"
+          className={`dragon-tile dragon-el-${dragonDie(grant.id).element}`}
+          onClick={() => onLook(lookAt(grant))}
+          title={`${dragonNameOf(grant.id)} — look`}
+        >
+          <DragonTileBody dieId={grant.id} />
+        </button>
+        {times}
+      </span>
+    )
+  }
+  return null
+}
+
+function OfferCard({
+  offer,
+  run,
+  picked,
+  onPick,
+  onLook,
+}: {
+  offer: Offer
+  run: RunState
+  picked: boolean
+  onPick: () => void
+  onLook: (looking: Looking) => void
+}) {
   const text = offerText(offer, run.race)
   return (
     <div className={`offer${picked ? ' is-picked' : ''}`}>
       <div className="offer-die">
-        {offer.kind === 'unit' && <UnitButton typeId={offer.id} label="look" onClick={onLook} />}
-        {offer.kind === 'dragon' && (
-          <button type="button" className={`dragon-tile dragon-el-${dragonDie(offer.id).element}`} onClick={onLook} title={`${text.name} — look`}>
-            <DragonTileBody dieId={offer.id} />
-          </button>
-        )}
+        {offer.grants.map((grant, i) => (
+          <GrantDie key={i} grant={grant} onLook={onLook} />
+        ))}
       </div>
       <button type="button" className="offer-pick" onClick={onPick} aria-pressed={picked}>
         <span className="run-label">{text.kind}</span>
         <b className="offer-name">{text.name}</b>
         <span className="muted">{text.detail}</span>
-        {offer.kind === 'dragon' && <span className="offer-why">{dragonNote(run)}</span>}
+        {offer.grants.some((g) => g.kind === 'dragon') && <span className="offer-why">{dragonNote(run)}</span>}
       </button>
-      {offer.kind === 'unit' && <FaceSheet typeId={offer.id} faces={unitType(offer.id).faces} size={30} />}
-      {offer.kind === 'terrain' && <TerrainDetail terrain={{ dieId: offer.id }} />}
+      {offer.grants.map((grant, i) =>
+        grant.kind === 'unit' ? (
+          <FaceSheet key={i} typeId={grant.id} faces={unitType(grant.id).faces} size={30} />
+        ) : grant.kind === 'terrain' ? (
+          <TerrainDetail key={i} terrain={{ dieId: grant.id }} />
+        ) : null,
+      )}
     </div>
   )
 }
@@ -473,7 +521,7 @@ function RewardScreen({ api, run }: { api: RunApi; run: RunState }) {
       run={run}
       foot={
         <>
-          <span className="run-foot-why">{choice === undefined ? 'Pick one of the five.' : offerText(choice, run.race).detail}</span>
+          <span className="run-foot-why">{choice === undefined ? 'Pick one offer.' : offerText(choice, run.race).detail}</span>
           <button
             type="button"
             className="choice"
@@ -498,18 +546,9 @@ function RewardScreen({ api, run }: { api: RunApi; run: RunState }) {
         </button>
       </div>
       {holdings && <ForceAndPool run={run} onLook={setLooking} />}
-      <div className="offers">
+      <div className="offers" style={{ '--offers': offers.length } as CSSProperties}>
         {offers.map((offer, i) => (
-          <OfferCard
-            key={i}
-            offer={offer}
-            run={run}
-            picked={picked === i}
-            onPick={() => setPicked(i)}
-            onLook={() =>
-              setLooking(offer.kind === 'unit' ? { kind: 'unit', typeId: offer.id } : { kind: offer.kind, dieId: offer.id })
-            }
-          />
+          <OfferCard key={i} offer={offer} run={run} picked={picked === i} onPick={() => setPicked(i)} onLook={setLooking} />
         ))}
       </div>
       {looking !== null && <Inspect looking={looking} onClose={() => setLooking(null)} />}

@@ -7,8 +7,10 @@
  *                -> Home terrain -> Frontier proposal -> Act I's schedule
  *     act start  -> the schedule: a shuffle of the slots between its two battles
  *     encounter  -> which one, of its slot's kind, from the act's pool
- *     reward     -> unit 1 (race or any, then which die) -> unit 2 -> unit 3
- *                -> dragon element -> dragon form -> terrain
+ *     reward     -> template -> each offer's dice in order, each die by `giveDie`:
+ *                   flavour -> (similar) a copy of the pool [-> its element] -> the die
+ *                              (general unit) shared or any -> the die
+ *                              (general dragon, terrain) the die
  *     transform  -> which die of the same species and health
  *
  * A forced choice draws nothing -- the same-line medium, the five small dice, the opening
@@ -18,30 +20,25 @@
  * (`homeDiceFor`, `terrainDiceSharing`), so "a Home of the race's own type" means here
  * exactly what it means when setup draws one.
  */
+import type { Collection } from '../data/collections'
 import { DRAGON_DICE, speciesElements, unitType } from '../data/load'
 import type { Element, UnitSize, UnitType } from '../data/types'
-import { PRESET_ARMY_NAMES } from '../data/presets'
 import type { BuiltForce } from '../engine/force'
-import { PLAYABLE_UNITS } from '../engine/playable'
 import { nextInt, type RngState } from '../engine/rng'
 import { homeDiceFor, terrainDiceSharing } from '../engine/setup'
 
-import { ACT_PLAN, RACE_DIE_IN_10, UNIT_OFFERS, type Act, type Encounter, type Offer, type RunContent, type Slot } from './types'
-
-const byId = <T extends { readonly id: string }>(list: readonly T[]): readonly T[] =>
-  [...list].sort((a, b) => a.id.localeCompare(b.id))
-
-/** One item, uniformly. Throws on an empty list, naming what was being drawn. */
-function pick<T>(list: readonly T[], rng: RngState, what: string): readonly [T, RngState] {
-  if (list.length === 0) throw new Error(`nothing to draw ${what} from`)
-  const [index, next] = nextInt(rng, list.length)
-  const item = list[index]
-  if (item === undefined) throw new Error(`drew ${what} ${index} of ${list.length}`)
-  return [item, next] as const
-}
-
-/** Every playable die, sorted by id: the 30% draw of a reward, and the 70%'s source. */
-const ALL_UNITS: readonly UnitType[] = byId(PLAYABLE_UNITS)
+import { ALL_UNITS, byId, giveDie, pick } from './give'
+import {
+  ACT_PLAN,
+  CLOSING_TEMPLATES,
+  REWARD_TEMPLATES,
+  type Act,
+  type Encounter,
+  type Grant,
+  type Offer,
+  type RunContent,
+  type Slot,
+} from './types'
 
 const raceUnits = (race: string): readonly UnitType[] => ALL_UNITS.filter((u) => u.species === race)
 
@@ -142,44 +139,22 @@ export function drawEncounter(
 }
 
 /**
- * Every element of every species a force fields, death included -- what a reward's
- * dragon and terrain read. A die in the pool and not the force widens nothing.
+ * A battle's reward (v3 Phase 6): one template, uniformly -- of `CLOSING_TEMPLATES` for the
+ * battle that closes Act I or II, else `REWARD_TEMPLATES` -- then each offer's dice in
+ * order, each by `giveDie` against the pool as it stood when the battle was won.
  */
-export function forceElements(force: BuiltForce): readonly Element[] {
-  const species = new Set(PRESET_ARMY_NAMES.flatMap((army) => force.armies[army]).map((id) => unitType(id).species))
-  return [...new Set([...species].sort().flatMap((s) => speciesElements(s)))]
-}
-
-/**
- * A reward's five offers, after a battle won by `force`:
- * - three distinct unit dice, each of the race seven times in ten and of any playable
- *   species otherwise -- a duplicate is drawn again from where the stream left off;
- * - one dragon sharing an element with the force;
- * - one terrain sharing a (non-death: no terrain carries it) element with the force.
- */
-export function drawReward(race: string, force: BuiltForce, rng: RngState): readonly [readonly Offer[], RngState] {
-  const units: string[] = []
-  let state = rng
-  while (units.length < UNIT_OFFERS) {
-    const [roll, afterSource] = nextInt(state, 10)
-    const source = roll < RACE_DIE_IN_10 ? raceUnits(race) : ALL_UNITS
-    const [unit, afterUnit] = pick(source, afterSource, 'a unit offer')
-    state = afterUnit
-    if (!units.includes(unit.id)) units.push(unit.id)
-  }
-
-  const elements = forceElements(force)
-  const [dragon, afterDragon] = drawDragon(elements, state)
-  const [terrain, afterTerrain] = pick(terrainDiceSharing(elements), afterDragon, 'a terrain offer')
-
-  return [
-    [
-      ...units.map((id): Offer => ({ kind: 'unit', id })),
-      { kind: 'dragon', id: dragon },
-      { kind: 'terrain', id: terrain },
-    ],
-    afterTerrain,
-  ] as const
+export function drawReward(collection: Collection, closing: boolean, rng: RngState): readonly [readonly Offer[], RngState] {
+  const [template, afterTemplate] = pick(closing ? CLOSING_TEMPLATES : REWARD_TEMPLATES, rng, 'a reward template')
+  let state = afterTemplate
+  const offers = template.map((spec): Offer => {
+    const grants = spec.map(({ kind, count }): Grant => {
+      const [grant, next] = giveDie(kind, count, collection, state)
+      state = next
+      return grant
+    })
+    return { grants }
+  })
+  return [offers, state] as const
 }
 
 const NEXT_SIZE: Readonly<Partial<Record<UnitSize, UnitSize>>> = { small: 'medium', medium: 'large' }

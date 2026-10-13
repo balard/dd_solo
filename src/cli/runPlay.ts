@@ -29,11 +29,13 @@ import { transformsOf, upgradeOf } from '../run/draws'
 import { newRun, reduceRun } from '../run/reduce'
 import { loadMessage, parseRunSave, serializeRun, shouldSave, type RunLoad } from '../run/save'
 import {
+  ACTS,
   ACT_SIZE,
   actLength,
   IllegalRunAction,
   RUN_PLAYER,
   type Act,
+  type Grant,
   type Offer,
   type RunAction,
   type RunState,
@@ -73,18 +75,22 @@ function unitLine(id: string): string {
   return `${unit.name} ${dim(`(${speciesName(unit.species)}, ${unit.health} health, ${kind})`)}`
 }
 
-function offerLine(offer: Offer): string {
-  switch (offer.kind) {
+function grantLine(grant: Grant): string {
+  const times = grant.count > 1 ? bold(` ×${grant.count}`) : ''
+  switch (grant.kind) {
     case 'unit':
-      return unitLine(offer.id)
+      return `${unitLine(grant.id)}${times}`
     case 'dragon':
-      return `${dragonName(offer.id)} ${dim('(dragon)')}`
+      return `${dragonName(grant.id)}${times} ${dim('(dragon)')}`
     case 'terrain':
-      return `${terrainDieName(offer.id)} ${dim('(terrain)')}`
+      return `${terrainDieName(grant.id)}${times} ${dim('(terrain)')}`
   }
 }
 
-/** "Act II · 4 of 12". */
+/** "Sprite (Treefolk, 1 health, ...) ×3 + Fire Drake (dragon)". */
+const offerLine = (offer: Offer): string => offer.grants.map(grantLine).join(' + ')
+
+/** "Act II · 4 of 6". */
 const where = (run: RunState) => `Act ${ROMAN[run.act]} · ${run.encounter + 1} of ${actLength(run.act)}`
 
 /** A force's species and size: "Coral Elves, 12 health, 8 dice". */
@@ -368,7 +374,7 @@ export async function playRunInTerminal(options: RunOptions): Promise<RunState> 
   let run = start
   console.log(
     dim(
-      `run seed ${run.seed} · three acts of twelve encounters · a lost battle ends the run · ` +
+      `run seed ${run.seed} · three acts of ${ACTS.map(actLength).join(' / ')} encounters · a lost battle ends the run · ` +
         (saving ? `saved to ${RUN_FILE} outside battles` : 'a watched run is not saved'),
     ),
   )

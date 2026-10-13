@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { newRun, reduceRun } from '../../run/reduce'
-import { actLength, type RunAction, type RunState } from '../../run/types'
+import { actLength, type Grant, type Offer, type RunAction, type RunState } from '../../run/types'
 
 import {
   actStrip,
@@ -72,17 +72,28 @@ describe('actStrip', () => {
   })
 })
 
+/** An offer of these dice, one copy each unless a count is given. */
+const offer = (...grants: readonly (readonly [Grant['kind'], string, number?])[]): Offer => ({
+  grants: grants.map(([kind, id, count = 1]) => ({ kind, id, count, flavour: 'similar' })),
+})
+
 describe('the words', () => {
   it('says whose race an offered die is', () => {
-    expect(offerText({ kind: 'unit', id: 'treefolk.oak' }, 'treefolk')).toMatchObject({ kind: 'Your race', name: 'Oak' })
-    expect(offerText({ kind: 'unit', id: 'coral_elves.knight' }, 'treefolk')).toMatchObject({ kind: 'Coral Elves', name: 'Knight' })
-    expect(offerText({ kind: 'dragon', id: 'water_wyrm' }, 'treefolk')).toMatchObject({ kind: 'Dragon', name: 'Water Wyrm' })
-    expect(offerText({ kind: 'terrain', id: 'swampland_city' }, null).kind).toBe('Terrain')
+    expect(offerText(offer(['unit', 'treefolk.oak']), 'treefolk')).toMatchObject({ kind: 'Your race', name: 'Oak' })
+    expect(offerText(offer(['unit', 'coral_elves.knight']), 'treefolk')).toMatchObject({ kind: 'Coral Elves', name: 'Knight' })
+    expect(offerText(offer(['dragon', 'water_wyrm']), 'treefolk')).toMatchObject({ kind: 'Dragon', name: 'Water Wyrm' })
+    expect(offerText(offer(['terrain', 'swampland_city']), null).kind).toBe('Terrain')
+  })
+
+  it('names every die of a bundled offer, with its count (v3 Phase 6)', () => {
+    const text = offerText(offer(['unit', 'treefolk.oakling', 3], ['dragon', 'fire_drake']), 'treefolk')
+    expect(text).toMatchObject({ kind: 'Your race + Dragon', name: 'Oakling ×3 + Fire Drake' })
+    expect(text.detail).toMatch(/^Treefolk · 3 health · /)
   })
 
   it('names each way an encounter can end', () => {
     const at = { act: 1 as const, encounter: 0, id: 'x', name: 'X' }
-    expect(outcomeText({ ...at, outcome: { kind: 'won', took: { kind: 'unit', id: 'treefolk.oak' } } })).toBe('won · took Oak')
+    expect(outcomeText({ ...at, outcome: { kind: 'won', took: offer(['unit', 'treefolk.oak']) } })).toBe('won · took Oak')
     expect(outcomeText({ ...at, outcome: { kind: 'won', took: null } })).toBe('won')
     expect(outcomeText({ ...at, outcome: { kind: 'lost' } })).toBe('lost')
     expect(outcomeText({ ...at, outcome: { kind: 'upgrade', from: 'treefolk.oak', to: 'treefolk.oak_lord' } })).toBe('upgraded Oak to Oak Lord')
@@ -108,20 +119,20 @@ describe('freshDice', () => {
   it('lights the last reward and every event since, and nothing before that battle', () => {
     const fresh = freshDice(
       run([
-        { kind: 'won', took: { kind: 'unit', id: 'treefolk.oak' } },
+        { kind: 'won', took: offer(['unit', 'treefolk.oak']) },
         { kind: 'upgrade', from: 'treefolk.oakling', to: 'treefolk.oak' },
-        { kind: 'won', took: { kind: 'dragon', id: 'earth_wyrm' } },
+        { kind: 'won', took: offer(['unit', 'treefolk.pineling'], ['dragon', 'earth_wyrm']) },
         { kind: 'transform', from: 'treefolk.pine', to: 'treefolk.willow' },
         { kind: 'skip' },
       ]),
     )
-    expect([...fresh.units]).toEqual(['treefolk.willow'])
+    expect([...fresh.units]).toEqual(['treefolk.willow', 'treefolk.pineling'])
     expect([...fresh.dragons]).toEqual(['earth_wyrm'])
   })
 
   it('has nothing new at the opening, or after a terrain reward', () => {
     expect(freshDice(run([])).units.size).toBe(0)
-    const terrain = freshDice(run([{ kind: 'won', took: { kind: 'terrain', id: 'swampland_city' } }]))
+    const terrain = freshDice(run([{ kind: 'won', took: offer(['terrain', 'swampland_city']) }]))
     expect(terrain.units.size + terrain.dragons.size).toBe(0)
   })
 })

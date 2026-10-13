@@ -9,10 +9,10 @@
  *
  * Pure, like the rest of `src/run/`: the same seed and policy give the same numbers.
  */
-import { unitType } from '../data/load'
 import { nextInt, rngFrom, type RngState } from '../engine/rng'
 
 import { autopilot } from './autopilot'
+import { offerHealth, poolHealth as healthOfPool } from './give'
 import { newRun, reduceRun } from './reduce'
 import { ACTS, RUN_PLAYER, type Act, type Offer, type RunAction, type RunState } from './types'
 
@@ -21,16 +21,9 @@ export type Policy = 'autopilot' | 'heaviest' | 'lightest' | 'random'
 export const POLICIES: readonly Policy[] = ['autopilot', 'heaviest', 'lightest', 'random']
 
 /** Every unit the pool owns, by health: the number the curve is about. */
-export function poolHealth(run: RunState): number {
-  return Object.entries(run.collection.units).reduce((sum, [id, n]) => sum + unitType(id).health * n, 0)
-}
+export const poolHealth = (run: RunState): number => healthOfPool(run.collection)
 
 const dragonsOwned = (run: RunState): number => Object.values(run.collection.dragons).reduce((sum, n) => sum + n, 0)
-
-/** The health one offer adds to the pool. */
-export function offerHealth(offer: Offer): number {
-  return offer.kind === 'unit' ? unitType(offer.id).health : 0
-}
 
 /** The index of the offer a policy takes; ties go to the first. */
 function pickOffer(offers: readonly Offer[], policy: 'heaviest' | 'lightest'): number {
