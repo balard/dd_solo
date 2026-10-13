@@ -15,13 +15,15 @@ import { nextInt, rngFrom, type RngState } from '../engine/rng'
 import { homeDiceFor, setupGame, terrainDiceSharing } from '../engine/setup'
 import { V1_RULES } from '../engine/types'
 
-import { drawEncounter, drawReward, forceElements, rollStart, transformsOf, upgradeOf } from './draws'
+import { drawEncounter, drawReward, drawSchedule, forceElements, rollStart, transformsOf, upgradeOf } from './draws'
 import { newRun, reduceRun, upgradePreview } from './reduce'
 import {
   ACTS,
+  ACT_PLAN,
   ACT_SIZE,
-  ENCOUNTERS_PER_ACT,
   IllegalRunAction,
+  actLength,
+  slotsIn,
   type Act,
   type Encounter,
   type RunAction,
@@ -158,10 +160,12 @@ describe('the opening draw', () => {
     expect(start.force).toEqual({ armies, homeTerrain: home, frontierProposal: frontier, dragons: [dragon] })
     expect(after).toEqual(afterSplit)
 
-    // pick_race draws exactly this, then the first encounter.
+    // pick_race draws exactly this, then Act I's schedule, then the first encounter.
     const run = started(seed, race)
-    const [first] = drawEncounter(CONTENT, 1, [], afterSplit)
+    const [schedule, afterSchedule] = drawSchedule(1, afterSplit)
+    const [first] = drawEncounter(CONTENT, 1, 'battle', [], afterSchedule)
     expect(run.force).toEqual(start.force)
+    expect(run.schedule).toEqual(schedule)
     expect(run.current).toEqual(first)
   })
 
@@ -217,78 +221,104 @@ describe('the opening draw', () => {
   })
 })
 
-describe('the encounter draw', () => {
-  it.each([1, 2, 3] as const)('opens act %s on a battle, drawing no kind for it', (act) => {
-    const battles = [...CONTENT.acts[act]].filter((e) => e.kind === 'battle').sort((a, b) => a.id.localeCompare(b.id))
+/** Plays a run to its end: every battle won, the first offer, and an event skipped. */
+function wonThrough(seed: number): RunState {
+  let run = started(seed)
+  while (run.pending.kind !== 'over') {
+    const kind: RunPending['kind'] = run.pending.kind
+    run = step(
+      run,
+      kind === 'arrange_force'
+        ? { kind: 'ready' }
+        : kind === 'battle'
+          ? { kind: 'battle_ended', winner: 'p1' }
+          : kind === 'reward'
+            ? { kind: 'take_offer', index: 0 }
+            : { kind: 'skip' },
+    )
+  }
+  return run
+}
+
+describe('the schedule', () => {
+  it.each([1, 2, 3] as const)("opens and closes act %s on a battle, with its plan's slots between", (act) => {
     for (let seed = 1; seed <= 200; seed++) {
-      const rng = rngFrom(seed)
-      const [encounter, after] = drawEncounter(CONTENT, act, [], rng)
-      // One draw, the battle itself: the kind is forced.
-      const [i, afterPick] = nextInt(rng, battles.length)
-      expect(encounter).toEqual(battles[i])
-      expect(after).toEqual(afterPick)
+      const [schedule] = drawSchedule(act, rngFrom(seed))
+      expect(schedule).toHaveLength(actLength(act))
+      expect(schedule[0]).toBe('battle')
+      expect(schedule[schedule.length - 1]).toBe('battle')
+      const counts = { battle: 0, event: 0 }
+      for (const slot of schedule) counts[slot]++
+      expect(counts).toEqual(slotsIn(act))
     }
   })
 
-  it('opens every act of a run on a battle', () => {
+  /** Fisher-Yates over the middle, from the back: one draw per place but the first. */
+  it('draws in the pinned order', () => {
+    const plan = ACT_PLAN[1]
+    const middle = [...Array<'battle'>(plan.battles - 2).fill('battle'), ...plan.between]
+    let rng: RngState = rngFrom(23)
+    for (let i = middle.length - 1; i > 0; i--) {
+      let j: number
+      ;[j, rng] = nextInt(rng, i + 1)
+      ;[middle[i], middle[j]] = [at(middle, j), at(middle, i)]
+    }
+    expect(drawSchedule(1, rngFrom(23))).toEqual([['battle', ...middle, 'battle'], rng])
+  })
+
+  it('shuffles the events through the middle of the act', () => {
+    const places = new Set<number>()
+    for (let seed = 1; seed <= 200; seed++) {
+      const [schedule] = drawSchedule(1, rngFrom(seed))
+      schedule.forEach((slot, i) => slot === 'event' && places.add(i))
+    }
+    // Every place but the two battles that hold the ends.
+    expect([...places].sort((a, b) => a - b)).toEqual(Array.from({ length: actLength(1) - 2 }, (_, i) => i + 1))
+  })
+
+  it('plays every act of a run by its schedule, opening and closing on a battle', () => {
     // So no run opens on an event.
     expect(() => seedOpeningOn('event')).toThrow(/no seed opens on event/)
     for (let seed = 1; seed <= 20; seed++) {
-      let run = started(seed)
-      while (run.pending.kind !== 'over') {
-        if (run.encounter === 0) expect(run.current?.kind).toBe('battle')
-        const kind: RunPending['kind'] = run.pending.kind
-        run = step(
-          run,
-          kind === 'arrange_force'
-            ? { kind: 'ready' }
-            : kind === 'battle'
-              ? { kind: 'battle_ended', winner: 'p1' }
-              : kind === 'reward'
-                ? { kind: 'take_offer', index: 0 }
-                : { kind: 'skip' },
-        )
+      const run = wonThrough(seed)
+      expect(run.status).toBe('won')
+      for (const act of ACTS) {
+        const kinds = run.history.filter((h) => h.act === act).map((h) => (h.outcome.kind === 'won' ? 'battle' : 'event'))
+        expect(kinds).toHaveLength(actLength(act))
+        expect(kinds[0]).toBe('battle')
+        expect(kinds[kinds.length - 1]).toBe('battle')
+        expect(kinds.filter((k) => k === 'event')).toHaveLength(slotsIn(act).event)
       }
-      expect(run.history.filter((h) => h.encounter === 0).map((h) => h.outcome.kind)).toEqual(['won', 'won', 'won'])
+    }
+  })
+})
+
+describe('the encounter draw', () => {
+  it.each([1, 2, 3] as const)("draws one encounter of the slot's kind in act %s, in one draw", (act) => {
+    for (const slot of ['battle', 'event'] as const) {
+      const ofKind = [...CONTENT.acts[act]].filter((e) => e.kind === slot).sort((a, b) => a.id.localeCompare(b.id))
+      for (let seed = 1; seed <= 50; seed++) {
+        const rng = rngFrom(seed)
+        const [encounter, after] = drawEncounter(CONTENT, act, slot, [], rng)
+        const [i, afterPick] = nextInt(rng, ofKind.length)
+        expect(encounter).toEqual(ofKind[i])
+        expect(after).toEqual(afterPick)
+      }
     }
   })
 
-  it('draws twelve different encounters an act, battles about seven in ten', () => {
-    let battles = 0
-    let total = 0
-    for (let seed = 1; seed <= 200; seed++) {
-      let rng = rngFrom(seed)
-      const drawn: string[] = []
-      for (let n = 0; n < ENCOUNTERS_PER_ACT; n++) {
-        const [encounter, next] = drawEncounter(CONTENT, 2, drawn, rng)
-        rng = next
-        expect(encounter.act).toBe(2)
-        drawn.push(encounter.id)
-        // The second draw: the first is forced to a battle.
-        if (n === 1) {
-          total++
-          if (encounter.kind === 'battle') battles++
-        }
+  it('never draws one encounter twice in an act', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const run = wonThrough(seed)
+      for (const act of ACTS) {
+        const ids = run.history.filter((h) => h.act === act).map((h) => h.id)
+        expect(new Set(ids).size).toBe(ids.length)
       }
-      expect(new Set(drawn).size).toBe(ENCOUNTERS_PER_ACT)
     }
-    expect(battles / total).toBeGreaterThan(0.6)
-    expect(battles / total).toBeLessThan(0.8)
   })
 
-  it('falls back to the other half when one runs out', () => {
-    const short = content(12, 1)
-    let rng = rngFrom(9)
-    const drawn: string[] = []
-    for (let n = 0; n < ENCOUNTERS_PER_ACT; n++) {
-      const [encounter, next] = drawEncounter(short, 1, drawn, rng)
-      rng = next
-      drawn.push(encounter.id)
-    }
-    // Twelve drawn from thirteen: whatever the 7-in-10 said, no draw stuck.
-    expect(new Set(drawn).size).toBe(12)
-    const onlyEvent = content(0, 13)
-    expect(drawEncounter(onlyEvent, 3, [], rngFrom(1))[0].kind).toBe('event')
+  it('throws naming the slot when the pool has none of its kind left', () => {
+    expect(() => drawEncounter(content(11, 0), 2, 'event', [], rngFrom(1))).toThrow(/an act 2 event/)
   })
 })
 
@@ -478,7 +508,7 @@ describe('the history', () => {
         pending.kind === 'arrange_force'
           ? { kind: 'ready' }
           : pending.kind === 'battle'
-            ? { kind: 'battle_ended', winner: run.act === 2 && run.encounter === 3 ? 'p2' : 'p1' }
+            ? { kind: 'battle_ended', winner: run.act === 2 && run.encounter === actLength(2) - 1 ? 'p2' : 'p1' }
             : pending.kind === 'reward'
               ? { kind: 'take_offer', index: 4 }
               : pending.kind === 'event'
@@ -488,11 +518,11 @@ describe('the history', () => {
                   })()
       run = step(run, action)
     }
-    // Act I whole, then Act II up to the battle lost at its fourth encounter.
-    expect(run.history).toHaveLength(12 + 4)
+    // Act I whole, then Act II up to the battle that closes it, lost.
+    expect(run.history).toHaveLength(actLength(1) + actLength(2))
     expect(run.history.map((h) => [h.act, h.encounter])).toEqual([
-      ...Array.from({ length: 12 }, (_, i) => [1, i]),
-      ...Array.from({ length: 4 }, (_, i) => [2, i]),
+      ...Array.from({ length: actLength(1) }, (_, i) => [1, i]),
+      ...Array.from({ length: actLength(2) }, (_, i) => [2, i]),
     ])
     const last = run.history[run.history.length - 1]
     expect(last?.outcome.kind).toBe('lost')
@@ -520,10 +550,9 @@ describe('the history', () => {
       )
     }
     expect(run.status).toBe('won')
-    expect(run.history).toHaveLength(36)
-    const last = run.history[35]
-    expect(last?.outcome.kind === 'won' || last?.outcome.kind === 'skip').toBe(true)
-    if (last?.outcome.kind === 'won') expect(last.outcome.took).toBeNull()
+    expect(run.history).toHaveLength(actLength(1) + actLength(2) + actLength(3))
+    // The last encounter of Act III is always a battle now (v3 Phase 6), and gives nothing.
+    expect(run.history[run.history.length - 1]?.outcome).toEqual({ kind: 'won', took: null })
   })
 })
 
@@ -774,7 +803,7 @@ describe('the run fuzz', () => {
       if (run.status === 'won') {
         ends.won++
         expect(run.act).toBe(3)
-        expect(run.encounter).toBe(ENCOUNTERS_PER_ACT - 1)
+        expect(run.encounter).toBe(actLength(3) - 1)
       } else ends.lost++
       acts.add(run.act)
     }

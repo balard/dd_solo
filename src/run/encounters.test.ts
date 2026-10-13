@@ -17,7 +17,7 @@ import { validateState } from '../engine/validate'
 import { battleSeed, battleSetup, enemyForce } from './battle'
 import { RUN_CONTENT, readEncounters, readEnemyForces } from './encounters'
 import { newRun, reduceRun } from './reduce'
-import { ACTS, ACT_SIZE, ENCOUNTERS_PER_ACT, type BattleEncounter, type RunState } from './types'
+import { ACTS, ACT_SIZE, actLength, slotsIn, type BattleEncounter, type RunState } from './types'
 
 const battles: readonly BattleEncounter[] = ACTS.flatMap((act) =>
   RUN_CONTENT.acts[act].filter((e): e is BattleEncounter => e.kind === 'battle'),
@@ -34,12 +34,12 @@ const speciesOf = (force: BuiltForce): readonly string[] => [
 ]
 
 describe('the encounters in the data', () => {
-  it('hold more than twelve an act, both kinds in each, every enemy force met', () => {
+  it('hold more of each kind than an act plays, every enemy force met', () => {
     for (const act of ACTS) {
       const list = RUN_CONTENT.acts[act]
-      expect(list.length).toBeGreaterThan(ENCOUNTERS_PER_ACT)
-      expect(list.some((e) => e.kind === 'battle')).toBe(true)
-      expect(list.some((e) => e.kind === 'event')).toBe(true)
+      for (const [kind, wanted] of Object.entries(slotsIn(act))) {
+        expect(list.filter((e) => e.kind === kind).length, `act ${act} ${kind}`).toBeGreaterThan(wanted)
+      }
       for (const e of list) expect(e.act).toBe(act)
     }
     const built = battles.flatMap((b) => ('built' in b.enemy ? [b.enemy.built] : []))
@@ -124,7 +124,7 @@ describe('battleSetup', () => {
   })
 
   it('gives every battle of a run its own seed, and another run other seeds', () => {
-    const seeds = ACTS.flatMap((act) => Array.from({ length: ENCOUNTERS_PER_ACT }, (_, n) => battleSeed(9, act, n)))
+    const seeds = ACTS.flatMap((act) => Array.from({ length: actLength(act) }, (_, n) => battleSeed(9, act, n)))
     expect(new Set(seeds).size).toBe(seeds.length)
     expect(battleSeed(10, 1, 0)).not.toBe(battleSeed(9, 1, 0))
   })
@@ -153,13 +153,18 @@ describe('readEncounters', () => {
     ...extra,
   })
   const event = (id: string) => ({ id, kind: 'event', name: id })
-  const act = (n: number) => [...Array.from({ length: 12 }, (_, i) => battle(`a${n}.b${i}`)), event(`a${n}.e`)]
+  /** Twelve battles and two events: as many events as Act I's schedule plays. */
+  const act = (n: number) => [
+    ...Array.from({ length: 12 }, (_, i) => battle(`a${n}.b${i}`)),
+    event(`a${n}.e0`),
+    event(`a${n}.e1`),
+  ]
   const problemsOf = (value: unknown, forces: Readonly<Record<string, BuiltForce>> = {}) => {
     const read = readEncounters(value, forces)
     return 'problems' in read ? read.problems : []
   }
 
-  it('accepts a minimal content: thirteen an act, both kinds', () => {
+  it('accepts a minimal content: as many of each kind as a schedule plays', () => {
     expect(problemsOf({ acts: { 1: act(1), 2: act(2), 3: act(3) } })).toEqual([])
   })
 
@@ -181,15 +186,14 @@ describe('readEncounters', () => {
     }
     expect(problemsOf(bad, { 'treefolk-12': ok, unused: ok })).toEqual([
       'a1.b0 is used twice',
-      'act 2 holds 12 encounters; a run draws 12, so it needs more',
-      'act 2 has no event',
+      'act 2 holds 0 of kind event; its schedule plays 1',
       'a3.x (act 3, encounter 13): there is no species elves',
       'a3.y (act 3, encounter 14): random is the fuzz opponent, not an opponent',
       'a3.z (act 3, encounter 15): treefolk-12 is 12 health, and Act 3 meets 36',
       'a3.w (act 3, encounter 16): there is no enemy force nowhere in data/forces/enemies/',
       'a3.v (act 3, encounter 17): an enemy is a pool or a built force, exactly one',
       'a3.u (act 3, encounter 18): its kind is "battle" or "event"',
-      'act 3 has no event',
+      'act 3 holds 0 of kind event; its schedule plays 1',
       'no encounter meets the enemy force treefolk-12',
       'no encounter meets the enemy force unused',
     ])

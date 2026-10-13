@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { newRun, reduceRun } from '../../run/reduce'
-import type { RunAction, RunState } from '../../run/types'
+import { actLength, type RunAction, type RunState } from '../../run/types'
 
 import {
   actStrip,
@@ -44,7 +44,8 @@ describe('actStrip', () => {
     const run = playTo(3, () => true)
     const [one, two, three] = actStrip(run)
     expect(one).toMatchObject({ act: 1, cap: 12, state: 'now' })
-    expect(one?.slots).toEqual(['here', ...Array(11).fill('ahead')])
+    expect(one?.slots).toEqual(['here', ...Array(actLength(1) - 1).fill('ahead')])
+    expect(three?.slots).toHaveLength(actLength(3))
     expect(two?.state).toBe('ahead')
     expect(three?.slots.every((s) => s === 'ahead')).toBe(true)
   })
@@ -58,7 +59,7 @@ describe('actStrip', () => {
       ...run.history.filter((h) => h.act === 2).map((h) => (h.outcome.kind === 'won' ? 'won' : 'event')),
       'here',
     ])
-    expect(runWhere(run)).toBe('Act II · 3 of 12')
+    expect(runWhere(run)).toBe(`Act II · 3 of ${actLength(2)}`)
   })
 
   it('marks the battle lost and rings nothing once the run is over', () => {
@@ -91,7 +92,7 @@ describe('the words', () => {
   it('counts a run for its end', () => {
     const run = playTo(5, (r) => r.act === 2)
     const stats = runStats(run)
-    expect(stats.battlesWon + stats.events).toBe(12)
+    expect(stats.battlesWon + stats.events).toBe(actLength(1))
     expect(stats.poolHealth).toBeGreaterThanOrEqual(12)
     expect(stats.dragons).toBeGreaterThanOrEqual(1)
   })
@@ -130,7 +131,7 @@ describe('savedRunView', () => {
   it('offers a run in progress by race and place, and says when it was saved', () => {
     const run = playTo(3, (r) => r.encounter === 2)
     const view = savedRunView({ kind: 'ok', run, savedAt: new Date(2026, 9, 8, 14, 2).toISOString() }, now)
-    expect(view).toMatchObject({ kind: 'playing', title: 'A Treefolk run · Act I · 3 of 12' })
+    expect(view).toMatchObject({ kind: 'playing', title: `A Treefolk run · Act I · 3 of ${actLength(1)}` })
     if (view.kind === 'playing') expect(view.detail).toMatch(/saved today at 14:02/)
   })
 
@@ -160,12 +161,13 @@ describe('savedRunView', () => {
 
 describe('the battle in a run', () => {
   it('names the encounter in hand, long and short', () => {
-    const run = playTo(3, (r) => r.act === 2 && r.encounter === 4 && r.pending.kind === 'battle')
-    expect(runWhere(run)).toBe('Act II · 5 of 12')
-    expect(runWhereShort(run)).toBe('II·5')
+    const run = playTo(3, (r) => r.act === 2 && r.encounter >= 3 && r.pending.kind === 'battle')
+    const n = run.encounter + 1
+    expect(runWhere(run)).toBe(`Act II · ${n} of ${actLength(2)}`)
+    expect(runWhereShort(run)).toBe(`II·${n}`)
     const ask = concedeAsk(run)
     expect(ask.question).toBe(`Concede ${run.current?.name}?`)
-    expect(ask.detail).toMatch(/^A lost battle ends the run: your Treefolk run stops at Act II · 5 of 12\./)
+    expect(ask.detail.startsWith(`A lost battle ends the run: your Treefolk run stops at Act II · ${n} of ${actLength(2)}.`)).toBe(true)
     expect(ask.detail).toMatch(/use Leave run instead/)
   })
 

@@ -23,11 +23,16 @@ import { nextInt, rngFrom } from '../engine/rng'
 import { completeForce, type SetupOptions } from '../engine/setup'
 
 import { RUN_CONTENT } from './encounters'
-import { ACT_SIZE, ENCOUNTERS_PER_ACT, type Act, type BattleEncounter, type RunContent, type RunState } from './types'
+import { ACT_SIZE, type Act, type BattleEncounter, type RunContent, type RunState } from './types'
 
 /** Salts the run's seed into the battle seeds' stream. Any constant; changing it moves
  *  every run's every battle. */
 const BATTLE_SALT = 0xba77_1e5e
+
+/** Battles an act may hold, as far as seeds go: the counter is act-major with this stride.
+ *  Fixed rather than read off `actLength`, so a change to an act's length moves no seed of
+ *  an act before it. Twelve was every act's length before v3 Phase 6. */
+const SEED_STRIDE = 12
 
 /** Salts a battle's seed into its enemy's force draw. */
 const ENEMY_SALT = 0x0e4e_5eed
@@ -39,7 +44,7 @@ const ENEMY_SALT = 0x0e4e_5eed
  * own stream.
  */
 export function battleSeed(runSeed: number, act: Act, encounter: number): number {
-  const index = (act - 1) * ENCOUNTERS_PER_ACT + encounter
+  const index = (act - 1) * SEED_STRIDE + encounter
   const [seed] = nextInt({ seed: (runSeed ^ BATTLE_SALT) >>> 0, counter: index }, 2 ** 31)
   return seed
 }

@@ -8,8 +8,9 @@
  *
  * then the next encounter is drawn at once, so a run always rests at the start of an
  * encounter or inside one -- which is what lets Phase 3 save it "at the start of each
- * encounter" as a plain snapshot. Twelve encounters make an act; the twelfth of Act III
- * ends the run won, with no reward after it, since there is nothing left to spend one on.
+ * encounter" as a plain snapshot. An act is its schedule, `actLength(act)` encounters
+ * drawn when it starts (v3 Phase 6); the last of Act III ends the run won, with no reward
+ * after it, since there is nothing left to spend one on.
  *
  * **`arrange_force` is the first step of every battle encounter, and nowhere else.** The
  * plan has it "after every reward and every event, and before the first battle", which
@@ -29,12 +30,12 @@ import { PLAYABLE_SPECIES } from '../engine/playable'
 import { rngFrom } from '../engine/rng'
 
 import { RUN_CONTENT } from './encounters'
-import { drawEncounter, drawReward, drawTransform, rollStart, transformsOf, upgradeOf } from './draws'
+import { drawEncounter, drawReward, drawSchedule, drawTransform, rollStart, transformsOf, upgradeOf } from './draws'
 import {
   ACT_SIZE,
-  ENCOUNTERS_PER_ACT,
   IllegalRunAction,
   RUN_PLAYER,
+  actLength,
   type Act,
   type HistoryEntry,
   type Outcome,
@@ -57,6 +58,7 @@ export function newRun(seed: number): RunState {
     force: EMPTY_ARMIES,
     act: 1,
     encounter: 0,
+    schedule: [],
     current: null,
     drawn: [],
     history: [],
@@ -98,11 +100,19 @@ function openingPending(run: RunState): RunPending {
   }
 }
 
-/** Draws the encounter at `run.act` / `run.encounter` and opens it. */
+/** Draws the encounter at `run.act` / `run.encounter`, of its slot's kind, and opens it. */
 function startEncounter(run: RunState, content: RunContent): RunState {
-  const [encounter, rng] = drawEncounter(content, run.act, run.drawn, run.rng)
+  const slot = run.schedule[run.encounter]
+  if (slot === undefined) throw new Error(`act ${run.act} has no encounter ${run.encounter}`)
+  const [encounter, rng] = drawEncounter(content, run.act, slot, run.drawn, run.rng)
   const next: RunState = { ...run, rng, current: encounter, drawn: [...run.drawn, encounter.id] }
   return { ...next, pending: openingPending(next) }
+}
+
+/** Opens `act`: its schedule drawn, its pool's draws forgotten, its first encounter. */
+function startAct(run: RunState, act: Act, content: RunContent): RunState {
+  const [schedule, rng] = drawSchedule(act, run.rng)
+  return startEncounter({ ...run, rng, act, encounter: 0, schedule, drawn: [] }, content)
 }
 
 /** The run with the encounter in hand written into its history. */
@@ -117,12 +127,12 @@ function record(run: RunState, outcome: Outcome): RunState {
  *  of the run. */
 function finishEncounter(run: RunState, outcome: Outcome, content: RunContent): RunState {
   const done = record(run, outcome)
-  if (done.encounter + 1 < ENCOUNTERS_PER_ACT) return startEncounter({ ...done, encounter: done.encounter + 1 }, content)
+  if (done.encounter + 1 < actLength(done.act)) return startEncounter({ ...done, encounter: done.encounter + 1 }, content)
   if (done.act === 3) return { ...done, status: 'won', pending: { kind: 'over' } }
-  return startEncounter({ ...done, act: (done.act + 1) as Act, encounter: 0, drawn: [] }, content)
+  return startAct(done, (done.act + 1) as Act, content)
 }
 
-const isLastEncounter = (run: RunState): boolean => run.act === 3 && run.encounter === ENCOUNTERS_PER_ACT - 1
+const isLastEncounter = (run: RunState): boolean => run.act === 3 && run.encounter === actLength(3) - 1
 
 /** The force with the first copy of `from` (in army order) changed to `to`, and the
  *  army it stood in; null when the force fields no `from`. */
@@ -212,7 +222,7 @@ export function reduceRun(run: RunState, action: RunAction, content: RunContent 
       for (const id of [start.force.homeTerrain, start.force.frontierProposal]) {
         if (id !== undefined) collection = adjust(collection, 'terrains', id, 1)
       }
-      return startEncounter({ ...run, rng, race: action.race, collection, force: start.force }, content)
+      return startAct({ ...run, rng, race: action.race, collection, force: start.force }, 1, content)
     }
 
     case 'arrange_force': {

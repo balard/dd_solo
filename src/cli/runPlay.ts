@@ -30,7 +30,7 @@ import { newRun, reduceRun } from '../run/reduce'
 import { loadMessage, parseRunSave, serializeRun, shouldSave, type RunLoad } from '../run/save'
 import {
   ACT_SIZE,
-  ENCOUNTERS_PER_ACT,
+  actLength,
   IllegalRunAction,
   RUN_PLAYER,
   type Act,
@@ -85,7 +85,7 @@ function offerLine(offer: Offer): string {
 }
 
 /** "Act II · 4 of 12". */
-const where = (run: RunState) => `Act ${ROMAN[run.act]} · ${run.encounter + 1} of ${ENCOUNTERS_PER_ACT}`
+const where = (run: RunState) => `Act ${ROMAN[run.act]} · ${run.encounter + 1} of ${actLength(run.act)}`
 
 /** A force's species and size: "Coral Elves, 12 health, 8 dice". */
 function forceLine(force: BuiltForce): string {
@@ -413,7 +413,7 @@ export async function playRunInTerminal(options: RunOptions): Promise<RunState> 
   console.log(
     run.status === 'won'
       ? bold(green(`\nThe run is won: all three acts cleared.`))
-      : bold(red(`\nThe run is lost in Act ${ROMAN[run.act]}, at encounter ${run.encounter + 1} of ${ENCOUNTERS_PER_ACT}.`)),
+      : bold(red(`\nThe run is lost in Act ${ROMAN[run.act]}, at encounter ${run.encounter + 1} of ${actLength(run.act)}.`)),
   )
   const units = Object.entries(run.collection.units)
   const dice = units.reduce((n, [, c]) => n + c, 0)

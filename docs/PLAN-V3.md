@@ -991,6 +991,32 @@ at each act's end:
 All Phase 6 rewards are at least 1 health, and the second dragon is forced, so these figures
 should end up much closer together. 6d re-runs the report.
 
+### What 6b found
+
+- **The schedule ships without its boons.** Boons arrive in 6d, so 6b's `ACT_PLAN` has only
+  battles and die events: acts of 9 / 6 / 6. A boon slot with nothing behind it would have been a
+  half-built state. 6d adds the boon slots, which makes the acts 11 / 8 / 7.
+- **`drawEncounter` lost its fallback.** It used to fall back to the other kind when one ran out.
+  Now `readEncounters` refuses a pool with fewer of a kind than the schedule plays, and the draw
+  throws naming the slot if it ever runs short.
+- **`battleSeed` keeps a stride of 12** (`SEED_STRIDE`), not the act's length, so a later change
+  to an act's length moves no seed in an earlier act.
+- **The act strip still hides what is coming.** The schedule is known when an act starts, and the
+  map under *Deliberately out of v3* can read it from there.
+- **`RUN_VERSION` is 3.** A version-2 save has no schedule and is discarded, as version 1 was.
+
+The report on 9 / 6 / 6, still with today's rewards:
+
+| Policy | Act I mean (min–p90) | Act II mean | Act III mean | < 2 dragons after Act I |
+|---|---|---|---|---|
+| autopilot | 34.7 (29–37) | 53.0 | 67.9 | 0% |
+| heaviest unit | 38.2 (32–41) | 56.5 | 71.3 | 100% |
+| lightest offer | 14 (14–14) | 15 | 16 | 0% |
+| random | 23.1 (13–28) | 30.9 | 37.4 | 23% |
+
+Shorter acts cut the heaviest player's Act I gain from +34 to +26. That is still too much, and
+the lightest is still +2: the spread is the reward mix's to close, not the schedule's.
+
 ---
 
 ## Deliberately out of v3 (for now)

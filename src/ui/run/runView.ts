@@ -6,7 +6,7 @@ import { dragonDie, dragonName, terrainDie, terrainDieName, terrainType, unitTyp
 import { dragonCount } from '../../engine/force'
 import { forceHealth } from '../../engine/forceProblems'
 import { eventEffect } from '../../run/reduce'
-import { ACTS, ACT_SIZE, ENCOUNTERS_PER_ACT, type Act, type HistoryEntry, type Offer, type RunState } from '../../run/types'
+import { ACTS, ACT_SIZE, actLength, type Act, type HistoryEntry, type Offer, type RunState } from '../../run/types'
 import type { RunLoad } from '../../run/save'
 
 import { describe } from '../game/DiceGrid'
@@ -14,8 +14,8 @@ import { speciesInfo } from '../game/Elements'
 
 export const ROMAN: Readonly<Record<Act, string>> = { 1: 'I', 2: 'II', 3: 'III' }
 
-/** One encounter's place on the act strip. Ahead is never a kind: encounters are drawn as
- *  they are reached, so the strip does not know what is coming. */
+/** One encounter's place on the act strip. Ahead is never a kind: the schedule is drawn
+ *  when the act starts (v3 Phase 6), but the strip keeps what is coming a surprise. */
 export type SlotState = 'won' | 'lost' | 'event' | 'here' | 'ahead'
 
 export interface ActView {
@@ -34,7 +34,7 @@ const slotOf = (entry: HistoryEntry): SlotState =>
  */
 export function actStrip(run: RunState): readonly ActView[] {
   return ACTS.map((act) => {
-    const slots: SlotState[] = Array.from({ length: ENCOUNTERS_PER_ACT }, () => 'ahead')
+    const slots: SlotState[] = Array.from({ length: actLength(act) }, () => 'ahead')
     for (const entry of run.history) if (entry.act === act) slots[entry.encounter] = slotOf(entry)
     if (run.status === 'playing' && run.act === act) slots[run.encounter] = 'here'
     const state = act < run.act || (run.status === 'won' && act === run.act) ? 'done' : act === run.act ? 'now' : 'ahead'
@@ -42,9 +42,9 @@ export function actStrip(run: RunState): readonly ActView[] {
   })
 }
 
-/** "Act II · 5 of 12". */
+/** "Act II · 5 of 6". */
 export const runWhere = (run: RunState): string =>
-  `Act ${ROMAN[run.act]} · ${run.encounter + 1} of ${ENCOUNTERS_PER_ACT}`
+  `Act ${ROMAN[run.act]} · ${run.encounter + 1} of ${actLength(run.act)}`
 
 /** "II·5": the same, where a header has one word of room (4a: upright, and sideways). */
 export const runWhereShort = (run: RunState): string => `${ROMAN[run.act]}·${run.encounter + 1}`

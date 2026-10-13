@@ -21,12 +21,34 @@ export const ACTS: readonly Act[] = [1, 2, 3]
 /** The force-size cap of each act, which is also the size of the enemies met there. */
 export const ACT_SIZE: Readonly<Record<Act, number>> = { 1: 12, 2: 24, 3: 36 }
 
-/** Encounters played in each act. The act's pool holds more, drawn without replacement. */
-export const ENCOUNTERS_PER_ACT = 12
-
-/** One in ten draws: seven battles to three events, and seven race dice to three of any. */
-export const BATTLE_IN_10 = 7
+/** One in ten reward draws is of any species, the rest of the run's race. */
 export const RACE_DIE_IN_10 = 7
+
+/** What one encounter of an act's schedule will be. */
+export type Slot = 'battle' | 'event'
+
+/**
+ * The shape of each act (v3 Phase 6): how many battles, and the other slots between them.
+ * An act opens and closes on a battle, and its middle is shuffled when the act starts
+ * (`drawSchedule`). It is a schedule, not a draw per encounter, so an act always gives the
+ * same number of rewards and events -- which is what lets the pool grow on a curve.
+ */
+export const ACT_PLAN: Readonly<Record<Act, { readonly battles: number; readonly between: readonly Slot[] }>> = {
+  1: { battles: 7, between: ['event', 'event'] },
+  2: { battles: 5, between: ['event'] },
+  3: { battles: 5, between: ['event'] },
+}
+
+/** Encounters played in an act. The act's pool holds more of each kind, drawn without
+ *  replacement. */
+export const actLength = (act: Act): number => ACT_PLAN[act].battles + ACT_PLAN[act].between.length
+
+/** How many of each slot an act's schedule holds. */
+export function slotsIn(act: Act): Readonly<Record<Slot, number>> {
+  const counts: Record<Slot, number> = { battle: ACT_PLAN[act].battles, event: 0 }
+  for (const slot of ACT_PLAN[act].between) counts[slot]++
+  return counts
+}
 
 /** How many unit dice a reward offers, beside its one dragon and one terrain. */
 export const UNIT_OFFERS = 3
@@ -124,7 +146,7 @@ export type Outcome =
  */
 export interface HistoryEntry {
   readonly act: Act
-  /** 0..11 within the act. */
+  /** 0-based within the act. */
   readonly encounter: number
   readonly id: string
   readonly name: string
@@ -144,8 +166,11 @@ export interface RunState {
    *  an army empty, and `ready` waits for the player to fix it. */
   readonly force: BuiltForce
   readonly act: Act
-  /** 0..11 within the act. */
+  /** 0-based within the act, below `actLength(act)`. */
   readonly encounter: number
+  /** The act's encounters by kind, drawn when the act starts: one slot per encounter.
+   *  Empty until a race is picked. */
+  readonly schedule: readonly Slot[]
   /** The encounter in hand, drawn when reached. */
   readonly current: Encounter | null
   /** This act's draws so far, so its pool is drawn without replacement. */

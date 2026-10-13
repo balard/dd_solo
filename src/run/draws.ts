@@ -4,15 +4,15 @@
  * **The order is the stream**, as it is in `setupGame`, and `run.test.ts` pins it:
  *
  *     pick_race  -> large die -> second medium's line -> dragon element -> dragon form
- *                -> Home terrain -> Frontier proposal
- *     encounter  -> battle or event (7 in 10) -> which one, from the act's pool
- *                   (an act's first encounter is a battle, and skips the first draw)
+ *                -> Home terrain -> Frontier proposal -> Act I's schedule
+ *     act start  -> the schedule: a shuffle of the slots between its two battles
+ *     encounter  -> which one, of its slot's kind, from the act's pool
  *     reward     -> unit 1 (race or any, then which die) -> unit 2 -> unit 3
  *                -> dragon element -> dragon form -> terrain
  *     transform  -> which die of the same species and health
  *
  * A forced choice draws nothing -- the same-line medium, the five small dice, the opening
- * split, an act's first encounter being a battle -- the
+ * split, the battles that open and close an act -- the
  * setup rule for a pinned terrain. Every list a draw picks from is sorted by id, so
  * reordering a data file cannot reseat a run. Terrains are drawn by setup's own lists
  * (`homeDiceFor`, `terrainDiceSharing`), so "a Home of the race's own type" means here
@@ -26,7 +26,7 @@ import { PLAYABLE_UNITS } from '../engine/playable'
 import { nextInt, type RngState } from '../engine/rng'
 import { homeDiceFor, terrainDiceSharing } from '../engine/setup'
 
-import { BATTLE_IN_10, RACE_DIE_IN_10, UNIT_OFFERS, type Act, type Encounter, type Offer, type RunContent } from './types'
+import { ACT_PLAN, RACE_DIE_IN_10, UNIT_OFFERS, type Act, type Encounter, type Offer, type RunContent, type Slot } from './types'
 
 const byId = <T extends { readonly id: string }>(list: readonly T[]): readonly T[] =>
   [...list].sort((a, b) => a.id.localeCompare(b.id))
@@ -112,25 +112,33 @@ export function rollStart(
 }
 
 /**
- * The next encounter of an act: a battle seven times in ten, then one encounter of that
- * kind from what is left of the act's pool. A half that has run out gives way to the
- * other, so the odds hold however the pool is filled and a short half never sticks.
- *
- * **Every act's first encounter is a battle** (playtest decisions, 2026-10-08),
- * and draws no kind for it: a forced choice draws nothing.
+ * An act's schedule (v3 Phase 6): a battle, the act's other slots shuffled among its
+ * remaining battles, and a battle. The first and last are forced and draw nothing; the
+ * middle is a Fisher-Yates shuffle, one draw per place from the back.
  */
+export function drawSchedule(act: Act, rng: RngState): readonly [readonly Slot[], RngState] {
+  const plan = ACT_PLAN[act]
+  if (plan.battles < 2) throw new Error(`act ${act} needs a battle to open and one to close`)
+  const middle: Slot[] = [...Array<Slot>(plan.battles - 2).fill('battle'), ...plan.between]
+  let state = rng
+  for (let i = middle.length - 1; i > 0; i--) {
+    const [j, next] = nextInt(state, i + 1)
+    state = next
+    ;[middle[i], middle[j]] = [middle[j] as Slot, middle[i] as Slot]
+  }
+  return [['battle', ...middle, 'battle'], state] as const
+}
+
+/** The encounter for one slot of an act: one of that kind, from what is left of the pool. */
 export function drawEncounter(
   content: RunContent,
   act: Act,
+  slot: Slot,
   drawn: readonly string[],
   rng: RngState,
 ): readonly [Encounter, RngState] {
-  const left = byId(content.acts[act].filter((e) => !drawn.includes(e.id)))
-  const first = drawn.length === 0
-  const [roll, afterKind] = first ? ([0, rng] as const) : nextInt(rng, 10)
-  const wanted = first || roll < BATTLE_IN_10 ? 'battle' : 'event'
-  const ofKind = left.filter((e) => e.kind === wanted)
-  return pick(ofKind.length > 0 ? ofKind : left, afterKind, `an act ${act} encounter`)
+  const left = byId(content.acts[act].filter((e) => e.kind === slot && !drawn.includes(e.id)))
+  return pick(left, rng, `an act ${act} ${slot}`)
 }
 
 /**

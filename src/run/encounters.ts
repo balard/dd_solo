@@ -21,7 +21,7 @@ import { DataError } from '../data/types'
 import { builtForceHealth, builtForceProblem, readBuiltForce, type BuiltForce, type ForcePool } from '../engine/force'
 import { speciesProblem } from '../engine/playable'
 
-import { ACTS, ACT_SIZE, ENCOUNTERS_PER_ACT, type Act, type Encounter, type EnemySpec, type RunContent } from './types'
+import { ACTS, ACT_SIZE, slotsIn, type Act, type Encounter, type EnemySpec, type RunContent } from './types'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -151,11 +151,9 @@ export function readEncounters(
       if (encounter.kind === 'battle' && 'built' in encounter.enemy) used.add(encounter.enemy.built)
       encounters.push(encounter)
     })
-    if (list.length <= ENCOUNTERS_PER_ACT) {
-      problems.push(`act ${act} holds ${list.length} encounters; a run draws ${ENCOUNTERS_PER_ACT}, so it needs more`)
-    }
-    for (const kind of ['battle', 'event'] as const) {
-      if (!encounters.some((e) => e.kind === kind)) problems.push(`act ${act} has no ${kind}`)
+    for (const [kind, wanted] of Object.entries(slotsIn(act))) {
+      const held = encounters.filter((e) => e.kind === kind).length
+      if (held < wanted) problems.push(`act ${act} holds ${held} of kind ${kind}; its schedule plays ${wanted}`)
     }
     acts[act] = encounters
   }

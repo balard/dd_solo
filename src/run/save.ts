@@ -20,7 +20,7 @@
 import { DRAGON_DICE, TERRAIN_DICE, UNIT_TYPES } from '../data/load'
 import { readBuiltForce } from '../engine/force'
 
-import { ENCOUNTERS_PER_ACT, type RunPending, type RunState } from './types'
+import { actLength, type RunPending, type RunState, type Slot } from './types'
 
 /**
  * The shape of a saved run. Bump it when `RunState` or anything inside it changes
@@ -37,7 +37,7 @@ import { ENCOUNTERS_PER_ACT, type RunPending, type RunState } from './types'
  *    act strip and the run's end draw. A version-1 run has no record of its past, and
  *    inventing one would draw a strip that lies about it.
  */
-export const RUN_VERSION = 2
+export const RUN_VERSION = 3
 
 export interface RunSave {
   readonly version: number
@@ -72,6 +72,8 @@ const KNOWN: Readonly<Record<'units' | 'dragons' | 'terrains', ReadonlySet<strin
   terrains: new Set(TERRAIN_DICE.map((d) => d.id)),
 }
 
+const SLOTS: ReadonlySet<Slot> = new Set<Slot>(['battle', 'event'])
+
 const PENDING_KINDS: ReadonlySet<RunPending['kind']> = new Set<RunPending['kind']>([
   'choose_race',
   'arrange_force',
@@ -93,7 +95,15 @@ function runProblem(value: unknown): string | null {
   if (!isRecord(rng) || !isWhole(rng['seed']) || !isWhole(rng['counter'])) return 'its random state is damaged'
   if (race !== null && typeof race !== 'string') return 'its race is damaged'
   if (act !== 1 && act !== 2 && act !== 3) return 'its act is damaged'
-  if (!isWhole(encounter) || encounter >= ENCOUNTERS_PER_ACT) return 'its encounter number is damaged'
+  if (!isWhole(encounter) || encounter >= actLength(act)) return 'its encounter number is damaged'
+  const schedule = value['schedule']
+  if (
+    !Array.isArray(schedule) ||
+    !schedule.every((slot) => SLOTS.has(slot as Slot)) ||
+    (schedule.length !== actLength(act) && !(schedule.length === 0 && race === null))
+  ) {
+    return 'its schedule is damaged'
+  }
   if (status !== 'playing' && status !== 'won' && status !== 'lost') return 'its status is damaged'
   if (!Array.isArray(drawn) || !drawn.every((id) => typeof id === 'string')) return 'its drawn encounters are damaged'
   const history = value['history']

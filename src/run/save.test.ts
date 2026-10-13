@@ -56,6 +56,13 @@ describe('the run save', () => {
     expect(loadMessage({ kind: 'none' })).toBeNull()
   })
 
+  it('discards a version-2 save, which has no schedule (v3 Phase 6)', () => {
+    const v2 = JSON.parse(written(reduceRun(newRun(1), { kind: 'pick_race', race: 'treefolk' }))) as { version: number; run: Record<string, unknown> }
+    v2.version = 2
+    delete v2.run['schedule']
+    expect(parseRunSave(JSON.stringify(v2))).toEqual({ kind: 'outdated', found: 2 })
+  })
+
   it('discards a version-1 save, which has no history', () => {
     const v1 = JSON.parse(written(newRun(1))) as { version: number; run: Record<string, unknown> }
     v1.version = 1
@@ -82,6 +89,12 @@ describe('the run save', () => {
     expect(damage((r) => (r['act'] = 4))).toEqual({ kind: 'unreadable', reason: 'the saved run is damaged: its act is damaged' })
     expect(damage((r) => (r['pending'] = { kind: 'shop' }))).toMatchObject({ reason: /next question/ })
     expect(damage((r) => delete r['force'])).toMatchObject({ reason: /its force: missing/ })
+    // A schedule that is not the act's length, or holds a slot this version does not know.
+    expect(damage((r) => (r['schedule'] = ['battle']))).toMatchObject({ reason: /its schedule is damaged/ })
+    expect(damage((r) => delete r['schedule'])).toMatchObject({ reason: /its schedule is damaged/ })
+    expect(
+      damage((r) => (r['schedule'] = (r['schedule'] as string[]).map((slot, i) => (i === 1 ? 'shop' : slot)))),
+    ).toMatchObject({ reason: /its schedule is damaged/ })
     // The one thing that rots with no change of shape: a die the data no longer has.
     expect(
       damage((r) => ((r['collection'] as { units: Record<string, number> }).units['treefolk.ent'] = 1)),
