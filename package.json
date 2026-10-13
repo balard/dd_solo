@@ -16,6 +16,7 @@
     "play": "vite-node src/cli/play.ts",
     "goldens": "vite-node src/cli/goldens.ts",
     "sai-order": "vite-node src/cli/saiOrder.ts",
+    "run-economy": "vite-node src/cli/runEconomy.ts",
     "art": "python tools/fetch_faces.py"
   },
   "dependencies": {

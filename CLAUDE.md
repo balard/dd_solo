@@ -377,6 +377,7 @@ npm run play -- --run   # a v3 run (--seed N, --race <species>, --p1-ai <ai> [--
 npm run fuzz        # the live-rules fuzz at 1000 games instead of 200 (about a minute)
 npm run goldens -- v1   # re-record one golden corpus (v0 or v1) -- see below before you do
 npm run sai-order   # how often the SAI resolution order could matter, over self-play (~20s)
+npm run run-economy # a run's pool health at each act's end, every battle won (~30s)
 ```
 
 **`npm test` is slow on purpose** — tens of seconds, most of it the fuzzes (1000 `V0_RULES` games,

@@ -912,6 +912,87 @@ The second round (2026-10-09):
 
 ---
 
+## Phase 6 — The act's shape and the health curve
+
+Two playtest findings (2026-10-13). **Twelve encounters an act is too long** once battles are 24
+and 36 health. **The army grows by luck**: the 70/30 draw sets how many rewards an act gives, a
+dragon or terrain offer is 0 health, and an event is a sideways move. The pool should grow on a
+curve the run controls: about **+18 health in Act I** (12 → ~30 against a 24 cap) and **+12 in Act
+II** (~42 against 36). **Act I hands out the second dragon** that Act III fields
+(`dragonCount(36) = 2`; a 24-health force still fields one, and that rule stays).
+
+**The acts are a schedule, not a draw.** Every act opens and closes on a battle; the middle is
+shuffled at the act's start.
+
+| | Act I | Act II | Act III |
+|---|---|---|---|
+| Length | 11 | 8 | 7 |
+| Battles | 7 | 5 | 5 |
+| Die events | 2 | 1 | 1 |
+| Forced boons | dragon, monster | terrain, monster | monster |
+| Health floor | 6·1 + 3 + 2 + 4 = **15** | 4·1 + 3 + 1 + 4 = **12** | — |
+
+**Every die given is a kind, then similar or general.** The reward template fixes the kind (small,
+medium, large, monster, dragon, terrain). Whether it is similar or general goes by the **pool's
+health**, every unit owned, fielded or not: 12–24 is 99% similar, 25–36 is 90%, and 37+ is 70%.
+
+| Kind | Similar | General |
+|---|---|---|
+| unit | pick a unit copy in the pool; a die of that size of its species | 70%: that size, sharing an element with any pool unit (unweighted); 30%: any die of that size |
+| dragon | pick a unit or dragon copy; a dragon of one of its elements | a dragon of an element a pool dragon has |
+| terrain | pick a unit copy, then one of its non-death elements; a terrain carrying it | any terrain |
+
+**Rewards.** After a battle, one of three templates; each line is one offer:
+- **A**: small + dragon; medium; large.
+- **B**: small + terrain; medium; large.
+- **C**: medium; large; monster.
+
+The **closing battle** of Acts I and II uses one of two templates instead, four offers each:
+- small ×3 (one die, three copies) + a dragon (or + a terrain); medium ×2; large; monster.
+
+So every pick is ≥ 1 health after a battle and ≥ 3 after the closing one.
+
+**Non-combat encounters.**
+- **A die event** offers three answers, no skip, each +1 health:
+  - a small die (shown first) plus a transform;
+  - an upgrade;
+  - a different small die.
+- **A boon** (dragon, terrain or monster) is pick 1 of 3, no skip, all distinct:
+  - the first offer is always similar;
+  - the second follows the pool-health table;
+  - the third is always general.
+
+**Slices.**
+- **6a**: the economy report.
+- **6b**: the schedule.
+- **6c**: the giving layer and the battle rewards.
+- **6d**: the boons and the new die event.
+
+### What 6a found
+
+`npm run run-economy` (`src/run/economy.ts`) plays 200 runs a race with every battle won, and
+answers the rest by a policy. The baseline, on the rules before Phase 6, gives the pool's health
+at each act's end:
+
+| Policy | Act I mean (min–p90) | Act II mean | Act III mean | < 2 dragons after Act I |
+|---|---|---|---|---|
+| autopilot | 42.4 (31–48) | 76.1 | 107.1 | 0% |
+| heaviest unit | 45.9 (34–52) | 79.6 | 110.6 | 100% |
+| lightest offer | 15.2 (12–17) | 18.3 | 21.4 | 0% |
+| random | 26.2 (15–32) | 40.5 | 53.9 | 17% |
+
+**Choice, not the run, decides the curve.**
+- A player taking the heaviest unit gains about +34 in Act I, nearly twice the target.
+- One taking dragons and terrains gains about +3.
+- A player who always takes units owns one dragon all run.
+- The random policy, the closest to an undecided player, is the only one near the targets. About
+  one run in six leaves Act I without a second dragon.
+
+All Phase 6 rewards are at least 1 health, and the second dragon is forced, so these figures
+should end up much closer together. 6d re-runs the report.
+
+---
+
 ## Deliberately out of v3 (for now)
 
 - **Enemy-only dice, spells and races.** The encounter schema leaves room for them. They need
