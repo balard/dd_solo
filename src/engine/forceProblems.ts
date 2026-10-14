@@ -128,6 +128,7 @@ export function forceProblems(
   cap: number,
   force: BuiltForce,
   dragons: DragonRule = 'exactly',
+  halfOf: 'force' | 'cap' = 'force',
 ): readonly ForceProblem[] {
   const problems: ForceProblem[] = []
   const add = (where: ProblemPlace, text: string) => problems.push({ where, text })
@@ -136,7 +137,11 @@ export function forceProblems(
   if (total > cap) add('force', `it is ${total} health, over the cap of ${cap}`)
   for (const text of overOwned(collection, force, 'units', UNIT_IDS)) add('force', text)
 
-  const half = maxArmyHealth(total)
+  // `'cap'` judges an army against half the largest force the cap allows, not the force as
+  // it stands: a draft is short of its cap for most of its life, and an army of 4 in a
+  // force of 7 is not a mistake yet. Setup's own rule is `'force'` and is what Fight asks.
+  const basis = halfOf === 'cap' && Number.isFinite(cap) ? Math.max(cap, total) : total
+  const half = maxArmyHealth(basis)
   for (const name of PRESET_ARMY_NAMES) {
     const ids = force.armies[name]
     if (ids.length === 0) {
@@ -149,7 +154,7 @@ export function forceProblems(
     }
     const health = healthOf(ids)
     if (health > half) {
-      add(name, `the ${name} army is ${health} health, over half the force (${half} of ${total})`)
+      add(name, `the ${name} army is ${health} health, over half the force (${half} of ${basis})`)
     }
   }
 

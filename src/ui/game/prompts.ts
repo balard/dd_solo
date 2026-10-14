@@ -838,6 +838,43 @@ export function saiTargetSelection(
   )
 }
 
+/**
+ * What is already tapped when a question opens. Where the legal answer is forced to be
+ * every die the question offers -- a damage, breath or targeting budget as large as the
+ * whole army, or Rapid Growth, where rerolling is nearly always right -- they start
+ * selected, and the player taps off any they want to keep. Anywhere else, nothing is.
+ */
+export function startingSelection(
+  state: GameState,
+  pending: Pending | null,
+  human: 'p1' | 'p2',
+): ReadonlySet<UnitId> {
+  if (pending === null || pending.player !== human) return new Set()
+  const none: ReadonlySet<UnitId> = new Set()
+  switch (pending.kind) {
+    case 'rapid_growth':
+      return new Set(pending.options)
+    case 'assign_damage':
+    case 'dragon_breath':
+    case 'sai_target': {
+      const [owner, slot, sel] =
+        pending.kind === 'assign_damage'
+          ? ([pending.player, pending.slot, damageSelection(state, pending, none)] as const)
+          : pending.kind === 'dragon_breath'
+            ? ([pending.player, pending.slot, breathSelection(state, pending, none)] as const)
+            : ([pending.target, pending.slot, saiTargetSelection(state, pending, none)] as const)
+      const eligible = armyRef(state, owner, slot).filter(
+        (unit) => pending.kind !== 'sai_target' || pending.eligible === undefined || pending.eligible.includes(unit.id),
+      )
+      // `one` (Sleep) is a single die: forced only when a single die is on offer.
+      const all = eligible.length > 0 && sel.suggestion.length === eligible.length
+      return all ? new Set(sel.suggestion) : new Set()
+    }
+    default:
+      return new Set()
+  }
+}
+
 function budgetSelection(
   state: GameState,
   owner: 'p1' | 'p2',
@@ -1112,6 +1149,11 @@ export function retreatPlan(
  */
 export function focusedSlot(state: GameState): TerrainSlot {
   const pending = state.pending
+  // A Defensive Volley counter is offered at the terrain that was shot at, but it hits the
+  // army that shot, wherever that stands -- and that is the terrain the decision is about.
+  if (pending?.kind === 'choose_counter_attack' && pending.volley !== undefined && pending.volley.target !== 'reserve') {
+    return pending.volley.target
+  }
   if (pending !== null && 'slot' in pending && pending.slot !== 'reserve') return pending.slot
   const army = state.turn.marchingArmy
   if (army !== null && army !== 'reserve') return army

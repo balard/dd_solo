@@ -308,7 +308,7 @@ function ArrangeScreen({ api, run, onFight }: { api: RunApi; run: RunState; onFi
       foot={
         <>
           <span className={`run-foot-why${problems.length > 0 ? ' is-bad' : ''}`}>
-            {problems[0]?.text ?? `${total} / ${cap} health · ${(run.force.dragons ?? []).map(dragonNameOf).join(', ')}`}
+            {(forceProblems(run.collection, cap, run.force, 'at_most', 'cap')[0] ?? problems[0])?.text ?? `${total} / ${cap} health · ${(run.force.dragons ?? []).map(dragonNameOf).join(', ')}`}
           </span>
           <button type="button" className="choice secondary" onClick={api.leave}>
             Leave run
@@ -564,6 +564,7 @@ const BOON_WORD = { dragon: 'dragon', terrain: 'terrain', monster: 'monster' } a
 function BoonScreen({ api, run }: { api: RunApi; run: RunState }) {
   const [picked, setPicked] = useState<number | null>(null)
   const [looking, setLooking] = useState<Looking | null>(null)
+  const [holdings, setHoldings] = useState(false)
   if (run.pending.kind !== 'boon') return null
   const { encounter, offers } = run.pending
   const choice = picked === null ? undefined : offers[picked]
@@ -589,7 +590,16 @@ function BoonScreen({ api, run }: { api: RunApi; run: RunState }) {
         <p className="muted run-lede">
           Pick one {BOON_WORD[encounter.gives]}: it goes to your pool. Tap a die to look at it.
         </p>
+        <button
+          type="button"
+          className="choice secondary run-holdings-toggle"
+          aria-expanded={holdings}
+          onClick={() => setHoldings((open) => !open)}
+        >
+          {holdings ? 'Hide your force and pool' : 'Show your force and pool'}
+        </button>
       </div>
+      {holdings && <ForceAndPool run={run} onLook={setLooking} />}
       <div className="offers" style={{ '--offers': offers.length } as CSSProperties}>
         {offers.map((offer, i) => (
           <OfferCard key={i} offer={offer} run={run} picked={picked === i} onPick={() => setPicked(i)} onLook={setLooking} />

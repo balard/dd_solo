@@ -405,7 +405,18 @@ function logSteps(
       if (named !== undefined) {
         const exchange = inExchange(spellsExchange(i))
         if (named.player !== human) {
-          steps.push({ kind: 'spells', entries: spellBySpell(run), ...exchange, at: i })
+          // A save roll the spell allowed is a roll, and a stop of its own after the casting
+          // (playtest, 2026-10-14): inside the card it was a line among lines, and a
+          // Hailstorm's damage decision followed without the player seeing their saves.
+          steps.push({
+            kind: 'spells',
+            entries: spellBySpell(run.filter((inner) => inner.kind !== 'spell_saves')),
+            ...exchange,
+            at: i,
+          })
+          run.forEach((inner, k) => {
+            if (inner.kind === 'spell_saves') steps.push({ kind: 'roll', entry: inner, ...exchange, at: i + k })
+          })
         } else {
           // Your own: no stop for the casting, but a roll inside it still is one.
           run.forEach((inner, k) => {

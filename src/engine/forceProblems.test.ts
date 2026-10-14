@@ -50,6 +50,17 @@ describe('forceProblems', () => {
     expect(() => setupGame({ seed: 1, forces: { kind: 'built', forces: { p1: mixed12, p2: mixed12 } }, ruleSet: V1_RULES })).not.toThrow()
   })
 
+  it("judges an army against half the cap, not the half-built force, under 'cap'", () => {
+    // 5 of 8 health is over half of the force as it stands, but within half of 12.
+    const draft: BuiltForce = {
+      armies: { home: ['treefolk.oak', 'treefolk.hamadryad'], campaign: ['treefolk.oakling'], horde: ['treefolk.oakling'] },
+    }
+    const army = (halfOf: 'force' | 'cap') =>
+      forceProblems(FULL_COLLECTION, 12, draft, 'exactly', halfOf).filter((p) => p.where === 'home')
+    expect(army('force')).toHaveLength(1)
+    expect(army('cap')).toEqual([])
+  })
+
   it('holds a force to the cap', () => {
     const problems = forceProblems(FULL_COLLECTION, 24, starter)
     expect(problems).toEqual([{ where: 'force', text: 'it is 30 health, over the cap of 24' }])

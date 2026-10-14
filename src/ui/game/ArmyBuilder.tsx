@@ -286,7 +286,7 @@ export function ForceEditor({
   const [inspect, setInspect] = useState<Looking | null>(null)
   const closeInspector = useCallback(() => setInspect(null), [])
 
-  const problems = useMemo(() => forceProblems(collection, cap, force, dragonRule), [collection, cap, force, dragonRule])
+  const problems = useMemo(() => forceProblems(collection, cap, force, dragonRule, 'cap'), [collection, cap, force, dragonRule])
   const health = forceHealth(force)
   const lines = armyLines(force)
   // A die with no copies left is fielded already, so it is not drawn in the palette at all

@@ -45,6 +45,7 @@ import {
   pendingKey,
   pickModeFor,
   reinforcePlan,
+  startingSelection,
   tapMeaning,
   type ReinforceMove,
 } from './game/prompts'
@@ -297,7 +298,7 @@ function GameView({ game, runBattle }: { readonly game: PlayingGame; readonly ru
   // two consecutive Sleeps are two questions, not one.
   const key = pendingKey(pending)
   useEffect(() => {
-    setSelection(new Set())
+    setSelection(startingSelection(state, pending, human))
     setStaged([])
     setPairs([])
     setCounters({})
